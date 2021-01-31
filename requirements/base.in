@@ -1,0 +1,15 @@
+Pillow
+argon2-cffi
+django
+django-allauth
+django-cors-headers
+django-crispy-forms
+django-environ
+django-model-utils
+django-redis
+djangorestframework
+hiredis
+python-slugify
+pytz
+redis
+

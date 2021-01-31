@@ -1,0 +1,22 @@
+-r base.in
+
+Werkzeug
+black
+coverage
+django-coverage-plugin
+django-debug-toolbar
+django-extensions
+django-stubs
+factory-boy
+flake8
+flake8-isort
+ipdb
+mypy
+pip-tools
+pre-commit
+psycopg2
+pylint-django
+pytest
+pytest-django
+pytest-sugar
+sphinx

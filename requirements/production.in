@@ -1,0 +1,9 @@
+# PRECAUTION: avoid production dependencies that aren't in development
+
+-r base.in
+
+gunicorn
+psycopg2
+Collectfast
+django-storages[boto3]
+django-anymail
