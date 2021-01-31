@@ -1,0 +1,7 @@
+# PostgreSQL
+# ------------------------------------------------------------------------------
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=mibudge
+POSTGRES_USER=rqUBujvhWpxVurCWcvyfqPYAeyQvpyyQ
+POSTGRES_PASSWORD=LSE7YIuOs6F68Tk4xaO6iLxIIySTJiwde3TPcIkKmHEdchFJucYEvv2XN9iHwwis
