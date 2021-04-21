@@ -1,0 +1,20 @@
+Pillow
+argon2-cffi
+celery>=4.4.6,<5  # celery 5 incompatible with flower 0.9.7
+django
+django-allauth
+django-celery-beat
+django-compressor
+django-cors-headers
+django-crispy-forms
+django-environ
+django-model-utils
+django-redis
+djangorestframework
+flower
+hiredis
+python-slugify
+pytz
+redis
+uvicorn[standard]
+whitenoise
