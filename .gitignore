@@ -276,3 +276,7 @@ mibudge/media/
 .env
 .envs/*
 !.envs/.local/
+project.css
+*.min.css
+*.min.js
+vendors.js
