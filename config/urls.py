@@ -8,19 +8,32 @@ from django.views.generic import TemplateView
 from rest_framework.authtoken.views import obtain_auth_token
 
 urlpatterns = [
-    path("", TemplateView.as_view(template_name="pages/home.html"), name="home"),
     path(
-        "about/", TemplateView.as_view(template_name="pages/about.html"), name="about"
+        "",
+        TemplateView.as_view(template_name="pages/home.html"),
+        name="home"
+    ),
+    path(
+        "about/",
+        TemplateView.as_view(template_name="pages/about.html"),
+        name="about"
     ),
     # Django Admin, use {% url 'admin:index' %}
+    #
     path(settings.ADMIN_URL, admin.site.urls),
     # User management
+    #
     path("users/", include("mibudge.users.urls", namespace="users")),
     path("accounts/", include("allauth.urls")),
-    # Your stuff: custom urls includes go here
+    # The main app of this project: moneypools
+    #
+    path("mp/", include('moneypools.urls'))
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 if settings.DEBUG:
-    # Static file serving when using Gunicorn + Uvicorn for local web socket development
+    # Static file serving when using Gunicorn + Uvicorn for local web
+    # socket development
+    #
     urlpatterns += staticfiles_urlpatterns()
 
 # API URLS
@@ -34,6 +47,7 @@ urlpatterns += [
 if settings.DEBUG:
     # This allows the error pages to be debugged during development, just visit
     # these url in browser to see how these error pages look like.
+    #
     urlpatterns += [
         path(
             "400/",
