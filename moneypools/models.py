@@ -6,6 +6,7 @@ from django.db import models
 
 from djchoices import ChoiceItem, DjangoChoices
 from djmoney.models.fields import MoneyField
+from multiselectfield import MultiSelectField
 import recurrence.fields
 
 # See https://stackoverflow.com/questions/224462/storing-money-in-a-decimal-column-what-precision-and-scale/224866#224866
@@ -83,120 +84,6 @@ class BankAccount(MoneyPoolBaseClass):
         description="Amount of money that is not allocated to any budget.",
         editable=False,
     )
-
-
-########################################################################
-########################################################################
-#
-# NOTE: we must make sure that there is always a 'safe to spend'
-# budget. It is displayed somewhat specially.
-#
-class Budget(MoneyPoolBaseClass):
-    """"""
-
-    #####################################################################
-    #
-    class BudgetType(DjangoChoices):
-        """
-        Goal -> money accumulates and once it reaches the target_balance
-                the goal is complete (and further automatic accumulation
-                of money does not happen.)
-
-        Recurring -> money accumulates and once it reaches the
-                target_balance it is complete. However, if the amount of
-                money in the budget falls below the target_balance, it
-                will start accuring money again on its schedule.
-        """
-
-        goal = ChoiceItem("G", "Goal")
-        recurring_to_goal = ChoiceItem("R", "Recurring to Goal")
-        recurring_w_fillup_goal = ChoiceItem("F", "Recurring to Fill-up Goal")
-        associated_fillup_goal = ChoiceItem("A", "Associated Fill-up Goal")
-
-    #
-    #####################################################################
-
-    #####################################################################
-    #
-    class FundingType(DjangoChoices):
-        """
-        How is a budget funded? Budgets are credited some time on the day
-        of their specified funding schedule. How much money is
-        credited in to a budget is of tehse types:
-
-        Target Date -> You want the goal to be funded by the target
-            date. (the amount left to fund the budget divided by the
-            number of days in the funding schedule before the target
-            date)
-
-        Fixed Amount -> You want the goal to be credited a fixed
-            amount on its funding schedule dates.
-        """
-
-        target_date = ChoiceItem("D", "Target Date")
-        fixed_amount = ChoiceItem("F", "Fixed Amount")
-
-    #
-    #####################################################################
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=200)
-    bank_account = models.ForeignKey(
-        BankAccount, on_delete=models.CASCADE, editable=False
-    )
-    balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-    )
-    target_balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-    )
-    budget_type = models.CharField(
-        max_length=1, choices=BudgetType.choices, default=BudgetType.goal
-    )
-
-    # Only relevant if the FundingType is 'target_date'
-    #
-    target_date = models.DateTimeField(null=True, blank=True)
-
-    # Only relevant if the BudgetType is 'recurring'
-    #
-    with_fillup_goal = models.BooleanField(default=False)
-
-    # Only relevant if the BudgetType is 'recurring' and
-    # 'with_fillup_goal' is True. The fillup_goal is automatically
-    # created with a fixed naming pattern based on the name of this
-    # recurring budget.
-    #
-    fillup_goal = models.ForeignKey("self", null=True)
-
-    archived = models.BooleanField(default=False, editable=False)
-    archived_at = models.DateTimeField(null=True, blank=True, editable=False)
-    paused = models.BooleanField(
-        default=False,
-        description="A paused budget does not get automatically funded on its schedule.",
-    )
-    funding_schedule = recurrence.fields.RecurrenceField()
-
-    # Only relevant for 'recurring' budgets
-    #
-    recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
-
-    image = models.ImageField(
-        upload_to="budget_images/%Y-%m-%d/",
-        height_field="image_height",
-        width_field="image_width",
-        null=True,
-        blank=True,
-    )
-    image_height = models.IntegerField()
-    image_width = models.IntegerField()
-    memo = models.TextField(max_length=512, null=True, blank=True)
-    # auto-spend - ManyToManyField - but only one budget can per bank
-    # account can have an auto-spend category asigned to it.
 
 
 ########################################################################
@@ -413,6 +300,123 @@ class TransactionCategory(DjangoChoices):
     phone = ChoiceItem("Utilities:Phone", "Phone")
     trash = ChoiceItem("Utilities:Trash", "Trash")
     water_sewer = ChoiceItem("Utilities:Water & Sewer", "Water & Sewer")
+
+
+########################################################################
+########################################################################
+#
+# NOTE: we must make sure that there is always a 'safe to spend'
+# budget. It is displayed somewhat specially.
+#
+class Budget(MoneyPoolBaseClass):
+    """"""
+
+    #####################################################################
+    #
+    class BudgetType(DjangoChoices):
+        """
+        Goal -> money accumulates and once it reaches the target_balance
+                the goal is complete (and further automatic accumulation
+                of money does not happen.)
+
+        Recurring -> money accumulates and once it reaches the
+                target_balance it is complete. However, if the amount of
+                money in the budget falls below the target_balance, it
+                will start accuring money again on its schedule.
+        """
+
+        goal = ChoiceItem("G", "Goal")
+        recurring_to_goal = ChoiceItem("R", "Recurring to Goal")
+        recurring_w_fillup_goal = ChoiceItem("F", "Recurring to Fill-up Goal")
+        associated_fillup_goal = ChoiceItem("A", "Associated Fill-up Goal")
+
+    #
+    #####################################################################
+
+    #####################################################################
+    #
+    class FundingType(DjangoChoices):
+        """
+        How is a budget funded? Budgets are credited some time on the day
+        of their specified funding schedule. How much money is
+        credited in to a budget is of tehse types:
+
+        Target Date -> You want the goal to be funded by the target
+            date. (the amount left to fund the budget divided by the
+            number of days in the funding schedule before the target
+            date)
+
+        Fixed Amount -> You want the goal to be credited a fixed
+            amount on its funding schedule dates.
+        """
+
+        target_date = ChoiceItem("D", "Target Date")
+        fixed_amount = ChoiceItem("F", "Fixed Amount")
+
+    #
+    #####################################################################
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    bank_account = models.ForeignKey(
+        BankAccount, on_delete=models.CASCADE, editable=False
+    )
+    balance = MoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default=0,
+    )
+    target_balance = MoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default=0,
+    )
+    budget_type = models.CharField(
+        max_length=1, choices=BudgetType.choices, default=BudgetType.goal
+    )
+
+    # Only relevant if the FundingType is 'target_date'
+    #
+    target_date = models.DateTimeField(null=True, blank=True)
+
+    # Only relevant if the BudgetType is 'recurring'
+    #
+    with_fillup_goal = models.BooleanField(default=False)
+
+    # Only relevant if the BudgetType is 'recurring' and
+    # 'with_fillup_goal' is True. The fillup_goal is automatically
+    # created with a fixed naming pattern based on the name of this
+    # recurring budget.
+    #
+    fillup_goal = models.ForeignKey("self", null=True)
+
+    archived = models.BooleanField(default=False, editable=False)
+    archived_at = models.DateTimeField(null=True, blank=True, editable=False)
+    paused = models.BooleanField(
+        default=False,
+        description="A paused budget does not get automatically funded on its schedule.",
+    )
+    funding_schedule = recurrence.fields.RecurrenceField()
+
+    # Only relevant for 'recurring' budgets
+    #
+    recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
+
+    image = models.ImageField(
+        upload_to="budget_images/%Y-%m-%d/",
+        height_field="image_height",
+        width_field="image_width",
+        null=True,
+        blank=True,
+    )
+    image_height = models.IntegerField()
+    image_width = models.IntegerField()
+    memo = models.TextField(max_length=512, null=True, blank=True)
+
+    # NOTE: Need to enforce in pre-save that only one budget in an
+    #       account has the given fields selected.
+    #
+    auto_spend = MultiSelectField(choices=TransactionCategory.choices)
 
 
 ########################################################################

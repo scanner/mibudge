@@ -74,6 +74,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "djmoney",
     'recurrence',
+    'multiselectfield',
 ]
 
 LOCAL_APPS = [

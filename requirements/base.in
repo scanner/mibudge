@@ -12,6 +12,7 @@ django-crispy-forms
 django-environ
 django-model-utils
 django-money
+django-multiselectfield
 django-recurrence
 django-redis
 djangorestframework
