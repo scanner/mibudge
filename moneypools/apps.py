@@ -2,5 +2,5 @@ from django.apps import AppConfig
 
 
 class MoneyPoolsConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'moneypools'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "moneypools"
