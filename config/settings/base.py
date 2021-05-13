@@ -59,7 +59,7 @@ DJANGO_APPS = [
     "django.contrib.sites",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # "django.contrib.humanize", # Handy template tags
+    "django.contrib.humanize",
     "django.contrib.admin",
     "django.forms",
 ]
@@ -72,12 +72,12 @@ THIRD_PARTY_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
+    "djmoney",
+    'recurrence',
 ]
 
 LOCAL_APPS = [
     "mibudge.users.apps.UsersConfig",
-    # The moneypools app is the core app of this project.
-    #
     "moneypools.apps.MoneyPoolsConfig",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -311,5 +311,13 @@ REST_FRAMEWORK = {
 
 # django-cors-headers - https://github.com/adamchainz/django-cors-headers#setup
 CORS_URLS_REGEX = r"^/api/.*$"
-# Your stuff...
+
 # ------------------------------------------------------------------------------
+# Mibudge settings go after here.
+# ------------------------------------------------------------------------------
+
+# XXX I only have accounts in USD so we are going to start with just
+#     specifying a default currency. For expediency we start with just
+#     this default
+#
+DEFAULT_CURRENCY = 'USD'

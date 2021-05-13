@@ -4,6 +4,7 @@ from django.db import models
 
 from djchoices import ChoiceItem, DjangoChoices
 from djmoney.models.fields import MoneyField
+import recurrence.fields
 
 # See https://stackoverflow.com/questions/224462/storing-money-in-a-decimal-column-what-precision-and-scale/224866#224866
 #
@@ -96,15 +97,6 @@ class Budget(MoneyPoolBaseClass):
                 target_balance it is complete. However, if the amount of
                 money in the budget falls below the target_balance, it
                 will start accuring money again on its schedule.
-
-        Recurring with fillup -> Like recurring except when it reaches
-                the target_balance money is transferred to the
-                associated fill up goal until that goal reaches its
-                target_balance.
-
-        Fillup Goal -> created automatically when a `recurring with
-                fillup` goal is created. Its target_balance is the same
-                as the Recurring with fillup goal.
         """
 
         goal = ChoiceItem("G", "Goal")
@@ -150,25 +142,50 @@ class Budget(MoneyPoolBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
     )
-    target_date = models.DateTimeField(null=True, blank=True)
+
     budget_type = models.CharField(
         max_length=1, choices=BudgetType.choices, default=BudgetType.goal
     )
+
+    # Only relevant if the FundingType is 'target_date'
+    #
+    target_date = models.DateTimeField(null=True, blank=True)
+
+    # Only relevant if the BudgetType is 'recurring'
+    #
     with_fillup_goal = models.BooleanField(default=False)
-    fillup_goal = models.ForeignKey("self", null=True, blank=True)
+
+    # Only relevant if the BudgetType is 'recurring' and
+    # 'with_fillup_goal' is True. The fillup_goal is automatically
+    # created with a fixed naming pattern based on the name of this
+    # recurring budget.
+    #
+    fillup_goal = models.ForeignKey("self", null=True)
+
     archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
     paused = models.BooleanField(
         default=False,
         description="A paused budget does not get automatically funded on its schedule.",
     )
-    funding_schedule = models.ForeignKey(FundingSchedule, null=True)
-    recurring_schedule = models.CharField(max_length=256, null=True)  # Only relevant for
-    # funding_schedule
-    # photo
-    # memo
-    # auto-spend
-    # due_date
+    funding_schedule = recurrence.fields.RecurrenceField()
+
+    # Only relevant for 'recurring' budgets
+    #
+    recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
+
+    image = models.ImageField(
+        upload_to="budget_images/%Y-%m-%d/",
+        height_field="image_height",
+        width_field="image_width",
+        null=True,
+        blank=True,
+    )
+    image_height = models.IntegerField()
+    image_width = models.IntegerField()
+    memo = models.TextField(max_length=512, null=True, blank=True)
+    # auto-spend - ManyToManyField - but only one budget can per bank
+    # account can have an auto-spend category asigned to it.
 
 
 TRANSACTION_CATEGORY_CHOICES = (
@@ -431,6 +448,9 @@ class ThirdPartyTransaction(TransactionBaseClass):
         default_currency=settings.DEFAULT_CURRENCY,
         description="Available Balance has pending debits deducted.",
     )
+    # XXX Probably should make category its own object class and
+    #     pre-create a bunch of those in the initial migration.
+    #
     category = models.CharField(
         max_length=64,
         choices=TRANSACTION_CATEGORY_CHOICES,

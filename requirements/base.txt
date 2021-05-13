@@ -37,6 +37,8 @@ django-appconf==1.0.4
     # via django-compressor
 django-celery-beat==2.2.0
     # via -r base.in
+django-choices==1.7.1
+    # via -r base.in
 django-compressor==2.4.1
     # via -r base.in
 django-cors-headers==3.7.0
@@ -47,18 +49,25 @@ django-environ==0.4.5
     # via -r base.in
 django-model-utils==4.1.1
     # via -r base.in
+django-money==1.3.1
+    # via -r base.in
+django-recurrence==1.10.3
+    # via -r base.in
 django-redis==4.12.1
     # via -r base.in
 django-timezone-field==4.1.2
     # via django-celery-beat
-django==3.2
+django==3.2.2
     # via
     #   -r base.in
     #   django-allauth
     #   django-appconf
     #   django-celery-beat
+    #   django-choices
     #   django-cors-headers
     #   django-model-utils
+    #   django-money
+    #   django-recurrence
     #   django-redis
     #   django-timezone-field
     #   djangorestframework
@@ -70,9 +79,9 @@ h11==0.12.0
     # via uvicorn
 hiredis==2.0.0
     # via -r base.in
-httptools==0.1.1
+httptools==0.1.2
     # via uvicorn
-humanize==3.4.1
+humanize==3.5.0
     # via flower
 idna==2.10
     # via requests
@@ -84,17 +93,22 @@ pillow==8.2.0
     # via -r base.in
 prometheus-client==0.8.0
     # via flower
+py-moneyed==0.8.0
+    # via django-money
 pycparser==2.20
     # via cffi
-pyjwt[crypto]==2.0.1
+pyjwt[crypto]==2.1.0
     # via django-allauth
 python-crontab==2.5.1
     # via django-celery-beat
 python-dateutil==2.8.1
-    # via python-crontab
-python-dotenv==0.17.0
+    # via
+    #   -r base.in
+    #   django-recurrence
+    #   python-crontab
+python-dotenv==0.17.1
     # via uvicorn
-python-slugify==4.0.1
+python-slugify==5.0.2
     # via -r base.in
 python3-openid==3.2.0
     # via django-allauth
@@ -103,14 +117,13 @@ pytz==2021.1
     #   -r base.in
     #   celery
     #   django
+    #   django-recurrence
     #   django-timezone-field
     #   flower
 pyyaml==5.4.1
     # via uvicorn
 rcssmin==1.0.6
-    # via
-    #   -r base.in
-    #   django-compressor
+    # via django-compressor
 redis==3.5.3
     # via
     #   -r base.in
@@ -123,9 +136,10 @@ requests==2.25.1
     #   requests-oauthlib
 rjsmin==1.1.0
     # via django-compressor
-six==1.15.0
+six==1.16.0
     # via
     #   argon2-cffi
+    #   django-choices
     #   django-compressor
     #   python-dateutil
 sqlparse==0.4.1

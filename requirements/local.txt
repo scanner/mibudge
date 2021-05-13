@@ -18,19 +18,19 @@ argon2-cffi==20.1.0
     # via -r base.in
 asgiref==3.3.4
     # via django
-astroid==2.5.3
+astroid==2.5.6
     # via
     #   pylint
     #   pylint-celery
-attrs==20.3.0
+attrs==21.2.0
     # via pytest
-babel==2.9.0
+babel==2.9.1
     # via sphinx
 backcall==0.2.0
     # via ipython
 billiard==3.6.4.0
     # via celery
-black==20.8b1
+black==21.5b1
     # via -r local.in
 celery==4.4.7
     # via
@@ -71,6 +71,8 @@ django-appconf==1.0.4
     # via django-compressor
 django-celery-beat==2.2.0
     # via -r base.in
+django-choices==1.7.1
+    # via -r base.in
 django-compressor==2.4.1
     # via -r base.in
 django-cors-headers==3.7.0
@@ -87,6 +89,10 @@ django-extensions==3.1.3
     # via -r local.in
 django-model-utils==4.1.1
     # via -r base.in
+django-money==1.3.1
+    # via -r base.in
+django-recurrence==1.10.3
+    # via -r base.in
 django-redis==4.12.1
     # via -r base.in
 django-stubs-ext==0.2.0
@@ -95,16 +101,19 @@ django-stubs==1.8.0
     # via -r local.in
 django-timezone-field==4.1.2
     # via django-celery-beat
-django==3.2
+django==3.2.2
     # via
     #   -r base.in
     #   django-allauth
     #   django-appconf
     #   django-celery-beat
+    #   django-choices
     #   django-cors-headers
     #   django-debug-toolbar
     #   django-extensions
     #   django-model-utils
+    #   django-money
+    #   django-recurrence
     #   django-redis
     #   django-stubs
     #   django-stubs-ext
@@ -112,17 +121,17 @@ django==3.2
     #   djangorestframework
 djangorestframework==3.12.4
     # via -r base.in
-docutils==0.16
+docutils==0.17.1
     # via sphinx
 factory-boy==3.2.0
     # via -r local.in
-faker==8.1.0
+faker==8.1.3
     # via factory-boy
 filelock==3.0.12
     # via virtualenv
 flake8-isort==4.0.0
     # via -r local.in
-flake8==3.9.1
+flake8==3.9.2
     # via
     #   -r local.in
     #   flake8-isort
@@ -132,9 +141,9 @@ h11==0.12.0
     # via uvicorn
 hiredis==2.0.0
     # via -r base.in
-httptools==0.1.1
+httptools==0.1.2
     # via uvicorn
-humanize==3.4.1
+humanize==3.5.0
     # via flower
 identify==2.2.4
     # via pre-commit
@@ -148,7 +157,7 @@ ipdb==0.13.7
     # via -r local.in
 ipython-genutils==0.2.0
     # via traitlets
-ipython==7.22.0
+ipython==7.23.1
     # via ipdb
 isort==5.8.0
     # via
@@ -165,7 +174,11 @@ lazy-object-proxy==1.6.0
 livereload==2.6.3
     # via sphinx-autobuild
 markupsafe==1.1.1
-    # via jinja2
+    # via
+    #   jinja2
+    #   sphinx
+matplotlib-inline==0.1.2
+    # via ipython
 mccabe==0.6.1
     # via
     #   flake8
@@ -209,6 +222,8 @@ psycopg2==2.8.6
     # via -r local.in
 ptyprocess==0.7.0
     # via pexpect
+py-moneyed==0.8.0
+    # via django-money
 py==1.10.0
     # via pytest
 pycodestyle==2.7.0
@@ -217,21 +232,21 @@ pycparser==2.20
     # via cffi
 pyflakes==2.3.1
     # via flake8
-pygments==2.8.1
+pygments==2.9.0
     # via
     #   ipython
     #   sphinx
-pyjwt[crypto]==2.0.1
+pyjwt[crypto]==2.1.0
     # via django-allauth
 pylint-celery==0.3
     # via -r local.in
-pylint-django==2.4.3
+pylint-django==2.4.4
     # via -r local.in
 pylint-plugin-utils==0.6
     # via
     #   pylint-celery
     #   pylint-django
-pylint==2.7.4
+pylint==2.8.2
     # via
     #   pylint-celery
     #   pylint-django
@@ -242,7 +257,7 @@ pytest-django==4.2.0
     # via -r local.in
 pytest-sugar==0.9.4
     # via -r local.in
-pytest==6.2.3
+pytest==6.2.4
     # via
     #   -r local.in
     #   pytest-django
@@ -251,11 +266,13 @@ python-crontab==2.5.1
     # via django-celery-beat
 python-dateutil==2.8.1
     # via
+    #   -r base.in
+    #   django-recurrence
     #   faker
     #   python-crontab
-python-dotenv==0.17.0
+python-dotenv==0.17.1
     # via uvicorn
-python-slugify==4.0.1
+python-slugify==5.0.2
     # via -r base.in
 python3-openid==3.2.0
     # via django-allauth
@@ -265,6 +282,7 @@ pytz==2021.1
     #   babel
     #   celery
     #   django
+    #   django-recurrence
     #   django-timezone-field
     #   flower
 pyyaml==5.4.1
@@ -272,9 +290,7 @@ pyyaml==5.4.1
     #   pre-commit
     #   uvicorn
 rcssmin==1.0.6
-    # via
-    #   -r base.in
-    #   django-compressor
+    # via django-compressor
 redis==3.5.3
     # via
     #   -r base.in
@@ -290,9 +306,10 @@ requests==2.25.1
     #   sphinx
 rjsmin==1.1.0
     # via django-compressor
-six==1.15.0
+six==1.16.0
     # via
     #   argon2-cffi
+    #   django-choices
     #   django-compressor
     #   django-coverage-plugin
     #   livereload
@@ -302,7 +319,7 @@ snowballstemmer==2.1.0
     # via sphinx
 sphinx-autobuild==2021.3.14
     # via -r local.in
-sphinx==3.5.4
+sphinx==4.0.1
     # via
     #   -r local.in
     #   sphinx-autobuild
@@ -342,14 +359,13 @@ tornado==6.1
     #   flower
     #   livereload
 traitlets==5.0.5
-    # via ipython
+    # via
+    #   ipython
+    #   matplotlib-inline
 typed-ast==1.4.3
+    # via mypy
+typing-extensions==3.10.0.0
     # via
-    #   black
-    #   mypy
-typing-extensions==3.7.4.3
-    # via
-    #   black
     #   django-stubs
     #   mypy
 urllib3==1.26.4
@@ -363,7 +379,7 @@ vine==1.3.0
     #   amqp
     #   celery
     #   flower
-virtualenv==20.4.4
+virtualenv==20.4.6
     # via pre-commit
 watchgod==0.7
     # via
@@ -373,7 +389,7 @@ wcwidth==0.2.5
     # via prompt-toolkit
 websockets==8.1
     # via uvicorn
-werkzeug==1.0.1
+werkzeug==2.0.0
     # via -r local.in
 whitenoise==5.2.0
     # via -r base.in
