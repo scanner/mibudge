@@ -26,6 +26,7 @@ black
 pylint-django
 pylint-celery
 pre-commit
+pip-tools
 
 # Django
 # ------------------------------------------------------------------------------

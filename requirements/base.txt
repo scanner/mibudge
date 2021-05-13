@@ -57,7 +57,7 @@ django-redis==4.12.1
     # via -r base.in
 django-timezone-field==4.1.2
     # via django-celery-beat
-django==3.2.2
+django==3.2.3
     # via
     #   -r base.in
     #   django-allauth
