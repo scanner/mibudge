@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
@@ -34,7 +36,9 @@ class Bank(MoneyPoolBaseClass):
 
     name = models.CharField(max_length=200)
     # XXX Add a validator to make sure only digits are used
-    routing_number = models.CharField(max_length=9, null=True, default=None)
+    routing_number = models.CharField(
+        max_length=9, null=True, default=None, editable=False
+    )
 
 
 ########################################################################
@@ -48,17 +52,20 @@ class BankAccount(MoneyPoolBaseClass):
     """
 
     name = models.CharField(max_length=200)
-    bank = models.ForeignKey(Bank, on_delete=models.CASCADE)
+    bank = models.ForeignKey(Bank, on_delete=models.CASCADE, editable=False)
     owners = models.ManyToManyField(User)
 
     # XXX Add a validator to make sure only digits are used
-    account_number = models.CharField(max_length=12, null=True, default=None)
+    account_number = models.CharField(
+        max_length=12, null=True, default=None, editable=False
+    )
     posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Posted Balance does not include pending debits.",
+        editable=False,
     )
     available_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -66,6 +73,7 @@ class BankAccount(MoneyPoolBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Available Balance has pending debits deducted.",
+        editable=False,
     )
     unallocated_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -73,6 +81,7 @@ class BankAccount(MoneyPoolBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Amount of money that is not allocated to any budget.",
+        editable=False,
     )
 
 
@@ -130,8 +139,11 @@ class Budget(MoneyPoolBaseClass):
     #
     #####################################################################
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
-    bank_account = models.ForeignKey(BankAccount, on_delete=models.CASCADE)
+    bank_account = models.ForeignKey(
+        BankAccount, on_delete=models.CASCADE, editable=False
+    )
     balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -142,7 +154,6 @@ class Budget(MoneyPoolBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
     )
-
     budget_type = models.CharField(
         max_length=1, choices=BudgetType.choices, default=BudgetType.goal
     )
@@ -162,8 +173,8 @@ class Budget(MoneyPoolBaseClass):
     #
     fillup_goal = models.ForeignKey("self", null=True)
 
-    archived = models.BooleanField(default=False)
-    archived_at = models.DateTimeField(null=True, blank=True)
+    archived = models.BooleanField(default=False, editable=False)
+    archived_at = models.DateTimeField(null=True, blank=True, editable=False)
     paused = models.BooleanField(
         default=False,
         description="A paused budget does not get automatically funded on its schedule.",
@@ -188,170 +199,236 @@ class Budget(MoneyPoolBaseClass):
     # account can have an auto-spend category asigned to it.
 
 
-TRANSACTION_CATEGORY_CHOICES = (
-    ("Business:Business Clothing", "Business Clothing"),
-    ("Business:Business Services", "Business Services"),
-    ("Business:Business Supplies", "Business Supplies"),
-    ("Business:Meals", "Meals"),
-    ("Business:Travel", "Travel"),
-    ("Children:Activities", "Activities"),
-    ("Children:Allowance", "Allowance"),
-    ("Children:Baby Supplies", "Baby Supplies"),
-    ("Children:Childcare", "Childcare"),
-    ("Children:Kids Clothing", "Kids Clothing"),
-    ("Children:Kids Education", "Kids Education"),
-    ("Children:Toys", "Toys"),
-    ("Culture:Art", "Art"),
-    ("Culture:Books", "Books"),
-    ("Culture:Dance", "Dance"),
-    ("Culture:Games", "Games"),
-    ("Culture:Movies", "Movies"),
-    ("Culture:Music", "Music"),
-    ("Culture:News", "News"),
-    ("Culture:Random Fun", "Random Fun"),
-    ("Culture:TV", "TV"),
-    ("Education:Books & Supplies", "Books & Supplies"),
-    ("Education:Room & Board", "Room & Board"),
-    ("Education:Student Loans", "Student Loans"),
-    ("Education: Tuition & Fees", " Tuition & Fees"),
-    ("Fees:ATM Fees", "ATM Fees"),
-    ("Fees:Investment Fees", "Investment Fees"),
-    ("Fees:Other Fees", "Other Fees"),
-    ("Financial:Accounting", "Accounting"),
-    ("Financial:Credit Card Payment", "Credit Card Payment"),
-    ("Financial:Financial Advice", "Financial Advice"),
-    ("Financial:Life Insurance", "Life Insurance"),
-    ("Financial:Loan", "Loan"),
-    ("Financial:Loan Payment", "Loan Payment"),
-    ("Financial:Money Transfers", "Money Transfers"),
-    ("Financial:Other Financial", "Other Financial"),
-    ("Financial:Tax Preparation", "Tax Preparation"),
-    ("Financial:Taxes, Federal", "Taxes, Federal"),
-    ("Financial:Taxes, Other", "Taxes, Other"),
-    ("Financial:Taxes, State", "Taxes, State"),
-    ("Food & Drink:Alcohol & Bars", "Alcohol & Bars"),
-    ("Food & Drink:Coffee & Tea", "Coffee & Tea"),
-    ("Food & Drink:Dessert", "Dessert"),
-    ("Food & Drink:Fast Food", "Fast Food"),
-    ("Food & Drink:Groceries", "Groceries"),
-    ("Food & Drink:Other Food & Drink", "Other Food & Drink"),
-    ("Food & Drink:Restaurants", "Restaurants"),
-    ("Food & Drink:Snacks", "Snacks"),
-    ("Food & Drink:Tobacco & Like", "Tobacco & Like"),
-    ("Gifts & Donations:Charities", "Charities"),
-    ("Gifts & Donations:Gifts", "Gifts"),
-    ("Health & Medical:Care Facilities", "Care Facilities"),
-    ("Health & Medical:Dentist", "Dentist"),
-    ("Health & Medical:Doctor", "Doctor"),
-    ("Health & Medical:Equipment", "Equipment"),
-    ("Health & Medical:Eyes", "Eyes"),
-    ("Health & Medical:Health Insurance", "Health Insurance"),
-    ("Health & Medical:Other Health & Medical", "Other Health & Medical"),
-    ("Health & Medical:Pharmacies", "Pharmacies"),
-    ("Health & Medical:Prescriptions", "Prescriptions"),
-    ("Home:Furnishings", "Furnishings"),
-    ("Home:Home Insurance", "Home Insurance"),
-    ("Home:Home Purchase", "Home Purchase"),
-    ("Home:Home Services", "Home Services"),
-    ("Home:Home Supplies", "Home Supplies"),
-    ("Home:Lawn & Garden", "Lawn & Garden"),
-    ("Home:Mortgage", "Mortgage"),
-    ("Home:Moving", "Moving"),
-    ("Home:Other Home", "Other Home"),
-    ("Home:Property Tax", "Property Tax"),
-    ("Home:Rent", "Rent"),
-    ("Home:Renter's Insurance", "Renter's Insurance"),
-    ("Income:Bonus", "Bonus"),
-    ("Income:Commission", "Commission"),
-    ("Income:Interest", "Interest"),
-    ("Income:Other Income", "Other Income"),
-    ("Income:Paycheck", "Paycheck"),
-    ("Income:Reimbursement", "Reimbursement"),
-    ("Income:Rental Income", "Rental Income"),
-    ("Investment:Education Investment", "Education Investment"),
-    ("Investment:Other Investments", "Other Investments"),
-    ("Investment:Retirement", "Retirement"),
-    ("Investment:Stocks & Mutual Funds", "Stocks & Mutual Funds"),
-    ("Legal:Legal Fees", "Legal Fees"),
-    ("Legal:Legal Services", "Legal Services"),
-    ("Legal:Other Legal Costs", "Other Legal Costs"),
-    ("Office:Equipment", "Equipment"),
-    ("Office:Office Supplies", "Office Supplies"),
-    ("Office:Other Office", "Other Office"),
-    ("Office:Postage & Shipping", "Postage & Shipping"),
-    ("Personal:Accessories", "Accessories"),
-    ("Personal:Beauty", "Beauty"),
-    ("Personal:Body Enhancement", "Body Enhancement"),
-    ("Personal:Clothing", "Clothing"),
-    ("Personal:Counseling", "Counseling"),
-    ("Personal:Hair", "Hair"),
-    ("Personal:Hobbies", "Hobbies"),
-    ("Personal:Jewelry", "Jewelry"),
-    ("Personal:Laundry", "Laundry"),
-    ("Personal:Other Personal", "Other Personal"),
-    ("Personal:Religion", "Religion"),
-    ("Personal:Shoes", "Shoes"),
-    ("Pets:Pet Food", "Pet Food"),
-    ("Pets:Pet Grooming", "Pet Grooming"),
-    ("Pets:Pet Medicine", "Pet Medicine"),
-    ("Pets:Pet Supplies", "Pet Supplies"),
-    ("Pets:Veterinarian", "Veterinarian"),
-    ("Sports & Fitness:Camping", "Camping"),
-    ("Sports & Fitness:Fitness Gear", "Fitness Gear"),
-    ("Sports & Fitness:Golf", "Golf"),
-    ("Sports & Fitness:Memberships", "Memberships"),
-    ("Sports & Fitness:Other Sports & Fitness", "Other Sports & Fitness"),
-    ("Sports & Fitness:Sporting Events", "Sporting Events"),
-    ("Sports & Fitness:Sporting Goods", "Sporting Goods"),
-    ("Technology:Domains & Hosting", "Domains & Hosting"),
-    ("Technology:Hardware", "Hardware"),
-    ("Technology:Online Services", "Online Services"),
-    ("Technology:Software", "Software"),
-    ("Transportation:Auto Insurance", "Auto Insurance"),
-    ("Transportation:Auto Payment", "Auto Payment"),
-    ("Transportation:Auto Services", "Auto Services"),
-    ("Transportation:Auto Supplies", "Auto Supplies"),
-    ("Transportation:Bicycle", "Bicycle"),
-    ("Transportation:Boats & Marine", "Boats & Marine"),
-    ("Transportation:Gas", "Gas"),
-    ("Transportation:Other Transportation", "Other Transportation"),
-    ("Transportation:Parking & Tolls", "Parking & Tolls"),
-    ("Transportation:Parking Tickets", "Parking Tickets"),
-    ("Transportation:Public Transit", "Public Transit"),
-    ("Transportation:Shipping", "Shipping"),
-    ("Transportation:Taxies", "Taxies"),
-    ("Travel:Car Rental", "Car Rental"),
-    ("Travel:Flights", "Flights"),
-    ("Travel:Hotels", "Hotels"),
-    ("Travel:Tours & Cruises", "Tours & Cruises"),
-    ("Travel:Train", "Train"),
-    ("Travel:Travel Buses", "Travel Buses"),
-    ("Travel:Travel Dining", "Travel Dining"),
-    ("Travel:Travel Entertainment", "Travel Entertainment"),
-    ("Uncategorized:Cash", "Cash"),
-    ("Uncategorized:Other Shopping", "Other Shopping"),
-    ("Uncategorized:Unknown", "Unknown"),
-    ("Utilities:Cable", "Cable"),
-    ("Utilities:Electricity", "Electricity"),
-    ("Utilities:Gas & Fuel", "Gas & Fuel"),
-    ("Utilities:Internet", "Internet"),
-    ("Utilities:Other Utilities", "Other Utilities"),
-    ("Utilities:Phone", "Phone"),
-    ("Utilities:Trash", "Trash"),
-    ("Utilities:Water & Sewer", "Water & Sewer"),
-)
+########################################################################
+########################################################################
+#
+class TransactionCategory(DjangoChoices):
+    business_clothing = ChoiceItem(
+        "Business:Business Clothing", "Business Clothing"
+    )
+    business_services = ChoiceItem(
+        "Business:Business Services", "Business Services"
+    )
+    business_supplies = ChoiceItem(
+        "Business:Business Supplies", "Business Supplies"
+    )
+    meals = ChoiceItem("Business:Meals", "Meals")
+    travel = ChoiceItem("Business:Travel", "Travel")
+    activities = ChoiceItem("Children:Activities", "Activities")
+    allowance = ChoiceItem("Children:Allowance", "Allowance")
+    baby_supplies = ChoiceItem("Children:Baby Supplies", "Baby Supplies")
+    childcare = ChoiceItem("Children:Childcare", "Childcare")
+    kids_clothing = ChoiceItem("Children:Kids Clothing", "Kids Clothing")
+    kids_education = ChoiceItem("Children:Kids Education", "Kids Education")
+    toys = ChoiceItem("Children:Toys", "Toys")
+    art = ChoiceItem("Culture:Art", "Art")
+    books = ChoiceItem("Culture:Books", "Books")
+    dance = ChoiceItem("Culture:Dance", "Dance")
+    games = ChoiceItem("Culture:Games", "Games")
+    movies = ChoiceItem("Culture:Movies", "Movies")
+    music = ChoiceItem("Culture:Music", "Music")
+    news = ChoiceItem("Culture:News", "News")
+    random_fun = ChoiceItem("Culture:Random Fun", "Random Fun")
+    tv = ChoiceItem("Culture:TV", "TV")
+    books_supplies = ChoiceItem(
+        "Education:Books & Supplies", "Books & Supplies"
+    )
+    room_board = ChoiceItem("Education:Room & Board", "Room & Board")
+    student_loans = ChoiceItem("Education:Student Loans", "Student Loans")
+    tuition_fees = ChoiceItem("Education: Tuition & Fees", " Tuition & Fees")
+    atm_fees = ChoiceItem("Fees:ATM Fees", "ATM Fees")
+    investment_fees = ChoiceItem("Fees:Investment Fees", "Investment Fees")
+    other_fees = ChoiceItem("Fees:Other Fees", "Other Fees")
+    accounting = ChoiceItem("Financial:Accounting", "Accounting")
+    credit_card_payment = ChoiceItem(
+        "Financial:Credit Card Payment", "Credit Card Payment"
+    )
+    financial_advice = ChoiceItem(
+        "Financial:Financial Advice", "Financial Advice"
+    )
+    life_insurance = ChoiceItem("Financial:Life Insurance", "Life Insurance")
+    loan = ChoiceItem("Financial:Loan", "Loan")
+    loan_payment = ChoiceItem("Financial:Loan Payment", "Loan Payment")
+    money_transfers = ChoiceItem("Financial:Money Transfers", "Money Transfers")
+    other_financial = ChoiceItem("Financial:Other Financial", "Other Financial")
+    tax_preparation = ChoiceItem("Financial:Tax Preparation", "Tax Preparation")
+    taxes_federal = ChoiceItem("Financial:Taxes, Federal", "Taxes, Federal")
+    taxes_other = ChoiceItem("Financial:Taxes, Other", "Taxes, Other")
+    taxes_state = ChoiceItem("Financial:Taxes, State", "Taxes, State")
+    alcohol_bars = ChoiceItem("Food & Drink:Alcohol & Bars", "Alcohol & Bars")
+    coffee_tea = ChoiceItem("Food & Drink:Coffee & Tea", "Coffee & Tea")
+    dessert = ChoiceItem("Food & Drink:Dessert", "Dessert")
+    fast_food = ChoiceItem("Food & Drink:Fast Food", "Fast Food")
+    groceries = ChoiceItem("Food & Drink:Groceries", "Groceries")
+    other_food_drink = ChoiceItem(
+        "Food & Drink:Other Food & Drink", "Other Food & Drink"
+    )
+    restaurants = ChoiceItem("Food & Drink:Restaurants", "Restaurants")
+    snacks = ChoiceItem("Food & Drink:Snacks", "Snacks")
+    tobacco_like = ChoiceItem("Food & Drink:Tobacco & Like", "Tobacco & Like")
+    charities = ChoiceItem("Gifts & Donations:Charities", "Charities")
+    gifts = ChoiceItem("Gifts & Donations:Gifts", "Gifts")
+    care_facilities = ChoiceItem(
+        "Health & Medical:Care Facilities", "Care Facilities"
+    )
+    dentist = ChoiceItem("Health & Medical:Dentist", "Dentist")
+    doctor = ChoiceItem("Health & Medical:Doctor", "Doctor")
+    equipment = ChoiceItem("Health & Medical:Equipment", "Equipment")
+    eyes = ChoiceItem("Health & Medical:Eyes", "Eyes")
+    health_insurance = ChoiceItem(
+        "Health & Medical:Health Insurance", "Health Insurance"
+    )
+    other_health_medical = ChoiceItem(
+        "Health & Medical:Other Health & Medical", "Other Health & Medical"
+    )
+    pharmacies = ChoiceItem("Health & Medical:Pharmacies", "Pharmacies")
+    prescriptions = ChoiceItem(
+        "Health & Medical:Prescriptions", "Prescriptions"
+    )
+    furnishings = ChoiceItem("Home:Furnishings", "Furnishings")
+    home_insurance = ChoiceItem("Home:Home Insurance", "Home Insurance")
+    home_purchase = ChoiceItem("Home:Home Purchase", "Home Purchase")
+    home_services = ChoiceItem("Home:Home Services", "Home Services")
+    home_supplies = ChoiceItem("Home:Home Supplies", "Home Supplies")
+    lawn_garden = ChoiceItem("Home:Lawn & Garden", "Lawn & Garden")
+    mortgage = ChoiceItem("Home:Mortgage", "Mortgage")
+    moving = ChoiceItem("Home:Moving", "Moving")
+    other_home = ChoiceItem("Home:Other Home", "Other Home")
+    property_tax = ChoiceItem("Home:Property Tax", "Property Tax")
+    rent = ChoiceItem("Home:Rent", "Rent")
+    renters_insurance = ChoiceItem(
+        "Home:Renter's Insurance", "Renter's Insurance"
+    )
+    bonus = ChoiceItem("Income:Bonus", "Bonus")
+    commission = ChoiceItem("Income:Commission", "Commission")
+    interest = ChoiceItem("Income:Interest", "Interest")
+    other_income = ChoiceItem("Income:Other Income", "Other Income")
+    paycheck = ChoiceItem("Income:Paycheck", "Paycheck")
+    reimbursement = ChoiceItem("Income:Reimbursement", "Reimbursement")
+    rental_income = ChoiceItem("Income:Rental Income", "Rental Income")
+    education_investment = ChoiceItem(
+        "Investment:Education Investment", "Education Investment"
+    )
+    other_investments = ChoiceItem(
+        "Investment:Other Investments", "Other Investments"
+    )
+    retirement = ChoiceItem("Investment:Retirement", "Retirement")
+    stocks_mutual_funds = ChoiceItem(
+        "Investment:Stocks & Mutual Funds", "Stocks & Mutual Funds"
+    )
+    legal_fees = ChoiceItem("Legal:Legal Fees", "Legal Fees")
+    legal_services = ChoiceItem("Legal:Legal Services", "Legal Services")
+    other_legal_costs = ChoiceItem(
+        "Legal:Other Legal Costs", "Other Legal Costs"
+    )
+    equipment = ChoiceItem("Office:Equipment", "Equipment")
+    office_supplies = ChoiceItem("Office:Office Supplies", "Office Supplies")
+    other_office = ChoiceItem("Office:Other Office", "Other Office")
+    postage_shipping = ChoiceItem(
+        "Office:Postage & Shipping", "Postage & Shipping"
+    )
+    accessories = ChoiceItem("Personal:Accessories", "Accessories")
+    beauty = ChoiceItem("Personal:Beauty", "Beauty")
+    body_enhancement = ChoiceItem(
+        "Personal:Body Enhancement", "Body Enhancement"
+    )
+    clothing = ChoiceItem("Personal:Clothing", "Clothing")
+    counseling = ChoiceItem("Personal:Counseling", "Counseling")
+    hair = ChoiceItem("Personal:Hair", "Hair")
+    hobbies = ChoiceItem("Personal:Hobbies", "Hobbies")
+    jewelry = ChoiceItem("Personal:Jewelry", "Jewelry")
+    laundry = ChoiceItem("Personal:Laundry", "Laundry")
+    other_personal = ChoiceItem("Personal:Other Personal", "Other Personal")
+    religion = ChoiceItem("Personal:Religion", "Religion")
+    shoes = ChoiceItem("Personal:Shoes", "Shoes")
+    pet_food = ChoiceItem("Pets:Pet Food", "Pet Food")
+    pet_grooming = ChoiceItem("Pets:Pet Grooming", "Pet Grooming")
+    pet_medicine = ChoiceItem("Pets:Pet Medicine", "Pet Medicine")
+    pet_supplies = ChoiceItem("Pets:Pet Supplies", "Pet Supplies")
+    veterinarian = ChoiceItem("Pets:Veterinarian", "Veterinarian")
+    camping = ChoiceItem("Sports & Fitness:Camping", "Camping")
+    fitness_gear = ChoiceItem("Sports & Fitness:Fitness Gear", "Fitness Gear")
+    golf = ChoiceItem("Sports & Fitness:Golf", "Golf")
+    memberships = ChoiceItem("Sports & Fitness:Memberships", "Memberships")
+    other_sports_fitness = ChoiceItem(
+        "Sports & Fitness:Other Sports & Fitness", "Other Sports & Fitness"
+    )
+    sporting_events = ChoiceItem(
+        "Sports & Fitness:Sporting Events", "Sporting Events"
+    )
+    sporting_goods = ChoiceItem(
+        "Sports & Fitness:Sporting Goods", "Sporting Goods"
+    )
+    domains_hosting = ChoiceItem(
+        "Technology:Domains & Hosting", "Domains & Hosting"
+    )
+    hardware = ChoiceItem("Technology:Hardware", "Hardware")
+    online_services = ChoiceItem(
+        "Technology:Online Services", "Online Services"
+    )
+    software = ChoiceItem("Technology:Software", "Software")
+    auto_insurance = ChoiceItem(
+        "Transportation:Auto Insurance", "Auto Insurance"
+    )
+    auto_payment = ChoiceItem("Transportation:Auto Payment", "Auto Payment")
+    auto_services = ChoiceItem("Transportation:Auto Services", "Auto Services")
+    auto_supplies = ChoiceItem("Transportation:Auto Supplies", "Auto Supplies")
+    bicycle = ChoiceItem("Transportation:Bicycle", "Bicycle")
+    boats_marine = ChoiceItem("Transportation:Boats & Marine", "Boats & Marine")
+    gas = ChoiceItem("Transportation:Gas", "Gas")
+    other_transportation = ChoiceItem(
+        "Transportation:Other Transportation", "Other Transportation"
+    )
+    parking_tolls = ChoiceItem(
+        "Transportation:Parking & Tolls", "Parking & Tolls"
+    )
+    parking_tickets = ChoiceItem(
+        "Transportation:Parking Tickets", "Parking Tickets"
+    )
+    public_transit = ChoiceItem(
+        "Transportation:Public Transit", "Public Transit"
+    )
+    shipping = ChoiceItem("Transportation:Shipping", "Shipping")
+    taxies = ChoiceItem("Transportation:Taxies", "Taxies")
+    car_rental = ChoiceItem("Travel:Car Rental", "Car Rental")
+    flights = ChoiceItem("Travel:Flights", "Flights")
+    hotels = ChoiceItem("Travel:Hotels", "Hotels")
+    tours_cruises = ChoiceItem("Travel:Tours & Cruises", "Tours & Cruises")
+    train = ChoiceItem("Travel:Train", "Train")
+    travel_buses = ChoiceItem("Travel:Travel Buses", "Travel Buses")
+    travel_dining = ChoiceItem("Travel:Travel Dining", "Travel Dining")
+    travel_entertainment = ChoiceItem(
+        "Travel:Travel Entertainment", "Travel Entertainment"
+    )
+    cash = ChoiceItem("Uncategorized:Cash", "Cash")
+    other_shopping = ChoiceItem(
+        "Uncategorized:Other Shopping", "Other Shopping"
+    )
+    unknown = ChoiceItem("Uncategorized:Unknown", "Unknown")
+    cable = ChoiceItem("Utilities:Cable", "Cable")
+    electricity = ChoiceItem("Utilities:Electricity", "Electricity")
+    gas_fuel = ChoiceItem("Utilities:Gas & Fuel", "Gas & Fuel")
+    internet = ChoiceItem("Utilities:Internet", "Internet")
+    other_utilities = ChoiceItem("Utilities:Other Utilities", "Other Utilities")
+    phone = ChoiceItem("Utilities:Phone", "Phone")
+    trash = ChoiceItem("Utilities:Trash", "Trash")
+    water_sewer = ChoiceItem("Utilities:Water & Sewer", "Water & Sewer")
 
 
 ########################################################################
 ########################################################################
 #
 class TransactionBaseClass(MoneyPoolBaseClass):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     amount = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
+        editable=False,
     )
-    bank_account = models.ForeignKey(BankAccount, on_delete=models.CASCADE)
+    bank_account = models.ForeignKey(
+        BankAccount, on_delete=models.CASCADE, editable=False
+    )
 
     class Meta:
         abstract = True
@@ -410,14 +487,16 @@ class ThirdPartyTransaction(TransactionBaseClass):
     #
     #####################################################################
 
-    party = models.CharField(max_length=300, null=True, blank=True)
-    transaction_date = models.DateTimeField(null=False)
+    party = models.CharField(
+        max_length=300, null=True, blank=True, editable=False
+    )
+    transaction_date = models.DateTimeField(null=False, editable=False)
     transaction_type = models.CharField(
         length=32, choices=TransactionType.choices
     )
-    pending = models.BooleanField(default=False)
+    pending = models.BooleanField(default=False, editable=False)
     memo = models.TextField(max_length=512, null=True, blank=True)
-    raw_description = models.TextField(max_length=512)
+    raw_description = models.TextField(max_length=512, editable=False)
     description = models.TextField(max_length=512, null=True, blank=True)
     budget = models.ForeignKey("Budget")
     account_posted_balance = MoneyField(
@@ -426,6 +505,7 @@ class ThirdPartyTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Posted Balance does not include pending debits.",
+        editable=False,
     )
     account_available_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -433,6 +513,7 @@ class ThirdPartyTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Available Balance has pending debits deducted.",
+        editable=False,
     )
     budget_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -440,6 +521,7 @@ class ThirdPartyTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Posted Balance does not include pending debits.",
+        editable=False,
     )
     budget_available_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -447,14 +529,15 @@ class ThirdPartyTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Available Balance has pending debits deducted.",
+        editable=False,
     )
     # XXX Probably should make category its own object class and
     #     pre-create a bunch of those in the initial migration.
     #
     category = models.CharField(
         max_length=64,
-        choices=TRANSACTION_CATEGORY_CHOICES,
-        # default="Uncategorized:Unknown",
+        choices=TransactionCategory.choices,
+        default=TransactionCategory.unknown,
     )
     image = models.ImageField(
         upload_to="transaction_images/%Y-%m-%d/",
@@ -463,8 +546,8 @@ class ThirdPartyTransaction(TransactionBaseClass):
         null=True,
         blank=True,
     )
-    image_height = models.IntegerField()
-    image_width = models.IntegerField()
+    image_height = models.IntegerField(editable=False)
+    image_width = models.IntegerField(editable=False)
     document = models.FileField(
         upload_to="transaction_documents/%Y-%m-%d/", null=True, blank=True
     )
@@ -478,15 +561,16 @@ class InternalTransaction(TransactionBaseClass):
     An internal transaction moving money between budgets
     """
 
-    src_budget = models.ForeignKey("Budget", null=False)
-    dest_budget = models.ForiegnKey("Budget", null=False)
-    actor = models.ForeignKey("User", null=False)
+    src_budget = models.ForeignKey("Budget", null=False, editable=False)
+    dest_budget = models.ForiegnKey("Budget", null=False, editable=False)
+    actor = models.ForeignKey("User", null=False, editable=False)
     src_budget_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Posted Balance does not include pending debits.",
+        editable=False,
     )
     src_budget_available_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -494,6 +578,7 @@ class InternalTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Available Balance has pending debits deducted.",
+        editable=False,
     )
     dst_budget_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -501,6 +586,7 @@ class InternalTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Posted Balance does not include pending debits.",
+        editable=False,
     )
     dst_budget_available_balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -508,4 +594,5 @@ class InternalTransaction(TransactionBaseClass):
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
         description="Available Balance has pending debits deducted.",
+        editable=False,
     )
