@@ -27,7 +27,7 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     # The main app of this project: moneypools
     #
-    path("mp/", include('moneypools.urls'))
+    path("mp/", include('mibudge.moneypools.urls'))
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

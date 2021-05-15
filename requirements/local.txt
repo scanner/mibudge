@@ -128,9 +128,13 @@ djangorestframework==3.12.4
 docutils==0.17.1
     # via sphinx
 factory-boy==3.2.0
-    # via -r local.in
+    # via
+    #   -r local.in
+    #   pytest-factoryboy
 faker==8.1.4
-    # via factory-boy
+    # via
+    #   -r local.in
+    #   factory-boy
 filelock==3.0.12
     # via virtualenv
 flake8-isort==4.0.0
@@ -155,6 +159,8 @@ idna==2.10
     # via requests
 imagesize==1.2.0
     # via sphinx
+inflection==0.5.1
+    # via pytest-factoryboy
 iniconfig==1.1.1
     # via pytest
 ipdb==0.13.7
@@ -263,12 +269,15 @@ pyparsing==2.4.7
     # via packaging
 pytest-django==4.2.0
     # via -r local.in
+pytest-factoryboy==2.1.0
+    # via -r local.in
 pytest-sugar==0.9.4
     # via -r local.in
 pytest==6.2.4
     # via
     #   -r local.in
     #   pytest-django
+    #   pytest-factoryboy
     #   pytest-sugar
 python-crontab==2.5.1
     # via django-celery-beat

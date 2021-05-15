@@ -79,7 +79,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "mibudge.users.apps.UsersConfig",
-    "moneypools.apps.MoneyPoolsConfig",
+    "mibudge.moneypools.apps.MoneyPoolsConfig",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -326,3 +326,4 @@ CORS_URLS_REGEX = r"^/api/.*$"
 #     this default
 #
 DEFAULT_CURRENCY = "USD"
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"

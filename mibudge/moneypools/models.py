@@ -1,13 +1,15 @@
 import uuid
 
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.db import models
 
 from djchoices import ChoiceItem, DjangoChoices
 from djmoney.models.fields import MoneyField
 from multiselectfield import MultiSelectField
 import recurrence.fields
+
+User = get_user_model()
 
 # See https://stackoverflow.com/questions/224462/storing-money-in-a-decimal-column-what-precision-and-scale/224866#224866
 #
@@ -52,6 +54,14 @@ class BankAccount(MoneyPoolBaseClass):
     which bank account it is tied to.
     """
 
+    #####################################################################
+    #
+    class BankAccountType(DjangoChoices):
+        checking = ChoiceItem("C", "Checking")
+        savings = ChoiceItem("S", "Savings")
+    #
+    #####################################################################
+
     name = models.CharField(max_length=200)
     bank = models.ForeignKey(Bank, on_delete=models.CASCADE, editable=False)
     owners = models.ManyToManyField(User)
@@ -60,12 +70,14 @@ class BankAccount(MoneyPoolBaseClass):
     account_number = models.CharField(
         max_length=12, null=True, default=None, editable=False
     )
+
+    account_type = models.CharField(max_length=1, choices=BankAccountType.choices, default=BankAccountType.checking)
     posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Posted Balance does not include pending debits.",
+        help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     available_balance = MoneyField(
@@ -73,7 +85,7 @@ class BankAccount(MoneyPoolBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Available Balance has pending debits deducted.",
+        help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
     unallocated_balance = MoneyField(
@@ -81,7 +93,7 @@ class BankAccount(MoneyPoolBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Amount of money that is not allocated to any budget.",
+        help_text="Amount of money that is not allocated to any budget.",
         editable=False,
     )
 
@@ -388,13 +400,13 @@ class Budget(MoneyPoolBaseClass):
     # created with a fixed naming pattern based on the name of this
     # recurring budget.
     #
-    fillup_goal = models.ForeignKey("self", null=True)
+    fillup_goal = models.ForeignKey("self", null=True, on_delete=models.CASCADE)
 
     archived = models.BooleanField(default=False, editable=False)
     archived_at = models.DateTimeField(null=True, blank=True, editable=False)
     paused = models.BooleanField(
         default=False,
-        description="A paused budget does not get automatically funded on its schedule.",
+        help_text="A paused budget does not get automatically funded on its schedule.",
     )
     funding_schedule = recurrence.fields.RecurrenceField()
 
@@ -441,7 +453,7 @@ class TransactionBaseClass(MoneyPoolBaseClass):
 ########################################################################
 ########################################################################
 #
-class ThirdPartyTransaction(TransactionBaseClass):
+class Transaction(TransactionBaseClass):
     """
     A transaction detailing a credit/debit from some 3rd party
 
@@ -496,19 +508,19 @@ class ThirdPartyTransaction(TransactionBaseClass):
     )
     transaction_date = models.DateTimeField(null=False, editable=False)
     transaction_type = models.CharField(
-        length=32, choices=TransactionType.choices
+        max_length=32, choices=TransactionType.choices
     )
     pending = models.BooleanField(default=False, editable=False)
     memo = models.TextField(max_length=512, null=True, blank=True)
     raw_description = models.TextField(max_length=512, editable=False)
     description = models.TextField(max_length=512, null=True, blank=True)
-    budget = models.ForeignKey("Budget")
+    budget = models.ForeignKey(Budget, models.SET_NULL, blank=True, null=True, related_name="transactions")
     account_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Posted Balance does not include pending debits.",
+        help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     account_available_balance = MoneyField(
@@ -516,7 +528,7 @@ class ThirdPartyTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Available Balance has pending debits deducted.",
+        help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
     budget_posted_balance = MoneyField(
@@ -524,7 +536,7 @@ class ThirdPartyTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Posted Balance does not include pending debits.",
+        help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     budget_available_balance = MoneyField(
@@ -532,7 +544,7 @@ class ThirdPartyTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Available Balance has pending debits deducted.",
+        help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
     # XXX Probably should make category its own object class and
@@ -565,15 +577,15 @@ class InternalTransaction(TransactionBaseClass):
     An internal transaction moving money between budgets
     """
 
-    src_budget = models.ForeignKey("Budget", null=False, editable=False)
-    dest_budget = models.ForiegnKey("Budget", null=False, editable=False)
-    actor = models.ForeignKey("User", null=False, editable=False)
+    src_budget = models.ForeignKey(Budget, on_delete=models.CASCADE, editable=False, related_name="budget_debits")
+    dest_budget = models.ForeignKey(Budget, on_delete=models.CASCADE, editable=False, related_name="budget_credits")
+    actor = models.ForeignKey(User, on_delete=models.CASCADE, editable=False)
     src_budget_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Posted Balance does not include pending debits.",
+        help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     src_budget_available_balance = MoneyField(
@@ -581,7 +593,7 @@ class InternalTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Available Balance has pending debits deducted.",
+        help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
     dst_budget_posted_balance = MoneyField(
@@ -589,7 +601,7 @@ class InternalTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Posted Balance does not include pending debits.",
+        help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     dst_budget_available_balance = MoneyField(
@@ -597,6 +609,6 @@ class InternalTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        description="Available Balance has pending debits deducted.",
+        help_text="Available Balance has pending debits deducted.",
         editable=False,
     )

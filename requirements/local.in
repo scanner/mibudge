@@ -11,6 +11,8 @@ mypy
 django-stubs
 pytest
 pytest-sugar
+pytest-factoryboy
+faker
 
 # Documentation
 # ------------------------------------------------------------------------------
