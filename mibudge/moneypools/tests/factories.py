@@ -66,7 +66,7 @@ def random_string(length: int, character_set: str) -> str:
 #
 class BankFactory(DjangoModelFactory):
     name = factory.LazyAttribute(lambda x: random.choice(BANK_NAMES))
-    routing_number = factory.LazyAttribute(random_string(9, string.digits))
+    routing_number = factory.LazyAttribute(lambda x: random_string(9, string.digits))
 
     class Meta:
         model = 'moneypools.Bank'
@@ -82,7 +82,7 @@ class BankAccountFactory(DjangoModelFactory):
     #     this becomes a `@post_generate` function
     #
     name = factory.LazyAttribute(lambda x: faker.name())
-    account_number = factory.LazyAttribute(random_string(12, string.digits))
+    account_number = factory.LazyAttribute(lambda x: random_string(12, string.digits))
     account_type = factory.LazyAttribute(lambda x: random.choice['C', 'S'])
 
     @factory.post_generation
