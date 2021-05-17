@@ -69,7 +69,7 @@ class BankFactory(DjangoModelFactory):
     routing_number = factory.LazyAttribute(random_string(9, string.digits))
 
     class Meta:
-        model = 'mibudge.moneypools.Bank'
+        model = 'moneypools.Bank'
         django_get_or_create = ["username"]
 
 
@@ -121,4 +121,4 @@ class BankAccountFactory(DjangoModelFactory):
         self.set_unallocated_balance(unallocated_balance)
 
     class Meta:
-        model = 'mibudge.moneypools.BankAccount'
+        model = 'moneypools.BankAccount'
