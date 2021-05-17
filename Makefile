@@ -1,31 +1,31 @@
-local_build:
+build:
 	@docker compose -f ./local.yml build
 
-local_start: local_build
+start: local_build
 	@docker compose -f ./local.yml up --remove-orphans --detach
 
-local_stop:
+stop:
 	@docker compose -f ./local.yml down --remove-orphans
 
-local_delete:
+delete:
 	@docker compose -f ./local.yml down --remove-orphans
 
-local_restart:
+restart:
 	@docker compose -f ./local.yml restart
 
-local_shell:
+shell:
 	@docker compose -f ./local.yml run --rm /bin/bash
 
-local_manage_shell:
+manage_shell:
 	@docker compose -f ./local.yml run --rm django python manage.py shell_plus
 
-local_migrate:
+migrate:
 	@docker compose -f ./local.yml run --rm django python manage.py migrate
 
-local_makemigrations:
+makemigrations:
 	@docker compose -f ./local.yml run --rm django python manage.py makemigrations
 
-local_logs:
+logs:
 	@docker compose -f ./local.yml logs -f -t
 
 test:
