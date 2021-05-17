@@ -70,7 +70,7 @@ class BankFactory(DjangoModelFactory):
 
     class Meta:
         model = 'moneypools.Bank'
-        django_get_or_create = ["username"]
+        django_get_or_create = ["name"]
 
 
 ####################################################################
