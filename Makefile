@@ -1,7 +1,7 @@
 build:
 	@docker compose -f ./local.yml build
 
-start: local_build
+start: build
 	@docker compose -f ./local.yml up --remove-orphans --detach
 
 stop:
