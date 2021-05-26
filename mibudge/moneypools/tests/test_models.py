@@ -13,7 +13,7 @@ business logic.
 # 3rd party module imports
 #
 import pytest
-from django.contrib.auth import get_user_model
+from moneyed import Money, USD
 
 # Application imports
 #
@@ -35,6 +35,19 @@ def test_bank_factory(bank_factory):
 
 ####################################################################
 #
-def test_bank_account_factory(bank_account_factory):
+def test_bank_account_factory(bank_account_factory, bank_factory):
     bank_account = bank_account_factory()
+    old_bank = bank_account.bank
     assert isinstance(bank_account, BankAccount)
+    bank = bank_factory(name="foo")
+    assert old_bank.id != bank.id
+
+    bank_account = bank_account_factory(bank=bank)
+    assert bank == bank_account.bank
+    assert old_bank != bank_account.bank
+
+    bank_account = bank_account_factory(
+        account_number="12345", posted_balance=12345.00
+    )
+    assert bank_account.account_number == "12345"
+    assert bank_account.posted_balance == Money(12345.00, USD)

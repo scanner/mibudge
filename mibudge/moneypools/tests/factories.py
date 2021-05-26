@@ -102,15 +102,6 @@ class BankAccountFactory(DjangoModelFactory):
     )
 
     bank = factory.SubFactory(BankFactory)
-    # @factory.post_generation
-    # def bank(self, create: bool, extracted: Bank, **kwargs):
-    #     if not create:
-    #         return
-    #     with factory.debug():
-    #         print(f"******************************** extracted is: {extracted}")
-    #         bank = extracted if extracted else factory.SubFactory(BankFactory)
-    #         print(f"******************************** Bank is: {bank}")
-    #         self.set_bank(bank)
 
     @factory.post_generation
     def owners(self, create: bool, extracted: Sequence[User], **kwargs):
@@ -122,21 +113,6 @@ class BankAccountFactory(DjangoModelFactory):
                 self.owners.add(user)
         else:
             self.owners.add(UserFactory())
-
-    @factory.post_generation
-    def posted_balance(self, create: bool, extracted: int, **kwargs):
-        posted_balance = extracted if extracted else 0
-        self.posted_balance = posted_balance
-
-    @factory.post_generation
-    def available_balance(self, create: bool, extracted: int, **kwargs):
-        available_balance = extracted if extracted else 0
-        self.available_balance = available_balance
-
-    @factory.post_generation
-    def unallocated_balance(self, create: bool, extracted: int, **kwargs):
-        unallocated_balance = extracted if extracted else 0
-        self.unallocated_balance = unallocated_balance
 
     class Meta:
         model = BankAccount
