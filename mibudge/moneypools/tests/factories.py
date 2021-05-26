@@ -80,13 +80,14 @@ class BankFactory(DjangoModelFactory):
     )
 
     class Meta:
-        model = "moneypools.Bank"
+        model = Bank
         django_get_or_create = ["name"]  # XXX Maybe should be routing_number?
 
 
 ####################################################################
 #
 class BankAccountFactory(DjangoModelFactory):
+
     # XXX This is generating people names not bank account names... we
     #     should do something like "Name's Checking Account" etc. and
     #     append the last 4 digits of teh account_number.. so maybe
@@ -100,34 +101,43 @@ class BankAccountFactory(DjangoModelFactory):
         lambda x: random.choice(list(BankAccount.BankAccountType.values.keys()))
     )
 
-    @factory.post_generation
-    def bank(self, create: bool, extracted: Bank, **kwargs):
-        with factory.debug():
-            print(f"******************************** extracted is: {extracted}")
-            bank = extracted if extracted else factory.SubFactory(BankFactory)
-            print(f"******************************** Bank is: {bank}")
-            self.set_bank(bank)
+    bank = factory.SubFactory(BankFactory)
+    # @factory.post_generation
+    # def bank(self, create: bool, extracted: Bank, **kwargs):
+    #     if not create:
+    #         return
+    #     with factory.debug():
+    #         print(f"******************************** extracted is: {extracted}")
+    #         bank = extracted if extracted else factory.SubFactory(BankFactory)
+    #         print(f"******************************** Bank is: {bank}")
+    #         self.set_bank(bank)
 
     @factory.post_generation
     def owners(self, create: bool, extracted: Sequence[User], **kwargs):
-        owners = extracted if extracted else UserFactory()
-        self.set_owners(owners)
+        if not create:
+            return
+        if extracted:
+            # A list of users were passed in, use them
+            for user in extracted:
+                self.owners.add(user)
+        else:
+            self.owners.add(UserFactory())
 
     @factory.post_generation
     def posted_balance(self, create: bool, extracted: int, **kwargs):
         posted_balance = extracted if extracted else 0
-        self.set_posted_balance(posted_balance)
+        self.posted_balance = posted_balance
 
     @factory.post_generation
     def available_balance(self, create: bool, extracted: int, **kwargs):
         available_balance = extracted if extracted else 0
-        self.set_available_balance(available_balance)
+        self.available_balance = available_balance
 
     @factory.post_generation
     def unallocated_balance(self, create: bool, extracted: int, **kwargs):
         unallocated_balance = extracted if extracted else 0
-        self.set_unallocated_balance(unallocated_balance)
+        self.unallocated_balance = unallocated_balance
 
     class Meta:
-        model = "moneypools.BankAccount"
+        model = BankAccount
         django_get_or_create = ["account_number"]
