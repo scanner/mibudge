@@ -40,7 +40,7 @@ class Bank(MoneyPoolBaseClass):
     name = models.CharField(max_length=200)
     # XXX Add a validator to make sure only digits are used
     routing_number = models.CharField(
-        max_length=9, null=True, default=None, editable=False
+        max_length=9, null=True, default=None, editable=False, unique=True
     )
 
 
@@ -59,6 +59,7 @@ class BankAccount(MoneyPoolBaseClass):
     class BankAccountType(DjangoChoices):
         checking = ChoiceItem("C", "Checking")
         savings = ChoiceItem("S", "Savings")
+
     #
     #####################################################################
 
@@ -68,10 +69,14 @@ class BankAccount(MoneyPoolBaseClass):
 
     # XXX Add a validator to make sure only digits are used
     account_number = models.CharField(
-        max_length=12, null=True, default=None, editable=False
+        max_length=12, null=True, default=None, editable=False, unique=True
     )
 
-    account_type = models.CharField(max_length=1, choices=BankAccountType.choices, default=BankAccountType.checking)
+    account_type = models.CharField(
+        max_length=1,
+        choices=BankAccountType.choices,
+        default=BankAccountType.checking,
+    )
     posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -514,7 +519,13 @@ class Transaction(TransactionBaseClass):
     memo = models.TextField(max_length=512, null=True, blank=True)
     raw_description = models.TextField(max_length=512, editable=False)
     description = models.TextField(max_length=512, null=True, blank=True)
-    budget = models.ForeignKey(Budget, models.SET_NULL, blank=True, null=True, related_name="transactions")
+    budget = models.ForeignKey(
+        Budget,
+        models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="transactions",
+    )
     account_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -577,8 +588,18 @@ class InternalTransaction(TransactionBaseClass):
     An internal transaction moving money between budgets
     """
 
-    src_budget = models.ForeignKey(Budget, on_delete=models.CASCADE, editable=False, related_name="budget_debits")
-    dest_budget = models.ForeignKey(Budget, on_delete=models.CASCADE, editable=False, related_name="budget_credits")
+    src_budget = models.ForeignKey(
+        Budget,
+        on_delete=models.CASCADE,
+        editable=False,
+        related_name="budget_debits",
+    )
+    dest_budget = models.ForeignKey(
+        Budget,
+        on_delete=models.CASCADE,
+        editable=False,
+        related_name="budget_credits",
+    )
     actor = models.ForeignKey(User, on_delete=models.CASCADE, editable=False)
     src_budget_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,

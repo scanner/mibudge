@@ -13,11 +13,20 @@ from django.contrib.auth import get_user_model
 #     `factories.py`)
 #
 from mibudge.users.tests.factories import UserFactory
+from ..models import Bank, BankAccount
 
 User = get_user_model()
 
 faker = FakerFactory.create()
 
+# Because I want bank names, not random strings, or people names, but
+# not real bank names, but things that sound like bank names:
+# https://www.fantasynamegenerators.com/bank-names.php
+#
+# XXX This is cute and all but maybe we should just use the 'business
+#     name' generator in `faker` and add one of 'Bank', `Credit
+#     Union`, or `Trust` to the end of the generated names.
+#
 BANK_NAMES = [
     "United Credit Union",
     "Gold Credit Bank System",
@@ -59,18 +68,20 @@ def random_string(length: int, character_set: str) -> str:
     Generate a random string of from the given character set up to
     `length` characters long.
     """
-    return ''.join(random.choice(character_set) for _ in range(length))
+    return "".join(random.choice(character_set) for _ in range(length))
 
 
 ####################################################################
 #
 class BankFactory(DjangoModelFactory):
     name = factory.LazyAttribute(lambda x: random.choice(BANK_NAMES))
-    routing_number = factory.LazyAttribute(lambda x: random_string(9, string.digits))
+    routing_number = factory.LazyAttribute(
+        lambda x: random_string(9, string.digits)
+    )
 
     class Meta:
-        model = 'moneypools.Bank'
-        django_get_or_create = ["name"]
+        model = "moneypools.Bank"
+        django_get_or_create = ["name"]  # XXX Maybe should be routing_number?
 
 
 ####################################################################
@@ -82,43 +93,41 @@ class BankAccountFactory(DjangoModelFactory):
     #     this becomes a `@post_generate` function
     #
     name = factory.LazyAttribute(lambda x: faker.name())
-    account_number = factory.LazyAttribute(lambda x: random_string(12, string.digits))
-    account_type = factory.LazyAttribute(lambda x: random.choice['C', 'S'])
+    account_number = factory.LazyAttribute(
+        lambda x: random_string(12, string.digits)
+    )
+    account_type = factory.LazyAttribute(
+        lambda x: random.choice(list(BankAccount.BankAccountType.values.keys()))
+    )
 
     @factory.post_generation
-    def bank(self, create: bool, extracted: Sequence[Any], **kwargs):
-        bank = (
-            extracted if extracted else factory.SubFactory(BankFactory)
-        )
-        self.set_bank(bank)
+    def bank(self, create: bool, extracted: Bank, **kwargs):
+        with factory.debug():
+            print(f"******************************** extracted is: {extracted}")
+            bank = extracted if extracted else factory.SubFactory(BankFactory)
+            print(f"******************************** Bank is: {bank}")
+            self.set_bank(bank)
 
     @factory.post_generation
     def owners(self, create: bool, extracted: Sequence[User], **kwargs):
-        owners = (
-            extracted if extracted else UserFactory()
-        )
+        owners = extracted if extracted else UserFactory()
         self.set_owners(owners)
 
     @factory.post_generation
     def posted_balance(self, create: bool, extracted: int, **kwargs):
-        posted_balance = (
-            extracted if extracted else 0
-        )
+        posted_balance = extracted if extracted else 0
         self.set_posted_balance(posted_balance)
 
     @factory.post_generation
     def available_balance(self, create: bool, extracted: int, **kwargs):
-        available_balance = (
-            extracted if extracted else 0
-        )
+        available_balance = extracted if extracted else 0
         self.set_available_balance(available_balance)
 
     @factory.post_generation
     def unallocated_balance(self, create: bool, extracted: int, **kwargs):
-        unallocated_balance = (
-            extracted if extracted else 0
-        )
+        unallocated_balance = extracted if extracted else 0
         self.set_unallocated_balance(unallocated_balance)
 
     class Meta:
-        model = 'moneypools.BankAccount'
+        model = "moneypools.BankAccount"
+        django_get_or_create = ["account_number"]

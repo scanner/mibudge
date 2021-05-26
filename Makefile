@@ -29,4 +29,4 @@ logs:
 	@docker compose -f ./local.yml logs -f -t
 
 test:
-	@docker compose -f ./local.yml run --rm django pytest
+	@docker compose -f ./local.yml run --rm django pytest -vvvv

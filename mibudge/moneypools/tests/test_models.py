@@ -21,8 +21,7 @@ from django.contrib.auth import get_user_model
 #     unbound also
 #
 from mibudge.users.tests.factories import UserFactory
-from ..models import (Bank, BankAccount, Budget, Transaction, InternalTransaction)
-from .factories import BankFactory, BankAccountFactory
+from ..models import Bank, BankAccount, Budget, Transaction, InternalTransaction
 
 pytestmark = pytest.mark.django_db
 
@@ -30,10 +29,12 @@ pytestmark = pytest.mark.django_db
 ####################################################################
 #
 def test_bank_factory(bank_factory):
-    assert isinstance(bank_factory, BankFactory)
+    bank = bank_factory()
+    assert isinstance(bank, Bank)
 
 
 ####################################################################
 #
 def test_bank_account_factory(bank_account_factory):
-    assert isinstance(bank_account_factory, BankAccountFactory)
+    bank_account = bank_account_factory()
+    assert isinstance(bank_account, BankAccount)
