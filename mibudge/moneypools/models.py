@@ -326,7 +326,15 @@ class TransactionCategory(DjangoChoices):
 # budget. It is displayed somewhat specially.
 #
 class Budget(MoneyPoolBaseClass):
-    """"""
+    """
+    The core of the MoneyPools system is the budget. Modeled somewhat
+    after what Simple Bank expressed as "goals" and "expenses" but
+    tweaked for how we actually used these systems with more
+    automation around recurring budgets (what Simple called
+    "expenses") and non-recurring budgets (ie: "Goals") and whether or
+    not they had a budget that money was filled up on completion of a
+    recurring budget.
+    """
 
     #####################################################################
     #
@@ -390,6 +398,11 @@ class Budget(MoneyPoolBaseClass):
     budget_type = models.CharField(
         max_length=1, choices=BudgetType.choices, default=BudgetType.goal
     )
+    funding_type = models.CharField(
+        max_length=1,
+        choices=FundingType.choices,
+        default=FundingType.target_date,
+    )
 
     # Only relevant if the FundingType is 'target_date'
     #
@@ -399,9 +412,19 @@ class Budget(MoneyPoolBaseClass):
     #
     with_fillup_goal = models.BooleanField(default=False)
 
-    # Only relevant if the BudgetType is 'recurring' and
-    # 'with_fillup_goal' is True. The fillup_goal is automatically
-    # created with a fixed naming pattern based on the name of this
+    # Only relevant if the BudgetType is 'recurring' and 'with_fillup_goal' is
+    # True. The fillup_goal is automatically created with a fixed naming
+    # pattern based on the name of this recurring budget.
+    #
+    # This is tied with the `recurrence_schedule` for the budget. On the
+    # reccurence schedule date money is moved from the recurring goal to the
+    # fillup_goal. Also NOTE: The fillup goal is called this because "it is
+    # filled up" to the target amoung on this budget that points to the fillup
+    # goal. Any remainder is left in this budget. So, for example: If this
+    # recurring budget has a target balance of $100 and the associated
+    # fillup_goal budget has $15 in it then on the recurrence schedule date
+    # $85 will be transferred from the recurring budget to the fillup goal
+    # budget (filling up the fillup_goal budget), leaving $15 in the source
     # recurring budget.
     #
     fillup_goal = models.ForeignKey("self", null=True, on_delete=models.CASCADE)
@@ -415,6 +438,13 @@ class Budget(MoneyPoolBaseClass):
     funding_schedule = recurrence.fields.RecurrenceField()
 
     # Only relevant for 'recurring' budgets with FundingType target_date.
+    # This is the interval at which we need this budget to be completed. So,
+    # if you have a bill you need to pay once a month, by the first of the
+    # month you would set your recurrence schedule to be "by the last day of
+    # each month." Things like rent, regular payments, etc. Another example is
+    # if you have a service you subscribe to that is renewed every year.. you
+    # would set the recurrence schedule to be shortly before that subscription
+    # is due.
     #
     recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
 

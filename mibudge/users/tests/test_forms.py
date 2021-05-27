@@ -36,4 +36,6 @@ class TestUserCreationForm:
         assert not form.is_valid()
         assert len(form.errors) == 1
         assert "username" in form.errors
-        assert form.errors["username"][0] == _("This username has already been taken.")
+        assert form.errors["username"][0] == _(
+            "This username has already been taken."
+        )

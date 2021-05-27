@@ -6,23 +6,43 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('moneypools', '0002_bankaccount_account_type'),
+        ("moneypools", "0002_bankaccount_account_type"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='bank',
-            name='routing_number',
-            field=models.CharField(default=None, editable=False, max_length=9, null=True, unique=True),
+            model_name="bank",
+            name="routing_number",
+            field=models.CharField(
+                default=None,
+                editable=False,
+                max_length=9,
+                null=True,
+                unique=True,
+            ),
         ),
         migrations.AlterField(
-            model_name='bankaccount',
-            name='account_number',
-            field=models.CharField(default=None, editable=False, max_length=12, null=True, unique=True),
+            model_name="bankaccount",
+            name="account_number",
+            field=models.CharField(
+                default=None,
+                editable=False,
+                max_length=12,
+                null=True,
+                unique=True,
+            ),
         ),
         migrations.AlterField(
-            model_name='budget',
-            name='budget_type',
-            field=models.CharField(choices=[('G', 'Goal'), ('R', 'Recurring'), ('A', 'Associated Fill-up Goal')], default='G', max_length=1),
+            model_name="budget",
+            name="budget_type",
+            field=models.CharField(
+                choices=[
+                    ("G", "Goal"),
+                    ("R", "Recurring"),
+                    ("A", "Associated Fill-up Goal"),
+                ],
+                default="G",
+                max_length=1,
+            ),
         ),
     ]

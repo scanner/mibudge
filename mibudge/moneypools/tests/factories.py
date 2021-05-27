@@ -1,6 +1,7 @@
 import random
 import string
-from typing import Any, Sequence
+from datetime import datetime, timedelta
+from typing import Sequence
 
 import factory
 from factory.django import DjangoModelFactory
@@ -13,7 +14,7 @@ from django.contrib.auth import get_user_model
 #     `factories.py`)
 #
 from mibudge.users.tests.factories import UserFactory
-from ..models import Bank, BankAccount
+from ..models import Bank, BankAccount, Budget
 
 User = get_user_model()
 
@@ -71,6 +72,7 @@ def random_string(length: int, character_set: str) -> str:
     return "".join(random.choice(character_set) for _ in range(length))
 
 
+########################################################################
 ####################################################################
 #
 class BankFactory(DjangoModelFactory):
@@ -84,6 +86,7 @@ class BankFactory(DjangoModelFactory):
         django_get_or_create = ["name"]  # XXX Maybe should be routing_number?
 
 
+########################################################################
 ####################################################################
 #
 class BankAccountFactory(DjangoModelFactory):
@@ -117,3 +120,43 @@ class BankAccountFactory(DjangoModelFactory):
     class Meta:
         model = BankAccount
         django_get_or_create = ["account_number"]
+
+
+########################################################################
+########################################################################
+#
+class BudgetFactory(DjangoModelFactory):
+    class Meta:
+        model = Budget
+        django_get_or_create = ["id"]
+
+    name = factory.LazyAttribute(lambda x: faker.name())
+    bank_account = factory.SubFactory(BankAccountFactory)
+    balance = factory.LazyAttribute(lambda x: random.randint(100, 10000))
+    target_balance = factory.LazyAttribute(
+        lambda x: factory.SelfAttribute("balance") + random.randint(10, 1000)
+    )
+    budget_type = factory.LazyAttribute(
+        lambda x: random.choice(list(Budget.BudgetType.values.keys()))
+    )
+    funding_type = factory.LazyAttribute(
+        lambda x: random.choice(list(Budget.FundingType.values.keys()))
+    )
+    # NOTE: This attribute is not part of the model. Instead this is
+    # used to create a boolean that can be tested to see if the
+    # 'funding type' for this budget is 'by a target date' (instead of
+    # 'fixed amount per funding schedule')
+    #
+    has_target_date = factory.LazyAttribute(
+        lambda x: True
+        if factory.SelfAttribute("funding_type")
+        == Budget.FundingType.target_date
+        else False
+    )
+    target_date = factory.Maybe(
+        "has_target_date",
+        yes_declaration=factory.LazyAttribute(
+            datetime.utcnow() + timedelta(days=random.randint(15, 90))
+        ),
+        no_declaration=None,
+    )

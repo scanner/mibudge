@@ -17,10 +17,6 @@ from moneyed import Money, USD
 
 # Application imports
 #
-# XXX when moneypools is moved into a separate app this needs to be
-#     unbound also
-#
-from mibudge.users.tests.factories import UserFactory
 from ..models import Bank, BankAccount, Budget, Transaction, InternalTransaction
 
 pytestmark = pytest.mark.django_db
@@ -36,6 +32,10 @@ def test_bank_factory(bank_factory):
 ####################################################################
 #
 def test_bank_account_factory(bank_account_factory, bank_factory):
+    # Make sure that we can make bank accounts that belong to
+    # different banks and that setting attributes via kwargs does the
+    # right thing.
+    #
     bank_account = bank_account_factory()
     old_bank = bank_account.bank
     assert isinstance(bank_account, BankAccount)

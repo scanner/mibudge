@@ -1,4 +1,5 @@
 import pytest
+from pytest_factoryboy import register
 
 from mibudge.users.models import User
 from mibudge.users.tests.factories import UserFactory
@@ -12,3 +13,6 @@ def media_storage(settings, tmpdir):
 @pytest.fixture
 def user() -> User:
     return UserFactory()
+
+
+register(UserFactory)

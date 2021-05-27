@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('moneypools', '0001_initial'),
+        ("moneypools", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='bankaccount',
-            name='account_type',
-            field=models.CharField(choices=[('C', 'Checking'), ('S', 'Savings')], default='C', max_length=1),
+            model_name="bankaccount",
+            name="account_type",
+            field=models.CharField(
+                choices=[("C", "Checking"), ("S", "Savings")],
+                default="C",
+                max_length=1,
+            ),
         ),
     ]
