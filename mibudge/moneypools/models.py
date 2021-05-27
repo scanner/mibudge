@@ -343,8 +343,7 @@ class Budget(MoneyPoolBaseClass):
         """
 
         goal = ChoiceItem("G", "Goal")
-        recurring_to_goal = ChoiceItem("R", "Recurring to Goal")
-        recurring_w_fillup_goal = ChoiceItem("F", "Recurring to Fill-up Goal")
+        recurring = ChoiceItem("R", "Recurring")
         associated_fillup_goal = ChoiceItem("A", "Associated Fill-up Goal")
 
     #
@@ -415,7 +414,7 @@ class Budget(MoneyPoolBaseClass):
     )
     funding_schedule = recurrence.fields.RecurrenceField()
 
-    # Only relevant for 'recurring' budgets
+    # Only relevant for 'recurring' budgets with FundingType target_date.
     #
     recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
 
