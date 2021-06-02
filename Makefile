@@ -30,3 +30,9 @@ logs:
 
 test:
 	@docker compose -f ./local.yml run --rm django pytest -vvvv
+
+# XXX Could use the local machine instead of docker for this.. need to
+#     setup the venv make rules (because `django` requires postgres to
+#     be running, etc which is not necessary just to run black)
+black:
+	@docker compose -f ./local.yml run --rm django black ./

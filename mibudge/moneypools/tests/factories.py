@@ -133,14 +133,15 @@ class BudgetFactory(DjangoModelFactory):
     name = factory.LazyAttribute(lambda x: faker.name())
     bank_account = factory.SubFactory(BankAccountFactory)
     balance = factory.LazyAttribute(lambda x: random.randint(100, 10000))
+    balance_attribute = factory.SelfAttribute("balance")
     target_balance = factory.LazyAttribute(
-        lambda x: factory.SelfAttribute("balance") + random.randint(10, 1000)
+        lambda self: self.balance_attribute + random.randint(100, 10000)
     )
     budget_type = factory.LazyAttribute(
-        lambda x: random.choice(list(Budget.BudgetType.values.keys()))
+        lambda self: random.choice(list(Budget.BudgetType.values.keys()))
     )
     funding_type = factory.LazyAttribute(
-        lambda x: random.choice(list(Budget.FundingType.values.keys()))
+        lambda self: random.choice(list(Budget.FundingType.values.keys()))
     )
     # NOTE: This attribute is not part of the model. Instead this is
     # used to create a boolean that can be tested to see if the

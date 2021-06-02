@@ -51,3 +51,10 @@ def test_bank_account_factory(bank_account_factory, bank_factory):
     )
     assert bank_account.account_number == "12345"
     assert bank_account.posted_balance == Money(12345.00, USD)
+
+
+####################################################################
+#
+def test_budget_factory(budget_factory):
+    budget = budget_factory()
+    assert isinstance(budget, Budget)
