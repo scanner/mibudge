@@ -455,8 +455,8 @@ class Budget(MoneyPoolBaseClass):
         null=True,
         blank=True,
     )
-    image_height = models.IntegerField()
-    image_width = models.IntegerField()
+    image_height = models.IntegerField(null=True, editable=False, blank=True)
+    image_width = models.IntegerField(null=True, editable=False, blank=True)
     memo = models.TextField(max_length=512, null=True, blank=True)
 
     # NOTE: Need to enforce in pre-save that only one budget in an

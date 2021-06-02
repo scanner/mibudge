@@ -128,15 +128,12 @@ class BankAccountFactory(DjangoModelFactory):
 class BudgetFactory(DjangoModelFactory):
     class Meta:
         model = Budget
-        django_get_or_create = ["id"]
+        exclude = ("has_target_date",)
 
     name = factory.LazyAttribute(lambda x: faker.name())
     bank_account = factory.SubFactory(BankAccountFactory)
-    balance = factory.LazyAttribute(lambda x: random.randint(100, 10000))
-    balance_attribute = factory.SelfAttribute("balance")
-    target_balance = factory.LazyAttribute(
-        lambda self: self.balance_attribute + random.randint(100, 10000)
-    )
+    balance = factory.LazyAttribute(lambda self: 100)
+    target_balance = factory.LazyAttribute(lambda self: 200)
     budget_type = factory.LazyAttribute(
         lambda self: random.choice(list(Budget.BudgetType.values.keys()))
     )
