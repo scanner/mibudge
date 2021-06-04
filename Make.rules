@@ -1,0 +1,40 @@
+# -*- Mode: Makefile -*-
+
+ACTIVATE := source $(ROOT_DIR)/venv/bin/activate &&
+
+.git/hooks/pre-commit .git/hooks/pre-push:
+	@$(ACTIVATE) pre-commit install
+	@echo "pre-commit hooks installed!"
+
+clean::
+	@find $(ROOT_DIR) -name \*~ -exec rm '{}' +
+	@find $(ROOT_DIR) -name \*.pyc -exec rm '{}' +
+	@find $(ROOT_DIR) -name __pycache__ -prune -exec rm -vfr '{}' +
+	@rm -rf build bdist cover dist sdist distribute-* *.egg *.egg-info
+	@rm -rf *.tar.gz junit.xml coverage.xml .cache
+	@rm -rf .tox .eggs
+	@rm -rf venv
+	@find $(ROOT_DIR) \( -name \*.orig -o -name \*.bak -o -name \*.rej \) -exec rm '{}' +
+
+venv::
+	python -m venv $(ROOT_DIR)/venv
+	$(ACTIVATE) pip install -U pip
+	$(ACTIVATE) pip install -r $(ROOT_DIR)/requirements/local.txt
+
+venv:: .git/hooks/pre-commit
+venv:: .git/hooks/pre-push
+
+lint: venv
+	$(ACTIVATE) flake8
+	$(ACTIVATE) mypy
+
+black: venv
+	$(ACTIVATE) black mibudge
+
+mypy: venv
+	$(ACTIVATE) mypy
+
+requirements: venv
+	cd $(ROOT_DIR) && $(ACTIVATE) pip-compile -U ./requirements/base.in -o ./requirements/base.txt
+	cd $(ROOT_DIR) && $(ACTIVATE) pip-compile -U ./requirements/local.in -o ./requirements/local.txt
+	cd $(ROOT_DIR) && $(ACTIVATE) pip-compile -U ./requirements/production.in -o ./requirements/production.txt

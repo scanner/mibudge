@@ -1,3 +1,8 @@
+ROOT_DIR := $(shell git rev-parse --show-toplevel)
+include $(ROOT_DIR)/Make.rules
+
+.PHONY: clean lint test mypy black
+
 build:
 	@docker compose -f ./local.yml build
 
@@ -7,8 +12,9 @@ start: build
 stop:
 	@docker compose -f ./local.yml down --remove-orphans
 
-delete:
+delete: clean
 	@docker compose -f ./local.yml down --remove-orphans
+	@docker volume prune --force
 
 restart:
 	@docker compose -f ./local.yml restart
@@ -31,8 +37,8 @@ logs:
 test:
 	@docker compose -f ./local.yml run --rm django pytest -vvvv
 
-# XXX Could use the local machine instead of docker for this.. need to
-#     setup the venv make rules (because `django` requires postgres to
-#     be running, etc which is not necessary just to run black)
-black:
-	@docker compose -f ./local.yml run --rm django black ./
+# # XXX Could use the local machine instead of docker for this.. need to
+# #     setup the venv make rules (because `django` requires postgres to
+# #     be running, etc which is not necessary just to run black)
+# black:
+# 	@docker compose -f ./local.yml run --rm django black ./
