@@ -58,3 +58,10 @@ def test_bank_account_factory(bank_account_factory, bank_factory):
 def test_budget_factory(budget_factory):
     budget = budget_factory()
     assert isinstance(budget, Budget)
+
+
+####################################################################
+#
+def test_transaction_factory(transaction_factory):
+    transaction = transaction_factory()
+    assert isinstance(transaction, Transaction)

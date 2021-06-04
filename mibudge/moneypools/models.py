@@ -309,6 +309,7 @@ class TransactionCategory(DjangoChoices):
         "Uncategorized:Other Shopping", "Other Shopping"
     )
     unknown = ChoiceItem("Uncategorized:Unknown", "Unknown")
+    unassigned = ChoiceItem("Uncategorized:Unassigned", "-------")
     cable = ChoiceItem("Utilities:Cable", "Cable")
     electricity = ChoiceItem("Utilities:Electricity", "Electricity")
     gas_fuel = ChoiceItem("Utilities:Gas & Fuel", "Gas & Fuel")
@@ -537,6 +538,12 @@ class Transaction(TransactionBaseClass):
     #
     #####################################################################
 
+    # TODO: The `party` field is something that is derived from the
+    # description in post processing after the Transaction has been
+    # created. The desire is to have this be a foreign key relation or a set
+    # of standardized names so we can easily say "all transactions by this
+    # party"
+    #
     party = models.CharField(
         max_length=300, null=True, blank=True, editable=False
     )
@@ -547,7 +554,14 @@ class Transaction(TransactionBaseClass):
     pending = models.BooleanField(default=False, editable=False)
     memo = models.TextField(max_length=512, null=True, blank=True)
     raw_description = models.TextField(max_length=512, editable=False)
-    description = models.TextField(max_length=512, null=True, blank=True)
+    # TODO: Initial value of the description is a cleaned up version of the
+    # raw_description. It is added in post processing at the same time that
+    # `party` is derived. Initially it is set to the same value as
+    # 'raw_description'
+    #
+    # NOTE: this is filled in via the pre_save signal in ./signals.py
+    #
+    description = models.TextField(max_length=512)
     budget = models.ForeignKey(
         Budget,
         models.SET_NULL,
@@ -593,7 +607,7 @@ class Transaction(TransactionBaseClass):
     category = models.CharField(
         max_length=64,
         choices=TransactionCategory.choices,
-        default=TransactionCategory.unknown,
+        default=TransactionCategory.unassigned,
     )
     image = models.ImageField(
         upload_to="transaction_images/%Y-%m-%d/",
@@ -602,8 +616,8 @@ class Transaction(TransactionBaseClass):
         null=True,
         blank=True,
     )
-    image_height = models.IntegerField(editable=False)
-    image_width = models.IntegerField(editable=False)
+    image_height = models.IntegerField(null=True, editable=False, blank=True)
+    image_width = models.IntegerField(null=True, editable=False, blank=True)
     document = models.FileField(
         upload_to="transaction_documents/%Y-%m-%d/", null=True, blank=True
     )

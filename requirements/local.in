@@ -7,12 +7,13 @@ watchgod
 
 # Testing
 # ------------------------------------------------------------------------------
+factory-boy
 mypy
 django-stubs
 pytest
+pytest-django
 pytest-sugar
 pytest-factoryboy
-faker
 
 # Documentation
 # ------------------------------------------------------------------------------
@@ -32,9 +33,7 @@ pip-tools
 
 # Django
 # ------------------------------------------------------------------------------
-factory-boy
 
 django-debug-toolbar
 django-extensions
 django-coverage-plugin
-pytest-django

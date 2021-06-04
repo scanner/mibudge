@@ -1,7 +1,8 @@
 from pytest_factoryboy import register
 
-from .factories import BankFactory, BankAccountFactory, BudgetFactory
+from .factories import BankFactory, BankAccountFactory, BudgetFactory, TransactionFactory
 
 register(BankFactory)
 register(BankAccountFactory)
 register(BudgetFactory)
+register(TransactionFactory)

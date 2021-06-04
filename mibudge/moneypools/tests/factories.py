@@ -3,9 +3,10 @@ import string
 from datetime import datetime, timedelta
 from typing import Sequence
 
+from pytz import UTC
 import factory
+import factory.fuzzy
 from factory.django import DjangoModelFactory
-from faker import Factory as FakerFactory
 
 from django.contrib.auth import get_user_model
 
@@ -14,11 +15,9 @@ from django.contrib.auth import get_user_model
 #     `factories.py`)
 #
 from mibudge.users.tests.factories import UserFactory
-from ..models import Bank, BankAccount, Budget
+from ..models import Bank, BankAccount, Budget, Transaction, TransactionCategory
 
 User = get_user_model()
-
-faker = FakerFactory.create()
 
 # Because I want bank names, not random strings, or people names, but
 # not real bank names, but things that sound like bank names:
@@ -76,14 +75,14 @@ def random_string(length: int, character_set: str) -> str:
 ####################################################################
 #
 class BankFactory(DjangoModelFactory):
+    class Meta:
+        model = Bank
+        django_get_or_create = ["name"]  # XXX Maybe should be routing_number?
+
     name = factory.LazyAttribute(lambda x: random.choice(BANK_NAMES))
     routing_number = factory.LazyAttribute(
         lambda x: random_string(9, string.digits)
     )
-
-    class Meta:
-        model = Bank
-        django_get_or_create = ["name"]  # XXX Maybe should be routing_number?
 
 
 ########################################################################
@@ -91,12 +90,16 @@ class BankFactory(DjangoModelFactory):
 #
 class BankAccountFactory(DjangoModelFactory):
 
+    class Meta:
+        model = BankAccount
+        django_get_or_create = ["account_number"]
+
     # XXX This is generating people names not bank account names... we
     #     should do something like "Name's Checking Account" etc. and
     #     append the last 4 digits of teh account_number.. so maybe
     #     this becomes a `@post_generate` function
     #
-    name = factory.LazyAttribute(lambda x: faker.name())
+    name = factory.Faker('name')
     account_number = factory.LazyAttribute(
         lambda x: random_string(12, string.digits)
     )
@@ -117,10 +120,6 @@ class BankAccountFactory(DjangoModelFactory):
         else:
             self.owners.add(UserFactory())
 
-    class Meta:
-        model = BankAccount
-        django_get_or_create = ["account_number"]
-
 
 ########################################################################
 ########################################################################
@@ -128,17 +127,21 @@ class BankAccountFactory(DjangoModelFactory):
 class BudgetFactory(DjangoModelFactory):
     class Meta:
         model = Budget
-        exclude = ("has_target_date",)
+        exclude = ("has_target_date", "target_balance_offset")
 
-    name = factory.LazyAttribute(lambda x: faker.name())
+    name = factory.Faker('name')
     bank_account = factory.SubFactory(BankAccountFactory)
-    balance = factory.LazyAttribute(lambda self: 100)
-    target_balance = factory.LazyAttribute(lambda self: 200)
-    budget_type = factory.LazyAttribute(
-        lambda self: random.choice(list(Budget.BudgetType.values.keys()))
+    balance = factory.fuzzy.FuzzyInteger(100, 2000)
+    balance = factory.fuzzy.FuzzyInteger(100, 2000)
+    target_balance_offset = factory.fuzzy.FuzzyInteger(100, 1000)
+    target_balance = factory.LazyAttribute(
+        lambda self: 200
     )
-    funding_type = factory.LazyAttribute(
-        lambda self: random.choice(list(Budget.FundingType.values.keys()))
+    budget_type = factory.fuzzy.FuzzyChoice(
+        Budget.BudgetType.values.keys()
+    )
+    funding_type = factory.fuzzy.FuzzyChoice(
+        Budget.FundingType.values.keys()
     )
     # NOTE: This attribute is not part of the model. Instead this is
     # used to create a boolean that can be tested to see if the
@@ -153,8 +156,31 @@ class BudgetFactory(DjangoModelFactory):
     )
     target_date = factory.Maybe(
         "has_target_date",
-        yes_declaration=factory.LazyAttribute(
-            datetime.utcnow() + timedelta(days=random.randint(15, 90))
+        yes_declaration=factory.fuzzy.FuzzyDateTime(
+            start_dt=datetime.now(UTC) + timedelta(days=15),
+            end_dt=datetime.now(UTC) + timedelta(days=90)
         ),
         no_declaration=None,
+    )
+
+
+########################################################################
+########################################################################
+#
+class TransactionFactory(DjangoModelFactory):
+    class Meta:
+        model = Transaction
+
+    bank_account = factory.SubFactory(BankAccountFactory)
+    amount = factory.fuzzy.FuzzyInteger(100, 200)
+    transaction_date = factory.fuzzy.FuzzyDateTime(
+        start_dt=datetime.now(UTC) - timedelta(days=365),
+        end_dt=datetime.now(UTC)
+    )
+    transaction_type = factory.fuzzy.FuzzyChoice(
+        Transaction.TransactionType.values.keys()
+    )
+    raw_description = factory.fuzzy.FuzzyText(length=100)
+    category = factory.fuzzy.FuzzyChoice(
+        TransactionCategory.values.keys()
     )
