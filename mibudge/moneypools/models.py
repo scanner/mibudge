@@ -645,7 +645,7 @@ class InternalTransaction(TransactionBaseClass):
         editable=False,
         related_name="budget_debits",
     )
-    dest_budget = models.ForeignKey(
+    dst_budget = models.ForeignKey(
         Budget,
         on_delete=models.CASCADE,
         editable=False,

@@ -193,5 +193,5 @@ class InternalTransactionFactory(DjangoModelFactory):
     bank_account = factory.SubFactory(BankAccountFactory)
     amount = factory.fuzzy.FuzzyInteger(100, 200)
     src_budget = factory.SubFactory(BudgetFactory)
-    dest_budget = factory.SubFactory(BudgetFactory)
+    dst_budget = factory.SubFactory(BudgetFactory)
     actor = factory.SubFactory(UserFactory)

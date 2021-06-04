@@ -50,12 +50,12 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
         # InternalTransaction and save those budgets.
         #
         instance.src_budget.balance -= instance.amount
-        instance.dest_budget.balance += instance.amount
+        instance.dst_budget.balance += instance.amount
         instance.src_budget_balance = instance.src_budget.balance
-        instance.dest_budget_balance = instance.dest_budget.balance
+        instance.dst_budget_balance = instance.dst_budget.balance
 
         instance.src_budget.save()
-        instance.dest_budget.save()
+        instance.dst_budget.save()
     else:
         # Otherwise we have to adjust the src and dst budgets by the change in
         # the amount of this InternalTransaction between the instance.amount
@@ -71,12 +71,12 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
         previous = InternalTransaction.objects.get(id=instance.id)
 
         previous.src_budget += previous.amount
-        previous.dest_budget -= previous.amount
+        previous.dst_budget -= previous.amount
         current.src_budget -= current.amount
-        current.dest_budget += current.amount
+        current.dst_budget += current.amount
 
         current.src_budget_balance = current.src_budget.balance
-        current.dest_budget_balance = current.dest_budget.balance
+        current.dst_budget_balance = current.dst_budget.balance
 
         # if current and previous are the same budget then we only need to save
         # one of them.
@@ -84,6 +84,6 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
         current.src_budget.save()
         if current.src_budget != previous.src_budget:
             previous.src_budget.save()
-        current.dest_budget.save()
-        if current.dest_budget != previous.dest_budget:
-            previous.dest_budget.save()
+        current.dst_budget.save()
+        if current.dst_budget != previous.dst_budget:
+            previous.dst_budget.save()
