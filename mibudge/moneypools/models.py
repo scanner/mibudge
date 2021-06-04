@@ -470,7 +470,6 @@ class Budget(MoneyPoolBaseClass):
 ########################################################################
 #
 class TransactionBaseClass(MoneyPoolBaseClass):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     amount = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -631,6 +630,15 @@ class InternalTransaction(TransactionBaseClass):
     An internal transaction moving money between budgets
     """
 
+    # The src and dst budgets are not editable. The internal
+    # transaction is created and the balances on the related budgets
+    # are immediately modified in the pre_save hook. If the actor
+    # wishes to change the amounts in the src and dst budgets again
+    # they will create a new internal transaction doing just that. Not
+    # editing an internal transaction that has already been created.
+    #
+    # You might describe these as "write once" objects.
+    #
     src_budget = models.ForeignKey(
         Budget,
         on_delete=models.CASCADE,
@@ -644,35 +652,17 @@ class InternalTransaction(TransactionBaseClass):
         related_name="budget_credits",
     )
     actor = models.ForeignKey(User, on_delete=models.CASCADE, editable=False)
-    src_budget_posted_balance = MoneyField(
+    src_budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
-    src_budget_available_balance = MoneyField(
+    dst_budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
         default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Available Balance has pending debits deducted.",
-        editable=False,
-    )
-    dst_budget_posted_balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Posted Balance does not include pending debits.",
-        editable=False,
-    )
-    dst_budget_available_balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Available Balance has pending debits deducted.",
         editable=False,
     )

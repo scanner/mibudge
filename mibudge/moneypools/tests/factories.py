@@ -15,7 +15,14 @@ from django.contrib.auth import get_user_model
 #     `factories.py`)
 #
 from mibudge.users.tests.factories import UserFactory
-from ..models import Bank, BankAccount, Budget, Transaction, TransactionCategory
+from ..models import (
+    Bank,
+    BankAccount,
+    Budget,
+    Transaction,
+    TransactionCategory,
+    InternalTransaction,
+)
 
 User = get_user_model()
 
@@ -89,7 +96,6 @@ class BankFactory(DjangoModelFactory):
 ####################################################################
 #
 class BankAccountFactory(DjangoModelFactory):
-
     class Meta:
         model = BankAccount
         django_get_or_create = ["account_number"]
@@ -99,7 +105,7 @@ class BankAccountFactory(DjangoModelFactory):
     #     append the last 4 digits of teh account_number.. so maybe
     #     this becomes a `@post_generate` function
     #
-    name = factory.Faker('name')
+    name = factory.Faker("name")
     account_number = factory.LazyAttribute(
         lambda x: random_string(12, string.digits)
     )
@@ -129,20 +135,13 @@ class BudgetFactory(DjangoModelFactory):
         model = Budget
         exclude = ("has_target_date", "target_balance_offset")
 
-    name = factory.Faker('name')
+    name = factory.Faker("name")
     bank_account = factory.SubFactory(BankAccountFactory)
     balance = factory.fuzzy.FuzzyInteger(100, 2000)
-    balance = factory.fuzzy.FuzzyInteger(100, 2000)
     target_balance_offset = factory.fuzzy.FuzzyInteger(100, 1000)
-    target_balance = factory.LazyAttribute(
-        lambda self: 200
-    )
-    budget_type = factory.fuzzy.FuzzyChoice(
-        Budget.BudgetType.values.keys()
-    )
-    funding_type = factory.fuzzy.FuzzyChoice(
-        Budget.FundingType.values.keys()
-    )
+    target_balance = factory.LazyAttribute(lambda self: 200)
+    budget_type = factory.fuzzy.FuzzyChoice(Budget.BudgetType.values.keys())
+    funding_type = factory.fuzzy.FuzzyChoice(Budget.FundingType.values.keys())
     # NOTE: This attribute is not part of the model. Instead this is
     # used to create a boolean that can be tested to see if the
     # 'funding type' for this budget is 'by a target date' (instead of
@@ -158,7 +157,7 @@ class BudgetFactory(DjangoModelFactory):
         "has_target_date",
         yes_declaration=factory.fuzzy.FuzzyDateTime(
             start_dt=datetime.now(UTC) + timedelta(days=15),
-            end_dt=datetime.now(UTC) + timedelta(days=90)
+            end_dt=datetime.now(UTC) + timedelta(days=90),
         ),
         no_declaration=None,
     )
@@ -175,12 +174,24 @@ class TransactionFactory(DjangoModelFactory):
     amount = factory.fuzzy.FuzzyInteger(100, 200)
     transaction_date = factory.fuzzy.FuzzyDateTime(
         start_dt=datetime.now(UTC) - timedelta(days=365),
-        end_dt=datetime.now(UTC)
+        end_dt=datetime.now(UTC),
     )
     transaction_type = factory.fuzzy.FuzzyChoice(
         Transaction.TransactionType.values.keys()
     )
     raw_description = factory.fuzzy.FuzzyText(length=100)
-    category = factory.fuzzy.FuzzyChoice(
-        TransactionCategory.values.keys()
-    )
+    category = factory.fuzzy.FuzzyChoice(TransactionCategory.values.keys())
+
+
+########################################################################
+########################################################################
+#
+class InternalTransactionFactory(DjangoModelFactory):
+    class Meta:
+        model = InternalTransaction
+
+    bank_account = factory.SubFactory(BankAccountFactory)
+    amount = factory.fuzzy.FuzzyInteger(100, 200)
+    src_budget = factory.SubFactory(BudgetFactory)
+    dest_budget = factory.SubFactory(BudgetFactory)
+    actor = factory.SubFactory(UserFactory)

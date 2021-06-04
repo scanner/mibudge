@@ -11,4 +11,4 @@ class MoneyPoolsConfig(AppConfig):
         # Need to import the signals module so that our @receiver
         # handlers get properly registered.
         #
-        from .signals import transaction_pre_save
+        from .signals import transaction_pre_save, internal_transaction_pre_save

@@ -14,7 +14,7 @@ restart:
 	@docker compose -f ./local.yml restart
 
 shell:
-	@docker compose -f ./local.yml run --rm /bin/bash
+	@docker compose -f ./local.yml run --rm django /bin/bash
 
 manage_shell:
 	@docker compose -f ./local.yml run --rm django python manage.py shell_plus

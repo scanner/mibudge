@@ -65,3 +65,10 @@ def test_budget_factory(budget_factory):
 def test_transaction_factory(transaction_factory):
     transaction = transaction_factory()
     assert isinstance(transaction, Transaction)
+
+
+####################################################################
+#
+def test_internal_transaction_factory(internal_transaction_factory):
+    internal_transaction = internal_transaction_factory()
+    assert isinstance(internal_transaction, InternalTransaction)
