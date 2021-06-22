@@ -45,6 +45,7 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+.blackened
 
 # Translations
 *.mo
@@ -68,6 +69,7 @@ celerybeat-schedule
 # Environments
 .venv
 venv/
+req_venv/
 ENV/
 
 # Rope project settings
@@ -270,7 +272,6 @@ tags
 mibudge/media/
 
 .pytest_cache/
-
 
 .ipython/
 .env

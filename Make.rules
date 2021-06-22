@@ -1,10 +1,12 @@
 # -*- Mode: Makefile -*-
 
 ACTIVATE := source $(ROOT_DIR)/venv/bin/activate &&
+REQ_ACTIVATE := source $(ROOT_DIR)/requirements/req_venv/bin/activate &&
 
 .git/hooks/pre-commit .git/hooks/pre-push:
 	@$(ACTIVATE) pre-commit install
 	@echo "pre-commit hooks installed!"
+	@touch .git/hooks/pre-commit .git/hooks/pre-push
 
 clean::
 	@find $(ROOT_DIR) -name \*~ -exec rm '{}' +
@@ -14,13 +16,26 @@ clean::
 	@rm -rf *.tar.gz junit.xml coverage.xml .cache
 	@rm -rf .tox .eggs
 	@rm -rf venv
+	@rm -rf requirements/req_venv
 	@find $(ROOT_DIR) \( -name \*.orig -o -name \*.bak -o -name \*.rej \) -exec rm '{}' +
 
-venv::
-	python -m venv $(ROOT_DIR)/venv
-	$(ACTIVATE) pip install -U pip
-	$(ACTIVATE) pip install -r $(ROOT_DIR)/requirements/local.txt
+$(ROOT_DIR)/requirements/req_venv:
+	@python -m venv $@
+	@$(REQ_ACTIVATE) pip install -U pip
+	@$(REQ_ACTIVATE) pip install pip-tools
+	@ touch $@
 
+$(ROOT_DIR)/venv: $(ROOT_DIR)/requirements/local.txt
+	@if [ -d "$@" ] ; then \
+	  $(ACTIVATE) pip-sync $(ROOT_DIR)/requirements/local.txt ; \
+        else \
+	  python -m venv $@ ; \
+	  $(ACTIVATE) pip install -U pip ; \
+	  $(ACTIVATE) pip install -r $(ROOT_DIR)/requirements/local.txt ; \
+        fi
+	@touch $@
+
+venv:: $(ROOT_DIR)/venv
 venv:: .git/hooks/pre-commit
 venv:: .git/hooks/pre-push
 
@@ -28,13 +43,23 @@ lint: venv
 	$(ACTIVATE) flake8
 	$(ACTIVATE) mypy
 
-black: venv
-	$(ACTIVATE) black mibudge
+PY_FILES=$(shell find mibudge/ -type f -name '*.py')
+.blackened: $(PY_FILES) venv
+	@$(ACTIVATE) black mibudge/
+	@touch .blackened
+
+black: .blackened
 
 mypy: venv
-	$(ACTIVATE) mypy
+	$(ACTIVATE) mypy mibudge/
 
-requirements: venv
-	cd $(ROOT_DIR) && $(ACTIVATE) pip-compile -U ./requirements/base.in -o ./requirements/base.txt
-	cd $(ROOT_DIR) && $(ACTIVATE) pip-compile -U ./requirements/local.in -o ./requirements/local.txt
-	cd $(ROOT_DIR) && $(ACTIVATE) pip-compile -U ./requirements/production.in -o ./requirements/production.txt
+$(ROOT_DIR)/requirements/base.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/base.in
+	$(REQ_ACTIVATE) pip-compile -U $(ROOT_DIR)/requirements/base.in -o $(ROOT_DIR)/requirements/base.txt
+
+$(ROOT_DIR)/requirements/production.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/base.txt $(ROOT_DIR)/requirements/production.in
+	$(REQ_ACTIVATE)	pip-compile -U $(ROOT_DIR)/requirements/production.in -o $(ROOT_DIR)/requirements/production.txt
+
+$(ROOT_DIR)/requirements/local.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/local.in  $(ROOT_DIR)/requirements/production.txt
+	$(REQ_ACTIVATE) pip-compile -U $(ROOT_DIR)/requirements/local.in -o $(ROOT_DIR)/requirements/local.txt
+
+requirements: $(ROOT_DIR)/requirements/local.txt $(ROOT_DIR)/requirements/production.txt

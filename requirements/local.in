@@ -26,6 +26,7 @@ flake8
 flake8-isort
 coverage
 black
+isort
 pylint-django
 pylint-celery
 pre-commit
