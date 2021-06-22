@@ -40,8 +40,8 @@ venv:: .git/hooks/pre-commit
 venv:: .git/hooks/pre-push
 
 lint: venv
-	$(ACTIVATE) flake8
-	$(ACTIVATE) mypy
+	@$(ACTIVATE) flake8 mibudge/
+	@$(ACTIVATE) mypy mibudge/
 
 PY_FILES=$(shell find mibudge/ -type f -name '*.py')
 .blackened: $(PY_FILES) venv
