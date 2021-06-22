@@ -3,12 +3,12 @@
 
 # 3rd party imports
 #
-from django.db.models.signals import pre_save
+from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
 
 # Project imports
 #
-from .models import Budget, Transaction, InternalTransaction
+from .models import InternalTransaction, Transaction
 
 
 ####################################################################
@@ -44,7 +44,7 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
     instance  -- instance of InternalTransaction object before save
     **kwargs  -- dict
     """
-    if instance.id is None:
+    if instance.pkid is None:
         # If this instance of an InternalTransaction has no id, then we
         # debit/credit the src and dst budgets by the amount of this
         # InternalTransaction and save those budgets.
@@ -87,3 +87,35 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
         current.dst_budget.save()
         if current.dst_budget != previous.dst_budget:
             previous.dst_budget.save()
+
+
+####################################################################
+#
+@receiver(pre_delete, sender=InternalTransaction)
+def internal_transaction_pre_delete(sender, instance, **kwargs):
+    """
+    The intent is that internal transactions (moving money between
+    budgets) are never deleted. If a user wishes to undo an internal
+    transaction they will create a new internal transaction reversing
+    the previous transaction.
+
+    However various book keeping and bug cleanup processes may require
+    that we delete internal transactions and when that happens the
+    adjustments to the associated budgets balances need to be
+    reversed.
+
+    Keyword Arguments:
+    sender    -- What sent the signal. In our case always InternalTransaction
+    instance  -- instance of InternalTransaction object before save
+    **kwargs  -- dict
+    """
+    instance.src_budget.balance += instance.amount
+    instance.dst_budget.balance -= instance.amount
+    # XXX We are deleting this instance so these lines are not necessary but it
+    #     feels kind of wrong to not update them..
+    #
+    instance.src_budget_balance = instance.src_budget.balance
+    instance.dst_budget_balance = instance.dst_budget.balance
+
+    instance.src_budget.save()
+    instance.dst_budget.save()

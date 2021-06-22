@@ -1,74 +1,50 @@
-#!/usr/bin/env python
-#
-# File: $Id$
-#
-"""
-Tests for the MoneyPools models and their somewhat complicated
-business logic.
-"""
-
 # system imports
 #
 
 # 3rd party module imports
 #
 import pytest
-from moneyed import Money, USD
+from moneyed import USD, Money
 
 # Application imports
 #
-from ..models import Bank, BankAccount, Budget, Transaction, InternalTransaction
+# from ..models import Bank, BankAccount, Budget, InternalTransaction, Transaction
 
 pytestmark = pytest.mark.django_db
 
 
 ####################################################################
 #
-def test_bank_factory(bank_factory):
-    bank = bank_factory()
-    assert isinstance(bank, Bank)
-
-
-####################################################################
-#
-def test_bank_account_factory(bank_account_factory, bank_factory):
-    # Make sure that we can make bank accounts that belong to
-    # different banks and that setting attributes via kwargs does the
-    # right thing.
-    #
-    bank_account = bank_account_factory()
-    old_bank = bank_account.bank
-    assert isinstance(bank_account, BankAccount)
-    bank = bank_factory(name="foo")
-    assert old_bank.id != bank.id
-
-    bank_account = bank_account_factory(bank=bank)
-    assert bank == bank_account.bank
-    assert old_bank != bank_account.bank
-
-    bank_account = bank_account_factory(
-        account_number="12345", posted_balance=12345.00
+def test_internal_transaction(budget_factory, internal_transaction_factory):
+    """
+    Keyword Arguments:
+    budget_factory               --
+    internal_transaction_factory --
+    """
+    src_budget = budget_factory(balance=100)
+    dst_budget = budget_factory(balance=100)
+    it = internal_transaction_factory(
+        amount=50, src_budget=src_budget, dst_budget=dst_budget
     )
-    assert bank_account.account_number == "12345"
-    assert bank_account.posted_balance == Money(12345.00, USD)
+    assert src_budget.balance == Money(50, USD)
+    assert dst_budget.balance == Money(150, USD)
+    assert it.src_budget_balance == Money(50, USD)
+    assert it.dst_budget_balance == Money(150, USD)
 
 
 ####################################################################
 #
-def test_budget_factory(budget_factory):
-    budget = budget_factory()
-    assert isinstance(budget, Budget)
-
-
-####################################################################
-#
-def test_transaction_factory(transaction_factory):
-    transaction = transaction_factory()
-    assert isinstance(transaction, Transaction)
-
-
-####################################################################
-#
-def test_internal_transaction_factory(internal_transaction_factory):
-    internal_transaction = internal_transaction_factory()
-    assert isinstance(internal_transaction, InternalTransaction)
+def test_interanl_transaction_update(
+    budget_factory, internal_transaction_factory
+):
+    """
+    Keyword Arguments:
+    budget_factory               --
+    internal_transaction_factory --
+    """
+    src_budget = budget_factory(balance=100)
+    dst_budget = budget_factory(balance=100)
+    it = internal_transaction_factory(
+        amount=50, src_budget=src_budget, dst_budget=dst_budget
+    )
+    assert it  # XXX Place holder for actual assertion

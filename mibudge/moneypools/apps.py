@@ -2,7 +2,6 @@ from django.apps import AppConfig
 
 
 class MoneyPoolsConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
     name = "mibudge.moneypools"
 
     ####################################################################
@@ -11,4 +10,7 @@ class MoneyPoolsConfig(AppConfig):
         # Need to import the signals module so that our @receiver
         # handlers get properly registered.
         #
-        from .signals import transaction_pre_save, internal_transaction_pre_save
+        from .signals import (  # noqa: F401
+            internal_transaction_pre_save,
+            transaction_pre_save,
+        )

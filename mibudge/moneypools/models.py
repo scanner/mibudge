@@ -1,17 +1,16 @@
 import uuid
 
+import recurrence.fields
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
-
 from djchoices import ChoiceItem, DjangoChoices
 from djmoney.models.fields import MoneyField
 from multiselectfield import MultiSelectField
-import recurrence.fields
 
 User = get_user_model()
 
-# See https://stackoverflow.com/questions/224462/storing-money-in-a-decimal-column-what-precision-and-scale/224866#224866
+# https://stackoverflow.com/questions/224462/storing-money-in-a-decimal-column-what-precision-and-scale/224866#224866
 #
 MAX_DIGITS = 14
 DECIMAL_PLACES = 2
@@ -21,6 +20,16 @@ DECIMAL_PLACES = 2
 ########################################################################
 #
 class MoneyPoolBaseClass(models.Model):
+    # NOTE: We are using UUID's as pseudo-primary keys.  This was originally
+    # because some of the data we import from simple bank json files has UUID's
+    # as identifiers and I thought it best to leverage that in my models and
+    # continue to use UUID's.. but without some of the tradeoffs of UUID's as
+    # primary keys.
+    #
+    # See: https://www.stevenmoseley.com/blog/tech/uuid-primary-keys-django-rest-framework-2-steps
+    #
+    pkid = models.BigAutoField(primary_key=True, editable=False)
+    id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
@@ -64,7 +73,9 @@ class BankAccount(MoneyPoolBaseClass):
     #####################################################################
 
     name = models.CharField(max_length=200)
-    bank = models.ForeignKey(Bank, on_delete=models.CASCADE, editable=False)
+    bank = models.ForeignKey(
+        Bank, to_field="id", on_delete=models.CASCADE, editable=False
+    )
     owners = models.ManyToManyField(User)
 
     # XXX Add a validator to make sure only digits are used
@@ -381,10 +392,9 @@ class Budget(MoneyPoolBaseClass):
     #
     #####################################################################
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
     bank_account = models.ForeignKey(
-        BankAccount, on_delete=models.CASCADE, editable=False
+        BankAccount, to_field="id", on_delete=models.CASCADE, editable=False
     )
     balance = MoneyField(
         max_digits=MAX_DIGITS,
@@ -428,7 +438,9 @@ class Budget(MoneyPoolBaseClass):
     # budget (filling up the fillup_goal budget), leaving $15 in the source
     # recurring budget.
     #
-    fillup_goal = models.ForeignKey("self", null=True, on_delete=models.CASCADE)
+    fillup_goal = models.ForeignKey(
+        "self", to_field="id", null=True, on_delete=models.CASCADE
+    )
 
     archived = models.BooleanField(default=False, editable=False)
     archived_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -477,7 +489,7 @@ class TransactionBaseClass(MoneyPoolBaseClass):
         editable=False,
     )
     bank_account = models.ForeignKey(
-        BankAccount, on_delete=models.CASCADE, editable=False
+        BankAccount, to_field="id", on_delete=models.CASCADE, editable=False
     )
 
     class Meta:
@@ -564,6 +576,7 @@ class Transaction(TransactionBaseClass):
     budget = models.ForeignKey(
         Budget,
         models.SET_NULL,
+        to_field="id",
         blank=True,
         null=True,
         related_name="transactions",
@@ -641,12 +654,14 @@ class InternalTransaction(TransactionBaseClass):
     #
     src_budget = models.ForeignKey(
         Budget,
+        to_field="id",
         on_delete=models.CASCADE,
         editable=False,
         related_name="budget_debits",
     )
     dst_budget = models.ForeignKey(
         Budget,
+        to_field="id",
         on_delete=models.CASCADE,
         editable=False,
         related_name="budget_credits",

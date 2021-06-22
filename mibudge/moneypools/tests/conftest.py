@@ -1,11 +1,11 @@
 from pytest_factoryboy import register
 
 from .factories import (
-    BankFactory,
     BankAccountFactory,
+    BankFactory,
     BudgetFactory,
-    TransactionFactory,
     InternalTransactionFactory,
+    TransactionFactory,
 )
 
 register(BankFactory)

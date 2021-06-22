@@ -3,25 +3,25 @@ import string
 from datetime import datetime, timedelta
 from typing import Sequence
 
-from pytz import UTC
 import factory
 import factory.fuzzy
-from factory.django import DjangoModelFactory
-
 from django.contrib.auth import get_user_model
+from factory.django import DjangoModelFactory
+from pytz import UTC
 
 # XXX If we want to separate 'moneypools' into its own app we will
 #     need to sever this link (and I guess add a UserFactory to our
 #     `factories.py`)
 #
 from mibudge.users.tests.factories import UserFactory
+
 from ..models import (
     Bank,
     BankAccount,
     Budget,
+    InternalTransaction,
     Transaction,
     TransactionCategory,
-    InternalTransaction,
 )
 
 User = get_user_model()
