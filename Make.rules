@@ -40,7 +40,7 @@ venv:: .git/hooks/pre-commit
 venv:: .git/hooks/pre-push
 
 lint: venv
-	@$(ACTIVATE) flake8 mibudge/
+	@$(ACTIVATE) flake8 --config=setup.cfg mibudge/
 	@$(ACTIVATE) mypy mibudge/
 
 PY_FILES=$(shell find mibudge/ -type f -name '*.py')
