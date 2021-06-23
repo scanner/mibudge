@@ -54,12 +54,12 @@ mypy: venv
 	$(ACTIVATE) mypy mibudge/
 
 $(ROOT_DIR)/requirements/base.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/base.in
-	$(REQ_ACTIVATE) pip-compile -U $(ROOT_DIR)/requirements/base.in -o $(ROOT_DIR)/requirements/base.txt
+	@$(REQ_ACTIVATE) pip-compile -U $(ROOT_DIR)/requirements/base.in -o $(ROOT_DIR)/requirements/base.txt
 
 $(ROOT_DIR)/requirements/production.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/base.txt $(ROOT_DIR)/requirements/production.in
-	$(REQ_ACTIVATE)	pip-compile -U $(ROOT_DIR)/requirements/production.in -o $(ROOT_DIR)/requirements/production.txt
+	@$(REQ_ACTIVATE)	pip-compile -U $(ROOT_DIR)/requirements/production.in -o $(ROOT_DIR)/requirements/production.txt
 
 $(ROOT_DIR)/requirements/local.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/local.in  $(ROOT_DIR)/requirements/production.txt
-	$(REQ_ACTIVATE) pip-compile -U $(ROOT_DIR)/requirements/local.in -o $(ROOT_DIR)/requirements/local.txt
+	@$(REQ_ACTIVATE) pip-compile -U $(ROOT_DIR)/requirements/local.in -o $(ROOT_DIR)/requirements/local.txt
 
 requirements: $(ROOT_DIR)/requirements/local.txt $(ROOT_DIR)/requirements/production.txt
