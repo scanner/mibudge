@@ -1,38 +1,38 @@
 ROOT_DIR := $(shell git rev-parse --show-toplevel)
 include $(ROOT_DIR)/Make.rules
 
-.PHONY: clean lint test mypy black
+.PHONY: clean lint test mypy logs migrate makemigrations manage_shell shell restart delete stop start build
 
 build:
-	@docker compose -f ./local.yml build
+	@docker-compose -f ./local.yml build
 
 start: build
-	@docker compose -f ./local.yml up --remove-orphans --detach
+	@docker-compose -f ./local.yml up --remove-orphans --detach
 
 stop:
-	@docker compose -f ./local.yml down --remove-orphans
+	@docker-compose -f ./local.yml down --remove-orphans
 
 delete: clean
-	@docker compose -f ./local.yml down --remove-orphans
+	@docker-compose -f ./local.yml down --remove-orphans
 	@docker volume prune --force
 
 restart:
-	@docker compose -f ./local.yml restart
+	@docker-compose -f ./local.yml restart
 
 shell:
-	@docker compose -f ./local.yml run --rm django /bin/bash
+	@docker-compose -f ./local.yml run --rm django /bin/bash
 
 manage_shell:
-	@docker compose -f ./local.yml run --rm django python manage.py shell_plus
+	@docker-compose -f ./local.yml run --rm django python manage.py shell_plus
 
 migrate:
-	@docker compose -f ./local.yml run --rm django python manage.py migrate
+	@docker-compose -f ./local.yml run --rm django python manage.py migrate
 
 makemigrations:
-	@docker compose -f ./local.yml run --rm django python manage.py makemigrations
+	@docker-compose -f ./local.yml run --rm django python manage.py makemigrations
 
 logs:
-	@docker compose -f ./local.yml logs -f -t
+	@docker-compose -f ./local.yml logs -f -t
 
 test:
-	@docker compose -f ./local.yml run --rm django pytest -vvvv
+	@docker-compose -f ./local.yml run --rm django pytest -vvvv

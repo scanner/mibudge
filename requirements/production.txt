@@ -4,13 +4,13 @@
 #
 #    pip-compile --output-file=/Users/scanner/src/bank_project/mibudge/requirements/production.txt /Users/scanner/src/bank_project/mibudge/requirements/production.in
 #
-amqp==2.6.1
+amqp==5.0.6
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   kombu
 argon2-cffi==20.1.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-asgiref==3.3.4
+asgiref==3.4.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django
@@ -23,7 +23,7 @@ billiard==3.6.4.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   celery
-celery==4.4.7
+celery==5.1.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-celery-beat
@@ -33,7 +33,7 @@ certifi==2021.5.30
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests
     #   sentry-sdk
-cffi==1.14.5
+cffi==1.14.6
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   argon2-cffi
@@ -42,10 +42,26 @@ chardet==4.0.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests
-click==8.0.1
+click==7.1.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
     #   uvicorn
+click-didyoumean==0.0.3
+    # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
+    #   celery
+click-plugins==1.1.1
+    # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
+    #   celery
+click-repl==0.2.0
+    # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
+    #   celery
 cryptography==3.4.7
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
@@ -54,7 +70,7 @@ defusedxml==0.7.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   python3-openid
-django==3.2.4
+django==3.2.5
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-allauth
@@ -70,7 +86,7 @@ django==3.2.4
     #   django-redis
     #   django-timezone-field
     #   djangorestframework
-django-allauth==0.44.0
+django-allauth==0.45.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
 django-anymail==8.4
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
@@ -78,9 +94,9 @@ django-appconf==1.0.4
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-compressor
-django-celery-beat==2.2.0
+django-celery-beat==2.2.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-django-choices==1.7.1
+django-choices==1.7.2
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
 django-compressor==2.4.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
@@ -92,7 +108,7 @@ django-environ==0.4.5
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
 django-model-utils==4.1.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-django-money==2.0
+django-money==2.0.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
 django-multiselectfield==0.1.12
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
@@ -100,13 +116,13 @@ django-recurrence==1.10.3
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
 django-redis==5.0.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-django-timezone-field==4.1.2
+django-timezone-field==4.2.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-celery-beat
 djangorestframework==3.12.4
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-flower==0.9.7
+flower==1.0.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
 gunicorn==20.1.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
@@ -120,7 +136,7 @@ httptools==0.2.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   uvicorn
-humanize==3.9.0
+humanize==3.10.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   flower
@@ -128,7 +144,7 @@ idna==2.10
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests
-kombu==4.6.11
+kombu==5.1.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   celery
@@ -136,12 +152,16 @@ oauthlib==3.1.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests-oauthlib
-pillow==8.2.0
+pillow==8.3.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-prometheus-client==0.8.0
+prometheus-client==0.11.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   flower
+prompt-toolkit==3.0.19
+    # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
+    #   click-repl
 psycopg2==2.9.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
 py-moneyed==1.2
@@ -210,12 +230,13 @@ rjsmin==1.1.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-compressor
-sentry-sdk==1.1.0
+sentry-sdk==1.3.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
 six==1.16.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   argon2-cffi
+    #   click-repl
     #   django-choices
     #   django-compressor
     #   python-dateutil
@@ -231,7 +252,7 @@ tornado==6.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   flower
-urllib3==1.26.5
+urllib3==1.26.6
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests
@@ -242,16 +263,20 @@ uvloop==0.15.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   uvicorn
-vine==1.3.0
+vine==5.0.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   amqp
     #   celery
-    #   flower
+    #   kombu
 watchgod==0.7
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   uvicorn
+wcwidth==0.2.5
+    # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
+    #   prompt-toolkit
 websockets==9.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt

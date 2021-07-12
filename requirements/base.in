@@ -1,6 +1,6 @@
 Pillow
 argon2-cffi
-celery>=4.4.6,<5  # celery 5 incompatible with flower 0.9.7
+celery
 python-dateutil
 django
 django-allauth
