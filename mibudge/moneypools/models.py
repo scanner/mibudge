@@ -88,6 +88,12 @@ class BankAccount(MoneyPoolBaseClass):
         choices=BankAccountType.choices,
         default=BankAccountType.checking,
     )
+    # Available Balance is the amount available for withdrawal and may include
+    # pending transactions not yet posted to your account.
+    #
+    # Posted Balance is the account's balance after items have posted to your
+    # accounts as deposits or withdrawals.
+    #
     posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -104,13 +110,21 @@ class BankAccount(MoneyPoolBaseClass):
         help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
-    unallocated_balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Amount of money that is not allocated to any budget.",
-        editable=False,
+
+    # All the money in a bank account is split across all budgets in the bank
+    # account. We need one budget that always exists that can not be
+    # archived. This is the budget of money that has not been allocated to any
+    # other budget.
+    #
+    # This budget is created if this foreign key is null in the bank account's
+    # post_save signal.
+    #
+    unallocated_budget = models.ForeignKey(
+        "Budget",
+        models.SET_NULL,
+        to_field="id",
+        blank=True,
+        null=True,
     )
 
 
@@ -562,17 +576,38 @@ class Transaction(TransactionBaseClass):
     transaction_type = models.CharField(
         max_length=32, choices=TransactionType.choices
     )
+
+    # `pending` is a state we get from the bank. It basically means that the
+    # amount may change until the state changes from `pending` to
+    # `posted`. Also the `posted`
+    #
+    # The `available_balance` will always update with the amount of this
+    # transaction. The `posted_balance` will only update when the transaction
+    # is no longer pending.
+    #
+    # XXX Since `posted` is the final state maybe this should be `posted`
+    #     instead of `pending` and we reverse the logic on when to apply it to
+    #     the `posted_balance`. At least then the names all match where as now
+    #     `pending` means `affects available` and `posted` means `affects
+    #     available and posted `
+    #
     pending = models.BooleanField(default=False, editable=False)
     memo = models.TextField(max_length=512, null=True, blank=True)
     raw_description = models.TextField(max_length=512, editable=False)
+
     # TODO: Initial value of the description is a cleaned up version of the
-    # raw_description. It is added in post processing at the same time that
-    # `party` is derived. Initially it is set to the same value as
-    # 'raw_description'
+    #       raw_description. It is added in post processing at the same time
+    #       that `party` is derived. Initially it is set to the same value as
+    #       'raw_description'
     #
     # NOTE: this is filled in via the pre_save signal in ./signals.py
     #
     description = models.TextField(max_length=512)
+
+    # If the budget field is null when this transaction is created it will be
+    # set to the unallocated budget associated with this bank account in the
+    # pre_save signal for Transactions.
+    #
     budget = models.ForeignKey(
         Budget,
         models.SET_NULL,
@@ -581,7 +616,7 @@ class Transaction(TransactionBaseClass):
         null=True,
         related_name="transactions",
     )
-    account_posted_balance = MoneyField(
+    bank_account_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
@@ -589,7 +624,7 @@ class Transaction(TransactionBaseClass):
         help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
-    account_available_balance = MoneyField(
+    bank_account_available_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
@@ -597,7 +632,7 @@ class Transaction(TransactionBaseClass):
         help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
-    budget_posted_balance = MoneyField(
+    budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
         default=0,
@@ -605,14 +640,7 @@ class Transaction(TransactionBaseClass):
         help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
-    budget_available_balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Available Balance has pending debits deducted.",
-        editable=False,
-    )
+
     # XXX Probably should make category its own object class and
     #     pre-create a bunch of those in the initial migration.
     #
@@ -640,7 +668,21 @@ class Transaction(TransactionBaseClass):
 #
 class InternalTransaction(TransactionBaseClass):
     """
-    An internal transaction moving money between budgets
+    An internal transacation is moving money between budgets. It is
+    all within the same bank account so the bank account's balance
+    never changes.
+
+    There is no 'pending' status either. This is typically a user
+    initiated action and it is basically final. You make the internal
+    transaction and money is debited from one budget and credited in
+    another budget.
+
+    We support having the amount of the transaction changed, and even
+    having the transaction deleted to update the associated budgets'
+    balances (this is done using django signals.. so note well: bulk
+    deleting of transactions will not update budget accounts so if you
+    are going to delete multiple internal transactions you need to
+    delete them one by one.)
     """
 
     # The src and dst budgets are not editable. The internal

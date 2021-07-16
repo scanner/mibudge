@@ -27,7 +27,7 @@ cffi==1.14.6
     # via
     #   argon2-cffi
     #   cryptography
-chardet==4.0.0
+charset-normalizer==2.0.2
     # via requests
 click==7.1.2
     # via
@@ -101,7 +101,7 @@ httptools==0.2.0
     # via uvicorn
 humanize==3.10.0
     # via flower
-idna==2.10
+idna==3.2
     # via requests
 kombu==5.1.0
     # via celery
@@ -121,7 +121,7 @@ pyjwt[crypto]==2.1.0
     # via django-allauth
 python-crontab==2.5.1
     # via django-celery-beat
-python-dateutil==2.8.1
+python-dateutil==2.8.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-recurrence
@@ -149,7 +149,7 @@ redis==3.5.3
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-redis
-requests==2.25.1
+requests==2.26.0
     # via
     #   django-allauth
     #   requests-oauthlib
@@ -174,7 +174,7 @@ urllib3==1.26.6
     # via requests
 uvicorn[standard]==0.14.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-uvloop==0.15.2
+uvloop==0.15.3
     # via uvicorn
 vine==5.0.0
     # via

@@ -38,7 +38,7 @@ cffi==1.14.6
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   argon2-cffi
     #   cryptography
-chardet==4.0.0
+charset-normalizer==2.0.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests
@@ -140,7 +140,7 @@ humanize==3.10.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   flower
-idna==2.10
+idna==3.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   requests
@@ -180,7 +180,7 @@ python-crontab==2.5.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-celery-beat
-python-dateutil==2.8.1
+python-dateutil==2.8.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-recurrence
@@ -216,7 +216,7 @@ redis==3.5.3
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-redis
-requests==2.25.1
+requests==2.26.0
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   django-allauth
@@ -259,7 +259,7 @@ urllib3==1.26.6
     #   sentry-sdk
 uvicorn[standard]==0.14.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
-uvloop==0.15.2
+uvloop==0.15.3
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.txt
     #   uvicorn

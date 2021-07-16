@@ -9,9 +9,7 @@ alabaster==0.7.12
 amqp==5.0.6
     # via kombu
 appdirs==1.4.4
-    # via
-    #   black
-    #   virtualenv
+    # via black
 appnope==0.1.2
     # via ipython
 argon2-cffi==20.1.0
@@ -32,6 +30,8 @@ babel==2.9.1
     #   sphinx
 backcall==0.2.0
     # via ipython
+backports.entry-points-selectable==1.1.0
+    # via virtualenv
 billiard==3.6.4.0
     # via celery
 black==21.6b0
@@ -49,7 +49,7 @@ cffi==1.14.6
     #   cryptography
 cfgv==3.3.0
     # via pre-commit
-chardet==4.0.0
+charset-normalizer==2.0.2
     # via requests
 click==7.1.2
     # via
@@ -169,7 +169,7 @@ humanize==3.10.0
     # via flower
 identify==2.2.11
     # via pre-commit
-idna==2.10
+idna==3.2
     # via requests
 imagesize==1.2.0
     # via sphinx
@@ -237,6 +237,8 @@ pillow==8.3.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 pip-tools==6.2.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/local.in
+platformdirs==2.0.2
+    # via virtualenv
 pluggy==0.13.1
     # via pytest
 pre-commit==2.13.0
@@ -296,7 +298,7 @@ pytest-sugar==0.9.4
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/local.in
 python-crontab==2.5.1
     # via django-celery-beat
-python-dateutil==2.8.1
+python-dateutil==2.8.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-recurrence
@@ -329,7 +331,7 @@ redis==3.5.3
     #   django-redis
 regex==2021.7.6
     # via black
-requests==2.25.1
+requests==2.26.0
     # via
     #   django-allauth
     #   requests-oauthlib
@@ -350,7 +352,7 @@ six==1.16.0
     #   virtualenv
 snowballstemmer==2.1.0
     # via sphinx
-sphinx==4.1.0
+sphinx==4.1.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/local.in
     #   sphinx-autobuild
@@ -405,14 +407,14 @@ urllib3==1.26.6
     # via requests
 uvicorn[standard]==0.14.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-uvloop==0.15.2
+uvloop==0.15.3
     # via uvicorn
 vine==5.0.0
     # via
     #   amqp
     #   celery
     #   kombu
-virtualenv==20.4.7
+virtualenv==20.6.0
     # via pre-commit
 watchgod==0.7
     # via
