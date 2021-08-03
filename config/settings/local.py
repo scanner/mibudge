@@ -1,6 +1,15 @@
 from .base import *  # noqa
 from .base import env
 
+# Enable rich tracebacks if the module exists.
+#
+try:
+    from rich.traceback import install
+
+    install(show_locals=True)
+except ImportError:
+    pass
+
 # GENERAL
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#debug

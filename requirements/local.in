@@ -22,15 +22,16 @@ sphinx-autobuild
 
 # Code quality
 # ------------------------------------------------------------------------------
+black
+coverage
 flake8
 flake8-isort
-coverage
-black
 isort
-pylint-django
-pylint-celery
-pre-commit
 pip-tools
+pre-commit
+pylint-celery
+pylint-django
+rich
 
 # Django
 # ------------------------------------------------------------------------------
