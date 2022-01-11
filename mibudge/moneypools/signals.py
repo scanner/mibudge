@@ -79,6 +79,9 @@ def transaction_pre_save(sender, instance, **kwargs):
 
     This is also where the amounts on the budget are credited or debited.
 
+    NOTE: Transactions can not change bank accounts (but they can change
+    budgets)
+
     Keyword Arguments:
     sender    -- What sent the signal. In our case always Transaction
     instance  -- instance of Transaction object before save
@@ -131,14 +134,69 @@ def transaction_pre_save(sender, instance, **kwargs):
 
         transaction.budget.balance += transaction.amount
         transaction.budget.save()
-        transaction.budget_balance = transaction.budget_balance
+        transaction.budget_balance = transaction.budget.balance
     else:
         # We only reach here if this transaction already exists and it is being
         # updated. So we need to compare in-memory transaction object with what
         # is already saved in the db to determine how to update related objects
         # and fields.
         #
-        pass
+        previous = Transaction.objects.get(id=transaction.id)
+
+        # If the associated budget has changed then we need to adjust the
+        # previous and current budgets.
+        #
+        # NOTE: We are adjusting both the previous budget and the
+        #       transacation's current budget by the _previous_ amount of the
+        #       transaction. In the following `if` clause where we check if
+        #       the transaction amount is different is where we will modify
+        #       the currently assigned budget's balance by the transaction's
+        #       new amount.
+        #
+        if previous.budget != transaction.budget:
+            previous.budget.balance -= previous.amount
+            previous.budget_balance = previous.budget.balance
+            transaction.budget.balance += previous.amount
+            transaction.budget_balance = transaction.budget.balance
+            previous.budget.save()
+            transaction.budget.save()
+
+        # If the amount of the transaction has changed then we need to
+        # change the bank accounts available amount and the associated
+        # budget's available amount.
+        #
+        save_bank_account = False
+        if previous.amount != transaction.amount:
+            transaction.bank_account.available_balance -= previous.amount
+            transaction.bank_account.available_balance += transaction.amount
+
+            transaction.budget.balance -= previous.amount
+            transaction.budget.balance += transaction.amount
+            transaction.budget_balance = transaction.budget.balance
+            transaction.budget.save()
+
+            # If this transaction was previously posted then we need to change
+            # the posted amount on the bank account as well.
+            #
+            # XXX This assumes that once a transaction is posted it never
+            #     changes back to pending.
+            #
+            if not previous.pending:
+                transaction.bank_account.posted_balance -= previous.amount
+            if not transaction.pending:
+                transaction.bank_account.posted_balance += transaction.amount
+
+            save_bank_account = True
+
+        elif not transaction.pending and previous.pending:
+            # The transaction has changed from pending to posted so we need to
+            # update the posted bank account balance.
+            #
+            transaction.bank_account.posted_balance += transaction.amount
+            save_bank_account = True
+
+        if save_bank_account:
+            transaction.bank_account.save()
 
 
 ####################################################################
@@ -154,6 +212,14 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
     instance  -- instance of InternalTransaction object before save
     **kwargs  -- dict
     """
+    # Internal transactions are a transfer from budget A to budget B.
+    # As such the amount is never negative. If you want to transfer
+    # from B to A, you would make that internal transaction. Not an
+    # internal transaction from A to B with a negative amount.
+    #
+    if instance.amount.amount < 0:
+        raise ValueError(f"Amount must not be negative: {instance.amount}")
+
     if instance.pkid is None:
         # If this instance of an InternalTransaction has no id, then we
         # debit/credit the src and dst budgets by the amount of this
