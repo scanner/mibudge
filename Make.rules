@@ -48,6 +48,12 @@ PY_FILES=$(shell find mibudge/ -type f -name '*.py')
 	@$(ACTIVATE) black mibudge/
 	@touch .blackened
 
+.isorted: $(PY_FILES) venv
+	@$(ACTIVATE) isort mibudge/
+	@touch .isorted
+
+formatting: black isort
+isort: .isorted
 black: .blackened
 
 mypy: venv
