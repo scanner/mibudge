@@ -1,3 +1,8 @@
+# system imports
+#
+
+# 3rd party imports
+#
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
@@ -5,9 +10,15 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import DetailView, RedirectView, UpdateView
 
+# app imports
+#
+
 User = get_user_model()
 
 
+########################################################################
+########################################################################
+#
 class UserDetailView(LoginRequiredMixin, DetailView):
 
     model = User
@@ -18,6 +29,9 @@ class UserDetailView(LoginRequiredMixin, DetailView):
 user_detail_view = UserDetailView.as_view()
 
 
+########################################################################
+########################################################################
+#
 class UserUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
 
     model = User
@@ -34,6 +48,9 @@ class UserUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
 user_update_view = UserUpdateView.as_view()
 
 
+########################################################################
+########################################################################
+#
 class UserRedirectView(LoginRequiredMixin, RedirectView):
 
     permanent = False

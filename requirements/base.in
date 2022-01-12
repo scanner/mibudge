@@ -1,7 +1,8 @@
 Pillow
+PyYAML
+Pygments
 argon2-cffi
 celery
-python-dateutil
 django
 django-allauth
 django-celery-beat
@@ -10,6 +11,8 @@ django-compressor
 django-cors-headers
 django-crispy-forms
 django-environ
+django-filter
+django-guardian
 django-model-utils
 django-money
 django-multiselectfield
@@ -18,6 +21,8 @@ django-redis
 djangorestframework
 flower
 hiredis
+markdown
+python-dateutil
 python-slugify
 pytz
 redis

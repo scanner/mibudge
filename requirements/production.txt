@@ -61,6 +61,8 @@ django==3.2.11
     #   django-celery-beat
     #   django-choices
     #   django-cors-headers
+    #   django-filter
+    #   django-guardian
     #   django-model-utils
     #   django-money
     #   django-multiselectfield
@@ -85,6 +87,10 @@ django-cors-headers==3.11.0
 django-crispy-forms==1.13.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-environ==0.8.1
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
+django-filter==21.1
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
+django-guardian==2.4.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-model-utils==4.2.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
@@ -114,8 +120,12 @@ humanize==3.13.1
     # via flower
 idna==3.3
     # via requests
+importlib-metadata==4.10.0
+    # via markdown
 kombu==5.2.3
     # via celery
+markdown==3.3.6
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 oauthlib==3.1.1
     # via requests-oauthlib
 packaging==21.3
@@ -132,6 +142,8 @@ py-moneyed==1.2
     # via django-money
 pycparser==2.21
     # via cffi
+pygments==2.11.2
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 pyjwt[crypto]==2.3.0
     # via django-allauth
 pyparsing==3.0.6
@@ -160,7 +172,9 @@ pytz==2021.3
     #   djangorestframework
     #   flower
 pyyaml==6.0
-    # via uvicorn
+    # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
+    #   uvicorn
 rcssmin==1.1.0
     # via django-compressor
 redis==4.1.0
@@ -212,6 +226,8 @@ whitenoise==5.3.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 wrapt==1.13.3
     # via deprecated
+zipp==3.7.0
+    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

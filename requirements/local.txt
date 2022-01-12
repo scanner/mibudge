@@ -96,6 +96,8 @@ django==3.2.11
     #   django-cors-headers
     #   django-debug-toolbar
     #   django-extensions
+    #   django-filter
+    #   django-guardian
     #   django-model-utils
     #   django-money
     #   django-multiselectfield
@@ -127,6 +129,10 @@ django-environ==0.8.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-extensions==3.1.5
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/local.in
+django-filter==21.1
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
+django-guardian==2.4.0
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-model-utils==4.2.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-money==2.1.1
@@ -177,6 +183,8 @@ idna==3.3
     # via requests
 imagesize==1.3.0
     # via sphinx
+importlib-metadata==4.10.0
+    # via markdown
 inflection==0.5.1
     # via pytest-factoryboy
 iniconfig==1.1.1
@@ -200,6 +208,8 @@ lazy-object-proxy==1.7.1
     # via astroid
 livereload==2.6.3
     # via sphinx-autobuild
+markdown==3.3.6
+    # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 markupsafe==2.0.1
     # via jinja2
 matplotlib-inline==0.1.3
@@ -271,6 +281,7 @@ pyflakes==2.4.0
     # via flake8
 pygments==2.11.2
     # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   ipython
     #   rich
     #   sphinx
@@ -329,6 +340,7 @@ pytz==2021.3
     #   flower
 pyyaml==6.0
     # via
+    #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   pre-commit
     #   uvicorn
 rcssmin==1.1.0
@@ -451,6 +463,8 @@ wrapt==1.13.3
     # via
     #   astroid
     #   deprecated
+zipp==3.7.0
+    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip

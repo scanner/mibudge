@@ -75,6 +75,8 @@ THIRD_PARTY_APPS = [
     "djmoney",
     "recurrence",
     "multiselectfield",
+    "django_filters",
+    "guardian",
 ]
 
 LOCAL_APPS = [
@@ -95,6 +97,7 @@ MIGRATION_MODULES = {"sites": "mibudge.contrib.sites.migrations"}
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
+    "guardian.backends.ObjectPermissionBackend",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-user-model
 AUTH_USER_MODEL = "users.User"
@@ -312,6 +315,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 40,
 }
 
 # django-cors-headers - https://github.com/adamchainz/django-cors-headers#setup
