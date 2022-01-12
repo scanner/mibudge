@@ -243,8 +243,48 @@ def test_transaction_amount_change(bank_account_factory, transaction_factory):
 
 ####################################################################
 #
-def transaction_budget_change(
-    bank_account_factory, budget_factory, transaction_factory
+def test_transaction_pending_change(bank_account_factory, transaction_factory):
+    """
+    A transaction goes from pending to posted.. budget amounts do not
+    change but the banks "avail" and "posted" amounts change.
+    """
+    BANK_AVAIL_BAL = 1000
+    BANK_POSTED_BAL = 1000
+    TRANSACTION_AMT = -100
+    bank_account = bank_account_factory(
+        available_balance=BANK_AVAIL_BAL, posted_balance=BANK_POSTED_BAL
+    )
+    transaction = transaction_factory(
+        amount=TRANSACTION_AMT,
+        pending=True,
+        raw_description="This is a transaction",
+        bank_account=bank_account,
+    )
+    transaction.save()
+
+    ba = BankAccount.objects.get(id=bank_account.id)
+    assert ba.posted_balance == Money(BANK_POSTED_BAL, USD)
+    assert ba.available_balance == Money(BANK_AVAIL_BAL + TRANSACTION_AMT, USD)
+    assert ba.unallocated_budget.balance == ba.available_balance
+
+    upd_trans = Transaction.objects.get(id=transaction.id)
+    upd_trans.pending = False
+    upd_trans.save()
+
+    ba = BankAccount.objects.get(id=bank_account.id)
+
+    assert ba.posted_balance == Money(BANK_POSTED_BAL + TRANSACTION_AMT, USD)
+    assert ba.available_balance == Money(BANK_AVAIL_BAL + TRANSACTION_AMT, USD)
+    assert ba.unallocated_budget.balance == ba.available_balance
+
+
+####################################################################
+#
+def test_transaction_budget_change(
+    bank_account_factory,
+    budget_factory,
+    transaction_factory,
+    internal_transaction_factory,
 ):
     """
     A common case (the most common case?) is some time after a
@@ -253,4 +293,80 @@ def transaction_budget_change(
     "unallocated budget" but later it was was associated with the
     "gasoline" budget.
     """
-    pass
+    BANK_AVAIL_BAL = 1000
+    BANK_POSTED_BAL = 1000
+    TRANSACTION_AMT = -100
+    bank_account = bank_account_factory(
+        available_balance=BANK_AVAIL_BAL, posted_balance=BANK_POSTED_BAL
+    )
+
+    # Make our dest budget and make sure it has money in it.
+    #
+    dst_budget = budget_factory(balance=0)
+    it = internal_transaction_factory(
+        amount=abs(TRANSACTION_AMT),
+        src_budget=bank_account.unallocated_budget,
+        dst_budget=dst_budget,
+    )
+    assert it.amount == Money(abs(TRANSACTION_AMT), USD)
+    assert dst_budget.balance == Money(abs(TRANSACTION_AMT), USD)
+
+    transaction = transaction_factory(
+        amount=TRANSACTION_AMT,
+        pending=True,
+        raw_description="This is a transaction",
+        bank_account=bank_account,
+    )
+    transaction.save()
+
+    upd_trans = Transaction.objects.get(id=transaction.id)
+    upd_trans.budget = dst_budget
+    upd_trans.pending = False
+    upd_trans.save()
+
+    ba = BankAccount.objects.get(id=bank_account.id)
+    dst_budget = Budget.objects.get(id=dst_budget.id)
+    assert ba.unallocated_budget.balance == Money(
+        BANK_POSTED_BAL + TRANSACTION_AMT, USD
+    )
+    assert dst_budget.balance == Money(0, USD)
+    assert ba.posted_balance == Money(BANK_POSTED_BAL + TRANSACTION_AMT, USD)
+    assert ba.available_balance == Money(BANK_AVAIL_BAL + TRANSACTION_AMT, USD)
+
+
+####################################################################
+#
+def test_transaction_delete(bank_account_factory, transaction_factory):
+    """
+    Should never happen in the normal case of things but debugging and
+    fixing may involve deleting transactions so deleting a transaction
+    should do the right thing with respect to bank account and buget
+    balances.
+    """
+    BANK_AVAIL_BAL = 900
+    BANK_POSTED_BAL = 1000
+    TRANSACTION_AMT = -100
+    bank_account = bank_account_factory(
+        available_balance=BANK_AVAIL_BAL, posted_balance=BANK_POSTED_BAL
+    )
+    transaction = transaction_factory(
+        amount=TRANSACTION_AMT,
+        pending=True,
+        raw_description="This is a transaction",
+        bank_account=bank_account,
+    )
+    transaction.delete()
+    ba = BankAccount.objects.get(id=bank_account.id)
+    assert ba.posted_balance == Money(BANK_POSTED_BAL, USD)
+    assert ba.available_balance == Money(BANK_AVAIL_BAL, USD)
+
+    transaction = transaction_factory(
+        amount=TRANSACTION_AMT,
+        pending=False,
+        raw_description="This is a transaction",
+        bank_account=bank_account,
+    )
+    transaction.delete()
+    ba = BankAccount.objects.get(id=bank_account.id)
+    assert ba.posted_balance == Money(BANK_POSTED_BAL, USD)
+    assert ba.available_balance == Money(BANK_AVAIL_BAL, USD)

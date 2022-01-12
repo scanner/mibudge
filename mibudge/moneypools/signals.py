@@ -201,6 +201,39 @@ def transaction_pre_save(sender, instance, **kwargs):
 
 ####################################################################
 #
+@receiver(pre_delete, sender=Transaction)
+def transaction_pre_delete(sender, instance, **kwargs):
+    """
+    Transactions in general will never be deleted but I can see doing cleanup
+    operations while debugging and testing that require their deletion and in
+    that case we need to make sure that the associated bank account and
+    budgets values are updated properly
+
+    TODO
+    """
+    transaction = instance  # To make the code easier to read
+
+    # Update the associated budget's balance.
+    #
+    if transaction.budget is not None:
+        transaction.budget.balance -= transaction.amount
+        transaction.budget.save()
+
+    # Update the bank account's available & posted balance.
+    #
+    if transaction.bank_account:
+        transaction.bank_account.available_balance -= transaction.amount
+
+        # If this transaction is not pending, then also update the the posted
+        # amount for the bank account.
+        #
+        if not transaction.pending:
+            transaction.bank_account.posted_balance -= transaction.amount
+        transaction.bank_account.save()
+
+
+####################################################################
+#
 @receiver(pre_save, sender=InternalTransaction)
 def internal_transaction_pre_save(sender, instance, **kwargs):
     """
