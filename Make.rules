@@ -14,7 +14,7 @@ clean::
 	@find $(ROOT_DIR) -name __pycache__ -prune -exec rm -vfr '{}' +
 	@rm -rf build bdist cover dist sdist distribute-* *.egg *.egg-info
 	@rm -rf *.tar.gz junit.xml coverage.xml .cache
-	@rm -rf .tox .eggs
+	@rm -rf .tox .eggs .blackened .isorted
 	@rm -rf venv
 	@rm -rf requirements/req_venv
 	@find $(ROOT_DIR) \( -name \*.orig -o -name \*.bak -o -name \*.rej \) -exec rm '{}' +
@@ -52,7 +52,7 @@ PY_FILES=$(shell find mibudge/ -type f -name '*.py')
 	@$(ACTIVATE) isort mibudge/
 	@touch .isorted
 
-formatting: black isort
+formatting: isort black
 isort: .isorted
 black: .blackened
 
