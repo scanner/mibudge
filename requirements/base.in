@@ -11,6 +11,7 @@ django-compressor
 django-cors-headers
 django-crispy-forms
 django-environ
+django-extensions
 django-filter
 django-guardian
 django-model-utils

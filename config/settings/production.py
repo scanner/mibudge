@@ -1,10 +1,10 @@
 import logging
+from typing import Any, Dict
 
 import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
-from sentry_sdk.integrations.celery import CeleryIntegration
-
 from sentry_sdk.integrations.redis import RedisIntegration
 
 from .base import *  # noqa
@@ -23,9 +23,9 @@ ALLOWED_HOSTS = env.list(
 # ------------------------------------------------------------------------------
 DATABASES["default"] = env.db("DATABASE_URL")  # noqa F405
 DATABASES["default"]["ATOMIC_REQUESTS"] = True  # noqa F405
-DATABASES["default"]["CONN_MAX_AGE"] = env.int(
+DATABASES["default"]["CONN_MAX_AGE"] = env.int(  # noqa F405
     "CONN_MAX_AGE", default=60
-)  # noqa F405
+)
 
 # CACHES
 # ------------------------------------------------------------------------------
@@ -114,7 +114,7 @@ INSTALLED_APPS += ["anymail"]  # noqa F405
 # https://anymail.readthedocs.io/en/stable/installation/#anymail-settings-reference
 # https://anymail.readthedocs.io/en/stable/esps
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-ANYMAIL = {}
+ANYMAIL: Dict[str, Any] = {}
 
 # django-compressor
 # ------------------------------------------------------------------------------

@@ -69,7 +69,7 @@ THIRD_PARTY_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "django_celery_beat",
-    "rest_framework",
+    "django-extensions," "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
     "djmoney",

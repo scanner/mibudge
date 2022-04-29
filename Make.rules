@@ -40,9 +40,12 @@ venv:: $(ROOT_DIR)/venv
 venv:: .git/hooks/pre-commit
 venv:: .git/hooks/pre-push
 
+squeegee: venv isort black
+	@$(ACTIVATE) flake8 mibudge/
+# @$(ACTIVATE) mypy --install-types --non-interactive mibudge/
+
 lint: venv
-	@$(ACTIVATE) flake8 --config=setup.cfg mibudge/
-	@$(ACTIVATE) mypy mibudge/
+	@$(ACTIVATE) pre-commit run -a
 
 PY_FILES=$(shell find mibudge/ -type f -name '*.py')
 .blackened: $(PY_FILES) venv
