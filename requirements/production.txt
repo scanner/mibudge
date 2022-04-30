@@ -4,21 +4,25 @@
 #
 #    pip-compile --output-file=/Users/scanner/src/bank_project/mibudge/requirements/production.txt /Users/scanner/src/bank_project/mibudge/requirements/production.in
 #
-amqp==5.0.9
+amqp==5.1.1
     # via kombu
+anyio==3.5.0
+    # via watchgod
 argon2-cffi==21.3.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 argon2-cffi-bindings==21.2.0
     # via argon2-cffi
-asgiref==3.4.1
+asgiref==3.5.0
     # via
     #   django
     #   uvicorn
-babel==2.9.1
+async-timeout==4.0.2
+    # via redis
+babel==2.10.1
     # via py-moneyed
 billiard==3.6.4.0
     # via celery
-celery==5.2.3
+celery==5.2.6
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-celery-beat
@@ -31,9 +35,9 @@ cffi==1.15.0
     # via
     #   argon2-cffi-bindings
     #   cryptography
-charset-normalizer==2.0.10
+charset-normalizer==2.0.12
     # via requests
-click==8.0.3
+click==8.1.3
     # via
     #   celery
     #   click-didyoumean
@@ -46,13 +50,13 @@ click-plugins==1.1.1
     # via celery
 click-repl==0.2.0
     # via celery
-cryptography==36.0.1
+cryptography==37.0.1
     # via pyjwt
 defusedxml==0.7.1
     # via python3-openid
 deprecated==1.2.13
     # via redis
-django==3.2.11
+django==3.2.13
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-allauth
@@ -71,9 +75,9 @@ django==3.2.11
     #   django-redis
     #   django-timezone-field
     #   djangorestframework
-django-allauth==0.47.0
+django-allauth==0.50.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-django-anymail==8.4
+django-anymail==8.5
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
 django-appconf==1.0.5
     # via django-compressor
@@ -81,11 +85,11 @@ django-celery-beat==2.2.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-choices==1.7.2
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-django-compressor==3.1
+django-compressor==4.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-cors-headers==3.11.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-django-crispy-forms==1.13.0
+django-crispy-forms==1.14.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-environ==0.8.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
@@ -101,11 +105,11 @@ django-money==2.1.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-multiselectfield==0.1.12
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-django-recurrence==1.10.3
+django-recurrence==1.11.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 django-redis==5.2.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-django-timezone-field==4.2.1
+django-timezone-field==4.2.3
     # via django-celery-beat
 djangorestframework==3.13.1
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
@@ -113,29 +117,31 @@ flower==1.0.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 gunicorn==20.1.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
-h11==0.12.0
+h11==0.13.0
     # via uvicorn
 hiredis==2.0.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-httptools==0.3.0
+httptools==0.4.0
     # via uvicorn
-humanize==3.13.1
+humanize==4.0.0
     # via flower
 idna==3.3
-    # via requests
-kombu==5.2.3
+    # via
+    #   anyio
+    #   requests
+kombu==5.2.4
     # via celery
 markdown==3.3.6
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-oauthlib==3.1.1
+oauthlib==3.2.0
     # via requests-oauthlib
 packaging==21.3
     # via redis
-pillow==9.0.0
+pillow==9.1.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-prometheus-client==0.12.0
+prometheus-client==0.14.1
     # via flower
-prompt-toolkit==3.0.24
+prompt-toolkit==3.0.29
     # via click-repl
 psycopg2==2.9.3
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
@@ -143,11 +149,11 @@ py-moneyed==1.2
     # via django-money
 pycparser==2.21
     # via cffi
-pygments==2.11.2
+pygments==2.12.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 pyjwt[crypto]==2.3.0
     # via django-allauth
-pyparsing==3.0.6
+pyparsing==3.0.8
     # via packaging
 python-crontab==2.6.0
     # via django-celery-beat
@@ -156,19 +162,18 @@ python-dateutil==2.8.2
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-recurrence
     #   python-crontab
-python-dotenv==0.19.2
+python-dotenv==0.20.0
     # via uvicorn
-python-slugify==5.0.2
+python-slugify==6.1.2
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 python3-openid==3.2.0
     # via django-allauth
-pytz==2021.3
+pytz==2022.1
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   babel
     #   celery
     #   django
-    #   django-recurrence
     #   django-timezone-field
     #   djangorestframework
     #   flower
@@ -178,7 +183,7 @@ pyyaml==6.0
     #   uvicorn
 rcssmin==1.1.0
     # via django-compressor
-redis==4.1.0
+redis==4.2.2
     # via
     #   -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
     #   django-redis
@@ -187,28 +192,30 @@ requests==2.27.1
     #   django-allauth
     #   django-anymail
     #   requests-oauthlib
-requests-oauthlib==1.3.0
+requests-oauthlib==1.3.1
     # via django-allauth
 rjsmin==1.2.0
     # via django-compressor
-sentry-sdk==1.5.2
+sentry-sdk==1.5.10
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/production.in
 six==1.16.0
     # via
     #   click-repl
     #   django-choices
     #   python-dateutil
+sniffio==1.2.0
+    # via anyio
 sqlparse==0.4.2
     # via django
 text-unidecode==1.3
     # via python-slugify
 tornado==6.1
     # via flower
-urllib3==1.26.8
+urllib3==1.26.9
     # via
     #   requests
     #   sentry-sdk
-uvicorn[standard]==0.16.0
+uvicorn[standard]==0.17.6
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
 uvloop==0.16.0
     # via uvicorn
@@ -217,15 +224,15 @@ vine==5.0.0
     #   amqp
     #   celery
     #   kombu
-watchgod==0.7
+watchgod==0.8.2
     # via uvicorn
 wcwidth==0.2.5
     # via prompt-toolkit
-websockets==10.1
+websockets==10.3
     # via uvicorn
-whitenoise==5.3.0
+whitenoise==6.0.0
     # via -r /Users/scanner/src/bank_project/mibudge/requirements/base.in
-wrapt==1.13.3
+wrapt==1.14.0
     # via deprecated
 
 # The following packages are considered to be unsafe in a requirements file:

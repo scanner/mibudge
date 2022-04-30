@@ -67,7 +67,7 @@ $(ROOT_DIR)/requirements/base.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)
 	@$(REQ_ACTIVATE) pip-compile $(ROOT_DIR)/requirements/base.in -o $(ROOT_DIR)/requirements/base.txt
 
 $(ROOT_DIR)/requirements/production.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/base.txt $(ROOT_DIR)/requirements/production.in
-	@$(REQ_ACTIVATE)	pip-compile $(ROOT_DIR)/requirements/production.in -o $(ROOT_DIR)/requirements/production.txt
+	@$(REQ_ACTIVATE) pip-compile $(ROOT_DIR)/requirements/production.in -o $(ROOT_DIR)/requirements/production.txt
 
 $(ROOT_DIR)/requirements/local.txt: $(ROOT_DIR)/requirements/req_venv $(ROOT_DIR)/requirements/local.in  $(ROOT_DIR)/requirements/production.txt
 	@$(REQ_ACTIVATE) pip-compile $(ROOT_DIR)/requirements/local.in -o $(ROOT_DIR)/requirements/local.txt
