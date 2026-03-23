@@ -20,6 +20,7 @@ django-multiselectfield
 django-recurrence
 django-redis
 djangorestframework
+dynaconf
 flower
 hiredis
 markdown
