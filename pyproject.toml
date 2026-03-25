@@ -1,82 +1,116 @@
-[tool.black]
-line-length = 80
-exclude = '''
-(
-  /(
-      \.tox
-    | .+/migrations
-    | venv.*
-    | \.venv
-    | \.pre-commit-cache
-  )/
-)
-'''
+[project]
+name = "mibudge"
+version = "0.1.0"
+description = "Personal budgeting service inspired by Simple Bank"
+requires-python = ">=3.13"
+dependencies = [
+    # Core
+    "django>=5.1",
+    "djangorestframework",
+    "django-environ",
+    "django-extensions",
+    "django-filter",
+    "django-model-utils",
+    "django-cors-headers",
+    "django-crispy-forms",
+    # Auth
+    "django-allauth",
+    "django-guardian",
+    "argon2-cffi",
+    # Money & scheduling
+    "django-money",
+    "django-recurrence",
+    # Celery
+    "celery",
+    "django-celery-beat",
+    "flower",
+    # Cache & broker
+    "redis[hiredis]",
+    "django-redis",
+    # Database
+    "psycopg[binary]",
+    # Static files & media
+    "whitenoise",
+    "django-compressor",
+    "Pillow",
+    # Server
+    "uvicorn[standard]",
+    # Utilities
+    "python-slugify",
+    "python-dateutil",
+    "markdown",
+    "PyYAML",
+    "Pygments",
+    "rich",
+]
 
-[tool.isort]
-profile = "black"
-line_length = 80
-skip_gitignore = true
-filter_files = true
-skip_glob = ["*venv*","*/migrations/*",".*cache"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest",
+    "pytest-django",
+    "pytest-factoryboy",
+    "pytest-sugar",
+    "pytest-cov",
+    "factory-boy",
+    "faker",
+    # Type checking
+    "mypy",
+    "django-stubs[compatible-mypy]",
+    # Linting & formatting
+    "ruff",
+    "pre-commit",
+    # Debugging
+    "ipdb",
+    "ipython",
+    "werkzeug",
+    # Utilities
+    "django-debug-toolbar",
+]
+
+########################################################################
+# Tool configurations
+########################################################################
+
+[tool.ruff]
+target-version = "py313"
+line-length = 80
+exclude = ['migrations/.+\.py$']
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "C4", "UP", "I"]
+ignore = ["E501", "B008", "B905"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mibudge"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [tool.mypy]
-exclude = [
-    '__pycache__',
-    '^\.mnt',
-    '.*[-_]cache',
-    '.git',
-    '\.venv',
-    'venv.*',
-    'tmp',
-    'fixtures',
-    'deployment',
-    'docs',
-    'requirements',
-    'migrations'
-]
-# exclude = '__pycache__|.metaflow|.mnt|.pytest_cache|\.pre-commit-cache|\.vscode|\.git|\.venv|venv.*|tmp|fixtures|deployment|docs|requirements|migrations'
+exclude = ['__pycache__', 'migrations', '.venv', 'venv*']
+plugins = ["mypy_django_plugin.main"]
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
-plugins = [
-    "mypy_django_plugin.main"
-]
 
-[[tool.mypy.overrides]]
-module = [
-    'boto3',
-    'click',
-    'funcy',
-]
+[tool.django-stubs]
+django_settings_module = "config.settings"
 
 [tool.pytest.ini_options]
-addopts = "-vvv"
-testpaths = [
-    "mibudge",
-]
+DJANGO_SETTINGS_MODULE = "config.settings"
+addopts = "--durations=10 --durations-min=0.1"
+testpaths = ["mibudge"]
 markers = [
-    "smoke: marks tests as smoke (deselect with '-m \"not smoke\"')",
+    "smoke: marks tests as smoke",
     "integration",
-]
-
-[tool.pylint.MASTER]
-ignore-paths=[ ".*/migrations/.*" ]
-
-[tool.pylint.FORMAT]
-max-module-lines=2000
-
-[tool.pylint.DESIGN]
-max-attributes=15
-max-branches=15
-
-[tool.pylint.BASIC]
-no-docstring-rgx='^_|^Meta$|.+Serializer$|.+ViewSet$|^[Tt]est'
-
-[tool.pylint.'MESSAGES CONTROL']
-disable=[
-    "unnecessary-pass",
-    "import-error",
-    "too-few-public-methods"
 ]

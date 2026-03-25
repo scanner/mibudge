@@ -1,12 +1,11 @@
 # system imports
 #
-from datetime import datetime
+from datetime import UTC, datetime
 
 # 3rd party imports
 #
 from django.db.models.signals import post_save, pre_delete, pre_save
 from django.dispatch import receiver
-from pytz import UTC
 
 # Project imports
 #

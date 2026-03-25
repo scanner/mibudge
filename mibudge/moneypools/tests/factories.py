@@ -1,13 +1,12 @@
 import random
 import string
-from datetime import datetime, timedelta
-from typing import Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
 import factory
 import factory.fuzzy
 from django.contrib.auth import get_user_model
 from factory.django import DjangoModelFactory
-from pytz import UTC
 
 # XXX If we want to separate 'moneypools' into its own app we will
 #     need to sever this link (and I guess add a UserFactory to our
@@ -110,7 +109,7 @@ class BankAccountFactory(DjangoModelFactory):
         lambda x: random_string(12, string.digits)
     )
     account_type = factory.LazyAttribute(
-        lambda x: random.choice(list(BankAccount.BankAccountType.values.keys()))
+        lambda x: random.choice(BankAccount.BankAccountType.values)
     )
 
     bank = factory.SubFactory(BankFactory)
@@ -140,18 +139,20 @@ class BudgetFactory(DjangoModelFactory):
     balance = factory.fuzzy.FuzzyInteger(100, 2000)
     target_balance_offset = factory.fuzzy.FuzzyInteger(100, 1000)
     target_balance = factory.LazyAttribute(lambda self: 200)
-    budget_type = factory.fuzzy.FuzzyChoice(Budget.BudgetType.values.keys())
-    funding_type = factory.fuzzy.FuzzyChoice(Budget.FundingType.values.keys())
+    budget_type = factory.fuzzy.FuzzyChoice(Budget.BudgetType.values)
+    funding_type = factory.fuzzy.FuzzyChoice(Budget.FundingType.values)
     # NOTE: This attribute is not part of the model. Instead this is
     # used to create a boolean that can be tested to see if the
     # 'funding type' for this budget is 'by a target date' (instead of
     # 'fixed amount per funding schedule')
     #
     has_target_date = factory.LazyAttribute(
-        lambda x: True
-        if factory.SelfAttribute("funding_type")
-        == Budget.FundingType.target_date
-        else False
+        lambda x: (
+            True
+            if factory.SelfAttribute("funding_type")
+            == Budget.FundingType.TARGET_DATE
+            else False
+        )
     )
     target_date = factory.Maybe(
         "has_target_date",
@@ -177,10 +178,10 @@ class TransactionFactory(DjangoModelFactory):
         end_dt=datetime.now(UTC),
     )
     transaction_type = factory.fuzzy.FuzzyChoice(
-        Transaction.TransactionType.values.keys()
+        Transaction.TransactionType.values
     )
     raw_description = factory.fuzzy.FuzzyText(length=100)
-    category = factory.fuzzy.FuzzyChoice(TransactionCategory.values.keys())
+    category = factory.fuzzy.FuzzyChoice(TransactionCategory.values)
 
 
 ########################################################################

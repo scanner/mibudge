@@ -4,9 +4,7 @@ import recurrence.fields
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
-from djchoices import ChoiceItem, DjangoChoices
 from djmoney.models.fields import MoneyField
-from multiselectfield import MultiSelectField
 
 User = get_user_model()
 
@@ -65,9 +63,9 @@ class BankAccount(MoneyPoolBaseClass):
 
     #####################################################################
     #
-    class BankAccountType(DjangoChoices):
-        checking = ChoiceItem("C", "Checking")
-        savings = ChoiceItem("S", "Savings")
+    class BankAccountType(models.TextChoices):
+        CHECKING = "C", "Checking"
+        SAVINGS = "S", "Savings"
 
     #
     #####################################################################
@@ -86,7 +84,7 @@ class BankAccount(MoneyPoolBaseClass):
     account_type = models.CharField(
         max_length=1,
         choices=BankAccountType.choices,
-        default=BankAccountType.checking,
+        default=BankAccountType.CHECKING,
     )
     # Available Balance is the amount available for withdrawal and may include
     # pending transactions not yet posted to your account.
@@ -131,218 +129,176 @@ class BankAccount(MoneyPoolBaseClass):
 ########################################################################
 ########################################################################
 #
-class TransactionCategory(DjangoChoices):
-    business_clothing = ChoiceItem(
-        "Business:Business Clothing", "Business Clothing"
+class TransactionCategory(models.TextChoices):
+    BUSINESS_CLOTHING = "Business:Business Clothing", "Business Clothing"
+    BUSINESS_SERVICES = "Business:Business Services", "Business Services"
+    BUSINESS_SUPPLIES = "Business:Business Supplies", "Business Supplies"
+    MEALS = "Business:Meals", "Meals"
+    TRAVEL = "Business:Travel", "Travel"
+    ACTIVITIES = "Children:Activities", "Activities"
+    ALLOWANCE = "Children:Allowance", "Allowance"
+    BABY_SUPPLIES = "Children:Baby Supplies", "Baby Supplies"
+    CHILDCARE = "Children:Childcare", "Childcare"
+    KIDS_CLOTHING = "Children:Kids Clothing", "Kids Clothing"
+    KIDS_EDUCATION = "Children:Kids Education", "Kids Education"
+    TOYS = "Children:Toys", "Toys"
+    ART = "Culture:Art", "Art"
+    BOOKS = "Culture:Books", "Books"
+    DANCE = "Culture:Dance", "Dance"
+    GAMES = "Culture:Games", "Games"
+    MOVIES = "Culture:Movies", "Movies"
+    MUSIC = "Culture:Music", "Music"
+    NEWS = "Culture:News", "News"
+    RANDOM_FUN = "Culture:Random Fun", "Random Fun"
+    TV = "Culture:TV", "TV"
+    BOOKS_SUPPLIES = "Education:Books & Supplies", "Books & Supplies"
+    ROOM_BOARD = "Education:Room & Board", "Room & Board"
+    STUDENT_LOANS = "Education:Student Loans", "Student Loans"
+    TUITION_FEES = "Education: Tuition & Fees", " Tuition & Fees"
+    ATM_FEES = "Fees:ATM Fees", "ATM Fees"
+    INVESTMENT_FEES = "Fees:Investment Fees", "Investment Fees"
+    OTHER_FEES = "Fees:Other Fees", "Other Fees"
+    ACCOUNTING = "Financial:Accounting", "Accounting"
+    CREDIT_CARD_PAYMENT = "Financial:Credit Card Payment", "Credit Card Payment"
+    FINANCIAL_ADVICE = "Financial:Financial Advice", "Financial Advice"
+    LIFE_INSURANCE = "Financial:Life Insurance", "Life Insurance"
+    LOAN = "Financial:Loan", "Loan"
+    LOAN_PAYMENT = "Financial:Loan Payment", "Loan Payment"
+    MONEY_TRANSFERS = "Financial:Money Transfers", "Money Transfers"
+    OTHER_FINANCIAL = "Financial:Other Financial", "Other Financial"
+    TAX_PREPARATION = "Financial:Tax Preparation", "Tax Preparation"
+    TAXES_FEDERAL = "Financial:Taxes, Federal", "Taxes, Federal"
+    TAXES_OTHER = "Financial:Taxes, Other", "Taxes, Other"
+    TAXES_STATE = "Financial:Taxes, State", "Taxes, State"
+    ALCOHOL_BARS = "Food & Drink:Alcohol & Bars", "Alcohol & Bars"
+    COFFEE_TEA = "Food & Drink:Coffee & Tea", "Coffee & Tea"
+    DESSERT = "Food & Drink:Dessert", "Dessert"
+    FAST_FOOD = "Food & Drink:Fast Food", "Fast Food"
+    GROCERIES = "Food & Drink:Groceries", "Groceries"
+    OTHER_FOOD_DRINK = "Food & Drink:Other Food & Drink", "Other Food & Drink"
+    RESTAURANTS = "Food & Drink:Restaurants", "Restaurants"
+    SNACKS = "Food & Drink:Snacks", "Snacks"
+    TOBACCO_LIKE = "Food & Drink:Tobacco & Like", "Tobacco & Like"
+    CHARITIES = "Gifts & Donations:Charities", "Charities"
+    GIFTS = "Gifts & Donations:Gifts", "Gifts"
+    CARE_FACILITIES = "Health & Medical:Care Facilities", "Care Facilities"
+    DENTIST = "Health & Medical:Dentist", "Dentist"
+    DOCTOR = "Health & Medical:Doctor", "Doctor"
+    HEALTH_EQUIPMENT = "Health & Medical:Equipment", "Equipment"
+    EYES = "Health & Medical:Eyes", "Eyes"
+    HEALTH_INSURANCE = "Health & Medical:Health Insurance", "Health Insurance"
+    OTHER_HEALTH_MEDICAL = (
+        "Health & Medical:Other Health & Medical",
+        "Other Health & Medical",
     )
-    business_services = ChoiceItem(
-        "Business:Business Services", "Business Services"
+    PHARMACIES = "Health & Medical:Pharmacies", "Pharmacies"
+    PRESCRIPTIONS = "Health & Medical:Prescriptions", "Prescriptions"
+    FURNISHINGS = "Home:Furnishings", "Furnishings"
+    HOME_INSURANCE = "Home:Home Insurance", "Home Insurance"
+    HOME_PURCHASE = "Home:Home Purchase", "Home Purchase"
+    HOME_SERVICES = "Home:Home Services", "Home Services"
+    HOME_SUPPLIES = "Home:Home Supplies", "Home Supplies"
+    LAWN_GARDEN = "Home:Lawn & Garden", "Lawn & Garden"
+    MORTGAGE = "Home:Mortgage", "Mortgage"
+    MOVING = "Home:Moving", "Moving"
+    OTHER_HOME = "Home:Other Home", "Other Home"
+    PROPERTY_TAX = "Home:Property Tax", "Property Tax"
+    RENT = "Home:Rent", "Rent"
+    RENTERS_INSURANCE = "Home:Renter's Insurance", "Renter's Insurance"
+    BONUS = "Income:Bonus", "Bonus"
+    COMMISSION = "Income:Commission", "Commission"
+    INTEREST = "Income:Interest", "Interest"
+    OTHER_INCOME = "Income:Other Income", "Other Income"
+    PAYCHECK = "Income:Paycheck", "Paycheck"
+    REIMBURSEMENT = "Income:Reimbursement", "Reimbursement"
+    RENTAL_INCOME = "Income:Rental Income", "Rental Income"
+    EDUCATION_INVESTMENT = (
+        "Investment:Education Investment",
+        "Education Investment",
     )
-    business_supplies = ChoiceItem(
-        "Business:Business Supplies", "Business Supplies"
+    OTHER_INVESTMENTS = "Investment:Other Investments", "Other Investments"
+    RETIREMENT = "Investment:Retirement", "Retirement"
+    STOCKS_MUTUAL_FUNDS = (
+        "Investment:Stocks & Mutual Funds",
+        "Stocks & Mutual Funds",
     )
-    meals = ChoiceItem("Business:Meals", "Meals")
-    travel = ChoiceItem("Business:Travel", "Travel")
-    activities = ChoiceItem("Children:Activities", "Activities")
-    allowance = ChoiceItem("Children:Allowance", "Allowance")
-    baby_supplies = ChoiceItem("Children:Baby Supplies", "Baby Supplies")
-    childcare = ChoiceItem("Children:Childcare", "Childcare")
-    kids_clothing = ChoiceItem("Children:Kids Clothing", "Kids Clothing")
-    kids_education = ChoiceItem("Children:Kids Education", "Kids Education")
-    toys = ChoiceItem("Children:Toys", "Toys")
-    art = ChoiceItem("Culture:Art", "Art")
-    books = ChoiceItem("Culture:Books", "Books")
-    dance = ChoiceItem("Culture:Dance", "Dance")
-    games = ChoiceItem("Culture:Games", "Games")
-    movies = ChoiceItem("Culture:Movies", "Movies")
-    music = ChoiceItem("Culture:Music", "Music")
-    news = ChoiceItem("Culture:News", "News")
-    random_fun = ChoiceItem("Culture:Random Fun", "Random Fun")
-    tv = ChoiceItem("Culture:TV", "TV")
-    books_supplies = ChoiceItem(
-        "Education:Books & Supplies", "Books & Supplies"
+    LEGAL_FEES = "Legal:Legal Fees", "Legal Fees"
+    LEGAL_SERVICES = "Legal:Legal Services", "Legal Services"
+    OTHER_LEGAL_COSTS = "Legal:Other Legal Costs", "Other Legal Costs"
+    OFFICE_EQUIPMENT = "Office:Equipment", "Equipment"
+    OFFICE_SUPPLIES = "Office:Office Supplies", "Office Supplies"
+    OTHER_OFFICE = "Office:Other Office", "Other Office"
+    POSTAGE_SHIPPING = "Office:Postage & Shipping", "Postage & Shipping"
+    ACCESSORIES = "Personal:Accessories", "Accessories"
+    BEAUTY = "Personal:Beauty", "Beauty"
+    BODY_ENHANCEMENT = "Personal:Body Enhancement", "Body Enhancement"
+    CLOTHING = "Personal:Clothing", "Clothing"
+    COUNSELING = "Personal:Counseling", "Counseling"
+    HAIR = "Personal:Hair", "Hair"
+    HOBBIES = "Personal:Hobbies", "Hobbies"
+    JEWELRY = "Personal:Jewelry", "Jewelry"
+    LAUNDRY = "Personal:Laundry", "Laundry"
+    OTHER_PERSONAL = "Personal:Other Personal", "Other Personal"
+    RELIGION = "Personal:Religion", "Religion"
+    SHOES = "Personal:Shoes", "Shoes"
+    PET_FOOD = "Pets:Pet Food", "Pet Food"
+    PET_GROOMING = "Pets:Pet Grooming", "Pet Grooming"
+    PET_MEDICINE = "Pets:Pet Medicine", "Pet Medicine"
+    PET_SUPPLIES = "Pets:Pet Supplies", "Pet Supplies"
+    VETERINARIAN = "Pets:Veterinarian", "Veterinarian"
+    CAMPING = "Sports & Fitness:Camping", "Camping"
+    FITNESS_GEAR = "Sports & Fitness:Fitness Gear", "Fitness Gear"
+    GOLF = "Sports & Fitness:Golf", "Golf"
+    MEMBERSHIPS = "Sports & Fitness:Memberships", "Memberships"
+    OTHER_SPORTS_FITNESS = (
+        "Sports & Fitness:Other Sports & Fitness",
+        "Other Sports & Fitness",
     )
-    room_board = ChoiceItem("Education:Room & Board", "Room & Board")
-    student_loans = ChoiceItem("Education:Student Loans", "Student Loans")
-    tuition_fees = ChoiceItem("Education: Tuition & Fees", " Tuition & Fees")
-    atm_fees = ChoiceItem("Fees:ATM Fees", "ATM Fees")
-    investment_fees = ChoiceItem("Fees:Investment Fees", "Investment Fees")
-    other_fees = ChoiceItem("Fees:Other Fees", "Other Fees")
-    accounting = ChoiceItem("Financial:Accounting", "Accounting")
-    credit_card_payment = ChoiceItem(
-        "Financial:Credit Card Payment", "Credit Card Payment"
+    SPORTING_EVENTS = "Sports & Fitness:Sporting Events", "Sporting Events"
+    SPORTING_GOODS = "Sports & Fitness:Sporting Goods", "Sporting Goods"
+    DOMAINS_HOSTING = "Technology:Domains & Hosting", "Domains & Hosting"
+    HARDWARE = "Technology:Hardware", "Hardware"
+    ONLINE_SERVICES = "Technology:Online Services", "Online Services"
+    SOFTWARE = "Technology:Software", "Software"
+    AUTO_INSURANCE = "Transportation:Auto Insurance", "Auto Insurance"
+    AUTO_PAYMENT = "Transportation:Auto Payment", "Auto Payment"
+    AUTO_SERVICES = "Transportation:Auto Services", "Auto Services"
+    AUTO_SUPPLIES = "Transportation:Auto Supplies", "Auto Supplies"
+    BICYCLE = "Transportation:Bicycle", "Bicycle"
+    BOATS_MARINE = "Transportation:Boats & Marine", "Boats & Marine"
+    GAS = "Transportation:Gas", "Gas"
+    OTHER_TRANSPORTATION = (
+        "Transportation:Other Transportation",
+        "Other Transportation",
     )
-    financial_advice = ChoiceItem(
-        "Financial:Financial Advice", "Financial Advice"
+    PARKING_TOLLS = "Transportation:Parking & Tolls", "Parking & Tolls"
+    PARKING_TICKETS = "Transportation:Parking Tickets", "Parking Tickets"
+    PUBLIC_TRANSIT = "Transportation:Public Transit", "Public Transit"
+    SHIPPING = "Transportation:Shipping", "Shipping"
+    TAXIES = "Transportation:Taxies", "Taxies"
+    CAR_RENTAL = "Travel:Car Rental", "Car Rental"
+    FLIGHTS = "Travel:Flights", "Flights"
+    HOTELS = "Travel:Hotels", "Hotels"
+    TOURS_CRUISES = "Travel:Tours & Cruises", "Tours & Cruises"
+    TRAIN = "Travel:Train", "Train"
+    TRAVEL_BUSES = "Travel:Travel Buses", "Travel Buses"
+    TRAVEL_DINING = "Travel:Travel Dining", "Travel Dining"
+    TRAVEL_ENTERTAINMENT = (
+        "Travel:Travel Entertainment",
+        "Travel Entertainment",
     )
-    life_insurance = ChoiceItem("Financial:Life Insurance", "Life Insurance")
-    loan = ChoiceItem("Financial:Loan", "Loan")
-    loan_payment = ChoiceItem("Financial:Loan Payment", "Loan Payment")
-    money_transfers = ChoiceItem("Financial:Money Transfers", "Money Transfers")
-    other_financial = ChoiceItem("Financial:Other Financial", "Other Financial")
-    tax_preparation = ChoiceItem("Financial:Tax Preparation", "Tax Preparation")
-    taxes_federal = ChoiceItem("Financial:Taxes, Federal", "Taxes, Federal")
-    taxes_other = ChoiceItem("Financial:Taxes, Other", "Taxes, Other")
-    taxes_state = ChoiceItem("Financial:Taxes, State", "Taxes, State")
-    alcohol_bars = ChoiceItem("Food & Drink:Alcohol & Bars", "Alcohol & Bars")
-    coffee_tea = ChoiceItem("Food & Drink:Coffee & Tea", "Coffee & Tea")
-    dessert = ChoiceItem("Food & Drink:Dessert", "Dessert")
-    fast_food = ChoiceItem("Food & Drink:Fast Food", "Fast Food")
-    groceries = ChoiceItem("Food & Drink:Groceries", "Groceries")
-    other_food_drink = ChoiceItem(
-        "Food & Drink:Other Food & Drink", "Other Food & Drink"
-    )
-    restaurants = ChoiceItem("Food & Drink:Restaurants", "Restaurants")
-    snacks = ChoiceItem("Food & Drink:Snacks", "Snacks")
-    tobacco_like = ChoiceItem("Food & Drink:Tobacco & Like", "Tobacco & Like")
-    charities = ChoiceItem("Gifts & Donations:Charities", "Charities")
-    gifts = ChoiceItem("Gifts & Donations:Gifts", "Gifts")
-    care_facilities = ChoiceItem(
-        "Health & Medical:Care Facilities", "Care Facilities"
-    )
-    dentist = ChoiceItem("Health & Medical:Dentist", "Dentist")
-    doctor = ChoiceItem("Health & Medical:Doctor", "Doctor")
-    equipment = ChoiceItem("Health & Medical:Equipment", "Equipment")
-    eyes = ChoiceItem("Health & Medical:Eyes", "Eyes")
-    health_insurance = ChoiceItem(
-        "Health & Medical:Health Insurance", "Health Insurance"
-    )
-    other_health_medical = ChoiceItem(
-        "Health & Medical:Other Health & Medical", "Other Health & Medical"
-    )
-    pharmacies = ChoiceItem("Health & Medical:Pharmacies", "Pharmacies")
-    prescriptions = ChoiceItem(
-        "Health & Medical:Prescriptions", "Prescriptions"
-    )
-    furnishings = ChoiceItem("Home:Furnishings", "Furnishings")
-    home_insurance = ChoiceItem("Home:Home Insurance", "Home Insurance")
-    home_purchase = ChoiceItem("Home:Home Purchase", "Home Purchase")
-    home_services = ChoiceItem("Home:Home Services", "Home Services")
-    home_supplies = ChoiceItem("Home:Home Supplies", "Home Supplies")
-    lawn_garden = ChoiceItem("Home:Lawn & Garden", "Lawn & Garden")
-    mortgage = ChoiceItem("Home:Mortgage", "Mortgage")
-    moving = ChoiceItem("Home:Moving", "Moving")
-    other_home = ChoiceItem("Home:Other Home", "Other Home")
-    property_tax = ChoiceItem("Home:Property Tax", "Property Tax")
-    rent = ChoiceItem("Home:Rent", "Rent")
-    renters_insurance = ChoiceItem(
-        "Home:Renter's Insurance", "Renter's Insurance"
-    )
-    bonus = ChoiceItem("Income:Bonus", "Bonus")
-    commission = ChoiceItem("Income:Commission", "Commission")
-    interest = ChoiceItem("Income:Interest", "Interest")
-    other_income = ChoiceItem("Income:Other Income", "Other Income")
-    paycheck = ChoiceItem("Income:Paycheck", "Paycheck")
-    reimbursement = ChoiceItem("Income:Reimbursement", "Reimbursement")
-    rental_income = ChoiceItem("Income:Rental Income", "Rental Income")
-    education_investment = ChoiceItem(
-        "Investment:Education Investment", "Education Investment"
-    )
-    other_investments = ChoiceItem(
-        "Investment:Other Investments", "Other Investments"
-    )
-    retirement = ChoiceItem("Investment:Retirement", "Retirement")
-    stocks_mutual_funds = ChoiceItem(
-        "Investment:Stocks & Mutual Funds", "Stocks & Mutual Funds"
-    )
-    legal_fees = ChoiceItem("Legal:Legal Fees", "Legal Fees")
-    legal_services = ChoiceItem("Legal:Legal Services", "Legal Services")
-    other_legal_costs = ChoiceItem(
-        "Legal:Other Legal Costs", "Other Legal Costs"
-    )
-    equipment = ChoiceItem("Office:Equipment", "Equipment")
-    office_supplies = ChoiceItem("Office:Office Supplies", "Office Supplies")
-    other_office = ChoiceItem("Office:Other Office", "Other Office")
-    postage_shipping = ChoiceItem(
-        "Office:Postage & Shipping", "Postage & Shipping"
-    )
-    accessories = ChoiceItem("Personal:Accessories", "Accessories")
-    beauty = ChoiceItem("Personal:Beauty", "Beauty")
-    body_enhancement = ChoiceItem(
-        "Personal:Body Enhancement", "Body Enhancement"
-    )
-    clothing = ChoiceItem("Personal:Clothing", "Clothing")
-    counseling = ChoiceItem("Personal:Counseling", "Counseling")
-    hair = ChoiceItem("Personal:Hair", "Hair")
-    hobbies = ChoiceItem("Personal:Hobbies", "Hobbies")
-    jewelry = ChoiceItem("Personal:Jewelry", "Jewelry")
-    laundry = ChoiceItem("Personal:Laundry", "Laundry")
-    other_personal = ChoiceItem("Personal:Other Personal", "Other Personal")
-    religion = ChoiceItem("Personal:Religion", "Religion")
-    shoes = ChoiceItem("Personal:Shoes", "Shoes")
-    pet_food = ChoiceItem("Pets:Pet Food", "Pet Food")
-    pet_grooming = ChoiceItem("Pets:Pet Grooming", "Pet Grooming")
-    pet_medicine = ChoiceItem("Pets:Pet Medicine", "Pet Medicine")
-    pet_supplies = ChoiceItem("Pets:Pet Supplies", "Pet Supplies")
-    veterinarian = ChoiceItem("Pets:Veterinarian", "Veterinarian")
-    camping = ChoiceItem("Sports & Fitness:Camping", "Camping")
-    fitness_gear = ChoiceItem("Sports & Fitness:Fitness Gear", "Fitness Gear")
-    golf = ChoiceItem("Sports & Fitness:Golf", "Golf")
-    memberships = ChoiceItem("Sports & Fitness:Memberships", "Memberships")
-    other_sports_fitness = ChoiceItem(
-        "Sports & Fitness:Other Sports & Fitness", "Other Sports & Fitness"
-    )
-    sporting_events = ChoiceItem(
-        "Sports & Fitness:Sporting Events", "Sporting Events"
-    )
-    sporting_goods = ChoiceItem(
-        "Sports & Fitness:Sporting Goods", "Sporting Goods"
-    )
-    domains_hosting = ChoiceItem(
-        "Technology:Domains & Hosting", "Domains & Hosting"
-    )
-    hardware = ChoiceItem("Technology:Hardware", "Hardware")
-    online_services = ChoiceItem(
-        "Technology:Online Services", "Online Services"
-    )
-    software = ChoiceItem("Technology:Software", "Software")
-    auto_insurance = ChoiceItem(
-        "Transportation:Auto Insurance", "Auto Insurance"
-    )
-    auto_payment = ChoiceItem("Transportation:Auto Payment", "Auto Payment")
-    auto_services = ChoiceItem("Transportation:Auto Services", "Auto Services")
-    auto_supplies = ChoiceItem("Transportation:Auto Supplies", "Auto Supplies")
-    bicycle = ChoiceItem("Transportation:Bicycle", "Bicycle")
-    boats_marine = ChoiceItem("Transportation:Boats & Marine", "Boats & Marine")
-    gas = ChoiceItem("Transportation:Gas", "Gas")
-    other_transportation = ChoiceItem(
-        "Transportation:Other Transportation", "Other Transportation"
-    )
-    parking_tolls = ChoiceItem(
-        "Transportation:Parking & Tolls", "Parking & Tolls"
-    )
-    parking_tickets = ChoiceItem(
-        "Transportation:Parking Tickets", "Parking Tickets"
-    )
-    public_transit = ChoiceItem(
-        "Transportation:Public Transit", "Public Transit"
-    )
-    shipping = ChoiceItem("Transportation:Shipping", "Shipping")
-    taxies = ChoiceItem("Transportation:Taxies", "Taxies")
-    car_rental = ChoiceItem("Travel:Car Rental", "Car Rental")
-    flights = ChoiceItem("Travel:Flights", "Flights")
-    hotels = ChoiceItem("Travel:Hotels", "Hotels")
-    tours_cruises = ChoiceItem("Travel:Tours & Cruises", "Tours & Cruises")
-    train = ChoiceItem("Travel:Train", "Train")
-    travel_buses = ChoiceItem("Travel:Travel Buses", "Travel Buses")
-    travel_dining = ChoiceItem("Travel:Travel Dining", "Travel Dining")
-    travel_entertainment = ChoiceItem(
-        "Travel:Travel Entertainment", "Travel Entertainment"
-    )
-    cash = ChoiceItem("Uncategorized:Cash", "Cash")
-    other_shopping = ChoiceItem(
-        "Uncategorized:Other Shopping", "Other Shopping"
-    )
-    unknown = ChoiceItem("Uncategorized:Unknown", "Unknown")
-    unassigned = ChoiceItem("Uncategorized:Unassigned", "-------")
-    cable = ChoiceItem("Utilities:Cable", "Cable")
-    electricity = ChoiceItem("Utilities:Electricity", "Electricity")
-    gas_fuel = ChoiceItem("Utilities:Gas & Fuel", "Gas & Fuel")
-    internet = ChoiceItem("Utilities:Internet", "Internet")
-    other_utilities = ChoiceItem("Utilities:Other Utilities", "Other Utilities")
-    phone = ChoiceItem("Utilities:Phone", "Phone")
-    trash = ChoiceItem("Utilities:Trash", "Trash")
-    water_sewer = ChoiceItem("Utilities:Water & Sewer", "Water & Sewer")
+    CASH = "Uncategorized:Cash", "Cash"
+    OTHER_SHOPPING = "Uncategorized:Other Shopping", "Other Shopping"
+    UNKNOWN = "Uncategorized:Unknown", "Unknown"
+    UNASSIGNED = "Uncategorized:Unassigned", "-------"
+    CABLE = "Utilities:Cable", "Cable"
+    ELECTRICITY = "Utilities:Electricity", "Electricity"
+    GAS_FUEL = "Utilities:Gas & Fuel", "Gas & Fuel"
+    INTERNET = "Utilities:Internet", "Internet"
+    OTHER_UTILITIES = "Utilities:Other Utilities", "Other Utilities"
+    PHONE = "Utilities:Phone", "Phone"
+    TRASH = "Utilities:Trash", "Trash"
+    WATER_SEWER = "Utilities:Water & Sewer", "Water & Sewer"
 
 
 ########################################################################
@@ -364,7 +320,7 @@ class Budget(MoneyPoolBaseClass):
 
     #####################################################################
     #
-    class BudgetType(DjangoChoices):
+    class BudgetType(models.TextChoices):
         """
         Goal -> money accumulates and once it reaches the target_balance
                 the goal is complete (and further automatic accumulation
@@ -376,16 +332,16 @@ class Budget(MoneyPoolBaseClass):
                 will start accuring money again on its schedule.
         """
 
-        goal = ChoiceItem("G", "Goal")
-        recurring = ChoiceItem("R", "Recurring")
-        associated_fillup_goal = ChoiceItem("A", "Associated Fill-up Goal")
+        GOAL = "G", "Goal"
+        RECURRING = "R", "Recurring"
+        ASSOCIATED_FILLUP_GOAL = "A", "Associated Fill-up Goal"
 
     #
     #####################################################################
 
     #####################################################################
     #
-    class FundingType(DjangoChoices):
+    class FundingType(models.TextChoices):
         """
         How is a budget funded? Budgets are credited some time on the day
         of their specified funding schedule. How much money is
@@ -400,8 +356,8 @@ class Budget(MoneyPoolBaseClass):
             amount on its funding schedule dates.
         """
 
-        target_date = ChoiceItem("D", "Target Date")
-        fixed_amount = ChoiceItem("F", "Fixed Amount")
+        TARGET_DATE = "D", "Target Date"
+        FIXED_AMOUNT = "F", "Fixed Amount"
 
     #
     #####################################################################
@@ -421,12 +377,14 @@ class Budget(MoneyPoolBaseClass):
         default=0,
     )
     budget_type = models.CharField(
-        max_length=1, choices=BudgetType.choices, default=BudgetType.goal
+        max_length=1,
+        choices=BudgetType.choices,
+        default=BudgetType.GOAL,
     )
     funding_type = models.CharField(
         max_length=1,
         choices=FundingType.choices,
-        default=FundingType.target_date,
+        default=FundingType.TARGET_DATE,
     )
 
     # Only relevant if the FundingType is 'target_date'
@@ -489,7 +447,7 @@ class Budget(MoneyPoolBaseClass):
     # NOTE: Need to enforce in pre-save that only one budget in an
     #       account has the given fields selected.
     #
-    auto_spend = MultiSelectField(choices=TransactionCategory.choices)
+    auto_spend = models.JSONField(default=list, blank=True)
 
 
 ########################################################################
@@ -523,42 +481,43 @@ class Transaction(TransactionBaseClass):
 
     #####################################################################
     #
-    class TransactionType(DjangoChoices):
+    class TransactionType(models.TextChoices):
         """
         An extended list of transaction types based on the original data
         in our existing bank accounts downloaded transaction logs.
         """
 
-        signature_purchase = ChoiceItem(
-            "signature_purchase", "Signature Purchase"
+        SIGNATURE_PURCHASE = "signature_purchase", "Signature Purchase"
+        ACH = "ach", "ACH"
+        ROUND_UP_TRANSFER = "round-up_transfer", "Round-up Transfer"
+        PROTECTED_GOAL_ACCOUNT_TRANSFER = (
+            "protected_goal_account_transfer",
+            "Protected Goal Account Transfer",
         )
-        ach = ChoiceItem("ach", "ACH")
-        round_up_transfer = ChoiceItem("round-up_transfer", "Round-up Transfer")
-        protected_goal_account_transfer = ChoiceItem(
-            "protected_goal_account_transfer", "Protected Goal Account Transfer"
+        FEE = "fee", "Fee"
+        PIN_PURCHASE = "pin_purchase", "Pin Purchase"
+        SIGNATURE_CREDIT = "signature_credit", "Signature Credit"
+        INTEREST_CREDIT = "interest_credit", "Interest Credit"
+        SHARED_TRANSFER = "shared_transfer", "Shared Transfer"
+        COURTESY_CREDIT = "courtesy_credit", "Courtesy Credit"
+        ATM_WITHDRAWAL = "atm_withdrawal", "ATM Withdrawal"
+        BILL_PAYMENT = "bill_payment", "Bill Payment"
+        BANK_GENERATED_CREDIT = (
+            "bank_generated_credit",
+            "Bank Generated Credit",
         )
-        fee = ChoiceItem("fee", "Fee")
-        pin_purchase = ChoiceItem("pin_purchase", "Pin Purchase")
-        signature_credit = ChoiceItem("signature_credit", "Signature Credit")
-        interest_credit = ChoiceItem("interest_credit", "Interest Credit")
-        shared_transfer = ChoiceItem("shared_transfer", "Shared Transfer")
-        courtesy_credit = ChoiceItem("courtesy_credit", "Courtesy Credit")
-        atm_withdrawal = ChoiceItem("atm_withdrawal", "ATM Withdrawal")
-        bill_payment = ChoiceItem("bill_payment", "Bill Payment")
-        bank_generated_credit = ChoiceItem(
-            "bank_generated_credit", "Bank Generated Credit"
+        WIRE_TRANSFER = "wire_transfer", "Wire Transfer"
+        CHECK_DEPOSIT = "check_deposit", "Check Deposit"
+        C2C = "c2c", "c2c"
+        MIGRATION_INTERBANK_TRANSFER = (
+            "Migration Interbank Transfer",
+            "migration_interbank_transfer",
         )
-        wire_transfer = ChoiceItem("wire_transfer", "Wire Transfer")
-        check_deposit = ChoiceItem("check_deposit", "Check Deposit")
-        c2c = ChoiceItem("c2c", "c2c")
-        migration_interbank_transfer = ChoiceItem(
-            "Migration Interbank Transfer", "migration_interbank_transfer"
-        )
-        balance_sweep = ChoiceItem("balance_sweep", "Balance Sweep")
-        ach_reversal = ChoiceItem("ach_reversal", "ACH Reversal")
-        adjustment = ChoiceItem("adjustment", "Adjustment")
-        signature_return = ChoiceItem("signature_return", "Signature return")
-        not_set = ChoiceItem("", "--------")
+        BALANCE_SWEEP = "balance_sweep", "Balance Sweep"
+        ACH_REVERSAL = "ach_reversal", "ACH Reversal"
+        ADJUSTMENT = "adjustment", "Adjustment"
+        SIGNATURE_RETURN = "signature_return", "Signature return"
+        NOT_SET = "", "--------"
 
     #
     #####################################################################
@@ -647,7 +606,7 @@ class Transaction(TransactionBaseClass):
     category = models.CharField(
         max_length=64,
         choices=TransactionCategory.choices,
-        default=TransactionCategory.unassigned,
+        default=TransactionCategory.UNASSIGNED,
     )
     image = models.ImageField(
         upload_to="transaction_images/%Y-%m-%d/",
