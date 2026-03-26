@@ -1,5 +1,3 @@
-version: '3'
-
 volumes:
   local_postgres_data: {}
   local_postgres_data_backups: {}
@@ -13,7 +11,7 @@ services:
     container_name: django
     depends_on:
       - postgres
-      - mailhog
+      - mailpit
     volumes:
       - .:/app:z
     env_file:
@@ -35,30 +33,15 @@ services:
     env_file:
       - ./.envs/.local/.postgres
 
-  docs:
-    image: mibudge_local_docs
-    container_name: docs
-    build:
-      context: .
-      dockerfile: ./compose/local/docs/Dockerfile
-    env_file:
-      - ./.envs/.local/.django
-    volumes:
-      - ./docs:/docs:z
-      - ./config:/app/config:z
-      - ./mibudge:/app/mibudge:z
-    ports:
-      - "7000:7000"
-    command: /start-docs
-
-  mailhog:
-    image: mailhog/mailhog:v1.0.0
-    container_name: mailhog
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
     ports:
       - "8025:8025"
+      - "1025:1025"
 
   redis:
-    image: redis:5.0
+    image: redis:7-alpine
     container_name: redis
 
   celeryworker:
@@ -68,7 +51,7 @@ services:
     depends_on:
       - redis
       - postgres
-      - mailhog
+      - mailpit
     ports: []
     command: /start-celeryworker
 
@@ -79,7 +62,7 @@ services:
     depends_on:
       - redis
       - postgres
-      - mailhog
+      - mailpit
     ports: []
     command: /start-celerybeat
 
@@ -91,6 +74,7 @@ services:
       - "5555:5555"
     command: /start-flower
 
+  # Frontend dev server - for future frontend work
   node:
     build:
       context: .
