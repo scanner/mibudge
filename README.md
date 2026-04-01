@@ -10,7 +10,7 @@ Simple Bank had a budgeting model that let you divide your checking account bala
 
 You have one or more bank accounts. Each account's balance is divided into **budgets** and **goals** — virtual sub-accounts that live entirely inside mibudge. Every dollar in the account is allocated to one of these, with an "Unallocated" budget catching anything not yet assigned.
 
-**Transactions** from the bank (purchases, deposits, transfers) are associated with a budget. Most map to a single budget, but a transaction can be split — say, a store receipt that's part groceries and part home improvement supplies.
+**Transactions** from the bank (purchases, deposits, transfers) are associated with a budget. Transactions may arrive as *pending* — recorded but not yet settled, with the final amount potentially differing from the pending amount (e.g. a gas station pre-authorization vs. the actual charge). A transaction represents one concrete bank event regardless of whether it is pending or posted. Most map to a single budget, but a transaction can be split — say, a store receipt that's part groceries and part home improvement supplies.
 
 As money comes in (paychecks, etc.), it's automatically distributed to budgets and goals on a schedule, so that by the time a bill is due or a savings target arrives, the money is there.
 
