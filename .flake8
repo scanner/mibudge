@@ -1,5 +1,0 @@
-[flake8]
-exclude = *venv*,*.tox*,*migrations*,.*cache
-ignore = E501,  # enforce max line length with Black instead of flake8
-         F401,  # XXX for now ignore unused imports until we get past skel phase
-         W503   # enforce line breaks should occur before the operator with Black instead of flake8

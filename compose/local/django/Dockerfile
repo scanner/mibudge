@@ -1,12 +1,12 @@
-FROM python:3.13-slim AS python
-
-# Python 'run' stage
-FROM python AS python-run-stage
+FROM python:3.13-slim AS python-run-stage
 
 ARG APP_HOME=/app
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Put the venv outside WORKDIR so volume mounts don't shadow it
+ENV UV_PROJECT_ENVIRONMENT=/venv
+ENV PATH="/venv/bin:$PATH"
 
 WORKDIR ${APP_HOME}
 
@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy dependency files and install
+# Copy dependency files and install deps only (not project) — cached layer
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
@@ -44,10 +44,10 @@ RUN sed -i 's/\r$//g' /start-celerybeat && chmod +x /start-celerybeat
 COPY ./compose/local/django/celery/flower/start /start-flower
 RUN sed -i 's/\r$//g' /start-flower && chmod +x /start-flower
 
-# Copy application code
-COPY . ${APP_HOME}
+# Copy Django application code — only app/ so WORKDIR /app is the project root
+COPY ./app ${APP_HOME}
 
-# Install the project itself (editable for local dev)
+# Install the project itself into /venv
 RUN uv sync --frozen --no-dev
 
 ENTRYPOINT ["/entrypoint"]

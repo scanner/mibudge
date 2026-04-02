@@ -13,7 +13,7 @@ services:
       - postgres
       - mailpit
     volumes:
-      - .:/app:z
+      - ./app:/app:z
     env_file:
       - ./.envs/.local/.django
       - ./.envs/.local/.postgres
@@ -74,21 +74,14 @@ services:
       - "5555:5555"
     command: /start-flower
 
-  # Frontend dev server - for future frontend work
-  node:
-    build:
-      context: .
-      dockerfile: ./compose/local/node/Dockerfile
-    image: mibudge_local_node
-    container_name: node
-    depends_on:
-      - django
-    volumes:
-      - .:/app:z
-      # http://jdlm.info/articles/2016/03/06/lessons-building-node-app-docker.html
-      - /app/node_modules
-    command: npm run dev
-    ports:
-      - "3000:3000"
-      # Expose browsersync UI: https://www.browsersync.io/docs/options/#option-ui
-      - "3001:3001"
+  # Vite frontend dev server — added when frontend/ scaffold is in place
+  # vite:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile.dev
+  #   container_name: vite
+  #   volumes:
+  #     - ./frontend:/app:z
+  #     - /app/node_modules
+  #   ports:
+  #     - "5173:5173"
