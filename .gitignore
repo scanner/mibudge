@@ -276,8 +276,7 @@ mibudge/media/
 
 .ipython/
 .env
-.envs/*
-!.envs/.local/
+.env.production
 project.css
 *.min.css
 *.min.js

@@ -1,63 +1,57 @@
-version: '3'
-
 volumes:
   production_postgres_data: {}
   production_postgres_data_backups: {}
-  production_traefik: {}
 
 services:
   django: &django
     build:
-      context: .
-      dockerfile: ./compose/production/django/Dockerfile
-    image: mibudge_production_django
+      context: ..
+      target: prod
+    image: mibudge:prod
     depends_on:
-      - postgres
-      - redis
-    env_file:
-      - ./.envs/.production/.django
-      - ./.envs/.production/.postgres
-    command: /start
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env.production
+    command: /app/scripts/start_app.sh
 
   postgres:
-    build:
-      context: .
-      dockerfile: ./compose/production/postgres/Dockerfile
-    image: mibudge_production_postgres
+    image: postgres:16-alpine
     volumes:
       - production_postgres_data:/var/lib/postgresql/data:Z
       - production_postgres_data_backups:/backups:z
-    env_file:
-      - ./.envs/.production/.postgres
-
-  traefik:
-    build:
-      context: .
-      dockerfile: ./compose/production/traefik/Dockerfile
-    image: mibudge_production_traefik
-    depends_on:
-      - django
-    volumes:
-      - production_traefik:/etc/traefik/acme:z
-    ports:
-      - "0.0.0.0:80:80"
-      - "0.0.0.0:443:443"
-      - "0.0.0.0:5555:5555"
+    env_file: .env.production
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   redis:
-    image: redis:5.0
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   celeryworker:
     <<: *django
-    image: mibudge_production_celeryworker
-    command: /start-celeryworker
+    image: mibudge:prod
+    command: /app/scripts/start_celeryworker.sh
 
   celerybeat:
     <<: *django
-    image: mibudge_production_celerybeat
-    command: /start-celerybeat
+    image: mibudge:prod
+    command: /app/scripts/start_celerybeat.sh
 
   flower:
     <<: *django
-    image: mibudge_production_flower
-    command: /start-flower
+    image: mibudge:prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5555:5555"
+    command: /app/scripts/start_flower.sh

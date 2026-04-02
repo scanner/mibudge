@@ -35,6 +35,8 @@ dependencies = [
     "Pillow",
     # Server
     "uvicorn[standard]",
+    # Service readiness
+    "wait-for-it",
     # Utilities
     "python-slugify",
     "python-dateutil",
@@ -62,7 +64,6 @@ dev = [
     "factory-boy",
     "faker",
     # Type checking
-    "mypy",
     "django-stubs[compatible-mypy]",
     # Linting & formatting
     "ruff",

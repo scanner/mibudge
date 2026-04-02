@@ -6,32 +6,35 @@ services:
   django: &django
     build:
       context: .
-      dockerfile: ./compose/local/django/Dockerfile
-    image: mibudge_local_django
+      target: dev
+    image: mibudge:dev
     container_name: django
     depends_on:
-      - postgres
-      - mailpit
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
     volumes:
       - ./app:/app:z
-    env_file:
-      - ./.envs/.local/.django
-      - ./.envs/.local/.postgres
+    env_file: .env
     ports:
       - "8000:8000"
-    command: /start
+    command: /app/scripts/start_dev.sh
 
   postgres:
-    build:
-      context: .
-      dockerfile: ./compose/production/postgres/Dockerfile
-    image: mibudge_production_postgres
+    image: postgres:16-alpine
     container_name: postgres
     volumes:
       - local_postgres_data:/var/lib/postgresql/data:Z
       - local_postgres_data_backups:/backups:z
-    env_file:
-      - ./.envs/.local/.postgres
+    env_file: .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-debug}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   mailpit:
     image: axllent/mailpit:latest
@@ -43,45 +46,47 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   celeryworker:
     <<: *django
-    image: mibudge_local_celeryworker
+    image: mibudge:dev
     container_name: celeryworker
     depends_on:
-      - redis
-      - postgres
-      - mailpit
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
     ports: []
-    command: /start-celeryworker
+    command: /app/scripts/start_celeryworker.sh
 
   celerybeat:
     <<: *django
-    image: mibudge_local_celerybeat
+    image: mibudge:dev
     container_name: celerybeat
     depends_on:
-      - redis
-      - postgres
-      - mailpit
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
     ports: []
-    command: /start-celerybeat
+    command: /app/scripts/start_celerybeat.sh
 
   flower:
     <<: *django
-    image: mibudge_local_flower
+    image: mibudge:dev
     container_name: flower
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "5555:5555"
-    command: /start-flower
-
-  # Vite frontend dev server — added when frontend/ scaffold is in place
-  # vite:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile.dev
-  #   container_name: vite
-  #   volumes:
-  #     - ./frontend:/app:z
-  #     - /app/node_modules
-  #   ports:
-  #     - "5173:5173"
+    command: /app/scripts/start_flower.sh
