@@ -111,7 +111,7 @@ django_settings_module = "config.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 addopts = "--durations=10 --durations-min=0.1"
-testpaths = ["app"]
+testpaths = ["app/tests"]
 pythonpath = ["app"]
 markers = [
     "smoke: marks tests as smoke",

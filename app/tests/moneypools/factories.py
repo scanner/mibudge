@@ -8,13 +8,7 @@ import factory.fuzzy
 from django.contrib.auth import get_user_model
 from factory.django import DjangoModelFactory
 
-# XXX If we want to separate 'moneypools' into its own app we will
-#     need to sever this link (and I guess add a UserFactory to our
-#     `factories.py`)
-#
-from users.tests.factories import UserFactory
-
-from ..models import (
+from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
@@ -22,6 +16,12 @@ from ..models import (
     Transaction,
     TransactionCategory,
 )
+
+# XXX If we want to separate 'moneypools' into its own app we will
+#     need to sever this link (and I guess add a UserFactory to our
+#     `factories.py`)
+#
+from tests.users.factories import UserFactory
 
 User = get_user_model()
 

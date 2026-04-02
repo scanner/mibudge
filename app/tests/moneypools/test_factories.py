@@ -8,7 +8,13 @@ from moneyed import USD, Money
 
 # Application imports
 #
-from ..models import Bank, BankAccount, Budget, InternalTransaction, Transaction
+from moneypools.models import (
+    Bank,
+    BankAccount,
+    Budget,
+    InternalTransaction,
+    Transaction,
+)
 
 pytestmark = pytest.mark.django_db
 
