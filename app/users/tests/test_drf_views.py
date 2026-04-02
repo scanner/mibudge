@@ -1,8 +1,8 @@
 import pytest
 from django.test import RequestFactory
 
-from mibudge.users.api.views import UserViewSet
-from mibudge.users.models import User
+from users.api.views import UserViewSet
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 

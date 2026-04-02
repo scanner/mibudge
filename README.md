@@ -33,30 +33,130 @@ Both types can be funded automatically (calculated from schedule + target) or wi
 
 mibudge supports multiple bank accounts — checking, savings, credit cards — each with their own set of budgets. Accounts can be shared between users (family members) or private to one user.
 
-## Tech stack
+## Architecture
+
+### Backend: Django + DRF
 
 - **Python 3.13+** / **Django 6.x** / **Django REST Framework**
 - **Celery** + **Redis** for async task scheduling (budget funding, etc.)
-- **PostgreSQL**
-- **uv** for dependency management
-- **ruff** for linting and formatting
+- **PostgreSQL** with psycopg (async-capable)
+- **django-allauth** for authentication, **django-guardian** for object permissions
+- **djmoney** MoneyField for all monetary values
+- **django-recurrence** for funding/refresh schedules
+
+### Frontend: Vue 3 SPA (planned)
+
+- **Vue 3** + **Vite** (replaces old gulp/browsersync toolchain)
+- **Pinia** for state management, **Vue Router** (history mode, base `/app/`)
+- **Axios** for API client with interceptors for silent JWT token refresh
+- **django-vite** for dev integration (HMR via Vite dev server)
+
+### URL routing
+
+| Path | Handled by | Purpose |
+|------|-----------|---------|
+| `/`, `/accounts/`, `/admin/` | Django templates | Login, auth, admin |
+| `/api/` | DRF | JWT-authenticated REST API |
+| `/app/*` | Vue SPA | Catch-all, Vue Router handles sub-routes |
+
+### Auth: JWT two-token pattern (planned)
+
+- **Access token** (60 min): held in JS memory only, sent as `Authorization: Bearer` header
+- **Refresh token** (14 days, sliding): `httpOnly; Secure; SameSite=Strict` cookie, never readable by JS
+- **Login flow**: django-allauth handles credentials, custom adapter generates JWT pair, refresh token set as httpOnly cookie, access token injected as `window.__INITIAL_TOKEN__` for SPA bootstrap
+
+## Project structure
+
+```
+mibudge/
+  app/                          # Django application code
+    config/                     # Django settings, urls, asgi/wsgi, celery
+    mibudge/                    # Main package
+      moneypools/               # Core budgeting app (models, signals, views)
+      users/                    # User model, auth adapters, API
+      contrib/                  # Site migrations
+      utils/                    # Context processors, helpers
+    scripts/                    # Container startup scripts
+      start_app.sh              # Production: collectstatic + gunicorn
+      start_dev.sh              # Development: migrate + runserver_plus
+      start_celeryworker.sh     # Celery worker
+      start_celerybeat.sh       # Celery beat scheduler
+      start_flower.sh           # Celery Flower dashboard
+    manage.py
+  deploy/                       # Deployment configuration
+    docker-compose.prod.yml     # Production compose (stock postgres/redis)
+    .env.example                # Production env template
+  frontend/                     # Vue 3 SPA (planned)
+  Dockerfile                    # Multi-stage: builder -> dev -> prod
+  docker-compose.yml            # Local dev (django, postgres, redis, celery)
+  pyproject.toml                # Dependencies, tool config (ruff, mypy, pytest)
+  uv.lock                       # Locked dependencies
+  Makefile                      # Dev commands (make help for full list)
+  Make.rules                    # Shared make rules (lint, format, mypy)
+```
+
+### Docker
+
+A single multi-stage `Dockerfile` produces both dev and prod images:
+
+- **builder** — compiles Python dependencies into `/venv` using uv
+- **dev** — includes dev dependencies, build tools, debugging utilities
+- **prod** — minimal runtime with only production dependencies, pre-compiled bytecode
+
+The container's `WORKDIR` is `/app`. The dev docker-compose mounts `./app:/app:z` so code changes are reflected immediately. The venv lives at `/venv` (outside the mount) so it isn't shadowed.
+
+Startup scripts in `app/scripts/` use [wait-for-it](https://pypi.org/project/wait-for-it/) for service readiness. The docker-compose `command:` selects which script runs — `start_dev.sh` for local dev (werkzeug `runserver_plus`), `start_app.sh` for production (gunicorn with uvicorn workers).
 
 ## Development
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), Python 3.13+
+Prerequisites: [Docker](https://docs.docker.com/get-docker/), [uv](https://docs.astral.sh/uv/), Python 3.13+
 
 ```bash
-# Install dependencies and create virtualenv
-uv sync
+# Start all services (builds images, runs in background)
+make up
 
-# Run linter
+# View logs
+make logs
+
+# Shell into the django container
+make shell
+
+# Django management shell (shell_plus)
+make manage_shell
+
+# Run migrations (in container)
+make migrate
+
+# Make new migrations (runs locally via uv)
+make makemigrations
+
+# Run tests (locally via uv, not in Docker)
+make test
+
+# Run linter + formatter + mypy (locally via uv)
 make lint
 
-# Run tests
-uv run pytest
+# See all available commands
+make help
+```
 
-# Type checking
-uv run mypy mibudge/ config/
+### Dependency management
+
+```bash
+make uv-sync          # Sync .venv with uv.lock
+make uv-lock          # Update uv.lock from pyproject.toml
+make uv-add PACKAGE=x # Add a dependency
+make uv-add-dev PACKAGE=x  # Add a dev dependency
+make uv-upgrade       # Upgrade all dependencies
+```
+
+### Environment
+
+Local dev uses a single `.env` file at the repo root (gitignored). Copy from the example and adjust if needed:
+
+```bash
+cp deploy/.env.example .env
+# Edit .env — the defaults work for local Docker dev
 ```
 
 ## License

@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class MoneyPoolsConfig(AppConfig):
-    name = "mibudge.moneypools"
+    name = "moneypools"
 
     ####################################################################
     #

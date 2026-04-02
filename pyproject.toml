@@ -5,14 +5,13 @@ description = "Personal budgeting service inspired by Simple Bank"
 requires-python = ">=3.13"
 dependencies = [
     # Core
-    "django>=5.1",
+    "django>=5.2,<6",
     "djangorestframework",
     "django-environ",
     "django-extensions",
     "django-filter",
     "django-model-utils",
     "django-cors-headers",
-    "django-crispy-forms",
     # Auth
     "django-allauth",
     "django-guardian",
@@ -31,7 +30,6 @@ dependencies = [
     "psycopg[binary]",
     # Static files & media
     "whitenoise",
-    "django-compressor",
     "Pillow",
     # Server
     "uvicorn[standard]",
@@ -51,7 +49,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app/mibudge"]
+packages = ["app/moneypools", "app/users"]
 
 [dependency-groups]
 dev = [
@@ -64,7 +62,7 @@ dev = [
     "factory-boy",
     "faker",
     # Type checking
-    "django-stubs[compatible-mypy]",
+    "django-stubs[compatible-mypy]>=5.2,<6",
     # Linting & formatting
     "ruff",
     "pre-commit",
@@ -90,7 +88,7 @@ select = ["E", "W", "F", "B", "C4", "UP", "I"]
 ignore = ["E501", "B008", "B905"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mibudge"]
+known-first-party = ["moneypools", "users", "config"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -113,7 +111,7 @@ django_settings_module = "config.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 addopts = "--durations=10 --durations-min=0.1"
-testpaths = ["app/mibudge"]
+testpaths = ["app"]
 pythonpath = ["app"]
 markers = [
     "smoke: marks tests as smoke",

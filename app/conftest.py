@@ -1,8 +1,8 @@
 import pytest
 from pytest_factoryboy import register
 
-from mibudge.users.models import User
-from mibudge.users.tests.factories import UserFactory
+from users.models import User
+from users.tests.factories import UserFactory
 
 
 @pytest.fixture(autouse=True)

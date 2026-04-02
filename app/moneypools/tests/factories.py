@@ -12,7 +12,7 @@ from factory.django import DjangoModelFactory
 #     need to sever this link (and I guess add a UserFactory to our
 #     `factories.py`)
 #
-from mibudge.users.tests.factories import UserFactory
+from users.tests.factories import UserFactory
 
 from ..models import (
     Bank,

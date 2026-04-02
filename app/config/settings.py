@@ -13,17 +13,9 @@ from pathlib import Path
 # 3rd party imports
 import environ
 from django.utils.crypto import get_random_string
-from dotenv import load_dotenv
-
-# Load environment variables from .env if present. In production the
-# container already has these set via docker-compose env_file, so this
-# is a no-op there. Locally (uv run, tests) this populates env vars
-# from .env without overriding any that are already set in the shell.
-#
-load_dotenv()
 
 ROOT_DIR = Path(__file__).resolve(strict=True).parent.parent
-APPS_DIR = ROOT_DIR / "mibudge"
+APPS_DIR = ROOT_DIR
 
 # NOTE: We provide our own set of characters because we need to
 #       specifically exclude '$' so that environ does not think it is
@@ -46,12 +38,16 @@ env = environ.FileAwareEnv(
         "django.core.mail.backends.smtp.EmailBackend",
     ),
     DJANGO_SECRET_KEY=(str, get_random_string(50, random_chars)),
-    EMAIL_HOST=(str, "mailhog"),
+    EMAIL_HOST=(str, "mailpit"),
     REDIS_URL=(str, "redis://localhost:6379/0"),
     SENTRY_DSN=(str, None),
     SENTRY_TRACES_SAMPLE_RATE=(float, 0.0),
-    USE_DOCKER=(str, "no"),
 )
+
+# Read .env file if it exists (no-op in Docker where env vars are
+# injected via docker-compose). Does not override existing env vars.
+#
+env.read_env(ROOT_DIR.parent / ".env", overwrite=False)
 
 # GENERAL
 # ------------------------------------------------------------------------------
@@ -61,9 +57,8 @@ ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 TIME_ZONE = "America/Los_Angeles"
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1
-USE_I18N = True
+USE_I18N = False
 USE_TZ = True
-LOCALE_PATHS = [str(ROOT_DIR / "locale")]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # DATABASES
@@ -89,10 +84,8 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     "django.contrib.admin",
-    "django.forms",
 ]
 THIRD_PARTY_APPS = [
-    "crispy_forms",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -105,11 +98,10 @@ THIRD_PARTY_APPS = [
     "recurrence",
     "django_filters",
     "guardian",
-    "compressor",
 ]
 LOCAL_APPS = [
-    "mibudge.users.apps.UsersConfig",
-    "mibudge.moneypools.apps.MoneyPoolsConfig",
+    "users.apps.UsersConfig",
+    "moneypools.apps.MoneyPoolsConfig",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -117,9 +109,6 @@ if DEBUG:
     INSTALLED_APPS = ["whitenoise.runserver_nostatic"] + INSTALLED_APPS
     INSTALLED_APPS += ["debug_toolbar"]
 
-# MIGRATIONS
-# ------------------------------------------------------------------------------
-MIGRATION_MODULES = {"sites": "mibudge.contrib.sites.migrations"}
 
 # AUTHENTICATION
 # ------------------------------------------------------------------------------
@@ -158,13 +147,11 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.common.BrokenLinkEmailsMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -179,7 +166,6 @@ STATICFILES_DIRS = [str(APPS_DIR / "static")]
 STATICFILES_FINDERS = [
     "django.contrib.staticfiles.finders.FileSystemFinder",
     "django.contrib.staticfiles.finders.AppDirectoriesFinder",
-    "compressor.finders.CompressorFinder",
 ]
 
 # MEDIA
@@ -212,23 +198,14 @@ TEMPLATES = [
                 "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
-                "django.template.context_processors.i18n",
                 "django.template.context_processors.media",
                 "django.template.context_processors.static",
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
-                "mibudge.utils.context_processors.settings_context",
             ],
         },
     }
 ]
-
-FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
-CRISPY_TEMPLATE_PACK = "bootstrap4"
-
-# FIXTURES
-# ------------------------------------------------------------------------------
-FIXTURE_DIRS = (str(APPS_DIR / "fixtures"),)
 
 # SECURITY
 # ------------------------------------------------------------------------------
@@ -329,8 +306,8 @@ ACCOUNT_ALLOW_REGISTRATION = env("DJANGO_ACCOUNT_ALLOW_REGISTRATION")
 ACCOUNT_LOGIN_METHODS = {"username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-ACCOUNT_ADAPTER = "mibudge.users.adapters.AccountAdapter"
-SOCIALACCOUNT_ADAPTER = "mibudge.users.adapters.SocialAccountAdapter"
+ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"
+SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 
 # django-rest-framework
 # ------------------------------------------------------------------------------
@@ -353,7 +330,7 @@ CORS_URLS_REGEX = r"^/api/.*$"
 # CACHES
 # ------------------------------------------------------------------------------
 if DEBUG:
-    CACHES = {
+    CACHES: dict[str, dict[str, object]] = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
             "LOCATION": "",
@@ -378,32 +355,7 @@ if DEBUG:
         "DISABLE_PANELS": ["debug_toolbar.panels.redirects.RedirectsPanel"],
         "SHOW_TEMPLATE_CONTEXT": True,
     }
-    INTERNAL_IPS = ["127.0.0.1", "10.0.2.2"]
-    if env("USE_DOCKER") == "yes":
-        import socket
-
-        hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
-        INTERNAL_IPS += [".".join(ip.split(".")[:-1] + ["1"]) for ip in ips]
-        try:
-            _, _, ips = socket.gethostbyname_ex("node")
-            INTERNAL_IPS.extend(ips)
-        except socket.gaierror:
-            pass
-
-# django-compressor (production)
-# ------------------------------------------------------------------------------
-if not DEBUG:
-    COMPRESS_ENABLED = env.bool("COMPRESS_ENABLED", default=True)
-    COMPRESS_STORAGE = "compressor.storage.GzipCompressorFileStorage"
-    COMPRESS_URL = STATIC_URL
-    COMPRESS_OFFLINE = True
-    COMPRESS_FILTERS = {
-        "css": [
-            "compressor.filters.css_default.CssAbsoluteFilter",
-            "compressor.filters.cssmin.rCSSMinFilter",
-        ],
-        "js": ["compressor.filters.jsmin.JSMinFilter"],
-    }
+    INTERNAL_IPS = ["127.0.0.1"]
 
 # Sentry
 # ------------------------------------------------------------------------------
