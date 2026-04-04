@@ -26,6 +26,7 @@ steps:
       - npm install -g pnpm
       - cd frontend
       - pnpm install --frozen-lockfile
+      - pnpm fmt:check
       - pnpm type-check
       - pnpm build
 

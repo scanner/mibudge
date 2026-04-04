@@ -10,12 +10,14 @@
 ////////////////////////////////////////////////////////////////////////
 //
 export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly body: string,
-  ) {
-    super(`HTTP ${status}`)
-    this.name = 'ApiError'
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`HTTP ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
   }
 }
 
@@ -23,9 +25,9 @@ export class ApiError extends Error {
 ////////////////////////////////////////////////////////////////////////
 //
 export class AuthError extends Error {
-  constructor(message = 'Session expired') {
-    super(message)
-    this.name = 'AuthError'
+  constructor(message = "Session expired") {
+    super(message);
+    this.name = "AuthError";
   }
 }
 
@@ -42,26 +44,26 @@ export async function apiFetch<T>(
   token: string | null,
   options: RequestInit = {},
 ): Promise<T> {
-  const { headers: extraHeaders, ...rest } = options
+  const { headers: extraHeaders, ...rest } = options;
 
   const response = await fetch(`/api${url}`, {
     ...rest,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       // Only set Authorization when a token is present — unauthenticated
       // endpoints (e.g. /api/token/refresh/) must not send a stale token.
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...extraHeaders,
     },
-  })
+  });
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new ApiError(response.status, body)
+    const body = await response.text().catch(() => "");
+    throw new ApiError(response.status, body);
   }
 
   // Return null for 204 No Content rather than trying to parse an empty body.
-  if (response.status === 204) return null as T
+  if (response.status === 204) return null as T;
 
-  return response.json() as Promise<T>
+  return response.json() as Promise<T>;
 }

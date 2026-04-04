@@ -13,27 +13,27 @@
 
 // 3rd party imports
 //
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
 // app imports
 //
-import { apiFetch, ApiError, AuthError } from '@/api/client'
+import { apiFetch, ApiError, AuthError } from "@/api/client";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 //
 interface TokenResponse {
-  access: string
+  access: string;
 }
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 //
-export const useAuthStore = defineStore('auth', () => {
+export const useAuthStore = defineStore("auth", () => {
   ////////////////////////////////////////////////////////////////////
   //
-  const accessToken = ref<string | null>(null)
+  const accessToken = ref<string | null>(null);
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -41,18 +41,18 @@ export const useAuthStore = defineStore('auth', () => {
   // Called once from main.ts immediately after the store is available.
   //
   function init() {
-    const w = window as Window & { __INITIAL_TOKEN__?: string }
+    const w = window as Window & { __INITIAL_TOKEN__?: string };
     if (w.__INITIAL_TOKEN__) {
-      accessToken.value = w.__INITIAL_TOKEN__
+      accessToken.value = w.__INITIAL_TOKEN__;
       // Remove from the DOM so the token is not readable after page load.
-      delete w.__INITIAL_TOKEN__
+      delete w.__INITIAL_TOKEN__;
     }
   }
 
   ////////////////////////////////////////////////////////////////////
   //
   function clear() {
-    accessToken.value = null
+    accessToken.value = null;
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -62,14 +62,14 @@ export const useAuthStore = defineStore('auth', () => {
   //
   async function refresh(): Promise<boolean> {
     try {
-      const data = await apiFetch<TokenResponse>('/token/refresh/', null, {
-        method: 'POST',
-      })
-      accessToken.value = data.access
-      return true
+      const data = await apiFetch<TokenResponse>("/token/refresh/", null, {
+        method: "POST",
+      });
+      accessToken.value = data.access;
+      return true;
     } catch {
-      clear()
-      return false
+      clear();
+      return false;
     }
   }
 
@@ -79,17 +79,17 @@ export const useAuthStore = defineStore('auth', () => {
   //
   async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     try {
-      return await apiFetch<T>(url, accessToken.value, options)
+      return await apiFetch<T>(url, accessToken.value, options);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        const ok = await refresh()
-        if (ok) return apiFetch<T>(url, accessToken.value, options)
+        const ok = await refresh();
+        if (ok) return apiFetch<T>(url, accessToken.value, options);
         // Refresh also failed — session is gone.
-        throw new AuthError()
+        throw new AuthError();
       }
-      throw err
+      throw err;
     }
   }
 
-  return { accessToken, init, clear, refresh, request }
-})
+  return { accessToken, init, clear, refresh, request };
+});

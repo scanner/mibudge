@@ -8,24 +8,24 @@
 
 // 3rd party imports
 //
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from "vue-router";
 
 // app imports
 //
-import HomeView from '@/views/HomeView.vue'
+import HomeView from "@/views/HomeView.vue";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 //
 const router = createRouter({
-  history: createWebHistory('/app/'),
+  history: createWebHistory("/app/"),
   routes: [
     {
-      path: '/',
-      name: 'home',
+      path: "/",
+      name: "home",
       component: HomeView,
     },
   ],
-})
+});
 
-export default router
+export default router;

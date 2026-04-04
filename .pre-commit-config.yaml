@@ -1,6 +1,5 @@
 exclude: 'docs|node_modules|migrations|.git|.tox'
 default_stages: [pre-commit]
-fail_fast: true
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -25,3 +24,17 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+
+      - id: oxfmt
+        name: oxfmt (frontend)
+        entry: sh -c 'cd frontend && pnpm fmt'
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/
+
+      - id: vue-tsc
+        name: vue-tsc (frontend)
+        entry: sh -c 'cd frontend && pnpm type-check'
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/
