@@ -2,7 +2,7 @@ ARG PYTHON_VERSION=3.13
 
 ########################################################################
 #
-# Builder stage — compile dependencies into /venv
+# Builder stage -- compile dependencies into /venv
 #
 FROM python:${PYTHON_VERSION}-slim AS builder
 
@@ -21,20 +21,20 @@ RUN apt-get update && \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy dependency files and install deps only (not project) — cached layer
+# Copy dependency files and install deps only (not project) -- cached layer
 COPY pyproject.toml uv.lock ./
 ENV UV_PROJECT_ENVIRONMENT=/venv
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Clean up unnecessary files from venv to reduce size.
-# NOTE: Only remove 'tests' (plural) — third-party test suites live there.
+# NOTE: Only remove 'tests' (plural) -- third-party test suites live there.
 # Do NOT remove 'test' (singular): django/test/ is a core Django module.
 RUN find /venv -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true && \
     find /venv -type d -name 'tests' -prune -exec rm -rf {} + 2>/dev/null || true
 
 ########################################################################
 #
-# Development stage — includes dev dependencies and debugging tools
+# Development stage -- includes dev dependencies and debugging tools
 #
 FROM python:${PYTHON_VERSION}-slim AS dev
 
@@ -89,7 +89,7 @@ CMD ["/app/scripts/start_app.sh"]
 
 ########################################################################
 #
-# Production stage — minimal runtime image
+# Production stage -- minimal runtime image
 #
 FROM python:${PYTHON_VERSION}-slim AS prod
 

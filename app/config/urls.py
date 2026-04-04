@@ -2,7 +2,9 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework.authtoken.views import obtain_auth_token
+
+from config.views import spa_shell_view
+from users.views import cookie_token_refresh_view
 
 urlpatterns = [
     # Django Admin
@@ -14,7 +16,12 @@ urlpatterns = [
     path("mp/", include("moneypools.urls")),
     # API
     path("api/", include("config.api_router")),
-    path("auth-token/", obtain_auth_token),
+    # JWT refresh -- reads refresh token from httpOnly cookie, returns new access token.
+    path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
+    # SPA shell -- serves index.html for /app/ and all sub-paths.
+    # Vue Router handles all client-side navigation from here.
+    path("app/", spa_shell_view, name="spa-shell"),
+    path("app/<path:subpath>", spa_shell_view, name="spa-shell-subpath"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

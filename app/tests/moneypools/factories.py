@@ -115,7 +115,9 @@ class BankAccountFactory(DjangoModelFactory):
     bank = factory.SubFactory(BankFactory)
 
     @factory.post_generation
-    def owners(self, create: bool, extracted: Sequence[User], **kwargs):
+    # get_user_model() returns a type expression, not a concrete class, so
+    # it cannot be used as a type annotation -- revisit if django-stubs improve
+    def owners(self, create: bool, extracted: Sequence[User], **kwargs) -> None:  # type: ignore[valid-type]
         if not create:
             return
         if extracted:

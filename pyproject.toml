@@ -13,6 +13,7 @@ dependencies = [
     "django-model-utils",
     "django-cors-headers",
     # Auth
+    "djangorestframework-simplejwt",
     "django-allauth",
     "django-guardian",
     "argon2-cffi",
@@ -30,6 +31,7 @@ dependencies = [
     "psycopg[binary]",
     # Static files & media
     "whitenoise",
+    "django-vite",
     "Pillow",
     # Server
     "uvicorn[standard]",
@@ -61,6 +63,9 @@ dev = [
     "pytest-cov",
     "factory-boy",
     "faker",
+    "fakeredis",
+    "pytest-mock",
+    "freezegun",
     # Type checking
     "django-stubs[compatible-mypy]>=5.2,<6",
     # Linting & formatting
@@ -104,9 +109,12 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
+# django-manager-missing is a known false-positive with djmoney (MoneyManager)
+disable_error_code = ["django-manager-missing"]
 
 [tool.django-stubs]
 django_settings_module = "config.settings"
+strict_settings = false
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"

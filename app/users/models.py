@@ -9,10 +9,19 @@ from django.utils.translation import gettext_lazy as _
 class User(AbstractUser):
     """Default user for My Budgets."""
 
-    #: First and last name do not cover name patterns around the globe
+    # First and last name do not cover name patterns around the globe so we are
+    # basically replacing "first_name" and "last_name" with just a "name"
+    # field.
+    #
     name = CharField(_("Name of User"), blank=True, max_length=255)
-    first_name = None  # type: ignore
-    last_name = None  # type: ignore
+
+    # AbstractUser declares first_name/last_name as CharField; we remove them in
+    # favour of a single name field by setting to None -- django-stubs cannot
+    # represent this intentional override -- revisit if stubs improve
+    #
+    first_name = None  # type: ignore[assignment]
+    last_name = None  # type: ignore[assignment]
+
     uuid = UUIDField(unique=True, default=uuid.uuid4, editable=False)
 
     def get_absolute_url(self):

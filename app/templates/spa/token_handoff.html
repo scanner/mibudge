@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Loading…</title>
+</head>
+<body>
+<script>
+  // Inject the access token into the window object so the SPA can read it
+  // once on load (see stores/auth.ts → init()).  The SPA removes it from
+  // the window immediately after reading it.
+  window.__INITIAL_TOKEN__ = "{{ access_token }}";
+  window.location.replace("/app/");
+</script>
+</body>
+</html>

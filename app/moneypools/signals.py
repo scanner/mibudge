@@ -152,7 +152,11 @@ def transaction_pre_save(sender, instance, **kwargs):
         #       the currently assigned budget's balance by the transaction's
         #       new amount.
         #
-        if previous.budget != transaction.budget:
+        if (
+            previous.budget is not None
+            and transaction.budget is not None
+            and previous.budget != transaction.budget
+        ):
             previous.budget.balance -= previous.amount
             previous.budget_balance = previous.budget.balance
             transaction.budget.balance += previous.amount

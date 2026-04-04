@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 import recurrence.fields
 from django.conf import settings
@@ -74,7 +75,7 @@ class BankAccount(MoneyPoolBaseClass):
     bank = models.ForeignKey(
         Bank, to_field="id", on_delete=models.CASCADE, editable=False
     )
-    owners = models.ManyToManyField(User)
+    owners: "models.ManyToManyField[Any, Any]" = models.ManyToManyField(User)
 
     # XXX Add a validator to make sure only digits are used
     account_number = models.CharField(
@@ -300,6 +301,16 @@ class TransactionCategory(models.TextChoices):
     TRASH = "Utilities:Trash", "Trash"
     WATER_SEWER = "Utilities:Water & Sewer", "Water & Sewer"
 
+    @property
+    def group(self) -> str:
+        """The top-level category group (e.g. 'Business', 'Food & Drink')."""
+        return self.value.split(":")[0]
+
+    @property
+    def display_name(self) -> str:
+        """The sub-category name portion of the value (e.g. 'Business Clothing')."""
+        return self.value.split(":")[1]
+
 
 ########################################################################
 ########################################################################
@@ -510,8 +521,8 @@ class Transaction(TransactionBaseClass):
         CHECK_DEPOSIT = "check_deposit", "Check Deposit"
         C2C = "c2c", "c2c"
         MIGRATION_INTERBANK_TRANSFER = (
-            "Migration Interbank Transfer",
             "migration_interbank_transfer",
+            "Migration Interbank Transfer",
         )
         BALANCE_SWEEP = "balance_sweep", "Balance Sweep"
         ACH_REVERSAL = "ach_reversal", "ACH Reversal"

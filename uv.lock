@@ -549,6 +549,18 @@ wheels = [
 ]
 
 [[package]]
+name = "django-vite"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/fe/4be07f538bbf9bf8bf73b045552ec2a1b4fba67e3176abb30490b643368e/django_vite-3.1.0.tar.gz", hash = "sha256:8b4ffe4a9fa81ff568bfb195e74dde8694aaf13fd4b656ae60bf59cce08b85e8", size = 25434, upload-time = "2025-02-23T15:32:07.914Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/59/7df4b1077fa41b43b4e542696d75138dbb86a65f44248c607b3e0f1014ce/django_vite-3.1.0-py3-none-any.whl", hash = "sha256:4e46572bd6b1ce70784be129205dc2ffcbc7a3c19fea50bebfb72b327bbde5fc", size = 23579, upload-time = "2025-02-23T15:32:06.603Z" },
+]
+
+[[package]]
 name = "djangorestframework"
 version = "3.17.1"
 source = { registry = "https://pypi.org/simple" }
@@ -558,6 +570,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ca/d7/c016e69fac19ff8afdc89db9d31d9ae43ae031e4d1993b20aca179b8301a/djangorestframework-3.17.1.tar.gz", hash = "sha256:a6def5f447fe78ff853bff1d47a3c59bf38f5434b031780b351b0c73a62db1a5", size = 905742, upload-time = "2026-03-24T16:58:33.705Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/e1/2c516bdc83652b1a60c6119366ac2c0607b479ed05cd6093f916ca8928f8/djangorestframework-3.17.1-py3-none-any.whl", hash = "sha256:c3c74dd3e83a5a3efc37b3c18d92bd6f86a6791c7b7d4dff62bb068500e76457", size = 898844, upload-time = "2026-03-24T16:58:31.845Z" },
+]
+
+[[package]]
+name = "djangorestframework-simplejwt"
+version = "5.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "djangorestframework" },
+    { name = "pyjwt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/27/2874a325c11112066139769f7794afae238a07ce6adf96259f08fd37a9d7/djangorestframework_simplejwt-5.5.1.tar.gz", hash = "sha256:e72c5572f51d7803021288e2057afcbd03f17fe11d484096f40a460abc76e87f", size = 101265, upload-time = "2025-07-21T16:52:25.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/94/fdfb7b2f0b16cd3ed4d4171c55c1c07a2d1e3b106c5978c8ad0c15b4a48b/djangorestframework_simplejwt-5.5.1-py3-none-any.whl", hash = "sha256:2c30f3707053d384e9f315d11c2daccfcb548d4faa453111ca19a542b732e469", size = 107674, upload-time = "2025-07-21T16:52:07.493Z" },
 ]
 
 [[package]]
@@ -594,6 +620,19 @@ wheels = [
 ]
 
 [[package]]
+name = "fakeredis"
+version = "2.34.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "redis" },
+    { name = "sortedcontainers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/11/40/fd09efa66205eb32253d2b2ebc63537281384d2040f0a88bcd2289e120e4/fakeredis-2.34.1.tar.gz", hash = "sha256:4ff55606982972eecce3ab410e03d746c11fe5deda6381d913641fbd8865ea9b", size = 177315, upload-time = "2026-02-25T13:17:51.315Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/b5/82f89307d0d769cd9bf46a54fb9136be08e4e57c5570ae421db4c9a2ba62/fakeredis-2.34.1-py3-none-any.whl", hash = "sha256:0107ec99d48913e7eec2a5e3e2403d1bd5f8aa6489d1a634571b975289c48f12", size = 122160, upload-time = "2026-02-25T13:17:49.701Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.25.2"
 source = { registry = "https://pypi.org/simple" }
@@ -616,6 +655,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/09/a1/357f1b5d8946deafdcfdd604f51baae9de10aafa2908d0b7322597155f92/flower-2.0.1.tar.gz", hash = "sha256:5ab717b979530770c16afb48b50d2a98d23c3e9fe39851dcf6bc4d01845a02a0", size = 3220408, upload-time = "2023-08-13T14:37:46.073Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/ff/ee2f67c0ff146ec98b5df1df637b2bc2d17beeb05df9f427a67bd7a7d79c/flower-2.0.1-py2.py3-none-any.whl", hash = "sha256:9db2c621eeefbc844c8dd88be64aef61e84e2deb29b271e02ab2b5b9f01068e2", size = 383553, upload-time = "2023-08-13T14:37:41.552Z" },
+]
+
+[[package]]
+name = "freezegun"
+version = "1.5.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/dd/23e2f4e357f8fd3bdff613c1fe4466d21bfb00a6177f238079b17f7b1c84/freezegun-1.5.5.tar.gz", hash = "sha256:ac7742a6cc6c25a2c35e9292dfd554b897b517d2dec26891a2e8debf205cb94a", size = 35914, upload-time = "2025-08-09T10:39:08.338Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/2e/b41d8a1a917d6581fc27a35d05561037b048e47df50f27f8ac9c7e27a710/freezegun-1.5.5-py3-none-any.whl", hash = "sha256:cd557f4a75cf074e84bc374249b9dd491eaeacd61376b9eb3c423282211619d2", size = 19266, upload-time = "2025-08-09T10:39:06.636Z" },
 ]
 
 [[package]]
@@ -974,7 +1025,9 @@ dependencies = [
     { name = "django-money" },
     { name = "django-recurrence" },
     { name = "django-redis" },
+    { name = "django-vite" },
     { name = "djangorestframework" },
+    { name = "djangorestframework-simplejwt" },
     { name = "flower" },
     { name = "markdown" },
     { name = "pillow" },
@@ -996,6 +1049,8 @@ dev = [
     { name = "django-stubs", extra = ["compatible-mypy"] },
     { name = "factory-boy" },
     { name = "faker" },
+    { name = "fakeredis" },
+    { name = "freezegun" },
     { name = "ipdb" },
     { name = "ipython" },
     { name = "pre-commit" },
@@ -1003,6 +1058,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-django" },
     { name = "pytest-factoryboy" },
+    { name = "pytest-mock" },
     { name = "pytest-sugar" },
     { name = "ruff" },
     { name = "werkzeug" },
@@ -1024,7 +1080,9 @@ requires-dist = [
     { name = "django-money" },
     { name = "django-recurrence" },
     { name = "django-redis" },
+    { name = "django-vite" },
     { name = "djangorestframework" },
+    { name = "djangorestframework-simplejwt" },
     { name = "flower" },
     { name = "markdown" },
     { name = "pillow" },
@@ -1046,6 +1104,8 @@ dev = [
     { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=5.2,<6" },
     { name = "factory-boy" },
     { name = "faker" },
+    { name = "fakeredis" },
+    { name = "freezegun" },
     { name = "ipdb" },
     { name = "ipython" },
     { name = "pre-commit" },
@@ -1053,6 +1113,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-django" },
     { name = "pytest-factoryboy" },
+    { name = "pytest-mock" },
     { name = "pytest-sugar" },
     { name = "ruff" },
     { name = "werkzeug" },
@@ -1351,6 +1412,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.12.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/27/a3b6e5bf6ff856d2509292e95c8f57f0df7017cf5394921fc4e4ef40308a/pyjwt-2.12.1.tar.gz", hash = "sha256:c74a7a2adf861c04d002db713dd85f84beb242228e671280bf709d765b03672b", size = 102564, upload-time = "2026-03-13T19:27:37.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/7a/8dd906bd22e79e47397a61742927f6747fe93242ef86645ee9092e610244/pyjwt-2.12.1-py3-none-any.whl", hash = "sha256:28ca37c070cad8ba8cd9790cd940535d40274d22f80ab87f3ac6a713e6e8454c", size = 29726, upload-time = "2026-03-13T19:27:35.677Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1406,6 +1476,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/91/8a/a0f9c58bf176b0d39b630a6e29cccebec9a429dfeb62204bbb9b632fb798/pytest_factoryboy-2.8.1.tar.gz", hash = "sha256:2221d48b31b8b8ccaa739c6a162fb50a43a4de6dff6043f249d2807a3462548d", size = 16906, upload-time = "2025-07-01T04:05:38.901Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/06/2f/4f73a79196b4acb0f902520a805caa22f8ba0adbecdfb028a371404c2537/pytest_factoryboy-2.8.1-py3-none-any.whl", hash = "sha256:91c762cb236bf34b11efdf2e54bafae33114488235621e8b2c4bd9fd77838784", size = 16413, upload-time = "2025-07-01T04:05:37.344Z" },
+]
+
+[[package]]
+name = "pytest-mock"
+version = "3.15.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/14/eb014d26be205d38ad5ad20d9a80f7d201472e08167f0bb4361e251084a9/pytest_mock-3.15.1.tar.gz", hash = "sha256:1849a238f6f396da19762269de72cb1814ab44416fa73a8686deac10b0d87a0f", size = 34036, upload-time = "2025-09-16T16:37:27.081Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/cc/06253936f4a7fa2e0f48dfe6d851d9c56df896a9ab09ac019d70b760619c/pytest_mock-3.15.1-py3-none-any.whl", hash = "sha256:0a25e2eb88fe5168d535041d09a4529a188176ae608a6d249ee65abc0949630d", size = 10095, upload-time = "2025-09-16T16:37:25.734Z" },
 ]
 
 [[package]]
@@ -1580,6 +1662,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
 ]
 
 [[package]]

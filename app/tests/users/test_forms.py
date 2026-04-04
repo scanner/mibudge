@@ -1,31 +1,34 @@
-"""
-Module for all Form Tests.
-"""
+"""Tests for users forms."""
 
+# system imports
+#
+
+# 3rd party imports
+#
 import pytest
 from django.utils.translation import gettext_lazy as _
 
+# app imports
+#
 from users.forms import UserCreationForm
 from users.models import User
 
 pytestmark = pytest.mark.django_db
 
 
+########################################################################
+########################################################################
+#
 class TestUserCreationForm:
-    """
-    Test class for all tests related to the UserCreationForm
-    """
+    """Tests for the UserCreationForm."""
 
-    def test_username_validation_error_msg(self, user: User):
+    def test_duplicate_username_is_rejected(self, user: User):
         """
-        Tests UserCreation Form's unique validator functions correctly by testing:
-            1) A new user with an existing username cannot be added.
-            2) Only 1 error is raised by the UserCreation Form
-            3) The desired error message is raised
+        GIVEN: an existing user in the database
+        WHEN:  UserCreationForm is submitted with that user's username
+        THEN:  the form is invalid, reports exactly one error on the username
+               field, and the message says the username is already taken
         """
-
-        # The user already exists,
-        # hence cannot be created.
         form = UserCreationForm(
             {
                 "username": user.username,

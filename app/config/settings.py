@@ -8,6 +8,7 @@ development.
 
 # system imports
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 # 3rd party imports
@@ -16,6 +17,8 @@ from django.utils.crypto import get_random_string
 
 ROOT_DIR = Path(__file__).resolve(strict=True).parent.parent
 APPS_DIR = ROOT_DIR
+# REPO_DIR is the repository root (one level above the Django project root).
+REPO_DIR = ROOT_DIR.parent
 
 # NOTE: We provide our own set of characters because we need to
 #       specifically exclude '$' so that environ does not think it is
@@ -25,9 +28,9 @@ random_chars = "abcdefghijklmnopqrstuvwxyz0123456789!@#%^&*(-_=+)"
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["localhost", "0.0.0.0", "127.0.0.1"]),
     CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
-    DATABASE_URL=(str, "postgres://debug:debug@localhost:5432/mibudge"),
+    DATABASE_URL=(str, "sqlite:///./db.sqlite3"),
     DEBUG=(bool, False),
-    DJANGO_ACCOUNT_ALLOW_REGISTRATION=(bool, True),
+    DJANGO_ACCOUNT_ALLOW_REGISTRATION=(bool, False),
     DJANGO_ADMIN_URL=(str, "admin/"),
     DJANGO_DEFAULT_FROM_EMAIL=(
         str,
@@ -92,12 +95,13 @@ THIRD_PARTY_APPS = [
     "django_celery_beat",
     "django_extensions",
     "rest_framework",
-    "rest_framework.authtoken",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "djmoney",
     "recurrence",
     "django_filters",
     "guardian",
+    "django_vite",
 ]
 LOCAL_APPS = [
     "users.apps.UsersConfig",
@@ -118,7 +122,7 @@ AUTHENTICATION_BACKENDS = [
     "guardian.backends.ObjectPermissionBackend",
 ]
 AUTH_USER_MODEL = "users.User"
-LOGIN_REDIRECT_URL = "users:redirect"
+LOGIN_REDIRECT_URL = "users:spa-login"
 LOGIN_URL = "account_login"
 
 # PASSWORDS
@@ -168,6 +172,28 @@ STATICFILES_FINDERS = [
     "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 ]
 
+# VITE
+# ------------------------------------------------------------------------------
+# In dev, django-vite proxies asset requests to the Vite dev server.
+# In production, it reads the manifest produced by `pnpm run build`.
+#
+DJANGO_VITE = {
+    "default": {
+        "dev_mode": env.bool("DJANGO_VITE_DEV_MODE", default=DEBUG),
+        "dev_server_port": 5173,
+        "manifest_path": REPO_DIR
+        / "frontend"
+        / "dist"
+        / ".vite"
+        / "manifest.json",
+    }
+}
+
+if not env.bool("DJANGO_VITE_DEV_MODE", default=DEBUG):
+    # Add the Vite build output to the static files search path so that
+    # collectstatic picks up the hashed bundles for production.
+    STATICFILES_DIRS += [str(REPO_DIR / "frontend" / "dist")]
+
 # MEDIA
 # ------------------------------------------------------------------------------
 MEDIA_ROOT = str(APPS_DIR / "media")
@@ -186,7 +212,9 @@ TEMPLATES = [
             ]
             if DEBUG
             else [
-                (
+                # django-stubs cannot represent the (loader_class, [loaders]) tuple-in-list
+                # format Django uses for the cached template loader -- revisit if stubs improve
+                (  # type: ignore[list-item]
                     "django.template.loaders.cached.Loader",
                     [
                         "django.template.loaders.filesystem.Loader",
@@ -285,6 +313,10 @@ if not DEBUG:
         },
     }
 
+# Redis
+# ------------------------------------------------------------------------------
+REDIS_URL: str = env("REDIS_URL")
+
 # Celery
 # ------------------------------------------------------------------------------
 CELERY_TIMEZONE = TIME_ZONE
@@ -313,14 +345,30 @@ SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 # ------------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 40,
+}
+
+# djangorestframework-simplejwt
+# ------------------------------------------------------------------------------
+# Two-token pattern: short-lived access token in JS memory, long-lived
+# rotating refresh token in an httpOnly cookie.
+#
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
+    # Each refresh call issues a new refresh token and blacklists the old one.
+    # This gives a sliding 14-day window: activity resets the clock.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "ALGORITHM": "HS256",
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # django-cors-headers

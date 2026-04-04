@@ -6,12 +6,14 @@ User = get_user_model()
 
 
 class UserChangeForm(admin_forms.UserChangeForm):
-    class Meta(admin_forms.UserChangeForm.Meta):
+    # django-stubs does not expose inner Meta classes on form types -- revisit if stubs improve
+    class Meta(admin_forms.UserChangeForm.Meta):  # type: ignore[name-defined]
         model = User
 
 
 class UserCreationForm(admin_forms.UserCreationForm):
-    class Meta(admin_forms.UserCreationForm.Meta):
+    # django-stubs does not expose inner Meta classes on form types -- revisit if stubs improve
+    class Meta(admin_forms.UserCreationForm.Meta):  # type: ignore[name-defined]
         model = User
 
         error_messages = {

@@ -12,7 +12,9 @@ class UserFactory(DjangoModelFactory):
     name = Faker("name")
 
     @post_generation
-    def password(self, create: bool, extracted: Sequence[Any], **kwargs):
+    def password(
+        self, create: bool, extracted: Sequence[Any], **kwargs
+    ) -> None:
         password = (
             extracted
             if extracted
@@ -25,7 +27,9 @@ class UserFactory(DjangoModelFactory):
                 lower_case=True,
             ).evaluate(None, None, extra={"locale": None})
         )
-        self.set_password(password)
+        # factory-boy's @post_generation passes the model instance as self at
+        # runtime, but stubs type it as the factory class -- revisit if factory-boy stubs improve
+        self.set_password(password)  # type: ignore[attr-defined]
 
     class Meta:
         model = get_user_model()
