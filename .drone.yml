@@ -1,0 +1,109 @@
+---
+kind: pipeline
+name: mibudge Tests
+
+steps:
+  - name: python tests
+    # NOTE: Keep this version in sync with requires-python in pyproject.toml
+    image: "python:3.13.12"
+    environment:
+      PYTHONUNBUFFERED: 1
+      UV_LINK_MODE: copy
+      DEBUG: "true"
+      # Dummy key for CI — tests run against SQLite, no real secrets needed
+      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
+    commands:
+      - pip install uv
+      - uv sync --frozen
+      - uv run ruff check .
+      - uv run ruff format --check .
+      - uv run mypy app/
+      - uv run pytest --cov=moneypools --cov=users --cov-report=term-missing:skip-covered --durations=20
+
+  - name: frontend
+    image: "node:22"
+    commands:
+      - npm install -g pnpm
+      - cd frontend
+      - pnpm install --frozen-lockfile
+      - pnpm type-check
+      - pnpm build
+
+---
+kind: pipeline
+name: Build and Publish Docker Image
+
+depends_on:
+  - mibudge Tests
+
+steps:
+  - name: Build prod
+    image: plugins/docker
+    settings:
+      username:
+        from_secret: GHCR_USER
+      password:
+        from_secret: GHCR_PAT
+      repo: ghcr.io/scanner/mibudge
+      registry: ghcr.io
+      auto_tag: true
+      target: prod
+
+  - name: Build dev
+    image: plugins/docker
+    settings:
+      username:
+        from_secret: GHCR_USER
+      password:
+        from_secret: GHCR_PAT
+      repo: ghcr.io/scanner/mibudge
+      registry: ghcr.io
+      auto_tag: true
+      auto_tag_suffix: dev
+      target: dev
+
+trigger:
+  event:
+    - tag
+
+---
+kind: pipeline
+name: Build Notify
+
+depends_on:
+  - mibudge Tests
+  - Build and Publish Docker Image
+
+trigger:
+  status:
+    - success
+    - failure
+
+steps:
+  - name: slack notification
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack_notify_webhook
+      channel: builds
+      username: drone
+      template: >-
+        {{#if build.pull }}
+          *{{#success build.status }}✔{{ else }}✘{{/success }} {{ uppercasefirst build.status }}*: <https://github.com/{{ repo.owner }}/{{ repo.name }}/pull/{{ build.pull }}|Pull Request {{ build.pull }}>
+        {{ else }}
+          *{{#success build.status }}✔{{ else }}✘{{/success }} {{ uppercasefirst build.status }}: Build {{ build.number }}* (type: `{{ build.event }}`)
+        {{/if }}
+
+        Repository: <https://github.com/{{ repo.owner }}/{{ repo.name }}|{{ repo.name }}>
+
+        Commit message: {{ build.message }}
+
+        Commit: <https://github.com/{{ repo.owner }}/{{ repo.name }}/commit/{{ build.commit }}|{{ truncate build.commit 8 }}>
+
+        Branch: <https://github.com/{{ repo.owner }}/{{ repo.name }}/commits/{{ build.branch }}|{{ build.branch }}>
+
+        Author: {{ build.author }}
+
+        Duration: {{ since build.started }}
+
+        <{{ build.link }}|Visit build page ↗>
