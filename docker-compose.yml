@@ -1,0 +1,97 @@
+volumes:
+  local_postgres_data: {}
+  local_postgres_data_backups: {}
+
+services:
+  django: &django
+    build:
+      context: .
+      target: dev
+    image: mibudge:dev
+    container_name: django
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    volumes:
+      - ./app:/app:z
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://debug:debug@postgres:5432/mibudge
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    command: /app/scripts/start_dev.sh
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data:Z
+      - local_postgres_data_backups:/backups:z
+    env_file: .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-debug}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  celeryworker:
+    <<: *django
+    image: mibudge:dev
+    container_name: celeryworker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    ports: []
+    command: /app/scripts/start_celeryworker.sh
+
+  celerybeat:
+    <<: *django
+    image: mibudge:dev
+    container_name: celerybeat
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    ports: []
+    command: /app/scripts/start_celerybeat.sh
+
+  flower:
+    <<: *django
+    image: mibudge:dev
+    container_name: flower
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5555:5555"
+    command: /app/scripts/start_flower.sh

@@ -1,0 +1,13 @@
+from django.apps import AppConfig
+
+
+class MoneyPoolsConfig(AppConfig):
+    name = "moneypools"
+
+    ####################################################################
+    #
+    def ready(self):
+        # Need to import the signals module so that our @receiver
+        # handlers get properly registered.
+        #
+        from .signals import transaction_pre_save  # noqa: F401
