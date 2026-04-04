@@ -1,3 +1,5 @@
+[![Build Status](https://drone.apricot.com/api/badges/scanner/mibudge/status.svg)](https://drone.apricot.com/scanner/mibudge)
+
 # mibudge
 
 Personal budgeting service inspired by [Simple Bank](https://en.wikipedia.org/wiki/Simple_(bank)).
