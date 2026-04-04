@@ -10,6 +10,7 @@ Vue 3 SPA for the mibudge personal budgeting service. Served by Django at
 - **Vite** for dev server (HMR) and production builds
 - **Pinia** for state management
 - **Vue Router** in history mode, base `/app/`
+- **oxfmt** for formatting (TS, CSS, JSON, HTML, Markdown)
 - Native `fetch` — no axios or other HTTP client
 
 ## Source layout
@@ -126,8 +127,10 @@ native `fetch`:
 ```bash
 pnpm install        # Install dependencies
 pnpm dev            # Start Vite dev server on port 5173 (HMR enabled)
-pnpm build          # Production build → dist/
-pnpm type-check     # Run vue-tsc
+pnpm build          # Production build → dist/ (includes type-check)
+pnpm type-check     # Run vue-tsc standalone
+pnpm fmt            # Format all files with oxfmt
+pnpm fmt:check      # Check formatting without modifying files (used in CI)
 ```
 
 For the full dev stack (Django + Postgres + Redis + Celery), run `make up`
