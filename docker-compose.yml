@@ -3,12 +3,12 @@ volumes:
   local_postgres_data_backups: {}
 
 services:
-  django: &django
+  backend: &backend
     build:
       context: .
       target: dev
     image: mibudge:dev
-    container_name: django
+    container_name: backend
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,7 +29,7 @@ services:
     command: /app/scripts/start_dev.sh
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: postgres
     volumes:
       - local_postgres_data:/var/lib/postgresql/data:Z
@@ -58,7 +58,7 @@ services:
       retries: 5
 
   celeryworker:
-    <<: *django
+    <<: *backend
     image: mibudge:dev
     container_name: celeryworker
     depends_on:
@@ -72,7 +72,7 @@ services:
     command: /app/scripts/start_celeryworker.sh
 
   celerybeat:
-    <<: *django
+    <<: *backend
     image: mibudge:dev
     container_name: celerybeat
     depends_on:
@@ -86,7 +86,7 @@ services:
     command: /app/scripts/start_celerybeat.sh
 
   flower:
-    <<: *django
+    <<: *backend
     image: mibudge:dev
     container_name: flower
     depends_on:

@@ -5,11 +5,17 @@ from .factories import (
     BankFactory,
     BudgetFactory,
     InternalTransactionFactory,
+    TransactionAllocationFactory,
     TransactionFactory,
 )
 
-register(BankFactory)
-register(BankAccountFactory)
-register(BudgetFactory)
-register(TransactionFactory)
-register(InternalTransactionFactory)
+register(BankFactory)  # BankFactory -> bank_factory
+register(BankAccountFactory)  # BankAccountFactory -> bank_account_factory
+register(BudgetFactory)  # BudgetFactory -> budget_factory
+register(TransactionFactory)  # TransactionFactory -> transaction_factory
+register(
+    TransactionAllocationFactory
+)  # TransactionAllocationFactory -> transaction_allocation_factory
+register(
+    InternalTransactionFactory
+)  # InternalTransactionFactory -> internal_transaction_factory

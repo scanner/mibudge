@@ -14,6 +14,7 @@ from moneypools.models import (
     Budget,
     InternalTransaction,
     Transaction,
+    TransactionAllocation,
     TransactionCategory,
 )
 
@@ -183,6 +184,18 @@ class TransactionFactory(DjangoModelFactory):
         Transaction.TransactionType.values
     )
     raw_description = factory.fuzzy.FuzzyText(length=100)
+
+
+########################################################################
+########################################################################
+#
+class TransactionAllocationFactory(DjangoModelFactory):
+    class Meta:
+        model = TransactionAllocation
+
+    transaction = factory.SubFactory(TransactionFactory)
+    budget = factory.SubFactory(BudgetFactory)
+    amount = factory.LazyAttribute(lambda o: o.transaction.amount)
     category = factory.fuzzy.FuzzyChoice(TransactionCategory.values)
 
 
