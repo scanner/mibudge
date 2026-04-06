@@ -1,0 +1,45 @@
+# General
+# ------------------------------------------------------------------------------
+DJANGO_SETTINGS_MODULE=config.settings
+DJANGO_SECRET_KEY=changeme-generate-a-real-secret-key
+DJANGO_ADMIN_URL=changeme-random-admin-path/
+DJANGO_ALLOWED_HOSTS=.example.com
+
+# Security
+# ------------------------------------------------------------------------------
+DJANGO_SECURE_SSL_REDIRECT=True
+
+# Email
+# ------------------------------------------------------------------------------
+DJANGO_SERVER_EMAIL=noreply@example.com
+
+# django-allauth
+# ------------------------------------------------------------------------------
+DJANGO_ACCOUNT_ALLOW_REGISTRATION=True
+
+# Gunicorn
+# ------------------------------------------------------------------------------
+WEB_CONCURRENCY=4
+
+# Sentry
+# ------------------------------------------------------------------------------
+SENTRY_DSN=
+
+# Redis
+# ------------------------------------------------------------------------------
+REDIS_URL=redis://redis:6379/0
+
+# Celery
+# ------------------------------------------------------------------------------
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_FLOWER_USER=changeme
+CELERY_FLOWER_PASSWORD=changeme
+
+# PostgreSQL
+# ------------------------------------------------------------------------------
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=mibudge
+POSTGRES_USER=changeme
+POSTGRES_PASSWORD=changeme
+DATABASE_URL=postgres://changeme:changeme@postgres:5432/mibudge

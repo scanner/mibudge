@@ -27,7 +27,8 @@ REPO_DIR = ROOT_DIR.parent
 random_chars = "abcdefghijklmnopqrstuvwxyz0123456789!@#%^&*(-_=+)"
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["localhost", "0.0.0.0", "127.0.0.1"]),
-    CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
+    CELERY_BROKER_URL=(str, "redis://localhost:6379/1"),
+    CELERY_RESULT_BACKEND=(str, "redis://localhost:6379/2"),
     DATABASE_URL=(str, "sqlite:///./db.sqlite3"),
     DEBUG=(bool, False),
     DJANGO_ACCOUNT_ALLOW_REGISTRATION=(bool, False),
@@ -57,7 +58,7 @@ env.read_env(ROOT_DIR.parent / ".env", overwrite=False)
 DEBUG = env("DEBUG")
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
-TIME_ZONE = "America/Los_Angeles"
+TIME_ZONE = env("TIME_ZONE", default="America/Los_Angeles")
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1
 USE_I18N = False
@@ -321,7 +322,7 @@ REDIS_URL: str = env("REDIS_URL")
 # ------------------------------------------------------------------------------
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

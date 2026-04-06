@@ -4,35 +4,58 @@ include $(ROOT_DIR)/Make.rules
 
 DOCKER_BUILDKIT := 1
 
-.PHONY: clean test logs migrate makemigrations manage_shell shell restart down up build uv-sync uv-lock uv-add uv-add-dev uv-upgrade help
+.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build uv-sync uv-lock uv-add uv-add-dev uv-upgrade help
 
 build:	## Build prod and dev Docker images
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --target prod --tag mibudge:latest .
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --target dev --tag mibudge:dev .
 
-up: build	## Build and docker compose up
+dirs: dbs ssl     ## Make the local directories for dbs, ssl, etc.
+
+dbs:
+	@mkdir -p $(ROOT_DIR)/deployment/db_backups
+
+ssl:
+	@mkdir -p $(ROOT_DIR)/deployment/ssl
+
+deployment/ssl/ssl_key.pem deployment/ssl/ssl_crt.pem: | ssl
+	@mkcert -key-file $(ROOT_DIR)/deployment/ssl/ssl_key.pem \
+                -cert-file $(ROOT_DIR)/deployment/ssl/ssl_crt.pem \
+                `hostname` localhost 127.0.0.1 ::1
+
+certs: ssl deployment/ssl/ssl_key.pem deployment/ssl/ssl_crt.pem	## uses `mkcert` to create certificates for local development.
+
+up: build dirs certs	## Build and docker compose up
 	@docker compose up --remove-orphans --detach
 
 down:	## docker compose down
 	@docker compose down --remove-orphans
 
+purge:	## docker compose down, removing all volumes (destroys db data)
+	@docker compose down --remove-orphans --volumes
+
 restart:	## docker compose restart
 	@docker compose restart
 
-shell:	## Make a bash shell in an ephemeral django container
-	@docker compose run --rm django /bin/bash
+shell:	## Make a bash shell in an ephemeral backend container
+	@docker compose run --rm backend /bin/bash
 
-manage_shell:	## Run manage.py shell_plus in a django container
-	@docker compose run --rm django python manage.py shell_plus
+manage_shell:	## Run manage.py shell_plus in a backend container
+	@docker compose run --rm backend python manage.py shell_plus
 
 migrate:	## Run manage.py migrate
-	@docker compose run --rm django python manage.py migrate
+	@docker compose run --rm backend python manage.py migrate
 
 makemigrations:	## Run manage.py makemigrations
 	@PYTHONPATH=$(ROOT_DIR)/app $(UV_RUN) python app/manage.py makemigrations
 
-logs:	## Tail the logs for django, celeryworker, celerybeat
-	@docker compose logs -f django celeryworker celerybeat
+createadmin: migrate   ## Create admin account (admin / testpass1234)
+	@docker compose run -e DJANGO_SUPERUSER_EMAIL=admin@example.com \
+                            -e DJANGO_SUPERUSER_PASSWORD=testpass1234 \
+                            --rm backend \
+                            /venv/bin/python /app/manage.py createsuperuser --username admin --no-input
+logs:	## Tail the logs for backend, celeryworker, celerybeat
+	@docker compose logs -f backend celeryworker celerybeat
 
 test: .venv	## Run all of the tests
 	@$(UV_RUN) pytest app/

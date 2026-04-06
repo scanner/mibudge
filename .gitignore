@@ -282,3 +282,4 @@ project.css
 *.min.css
 *.min.js
 vendors.js
+*.pem

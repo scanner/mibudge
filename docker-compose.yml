@@ -1,8 +1,23 @@
 volumes:
   local_postgres_data: {}
-  local_postgres_data_backups: {}
 
 services:
+  migrate:
+    build:
+      context: .
+      target: dev
+    image: mibudge:dev
+    container_name: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./app:/app:z
+    env_file: .env
+    environment:
+      TZ: ${TIME_ZONE:-America/Los_Angeles}
+    command: python /app/manage.py migrate
+
   backend: &backend
     build:
       context: .
@@ -10,20 +25,18 @@ services:
     image: mibudge:dev
     container_name: backend
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       mailpit:
         condition: service_started
     volumes:
       - ./app:/app:z
+      - "${HOST_SSL_DIR}:/mnt/ssl:ro"
     env_file: .env
     environment:
-      DATABASE_URL: postgres://debug:debug@postgres:5432/mibudge
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
+      TZ: ${TIME_ZONE:-America/Los_Angeles}
     ports:
       - "8000:8000"
     command: /app/scripts/start_dev.sh
@@ -33,10 +46,10 @@ services:
     container_name: postgres
     volumes:
       - local_postgres_data:/var/lib/postgresql/data:Z
-      - local_postgres_data_backups:/backups:z
+      - "${HOST_DB_BACKUPS_DIR}:/backups:z"
     env_file: .env
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-debug}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-debug} -d ${POSTGRES_DB:-mibudge}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -62,8 +75,8 @@ services:
     image: mibudge:dev
     container_name: celeryworker
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       mailpit:
@@ -76,8 +89,8 @@ services:
     image: mibudge:dev
     container_name: celerybeat
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       mailpit:
