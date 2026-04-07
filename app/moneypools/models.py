@@ -408,7 +408,7 @@ class Budget(MoneyPoolBaseClass):
 
     # Only relevant if the FundingType is 'target_date'
     #
-    target_date = models.DateTimeField(null=True, blank=True)
+    target_date = models.DateField(null=True, blank=True)
 
     # Only relevant if the BudgetType is 'recurring'
     #

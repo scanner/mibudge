@@ -236,6 +236,11 @@ TEMPLATES = [
     }
 ]
 
+# SESSIONS
+# ------------------------------------------------------------------------------
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
 # SECURITY
 # ------------------------------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True
@@ -378,24 +383,16 @@ CORS_URLS_REGEX = r"^/api/.*$"
 
 # CACHES
 # ------------------------------------------------------------------------------
-if DEBUG:
-    CACHES: dict[str, dict[str, object]] = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "",
-        }
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env("REDIS_URL"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "IGNORE_EXCEPTIONS": True,
+        },
     }
-else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": env("REDIS_URL"),
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "IGNORE_EXCEPTIONS": True,
-            },
-        }
-    }
+}
 
 # django-debug-toolbar
 # ------------------------------------------------------------------------------

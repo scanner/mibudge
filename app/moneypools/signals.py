@@ -63,7 +63,7 @@ def bank_account_post_save(sender, instance, created, **kwargs):
         unallocated_budget = Budget(
             name="Unallocated",
             bank_account=bank_account,
-            target_date=datetime.now(UTC),
+            target_date=datetime.now(UTC).date(),
             balance=bank_account.available_balance,
         )
         unallocated_budget.save()
