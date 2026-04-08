@@ -43,3 +43,16 @@ POSTGRES_DB=mibudge
 POSTGRES_USER=changeme
 POSTGRES_PASSWORD=changeme
 DATABASE_URL=postgres://changeme:changeme@postgres:5432/mibudge
+
+# django-fernet-encrypted-fields
+# ------------------------------------------------------------------------------
+# Required. Salt used to derive the encryption key for sensitive fields stored
+# at rest (e.g. BankAccount.account_number). The key is derived from
+# SECRET_KEY + SALT_KEY via PBKDF2-SHA256.
+#
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+#
+# Key rotation: set to a comma-separated list of salts. The first value
+# encrypts new data; the rest decrypt existing records. Once all records have
+# been re-saved, remove the old value.
+SALT_KEY=changeme-generate-with-openssl-rand-hex-32

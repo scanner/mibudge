@@ -121,6 +121,10 @@ ENV PATH=/venv/bin:$PATH
 # Copy application code
 COPY ./app ./
 
+# Provided at build time so collectstatic can load settings.
+# Never written to ENV so it is not present at runtime.
+ARG SALT_KEY
+
 # Collect static files and pre-compile bytecode
 RUN /venv/bin/python /app/manage.py collectstatic --no-input && \
     /venv/bin/python -m compileall /venv

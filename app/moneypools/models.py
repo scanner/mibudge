@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
 from djmoney.models.fields import MoneyField
+from encrypted_fields.fields import EncryptedCharField
 
 User = get_user_model()
 
@@ -46,6 +47,10 @@ class Bank(MoneyPoolBaseClass):
     """
 
     name = models.CharField(max_length=200)
+
+    def __str__(self) -> str:
+        return self.name
+
     # XXX Add a validator to make sure only digits are used
     routing_number = models.CharField(
         max_length=9, null=True, default=None, editable=False, unique=True
@@ -85,8 +90,11 @@ class BankAccount(MoneyPoolBaseClass):
         help_text="Joint ownership group for this account.",
     )
 
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bank.name}) [{str(self.id)[:8]}]"
+
     # XXX Add a validator to make sure only digits are used
-    account_number = models.CharField(
+    account_number = EncryptedCharField(
         max_length=12, null=True, default=None, editable=False, unique=True
     )
 

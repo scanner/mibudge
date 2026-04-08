@@ -4,11 +4,16 @@ include $(ROOT_DIR)/Make.rules
 
 DOCKER_BUILDKIT := 1
 
+# Ephemeral salt used only during `collectstatic` at image build time.
+# Never baked into the image as an ENV var; the real SALT_KEY is injected
+# at runtime via .env / docker-compose.
+BUILD_SALT_KEY := $(shell openssl rand -hex 32)
+
 .PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build uv-sync uv-lock uv-add uv-add-dev uv-upgrade help
 
 build:	## Build prod and dev Docker images
-	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --target prod --tag mibudge:latest .
-	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --target dev --tag mibudge:dev .
+	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target prod --tag mibudge:latest .
+	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target dev --tag mibudge:dev .
 
 dirs: dbs ssl     ## Make the local directories for dbs, ssl, etc.
 

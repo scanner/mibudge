@@ -12,6 +12,7 @@ steps:
       DEBUG: "true"
       # Dummy key for CI — tests run against SQLite, no real secrets needed
       DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
+      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
     commands:
       - pip install uv
       - uv sync --frozen
@@ -40,6 +41,9 @@ depends_on:
 steps:
   - name: Build prod
     image: plugins/docker
+    environment:
+      SALT_KEY:
+        from_secret: BUILD_SALT_KEY
     settings:
       username:
         from_secret: GHCR_USER
@@ -49,9 +53,14 @@ steps:
       registry: ghcr.io
       auto_tag: true
       target: prod
+      build_args_from_env:
+        - SALT_KEY
 
   - name: Build dev
     image: plugins/docker
+    environment:
+      SALT_KEY:
+        from_secret: BUILD_SALT_KEY
     settings:
       username:
         from_secret: GHCR_USER
@@ -62,6 +71,8 @@ steps:
       auto_tag: true
       auto_tag_suffix: dev
       target: dev
+      build_args_from_env:
+        - SALT_KEY
 
 trigger:
   event:

@@ -443,3 +443,20 @@ if DEBUG:
 # Mibudge
 # ------------------------------------------------------------------------------
 DEFAULT_CURRENCY = "USD"
+
+# django-fernet-encrypted-fields
+# ------------------------------------------------------------------------------
+# NOTE: SALT_KEY is used by django-fernet-encrypted-fields to derive the
+# encryption key for sensitive fields stored at rest. The key is derived from
+# SECRET_KEY + SALT_KEY using PBKDF2-SHA256.
+#
+# Key rotation: set SALT_KEY to a comma-separated list of salt strings. The
+# first value encrypts all new data; remaining values are tried in order when
+# decrypting existing values. To rotate, prepend the new salt:
+#
+#   .env:         SALT_KEY=new_salt,old_salt
+#   settings.py:  SALT_KEY = ["new_salt", "old_salt"]
+#
+# Once all existing records have been re-saved with the new salt, remove
+# the old value from the list.
+SALT_KEY = env.list("SALT_KEY")
