@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
 from djmoney.models.fields import MoneyField
+from encrypted_fields.fields import EncryptedCharField
 
 User = get_user_model()
 
@@ -46,6 +47,10 @@ class Bank(MoneyPoolBaseClass):
     """
 
     name = models.CharField(max_length=200)
+
+    def __str__(self) -> str:
+        return self.name
+
     # XXX Add a validator to make sure only digits are used
     routing_number = models.CharField(
         max_length=9, null=True, default=None, editable=False, unique=True
@@ -67,6 +72,7 @@ class BankAccount(MoneyPoolBaseClass):
     class BankAccountType(models.TextChoices):
         CHECKING = "C", "Checking"
         SAVINGS = "S", "Savings"
+        CREDIT_CARD = "X", "Credit Card"
 
     #
     #####################################################################
@@ -76,9 +82,19 @@ class BankAccount(MoneyPoolBaseClass):
         Bank, to_field="id", on_delete=models.CASCADE, editable=False
     )
     owners: "models.ManyToManyField[Any, Any]" = models.ManyToManyField(User)
+    group = models.ForeignKey(
+        "auth.Group",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Joint ownership group for this account.",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bank.name}) [{str(self.id)[:8]}]"
 
     # XXX Add a validator to make sure only digits are used
-    account_number = models.CharField(
+    account_number = EncryptedCharField(
         max_length=12, null=True, default=None, editable=False, unique=True
     )
 
@@ -400,7 +416,7 @@ class Budget(MoneyPoolBaseClass):
 
     # Only relevant if the FundingType is 'target_date'
     #
-    target_date = models.DateTimeField(null=True, blank=True)
+    target_date = models.DateField(null=True, blank=True)
 
     # Only relevant if the BudgetType is 'recurring'
     #
@@ -574,18 +590,9 @@ class Transaction(TransactionBaseClass):
     #
     description = models.TextField(max_length=512)
 
-    # If the budget field is null when this transaction is created it will be
-    # set to the unallocated budget associated with this bank account in the
-    # pre_save signal for Transactions.
-    #
-    budget = models.ForeignKey(
-        Budget,
-        models.SET_NULL,
-        to_field="id",
-        blank=True,
-        null=True,
-        related_name="transactions",
-    )
+    # Budget assignment is handled through TransactionAllocation objects.
+    # A non-split transaction has one allocation; a split transaction has
+    # multiple allocations whose amounts sum to the transaction amount.
     bank_account_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -601,23 +608,6 @@ class Transaction(TransactionBaseClass):
         default_currency=settings.DEFAULT_CURRENCY,
         help_text="Available Balance has pending debits deducted.",
         editable=False,
-    )
-    budget_balance = MoneyField(
-        max_digits=MAX_DIGITS,
-        decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
-        help_text="Posted Balance does not include pending debits.",
-        editable=False,
-    )
-
-    # XXX Probably should make category its own object class and
-    #     pre-create a bunch of those in the initial migration.
-    #
-    category = models.CharField(
-        max_length=64,
-        choices=TransactionCategory.choices,
-        default=TransactionCategory.UNASSIGNED,
     )
     image = models.ImageField(
         upload_to="transaction_images/%Y-%m-%d/",
@@ -693,3 +683,63 @@ class InternalTransaction(TransactionBaseClass):
         default_currency=settings.DEFAULT_CURRENCY,
         editable=False,
     )
+
+
+########################################################################
+########################################################################
+#
+class TransactionAllocation(MoneyPoolBaseClass):
+    """
+    Maps a portion of a transaction's amount to a budget.
+
+    Every transaction has at least one allocation. A non-split transaction
+    has exactly one allocation whose amount equals the transaction amount.
+    A split transaction has multiple allocations whose amounts sum to the
+    transaction amount.
+
+    Budget balance adjustments flow through allocations, not through the
+    Transaction model directly. This gives a single code path for both
+    split and non-split transactions.
+    """
+
+    transaction = models.ForeignKey(
+        Transaction,
+        to_field="id",
+        on_delete=models.CASCADE,
+        related_name="allocations",
+        editable=False,
+    )
+    budget = models.ForeignKey(
+        Budget,
+        models.SET_NULL,
+        to_field="id",
+        null=True,
+        related_name="transaction_allocations",
+    )
+    amount = MoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default=0,
+        editable=False,
+    )
+    budget_balance = MoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default=0,
+        default_currency=settings.DEFAULT_CURRENCY,
+        editable=False,
+    )
+    # What this portion of the transaction was spent on. Lives here
+    # rather than on Transaction because a single purchase (e.g. Costco)
+    # can contain groceries and home supplies allocated to different
+    # budgets with different categories.
+    #
+    # XXX Probably should make category its own object class and
+    #     pre-create a bunch of those in the initial migration.
+    #
+    category = models.CharField(
+        max_length=64,
+        choices=TransactionCategory.choices,
+        default=TransactionCategory.UNASSIGNED,
+    )
+    memo = models.TextField(max_length=512, null=True, blank=True)

@@ -27,7 +27,8 @@ REPO_DIR = ROOT_DIR.parent
 random_chars = "abcdefghijklmnopqrstuvwxyz0123456789!@#%^&*(-_=+)"
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["localhost", "0.0.0.0", "127.0.0.1"]),
-    CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
+    CELERY_BROKER_URL=(str, "redis://localhost:6379/1"),
+    CELERY_RESULT_BACKEND=(str, "redis://localhost:6379/2"),
     DATABASE_URL=(str, "sqlite:///./db.sqlite3"),
     DEBUG=(bool, False),
     DJANGO_ACCOUNT_ALLOW_REGISTRATION=(bool, False),
@@ -57,7 +58,7 @@ env.read_env(ROOT_DIR.parent / ".env", overwrite=False)
 DEBUG = env("DEBUG")
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
-TIME_ZONE = "America/Los_Angeles"
+TIME_ZONE = env("TIME_ZONE", default="America/Los_Angeles")
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1
 USE_I18N = False
@@ -235,6 +236,11 @@ TEMPLATES = [
     }
 ]
 
+# SESSIONS
+# ------------------------------------------------------------------------------
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
 # SECURITY
 # ------------------------------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True
@@ -321,7 +327,7 @@ REDIS_URL: str = env("REDIS_URL")
 # ------------------------------------------------------------------------------
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -377,24 +383,16 @@ CORS_URLS_REGEX = r"^/api/.*$"
 
 # CACHES
 # ------------------------------------------------------------------------------
-if DEBUG:
-    CACHES: dict[str, dict[str, object]] = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "",
-        }
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env("REDIS_URL"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "IGNORE_EXCEPTIONS": True,
+        },
     }
-else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": env("REDIS_URL"),
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "IGNORE_EXCEPTIONS": True,
-            },
-        }
-    }
+}
 
 # django-debug-toolbar
 # ------------------------------------------------------------------------------
@@ -445,3 +443,20 @@ if DEBUG:
 # Mibudge
 # ------------------------------------------------------------------------------
 DEFAULT_CURRENCY = "USD"
+
+# django-fernet-encrypted-fields
+# ------------------------------------------------------------------------------
+# NOTE: SALT_KEY is used by django-fernet-encrypted-fields to derive the
+# encryption key for sensitive fields stored at rest. The key is derived from
+# SECRET_KEY + SALT_KEY using PBKDF2-SHA256.
+#
+# Key rotation: set SALT_KEY to a comma-separated list of salt strings. The
+# first value encrypts all new data; remaining values are tried in order when
+# decrypting existing values. To rotate, prepend the new salt:
+#
+#   .env:         SALT_KEY=new_salt,old_salt
+#   settings.py:  SALT_KEY = ["new_salt", "old_salt"]
+#
+# Once all existing records have been re-saved with the new salt, remove
+# the old value from the list.
+SALT_KEY = env.list("SALT_KEY")

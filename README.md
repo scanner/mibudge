@@ -10,32 +10,34 @@ Simple Bank had a budgeting model that let you divide your checking account bala
 
 ### The core idea
 
-You have one or more bank accounts. Each account's balance is divided into **budgets** and **goals** -- virtual sub-accounts that live entirely inside mibudge. Every dollar in the account is allocated to one of these, with an "Unallocated" budget catching anything not yet assigned.
+You have one or more bank accounts. Each account's balance is divided into **budgets** -- virtual sub-accounts that live entirely inside mibudge. Every dollar in the account is allocated to a budget, with an "Unallocated" budget catching anything not yet assigned. Budgets come in two types: **Goal** and **Recurring** (with an optional **Associated Fill-up Goal** sub-type tied to a recurring budget).
 
 **Transactions** from the bank (purchases, deposits, transfers) are associated with a budget. Transactions may arrive as *pending* -- recorded but not yet settled, with the final amount potentially differing from the pending amount (e.g. a gas station pre-authorization vs. the actual charge). A transaction represents one concrete bank event regardless of whether it is pending or posted. Most map to a single budget, but a transaction can be split -- say, a store receipt that's part groceries and part home improvement supplies.
 
-As money comes in (paychecks, etc.), it's automatically distributed to budgets and goals on a schedule, so that by the time a bill is due or a savings target arrives, the money is there.
+As money comes in (paychecks, etc.), it's automatically distributed to budgets on a schedule, so that by the time a bill is due or a savings target arrives, the money is there.
 
 ### Funding
 
-**Funding** is the act of moving money from the "Unallocated" pool into a specific budget or goal. It does not involve any real bank transfer -- it's a reallocation entirely within mibudge's virtual accounting.
+**Funding** is the act of moving money from the "Unallocated" pool into a specific budget. It does not involve any real bank transfer -- it's a reallocation entirely within mibudge's virtual accounting.
 
-Each budget and goal has a **funding schedule** (e.g. weekly, bi-weekly, monthly) and either a fixed funding amount per event or an automatically calculated amount derived from the target and the time remaining. On each scheduled funding event, mibudge moves that amount out of Unallocated and into the budget or goal. If Unallocated doesn't have enough to cover all scheduled funding events, those events are partially funded or deferred.
+Each budget has a **funding schedule** (e.g. weekly, bi-weekly, monthly) and either a fixed funding amount per event or an automatically calculated amount derived from the target and the time remaining. On each scheduled funding event, mibudge moves that amount out of Unallocated and into the budget. If Unallocated doesn't have enough to cover all scheduled funding events, those events are partially funded or deferred.
 
-### Budgets vs Goals
+### Budget types
 
-A **goal** has a target amount and a target date. Money accumulates on a funding schedule until the goal is reached. Once funded, it's complete -- the money sits there until you spend it or roll it into something else.
+All virtual sub-accounts are **budgets**. They differ by `budget_type`:
 
-A **budget** (recurring) is never truly complete. It has a refresh cycle -- monthly, quarterly, yearly, etc. Money builds up until the target is reached, then resets on the next cycle. Think rent, groceries, subscriptions.
+A **Goal** budget has a target amount and a target date. Money accumulates on a funding schedule until the goal is reached. Once funded, it's complete -- the money sits there until you spend it or roll it into something else.
 
-Recurring budgets can optionally have an associated **fill-up goal**. The fill-up goal is where automatic funding deposits go -- not directly into the budget itself. Then, at the boundary between one refresh cycle and the next:
+A **Recurring** budget is never truly complete. It has a recurrence schedule -- monthly, quarterly, yearly, etc. Money builds up until the target is reached, then resets on the next cycle. Think rent, groceries, subscriptions.
 
-1. Money in the fill-up goal is transferred into the budget, up to the budget's target amount.
-2. Any excess that doesn't fit (because the budget wasn't fully spent) stays in the fill-up goal.
+A recurring budget can optionally have an **Associated Fill-up Goal** budget. The fill-up goal is where automatic funding deposits go -- not directly into the recurring budget itself. Then, at the boundary between one recurrence cycle and the next:
 
-For example: you have a monthly grocery budget with a $500 target. Throughout the month, automatic funding deposits accumulate in the fill-up goal. At the start of the cycle, the fill-up goal transfers $500 into the budget. You spend $400 that month. When the cycle refreshes, the $100 left in the budget doesn't need to move -- the fill-up goal only needs to top the budget up to $500, so it contributes $400 instead of $500. That means the fill-up goal starts its next accumulation cycle with a $100 head start, needing only $400 in new funding to be ready for the following refresh. This also means you can have a fully funded budget that is ready to spend *while simultaneously* accumulating funds in the fill-up goal for the next cycle.
+1. Money in the fill-up goal is transferred into the recurring budget, up to the budget's target amount.
+2. Any excess that doesn't fit (because the recurring budget wasn't fully spent) stays in the fill-up goal.
 
-Both types can be funded automatically (calculated from schedule + target) or with a fixed amount per funding event.
+For example: you have a monthly grocery budget with a $500 target. Throughout the month, automatic funding deposits accumulate in the fill-up goal. At the start of the cycle, the fill-up goal transfers $500 into the recurring budget. You spend $400 that month. When the cycle refreshes, the $100 left in the budget doesn't need to move -- the fill-up goal only needs to top the budget up to $500, so it contributes $400 instead of $500. That means the fill-up goal starts its next accumulation cycle with a $100 head start, needing only $400 in new funding to be ready for the following refresh. This also means you can have a fully funded recurring budget that is ready to spend *while simultaneously* accumulating funds in the fill-up goal for the next cycle.
+
+All budget types can be funded automatically (calculated from schedule + target) or with a fixed amount per funding event.
 
 ### Accounts
 

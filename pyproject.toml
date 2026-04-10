@@ -17,6 +17,8 @@ dependencies = [
     "django-allauth",
     "django-guardian",
     "argon2-cffi",
+    # Encryption
+    "django-fernet-encrypted-fields",
     # Money & scheduling
     "django-money",
     "django-recurrence",
@@ -77,6 +79,7 @@ dev = [
     "werkzeug",
     # Utilities
     "django-debug-toolbar",
+    "pyopenssl>=26.0.0",
 ]
 
 ########################################################################

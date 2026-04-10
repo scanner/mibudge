@@ -9,15 +9,21 @@ from django.dispatch import receiver
 
 # Project imports
 #
-from .models import BankAccount, Budget, InternalTransaction, Transaction
+from .models import (
+    BankAccount,
+    Budget,
+    InternalTransaction,
+    Transaction,
+    TransactionAllocation,
+)
 
 # To make our logic simpler every bank account will always have an unallocated
-# budget. This budget is creatd when the bank account is first saved. We do not
-# allow the creation of any other budget associated with a bank account to have
-# the same name. The user may not delete/archive this budget.
+# budget. This budget is created when the bank account is first saved. We do
+# not allow the creation of any other budget associated with a bank account to
+# have the same name. The user may not delete/archive this budget.
 #
-# If a Transaction is created and a budget is not associated with it, it will
-# be assocaited with the Unallocated budget.
+# When a Transaction is imported, the import service creates a default
+# TransactionAllocation pointing at the unallocated budget.
 #
 # XXX Maybe the unallocated budget should be an object assigned to the bank
 #     account? (and then we do not care what its name is..)
@@ -57,7 +63,7 @@ def bank_account_post_save(sender, instance, created, **kwargs):
         unallocated_budget = Budget(
             name="Unallocated",
             bank_account=bank_account,
-            target_date=datetime.now(UTC),
+            target_date=datetime.now(UTC).date(),
             balance=bank_account.available_balance,
         )
         unallocated_budget.save()
@@ -72,14 +78,12 @@ def bank_account_post_save(sender, instance, created, **kwargs):
 @receiver(pre_save, sender=Transaction)
 def transaction_pre_save(sender, instance, **kwargs):
     """
-    Modifications to make to the transaction object before it is
-    saved. Things like setting the `description` from the
-    `raw_description` if it is not already set.
+    Handle bank account balance updates when a transaction is saved.
 
-    This is also where the amounts on the budget are credited or debited.
+    This signal handles ONLY bank account balances (available and posted).
+    Budget balances are handled by TransactionAllocation signals.
 
-    NOTE: Transactions can not change bank accounts (but they can change
-    budgets)
+    NOTE: Transactions can not change bank accounts.
 
     Keyword Arguments:
     sender    -- What sent the signal. In our case always Transaction
@@ -94,30 +98,18 @@ def transaction_pre_save(sender, instance, **kwargs):
     if not transaction.description:
         transaction.description = transaction.raw_description.strip()
 
-    # All transactions must be associated with a budget. If no budget was
-    # specified then we will associate it with the bank account's "unallocated
-    # budget"
-    #
-    # TODO: In the future we will use information provided by the user to
-    #       determine what budget to associate this transaction with by
-    #       default.
-    #
-    if transaction.budget is None:
-        transaction.budget = transaction.bank_account.unallocated_budget
-
     # If the pkid is None then this is a newly created Transaction that has not
     # yet been saved to the db. This part of the `if` clause deals with newly
     # created transactions.
     #
     if transaction.pkid is None:
         # Update the bank account's available & posted balance.
-        # Update the associated budget's balance.
         #
         transaction.bank_account.available_balance += transaction.amount
         transaction.bank_account_available_balance = (
             transaction.bank_account.available_balance
         )
-        # If this transaction is not pending, then also update the the posted
+        # If this transaction is not pending, then also update the posted
         # amount for the bank account.
         #
         if not transaction.pending:
@@ -130,10 +122,6 @@ def transaction_pre_save(sender, instance, **kwargs):
         transaction.bank_account_posted_balance = (
             transaction.bank_account.posted_balance
         )
-
-        transaction.budget.balance += transaction.amount
-        transaction.budget.save()
-        transaction.budget_balance = transaction.budget.balance
     else:
         # We only reach here if this transaction already exists and it is being
         # updated. So we need to compare in-memory transaction object with what
@@ -142,41 +130,13 @@ def transaction_pre_save(sender, instance, **kwargs):
         #
         previous = Transaction.objects.get(id=transaction.id)
 
-        # If the associated budget has changed then we need to adjust the
-        # previous and current budgets.
-        #
-        # NOTE: We are adjusting both the previous budget and the
-        #       transacation's current budget by the _previous_ amount of the
-        #       transaction. In the following `if` clause where we check if
-        #       the transaction amount is different is where we will modify
-        #       the currently assigned budget's balance by the transaction's
-        #       new amount.
-        #
-        if (
-            previous.budget is not None
-            and transaction.budget is not None
-            and previous.budget != transaction.budget
-        ):
-            previous.budget.balance -= previous.amount
-            previous.budget_balance = previous.budget.balance
-            transaction.budget.balance += previous.amount
-            transaction.budget_balance = transaction.budget.balance
-            previous.budget.save()
-            transaction.budget.save()
-
         # If the amount of the transaction has changed then we need to
-        # change the bank accounts available amount and the associated
-        # budget's available amount.
+        # change the bank account's available amount.
         #
         save_bank_account = False
         if previous.amount != transaction.amount:
             transaction.bank_account.available_balance -= previous.amount
             transaction.bank_account.available_balance += transaction.amount
-
-            transaction.budget.balance -= previous.amount
-            transaction.budget.balance += transaction.amount
-            transaction.budget_balance = transaction.budget.balance
-            transaction.budget.save()
 
             # If this transaction was previously posted then we need to change
             # the posted amount on the bank account as well.
@@ -207,32 +167,104 @@ def transaction_pre_save(sender, instance, **kwargs):
 @receiver(pre_delete, sender=Transaction)
 def transaction_pre_delete(sender, instance, **kwargs):
     """
-    Transactions in general will never be deleted but I can see doing cleanup
-    operations while debugging and testing that require their deletion and in
-    that case we need to make sure that the associated bank account and
-    budgets values are updated properly
+    Reverse bank account balance changes when a transaction is deleted.
 
-    TODO
+    Budget balance reversal is handled by the cascade delete of associated
+    TransactionAllocation objects (via their own pre_delete signal).
+
+    NOTE: bulk deleting transactions will NOT trigger this signal. Delete
+    them one by one to keep balances correct.
     """
     transaction = instance  # To make the code easier to read
-
-    # Update the associated budget's balance.
-    #
-    if transaction.budget is not None:
-        transaction.budget.balance -= transaction.amount
-        transaction.budget.save()
 
     # Update the bank account's available & posted balance.
     #
     if transaction.bank_account:
         transaction.bank_account.available_balance -= transaction.amount
 
-        # If this transaction is not pending, then also update the the posted
+        # If this transaction is not pending, then also update the posted
         # amount for the bank account.
         #
         if not transaction.pending:
             transaction.bank_account.posted_balance -= transaction.amount
         transaction.bank_account.save()
+
+
+####################################################################
+#
+@receiver(pre_save, sender=TransactionAllocation)
+def allocation_pre_save(sender, instance, **kwargs):
+    """
+    Handle budget balance updates when an allocation is saved.
+
+    On creation: credits the allocated amount to the budget.
+    On update: if the budget changed, moves the amount between budgets.
+              If the amount changed, adjusts the budget balance by the delta.
+
+    Keyword Arguments:
+    sender    -- What sent the signal. Always TransactionAllocation
+    instance  -- instance of TransactionAllocation object before save
+    **kwargs  -- dict
+    """
+    allocation = instance  # To make the code easier to read
+
+    # If no budget is set, default to the transaction's bank account's
+    # unallocated budget.
+    #
+    if allocation.budget is None:
+        allocation.budget = (
+            allocation.transaction.bank_account.unallocated_budget
+        )
+
+    if allocation.pkid is None:
+        # New allocation: credit the budget by the allocation amount.
+        #
+        allocation.budget.balance += allocation.amount
+        allocation.budget.save()
+        allocation.budget_balance = allocation.budget.balance
+    else:
+        # Existing allocation being updated.
+        #
+        previous = TransactionAllocation.objects.get(id=allocation.id)
+
+        # If the budget changed, move the previous amount from old budget
+        # to new budget.
+        #
+        if (
+            previous.budget is not None
+            and allocation.budget is not None
+            and previous.budget != allocation.budget
+        ):
+            previous.budget.balance -= previous.amount
+            previous.budget.save()
+            allocation.budget.balance += previous.amount
+            allocation.budget.save()
+            allocation.budget_balance = allocation.budget.balance
+
+        # If the amount changed, adjust the budget balance by the delta.
+        #
+        if previous.amount != allocation.amount:
+            allocation.budget.balance -= previous.amount
+            allocation.budget.balance += allocation.amount
+            allocation.budget.save()
+            allocation.budget_balance = allocation.budget.balance
+
+
+####################################################################
+#
+@receiver(pre_delete, sender=TransactionAllocation)
+def allocation_pre_delete(sender, instance, **kwargs):
+    """
+    Reverse budget balance changes when an allocation is deleted.
+
+    NOTE: bulk deleting allocations will NOT trigger this signal. Delete
+    them one by one to keep balances correct.
+    """
+    allocation = instance  # To make the code easier to read
+
+    if allocation.budget is not None:
+        allocation.budget.balance -= allocation.amount
+        allocation.budget.save()
 
 
 ####################################################################
@@ -273,7 +305,7 @@ def internal_transaction_pre_save(sender, instance, **kwargs):
         # the amount of this InternalTransaction between the inst.amount
         # and the amount that is saved in the db.
         #
-        # XXX This should generally not happen beacuse the src budget, dst
+        # XXX This should generally not happen because the src budget, dst
         #     budget, and amount are NOT editable so no user UI action should
         #     cause this to happen. However, we need to properly account for
         #     this case as it is possible to modify these fields and save the
