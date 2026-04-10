@@ -46,6 +46,7 @@ dependencies = [
     "PyYAML",
     "Pygments",
     "rich",
+    "drf-spectacular>=0.29.0",
 ]
 
 [build-system]

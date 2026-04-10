@@ -70,7 +70,12 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 | `/`, `/accounts/`, `/admin/` | Django templates         | Login, auth, admin                           |
 | `/api/`                      | DRF                      | JWT-authenticated REST API                   |
 | `/api/token/refresh/`        | `CookieTokenRefreshView` | Silent token refresh via httpOnly cookie     |
+| `/api/schema/`               | drf-spectacular          | OpenAPI schema (YAML)                        |
+| `/api/schema/swagger-ui/`    | drf-spectacular          | Swagger UI (interactive docs)                |
+| `/api/schema/redoc/`         | drf-spectacular          | ReDoc (interactive docs)                     |
 | `/app/*`                     | `SpaShellView`           | SPA shell; Vue Router handles all sub-routes |
+
+The machine-readable OpenAPI spec and generated API reference docs live in [`docs/openapi.yaml`](docs/openapi.yaml) and [`docs/api.md`](docs/api.md). Regenerate them after any API change with `make api-docs`.
 
 ### Auth: JWT two-token pattern
 
