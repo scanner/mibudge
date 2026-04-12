@@ -2,33 +2,73 @@
 kind: pipeline
 name: mibudge Tests
 
+# Temp volumes are ephemeral per-run shared mounts.  The first step to use
+# a volume populates it; later steps with depends_on find it already built.
+# This avoids re-running `uv sync` and `pnpm install` in each step.
+#
+volumes:
+  - name: python-venv
+    temp: {}
+  - name: frontend-node-modules
+    temp: {}
+
 steps:
-  - name: python tests
+  - name: python lint
     # NOTE: Keep this version in sync with requires-python in pyproject.toml
     image: "python:3.13.12"
+    volumes:
+      - name: python-venv
+        path: /drone/src/.venv
     environment:
       PYTHONUNBUFFERED: 1
       UV_LINK_MODE: copy
-      DEBUG: "true"
-      # Dummy key for CI — tests run against SQLite, no real secrets needed
-      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
-      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
     commands:
       - pip install uv
       - uv sync --frozen
       - uv run ruff check .
       - uv run ruff format --check .
       - uv run mypy app/
-      - uv run pytest --cov=moneypools --cov=users --cov-report=term-missing:skip-covered --durations=20
 
-  - name: frontend
+  - name: frontend lint
     image: "node:22"
+    volumes:
+      - name: frontend-node-modules
+        path: /drone/src/frontend/node_modules
     commands:
       - npm install -g pnpm
       - cd frontend
       - pnpm install --frozen-lockfile
       - pnpm fmt:check
       - pnpm type-check
+
+  - name: python tests
+    image: "python:3.13.12"
+    depends_on:
+      - python lint
+    volumes:
+      - name: python-venv
+        path: /drone/src/.venv
+    environment:
+      PYTHONUNBUFFERED: 1
+      UV_LINK_MODE: copy
+      DEBUG: "true"
+      # Dummy key for CI -- tests run against SQLite, no real secrets needed
+      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
+      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
+    commands:
+      - pip install uv
+      - uv run pytest --cov=moneypools --cov=users --cov-report=term-missing:skip-covered --durations=20
+
+  - name: frontend build
+    image: "node:22"
+    depends_on:
+      - frontend lint
+    volumes:
+      - name: frontend-node-modules
+        path: /drone/src/frontend/node_modules
+    commands:
+      - npm install -g pnpm
+      - cd frontend
       - pnpm build
 
 ---
