@@ -1,0 +1,36 @@
+# mibudge local development environment
+# Copied to .env by `make env`
+#
+# All values below are safe defaults for local development.
+# In production, every variable must be set explicitly via
+# deployment/dot-env.example.
+
+# General
+# ------------------------------------------------------------------------------
+DEBUG=True
+DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
+DJANGO_ADMIN_URL=admin/
+
+# Database (SQLite default is baked into settings.py; uncomment for Postgres)
+# DATABASE_URL=postgres://mibudge:mibudge@localhost:5432/mibudge
+
+# Redis
+# ------------------------------------------------------------------------------
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+
+# Email (Mailpit default)
+# ------------------------------------------------------------------------------
+EMAIL_HOST=localhost
+
+# django-fernet-encrypted-fields
+# ------------------------------------------------------------------------------
+# Used to derive encryption keys for sensitive fields (e.g. account numbers).
+# In production use a strong random value and NEVER commit it.
+SALT_KEY=local-dev-salt-key-change-in-production
+
+# Sentry (disabled by default)
+# ------------------------------------------------------------------------------
+# SENTRY_DSN=
+# SENTRY_TRACES_SAMPLE_RATE=0.0

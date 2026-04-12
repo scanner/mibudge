@@ -9,7 +9,13 @@ DOCKER_BUILDKIT := 1
 # at runtime via .env / docker-compose.
 BUILD_SALT_KEY := $(shell openssl rand -hex 32)
 
-.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+
+env: $(ROOT_DIR)/.env	## Copy deployment/dot-env.dev to .env if it does not exist
+
+$(ROOT_DIR)/.env:
+	@cp $(ROOT_DIR)/deployment/dot-env.dev $(ROOT_DIR)/.env
+	@echo "Created .env from deployment/dot-env.dev"
 
 build:	## Build prod and dev Docker images
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target prod --tag mibudge:latest .
@@ -62,7 +68,7 @@ createadmin: migrate   ## Create admin account (admin / testpass1234)
 logs:	## Tail the logs for backend, celeryworker, celerybeat
 	@docker compose logs -f backend celeryworker celerybeat
 
-test: .venv	## Run all of the tests
+test: .venv $(ROOT_DIR)/.env	## Run all of the tests
 	@$(UV_RUN) pytest app/
 
 uv-sync: .venv	## Sync .venv with uv.lock after dependency changes

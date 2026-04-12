@@ -14,6 +14,10 @@ You have one or more bank accounts. Each account's balance is divided into **bud
 
 **Transactions** from the bank (purchases, deposits, transfers) are associated with a budget. Transactions may arrive as *pending* -- recorded but not yet settled, with the final amount potentially differing from the pending amount (e.g. a gas station pre-authorization vs. the actual charge). A transaction represents one concrete bank event regardless of whether it is pending or posted. Most map to a single budget, but a transaction can be split -- say, a store receipt that's part groceries and part home improvement supplies.
 
+**Internal transactions** track the movement of money between budgets within the same account. When you move $50 from "Dining Out" to "Groceries," an internal transaction records the transfer with the source budget, destination budget, amount, and resulting balances on both sides. Internal transactions are write-once -- to undo a transfer, you create a new internal transaction reversing it rather than deleting the original. In the UI, internal transactions are hidden by default to keep the transaction feed focused on real bank activity, but a toggle lets you show them when you want to see the full audit trail.
+
+When the same real-world money movement appears on two accounts -- for example, a credit card payment that shows as a debit on checking and a credit on the card -- mibudge can link those transactions together. This cross-account linking is done opportunistically after import when both sides are present.
+
 As money comes in (paychecks, etc.), it's automatically distributed to budgets on a schedule, so that by the time a bill is due or a savings target arrives, the money is there.
 
 ### Funding
@@ -76,6 +80,12 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 | `/app/*`                     | `SpaShellView`           | SPA shell; Vue Router handles all sub-routes |
 
 The machine-readable OpenAPI spec and generated API reference docs live in [`docs/openapi.yaml`](docs/openapi.yaml) and [`docs/api.md`](docs/api.md). Regenerate them after any API change with `make api-docs`.
+
+### API permissions
+
+- **Banks** are read-only reference data, accessible to any authenticated user.
+- **Users** list/retrieve/update is restricted to staff; `/api/users/me/` is available to all authenticated users.
+- **All other resources** (accounts, budgets, transactions, allocations, internal transactions) are scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does **not** bypass ownership checks in the REST API.
 
 ### Auth: JWT two-token pattern
 

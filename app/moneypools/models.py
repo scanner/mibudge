@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
 from djmoney.models.fields import MoneyField
+from djmoney.money import Money
 from encrypted_fields.fields import EncryptedCharField
 
 User = get_user_model()
@@ -14,6 +15,30 @@ User = get_user_model()
 #
 MAX_DIGITS = 14
 DECIMAL_PLACES = 2
+
+
+####################################################################
+#
+def get_default_currency() -> str:
+    """Return the project-wide default currency from settings.
+
+    Used as a callable default for MoneyField 'default_currency' and
+    CharField defaults so that changing DEFAULT_CURRENCY in settings
+    does not generate new migrations.
+    """
+    return settings.DEFAULT_CURRENCY
+
+
+####################################################################
+#
+def get_default_zero() -> Money:
+    """Return a zero Money value in the project-wide default currency.
+
+    Used as a callable default for MoneyField 'default' so that both
+    'default' and 'default_currency' are callables -- a requirement
+    of django-money when 'default_currency' is callable.
+    """
+    return Money("0.00", settings.DEFAULT_CURRENCY)
 
 
 ########################################################################
@@ -56,6 +81,15 @@ class Bank(MoneyPoolBaseClass):
         max_length=9, null=True, default=None, editable=False, unique=True
     )
 
+    # ISO 4217 currency code.  Bank accounts created under this bank
+    # inherit this currency by default.
+    #
+    default_currency = models.CharField(
+        max_length=3,
+        default=get_default_currency,
+        help_text="ISO 4217 currency code (e.g. USD, EUR, GBP).",
+    )
+
 
 ########################################################################
 ########################################################################
@@ -90,9 +124,6 @@ class BankAccount(MoneyPoolBaseClass):
         help_text="Joint ownership group for this account.",
     )
 
-    def __str__(self) -> str:
-        return f"{self.name} ({self.bank.name}) [{str(self.id)[:8]}]"
-
     # XXX Add a validator to make sure only digits are used
     account_number = EncryptedCharField(
         max_length=12, null=True, default=None, editable=False, unique=True
@@ -103,6 +134,18 @@ class BankAccount(MoneyPoolBaseClass):
         choices=BankAccountType.choices,
         default=BankAccountType.CHECKING,
     )
+
+    # ISO 4217 currency code for this account.  Specified by the user
+    # on creation; defaults to the bank's default_currency if omitted.
+    # Immutable after creation -- the pre_save signal propagates this
+    # to the balance MoneyField currencies.
+    #
+    currency = models.CharField(
+        max_length=3,
+        default=get_default_currency,
+        help_text="ISO 4217 currency code (e.g. USD, EUR, GBP).",
+    )
+
     # Available Balance is the amount available for withdrawal and may include
     # pending transactions not yet posted to your account.
     #
@@ -112,16 +155,16 @@ class BankAccount(MoneyPoolBaseClass):
     posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     available_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
@@ -141,6 +184,11 @@ class BankAccount(MoneyPoolBaseClass):
         blank=True,
         null=True,
     )
+
+    #####################################################################
+    #
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bank.name}) [{str(self.id)[:8]}]"
 
 
 ########################################################################
@@ -396,12 +444,14 @@ class Budget(MoneyPoolBaseClass):
     balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
+        default=get_default_zero,
+        default_currency=get_default_currency,
     )
     target_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
+        default=get_default_zero,
+        default_currency=get_default_currency,
     )
     budget_type = models.CharField(
         max_length=1,
@@ -590,22 +640,36 @@ class Transaction(TransactionBaseClass):
     #
     description = models.TextField(max_length=512)
 
+    # Linked counterpart on another account. For example, a credit card
+    # payment appears as a debit on checking and a credit on the card.
+    # Populated opportunistically by the import pipeline when both sides
+    # are present. Never required.
+    #
+    linked_transaction = models.OneToOneField(
+        "self",
+        to_field="id",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="linked_from",
+    )
+
     # Budget assignment is handled through TransactionAllocation objects.
     # A non-split transaction has one allocation; a split transaction has
     # multiple allocations whose amounts sum to the transaction amount.
     bank_account_posted_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         help_text="Posted Balance does not include pending debits.",
         editable=False,
     )
     bank_account_available_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         help_text="Available Balance has pending debits deducted.",
         editable=False,
     )
@@ -672,15 +736,15 @@ class InternalTransaction(TransactionBaseClass):
     src_budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         editable=False,
     )
     dst_budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         editable=False,
     )
 
@@ -725,8 +789,8 @@ class TransactionAllocation(MoneyPoolBaseClass):
     budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
-        default=0,
-        default_currency=settings.DEFAULT_CURRENCY,
+        default=get_default_zero,
+        default_currency=get_default_currency,
         editable=False,
     )
     # What this portion of the transaction was spent on. Lives here
