@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import (
     ListModelMixin,
     RetrieveModelMixin,
@@ -49,6 +50,9 @@ class UserViewSet(
     queryset = User.objects.all()
     lookup_field = "username"
     permission_classes = [IsAdminUser]
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["username", "name"]
+    ordering = ["username"]
 
     ####################################################################
     #

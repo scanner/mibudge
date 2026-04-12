@@ -99,6 +99,9 @@ class BankAccountFactory(DjangoModelFactory):
     class Meta:
         model = BankAccount
         django_get_or_create = ["account_number"]
+        # owners post-generation only calls .add() on an M2M -- no model
+        # field mutation, so the auto-save after hooks is extraneous.
+        skip_postgeneration_save = True
 
     # XXX This is generating people names not bank account names... we
     #     should do something like "Name's Checking Account" etc. and

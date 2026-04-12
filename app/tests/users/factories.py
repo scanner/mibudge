@@ -30,7 +30,10 @@ class UserFactory(DjangoModelFactory):
         # factory-boy's @post_generation passes the model instance as self at
         # runtime, but stubs type it as the factory class -- revisit if factory-boy stubs improve
         self.set_password(password)  # type: ignore[attr-defined]
+        if create:
+            self.save()  # type: ignore[attr-defined]
 
     class Meta:
         model = get_user_model()
         django_get_or_create = ["username"]
+        skip_postgeneration_save = True
