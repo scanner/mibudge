@@ -22,6 +22,10 @@ steps:
     environment:
       PYTHONUNBUFFERED: 1
       UV_LINK_MODE: copy
+      # mypy-django initializes Django settings at plugin load time, so mypy
+      # requires the same env vars as the test runner.
+      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
+      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
     commands:
       - pip install uv
       - uv sync --frozen
