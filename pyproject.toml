@@ -129,3 +129,8 @@ markers = [
     "smoke: marks tests as smoke",
     "integration",
 ]
+filterwarnings = [
+    # WhiteNoise fires this on every request when staticfiles/ doesn't exist
+    # locally (it's created by collectstatic, not present in the source tree).
+    "ignore:No directory at.*staticfiles:UserWarning",
+]

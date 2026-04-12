@@ -78,6 +78,9 @@ class BankViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Bank.objects.all()
     lookup_field = "id"
     permission_classes = [IsAuthenticated]
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["name"]
+    ordering = ["name"]
 
 
 ########################################################################
@@ -141,7 +144,7 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["account_type"]
     ordering_fields = ["name", "created_at"]
-    ordering = ["-created_at"]
+    ordering = ["name"]
 
     ####################################################################
     #
