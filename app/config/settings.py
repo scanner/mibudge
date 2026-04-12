@@ -361,11 +361,18 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ),
+    # Rate limits. 'user' is sized to accommodate bulk imports: a year
+    # of statements across several accounts can easily exceed several
+    # thousand POSTs in a few minutes. The per-minute 'burst' scope
+    # (applied selectively on write endpoints via ScopedRateThrottle on
+    # specific views if needed) keeps runaway clients bounded without
+    # capping normal import workflows. Review these numbers once real
+    # usage data is available.
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/hour",
-        "user": "1000/hour",
+        "user": "20000/hour",
     },
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.FlexiblePageNumberPagination",
     "PAGE_SIZE": 100,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -384,8 +391,8 @@ SPECTACULAR_SETTINGS = {
         "## Permissions\n\n"
         "- **Banks**: read-only, any authenticated user.\n"
         "- **Users**: list/retrieve/update restricted to staff; "
-        "`/api/users/me/` available to all authenticated users.\n"
-        "- **All other resources** (accounts, budgets, transactions, "
+        "`/api/v1/users/me/` available to all authenticated users.\n"
+        "- **All other resources** (bank accounts, budgets, transactions, "
         "allocations, internal transactions): scoped to bank account "
         "ownership. Only users in an account's `owners` M2M can "
         "access that account and its related objects. Staff and "
@@ -399,7 +406,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
-    "SCHEMA_PATH_PREFIX": "/api/",
+    "SCHEMA_PATH_PREFIX": "/api/v1/",
 }
 
 # djangorestframework-simplejwt

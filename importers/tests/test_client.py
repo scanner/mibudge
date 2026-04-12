@@ -23,7 +23,7 @@ def _make_response(
     body: Any = None,
     *,
     method: str = "GET",
-    url: str = "http://testserver/api/test/",
+    url: str = "http://testserver/api/v1/test/",
 ) -> httpx.Response:
     """Build a minimal httpx.Response for use in tests."""
     content = json.dumps(body).encode() if body is not None else b""
@@ -95,7 +95,7 @@ class TestAuthentication:
             ),
         )
         assert client._access_token is None
-        client.get("/api/accounts/")
+        client.get("/api/v1/bank-accounts/")
         assert client._access_token == "lazy-token"
 
 
@@ -129,7 +129,7 @@ class TestAutoReauth:
                 _make_response(200, {"count": 0, "next": None, "results": []}),
             ],
         )
-        result = client.get("/api/accounts/")
+        result = client.get("/api/v1/bank-accounts/")
         assert result["count"] == 0
         assert client._access_token == "new-token"
 
@@ -154,7 +154,7 @@ class TestAutoReauth:
             return_value=_make_response(401, {"detail": "forbidden"}),
         )
         with pytest.raises(APIError) as exc_info:
-            client.get("/api/accounts/")
+            client.get("/api/v1/bank-accounts/")
         assert exc_info.value.response.status_code == 401
 
 
@@ -174,7 +174,7 @@ class TestGetAll:
                 [
                     {
                         "count": 3,
-                        "next": "http://testserver/api/transactions/?page=2",
+                        "next": "http://testserver/api/v1/transactions/?page=2",
                         "results": [{"id": "1"}, {"id": "2"}],
                     },
                     {"count": 3, "next": None, "results": [{"id": "3"}]},
@@ -202,7 +202,7 @@ class TestGetAll:
             "request",
             side_effect=[_make_response(200, page) for page in pages],
         )
-        results = list(client.get_all("/api/transactions/"))
+        results = list(client.get_all("/api/v1/transactions/"))
         assert [r["id"] for r in results] == expected_ids
 
     ####################################################################
@@ -227,7 +227,7 @@ class TestGetAll:
                     200,
                     {
                         "count": 2,
-                        "next": "http://testserver/api/transactions/?bank_account=abc&page=2",
+                        "next": "http://testserver/api/v1/transactions/?bank_account=abc&page=2",
                         "results": [{"id": "1"}],
                     },
                 ),
@@ -238,13 +238,46 @@ class TestGetAll:
             ],
         )
         results = list(
-            client.get_all("/api/transactions/", {"bank_account": "abc"})
+            client.get_all("/api/v1/transactions/", {"bank_account": "abc"})
         )
         assert [r["id"] for r in results] == ["1", "2"]
         first_kwargs = mock_request.call_args_list[0].kwargs
         second_kwargs = mock_request.call_args_list[1].kwargs
         assert first_kwargs.get("params") == {"bank_account": "abc"}
         assert second_kwargs.get("params") is None
+
+    ####################################################################
+    #
+    def test_get_all_includes_page_size_in_first_request(
+        self,
+        client: MibudgeClient,
+        mocker: MockerFixture,
+    ) -> None:
+        """
+        GIVEN: get_all() called with page_size=500
+        WHEN:  the request is made
+        THEN:  page_size is included in the first request's params
+        """
+        client._access_token = "t"
+        mock_request = mocker.patch.object(
+            client._http,
+            "request",
+            return_value=_make_response(
+                200, {"count": 1, "next": None, "results": [{"id": "1"}]}
+            ),
+        )
+        list(
+            client.get_all(
+                "/api/v1/transactions/",
+                {"bank_account": "abc"},
+                page_size=500,
+            )
+        )
+        first_kwargs = mock_request.call_args_list[0].kwargs
+        assert first_kwargs.get("params") == {
+            "bank_account": "abc",
+            "page_size": 500,
+        }
 
 
 ########################################################################
@@ -261,13 +294,13 @@ class TestPostAndPatch:
             (
                 "post",
                 "POST",
-                "/api/transactions/",
+                "/api/v1/transactions/",
                 {"amount": "10.00", "bank_account": "uuid-abc"},
             ),
             (
                 "patch",
                 "PATCH",
-                "/api/transactions/uuid-abc/",
+                "/api/v1/transactions/uuid-abc/",
                 {"pending": False},
             ),
         ],
@@ -324,5 +357,29 @@ class TestPostAndPatch:
             ),
         )
         with pytest.raises(APIError) as exc_info:
-            client.post("/api/transactions/", {})
+            client.post("/api/v1/transactions/", {})
         assert exc_info.value.response.status_code == 400
+
+
+########################################################################
+########################################################################
+#
+class TestContextManager:
+    """Tests for MibudgeClient used as a context manager."""
+
+    ####################################################################
+    #
+    def test_close_called_on_exit(
+        self,
+        client: MibudgeClient,
+        mocker: MockerFixture,
+    ) -> None:
+        """
+        GIVEN: a client used as a context manager
+        WHEN:  the with-block exits normally
+        THEN:  close() is called on the underlying HTTP client
+        """
+        mock_close = mocker.patch.object(client._http, "close")
+        with client:
+            pass
+        mock_close.assert_called_once()

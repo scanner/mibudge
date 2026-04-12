@@ -129,12 +129,13 @@ class BankAccountSerializer(serializers.ModelSerializer):
     """Serializer for bank accounts.
 
     On create the caller supplies name, bank (UUID), account_type,
-    and optionally currency and initial balances.  The view adds the
-    requesting user to owners.  The unallocated budget is auto-created
-    by the post_save signal and returned in the response.
+    and optionally currency, account_number, and initial balances.
+    The view adds the requesting user to owners.  The unallocated
+    budget is auto-created by the post_save signal and returned in
+    the response.
 
-    After creation only name is updatable.  Currency and balances are
-    immutable once the account exists.
+    After creation only name is updatable.  Currency, account_number,
+    and balances are immutable once the account exists.
 
     Group assignment is not yet supported via the API.
     """
@@ -175,6 +176,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "bank",
             "owners",
             "account_type",
+            "account_number",
             "currency",
             "posted_balance",
             "posted_balance_currency",

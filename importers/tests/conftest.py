@@ -173,13 +173,27 @@ def bofa_csv_factory(
         # Sample transaction descriptions covering known type patterns so
         # tests can assert on type inference as well as parsing.
         description_templates = [
-            lambda: f"{faker.company().upper()} {faker.past_date(start_date='-30d'):%m/%d} PURCHASE {faker.city().upper()} {faker.state_abbr()}",
-            lambda: f"TST*{faker.company().upper()} {faker.past_date(start_date='-30d'):%m/%d} MOBILE PURCHASE {faker.city().upper()} {faker.state_abbr()}",
-            lambda: f"SQ *{faker.company().upper()} {faker.past_date(start_date='-30d'):%m/%d} PURCHASE {faker.city().upper()} {faker.state_abbr()}",
-            lambda: f"{faker.company()} DES:PAYROLL ID:CER{faker.numerify('######')} INDN:{faker.name().upper()} CO ID:{faker.numerify('######')} PPD",
-            lambda: f"{faker.company()} DES:{faker.bothify('??-######')} ID:{faker.bothify('??????????')} INDN:{faker.name().upper()} CO ID:{faker.numerify('######')} CCD",
-            lambda: f"Online Banking transfer from CHK {faker.numerify('####')} Confirmation# {faker.numerify('#####')}",
-            lambda: f"ATM WITHDRAWAL {faker.past_date(start_date='-30d'):%m/%d} {faker.city().upper()} {faker.state_abbr()}",
+            lambda: (
+                f"{faker.company().upper()} {faker.past_date(start_date='-30d'):%m/%d} PURCHASE {faker.city().upper()} {faker.state_abbr()}"
+            ),
+            lambda: (
+                f"TST*{faker.company().upper()} {faker.past_date(start_date='-30d'):%m/%d} MOBILE PURCHASE {faker.city().upper()} {faker.state_abbr()}"
+            ),
+            lambda: (
+                f"SQ *{faker.company().upper()} {faker.past_date(start_date='-30d'):%m/%d} PURCHASE {faker.city().upper()} {faker.state_abbr()}"
+            ),
+            lambda: (
+                f"{faker.company()} DES:PAYROLL ID:CER{faker.numerify('######')} INDN:{faker.name().upper()} CO ID:{faker.numerify('######')} PPD"
+            ),
+            lambda: (
+                f"{faker.company()} DES:{faker.bothify('??-######')} ID:{faker.bothify('??????????')} INDN:{faker.name().upper()} CO ID:{faker.numerify('######')} CCD"
+            ),
+            lambda: (
+                f"Online Banking transfer from CHK {faker.numerify('####')} Confirmation# {faker.numerify('#####')}"
+            ),
+            lambda: (
+                f"ATM WITHDRAWAL {faker.past_date(start_date='-30d'):%m/%d} {faker.city().upper()} {faker.state_abbr()}"
+            ),
         ]
 
         rows: list[BofaCSVRow] = []

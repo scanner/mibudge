@@ -32,8 +32,7 @@ from description keywords; anything unrecognised is left as NOT_SET ("").
 import csv
 import logging
 import re
-from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -69,8 +68,52 @@ class ParsedTransaction:
 ########################################################################
 ########################################################################
 #
+@dataclass
+class ParsedStatement:
+    """
+    A full Bank of America CSV statement -- summary metadata plus
+    transactions.
+
+    The summary section of a BofA CSV reports the account's balance
+    and activity totals over the statement window. We surface all of
+    it here so callers can (a) create a new bank account seeded with
+    the correct starting balance and (b) verify after import that the
+    sum of imported transactions reproduces the CSV's stated totals.
+
+    Args:
+        beginning_balance: Account balance at *beginning_date*.
+        beginning_date:    First date covered by the statement.
+        ending_balance:    Account balance at *ending_date*.
+        ending_date:       Last date covered by the statement.
+        total_credits:     Sum of credits (positive, from the summary).
+        total_debits:      Sum of debits (negative, from the summary).
+        transactions:      Parsed transactions in file order.
+    """
+
+    beginning_balance: Decimal
+    beginning_date: date
+    ending_balance: Decimal
+    ending_date: date
+    total_credits: Decimal
+    total_debits: Decimal
+    transactions: list[ParsedTransaction] = field(default_factory=list)
+
+
+########################################################################
+########################################################################
+#
 # Keyword patterns for transaction type inference from BofA descriptions.
 # Checked in order; first match wins.
+#
+# NOTE: Regex matching on the free-form description is a hacky approach
+# -- BofA's description strings are not a stable API, and collisions
+# between patterns (e.g. a merchant name that happens to contain
+# "REFUND") are always possible. It is good enough for the volume and
+# variety of data we actually see, and the import script logs every
+# unclassified description so we can extend the pattern list and
+# re-run the import to backfill. If we ever ingest from a source with
+# structured transaction-type codes (OFX/QFX TRNTYPE, for example),
+# prefer those over this list.
 #
 # BofA descriptions follow several conventions worth noting:
 #
@@ -99,6 +142,16 @@ _TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"\bOnline Banking transfer\b", re.IGNORECASE),
         "shared_transfer",
     ),
+    # Refunds from merchants (e.g. "TST*MERCHANT 10/26 REFUND ..." or
+    # "AMAZON MKTPLACE PMTS 04/14 REFUND Amzn.com/bill WA"). Must come
+    # before the PURCHASE pattern because some refund rows also contain
+    # "PURCHASE".
+    (re.compile(r"\bREFUND\b", re.IGNORECASE), "signature_credit"),
+    # BofA online bill pay (e.g. "Comcast Cable Communications Bill
+    # Payment", "AT&T Mobility (Cingular) Bill Payment").
+    (re.compile(r"\bBill\s+Payment\b", re.IGNORECASE), "bill_payment"),
+    # BofA foreign currency order (e.g. "FX Order Confirmation# XXXXX62185").
+    (re.compile(r"\bFX\s+Order\b", re.IGNORECASE), "fx_order"),
     (
         re.compile(r"\b(MOBILE\s+)?PURCHASE\b", re.IGNORECASE),
         "signature_purchase",
@@ -121,6 +174,12 @@ _TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 def _infer_transaction_type(description: str) -> str:
     """
     Infer a TransactionType value from a BofA transaction description.
+
+    NOTE: This is a hacky keyword-match approach -- see the comment on
+    ``_TYPE_PATTERNS`` above. It works well enough for the BofA CSV
+    export format but is not a substitute for a source with structured
+    type codes. Unmatched descriptions are logged so patterns can be
+    extended iteratively.
 
     Args:
         description: Raw description string from the CSV.
@@ -178,31 +237,104 @@ def _parse_date(raw: str) -> date:
     return datetime.strptime(raw.strip(), "%m/%d/%Y").date()
 
 
+####################################################################
+#
+_BEGINNING_RE = re.compile(r"Beginning balance as of (\d{2}/\d{2}/\d{4})")
+_ENDING_RE = re.compile(r"Ending balance as of (\d{2}/\d{2}/\d{4})")
+
+
+def _parse_summary_section(
+    section: str,
+) -> dict[str, Decimal | date]:
+    """
+    Parse the summary block at the top of a BofA CSV.
+
+    The summary has four rows after the header:
+
+        Beginning balance as of MM/DD/YYYY,,"N,NNN.NN"
+        Total credits,,"N,NNN.NN"
+        Total debits,,"-N,NNN.NN"
+        Ending balance as of MM/DD/YYYY,,"N,NNN.NN"
+
+    The function is tolerant of absent rows: fields default to
+    ``Decimal("0")`` / ``None`` so callers get a clear error when
+    something expected is missing.
+
+    Args:
+        section: The raw text of the summary section (before the blank
+            line separator).
+
+    Returns:
+        A dict with keys ``beginning_balance``, ``beginning_date``,
+        ``ending_balance``, ``ending_date``, ``total_credits``,
+        ``total_debits``.
+
+    Raises:
+        ValueError: If the beginning or ending balance rows cannot be
+            located (without them we cannot validate or seed balances).
+    """
+    reader = csv.reader(section.splitlines())
+    rows = [r for r in reader if any(c.strip() for c in r)]
+
+    out: dict[str, Decimal | date] = {
+        "total_credits": Decimal("0"),
+        "total_debits": Decimal("0"),
+    }
+
+    for row in rows:
+        if len(row) < 3:
+            continue
+        label, _, amount_str = row[0].strip(), row[1], row[2].strip()
+        if not amount_str:
+            continue
+
+        m_begin = _BEGINNING_RE.match(label)
+        m_end = _ENDING_RE.match(label)
+        if m_begin:
+            out["beginning_balance"] = _parse_amount(amount_str)
+            out["beginning_date"] = _parse_date(m_begin.group(1))
+        elif m_end:
+            out["ending_balance"] = _parse_amount(amount_str)
+            out["ending_date"] = _parse_date(m_end.group(1))
+        elif label.lower() == "total credits":
+            out["total_credits"] = _parse_amount(amount_str)
+        elif label.lower() == "total debits":
+            out["total_debits"] = _parse_amount(amount_str)
+
+    missing = {"beginning_balance", "ending_balance"} - out.keys()
+    if missing:
+        raise ValueError(
+            f"BofA CSV summary is missing required row(s): {sorted(missing)}."
+        )
+    return out
+
+
 ########################################################################
 ########################################################################
 #
-def parse(source: str | Path) -> Iterator[ParsedTransaction]:
+def parse(source: str | Path) -> ParsedStatement:
     """
     Parse a Bank of America CSV export file.
 
-    Skips the summary section, the header row, and the "Beginning balance"
-    row. Yields one ParsedTransaction per settled transaction.
+    Returns a ``ParsedStatement`` containing the summary metadata
+    (beginning/ending balance and dates, credit/debit totals) and the
+    list of parsed transactions in file order.
 
     Args:
         source: File path (str or Path) to the BofA CSV export.
 
-    Yields:
-        ParsedTransaction for each transaction row in the file.
+    Returns:
+        A populated ``ParsedStatement``.
 
     Raises:
-        ValueError: If the transaction section header is not found.
+        ValueError: If the file layout is unexpected (missing section
+            separator, unknown columns, missing summary rows).
         FileNotFoundError: If the file does not exist.
     """
     path = Path(source)
     raw_text = path.read_text(encoding="utf-8-sig")  # strip BOM if present
 
     # Split into summary section and transaction section at the blank line.
-    #
     parts = raw_text.split("\n\n", maxsplit=1)
     if len(parts) < 2:
         # Try Windows-style line endings.
@@ -212,6 +344,8 @@ def parse(source: str | Path) -> Iterator[ParsedTransaction]:
             "Could not find the blank line separating summary from "
             "transactions in the BofA CSV file."
         )
+
+    summary = _parse_summary_section(parts[0])
 
     transaction_section = parts[1].strip()
     reader = csv.DictReader(transaction_section.splitlines())
@@ -226,6 +360,7 @@ def parse(source: str | Path) -> Iterator[ParsedTransaction]:
             f"Expected {expected}, got {reader.fieldnames!r}."
         )
 
+    transactions: list[ParsedTransaction] = []
     for row in reader:
         # Skip the "Beginning balance" row -- it has no Amount.
         if not row["Amount"].strip():
@@ -237,10 +372,82 @@ def parse(source: str | Path) -> Iterator[ParsedTransaction]:
         running_balance = _parse_amount(row["Running Bal."])
         transaction_type = _infer_transaction_type(raw_description)
 
-        yield ParsedTransaction(
-            transaction_date=transaction_date,
-            raw_description=raw_description,
-            amount=amount,
-            running_balance=running_balance,
-            transaction_type=transaction_type,
+        transactions.append(
+            ParsedTransaction(
+                transaction_date=transaction_date,
+                raw_description=raw_description,
+                amount=amount,
+                running_balance=running_balance,
+                transaction_type=transaction_type,
+            )
         )
+
+    return ParsedStatement(
+        beginning_balance=summary["beginning_balance"],  # type: ignore[arg-type]
+        beginning_date=summary["beginning_date"],  # type: ignore[arg-type]
+        ending_balance=summary["ending_balance"],  # type: ignore[arg-type]
+        ending_date=summary["ending_date"],  # type: ignore[arg-type]
+        total_credits=summary["total_credits"],  # type: ignore[arg-type]
+        total_debits=summary["total_debits"],  # type: ignore[arg-type]
+        transactions=transactions,
+    )
+
+
+########################################################################
+########################################################################
+#
+def validate_statement(statement: ParsedStatement) -> list[str]:
+    """
+    Verify a parsed BofA statement is internally consistent.
+
+    Runs two checks:
+
+    1. **Running balance walk.** Walking transactions in file order
+       from *beginning_balance*, after applying each transaction's
+       signed amount, the cumulative balance must match that row's
+       own ``running_balance``. A mismatch means either a parsing
+       error or a corrupt CSV and the import should not proceed.
+
+    2. **Summary totals.** ``beginning_balance + total_credits +
+       total_debits == ending_balance``. BofA reports ``total_debits``
+       as a negative number, so the formula uses addition. A mismatch
+       here means the summary block is inconsistent with the detail
+       rows.
+
+    Args:
+        statement: A ``ParsedStatement`` returned by ``parse()``.
+
+    Returns:
+        A list of human-readable error messages. Empty if everything
+        balances.
+    """
+    errors: list[str] = []
+
+    running = statement.beginning_balance
+    for idx, tx in enumerate(statement.transactions, start=1):
+        running = (running + tx.amount).quantize(Decimal("0.01"))
+        if running != tx.running_balance.quantize(Decimal("0.01")):
+            errors.append(
+                f"Row {idx} ({tx.transaction_date} {tx.amount} "
+                f"{tx.raw_description[:40]!r}): running balance "
+                f"mismatch -- computed {running}, CSV says "
+                f"{tx.running_balance}."
+            )
+            # One mismatch cascades; report only the first.
+            break
+
+    expected_ending = (
+        statement.beginning_balance
+        + statement.total_credits
+        + statement.total_debits
+    ).quantize(Decimal("0.01"))
+    actual_ending = statement.ending_balance.quantize(Decimal("0.01"))
+    if expected_ending != actual_ending:
+        errors.append(
+            f"Summary totals mismatch: beginning ({statement.beginning_balance}) "
+            f"+ credits ({statement.total_credits}) + debits "
+            f"({statement.total_debits}) = {expected_ending}, but CSV "
+            f"ending balance is {actual_ending}."
+        )
+
+    return errors

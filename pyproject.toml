@@ -49,6 +49,9 @@ dependencies = [
     "drf-spectacular>=0.29.0",
     "httpx>=0.28.1",
     "ofxparse>=0.21",
+    "click>=8.3.1",
+    "python-dotenv>=1.2.2",
+    "hvac>=2.4.0",
 ]
 
 [build-system]

@@ -24,25 +24,25 @@ class TestUserAPIURLs:
     def test_user_detail(self, user: User):
         """
         GIVEN: an existing user
-        WHEN:  the api:user-detail URL name is reversed and the resulting path
+        WHEN:  the api_v1:user-detail URL name is reversed and the resulting path
                is resolved
-        THEN:  the path matches /api/users/<username>/ and resolves to
-               api:user-detail
+        THEN:  the path matches /api/v1/users/<username>/ and resolves to
+               api_v1:user-detail
         """
         assert (
-            reverse("api:user-detail", kwargs={"username": user.username})
-            == f"/api/users/{user.username}/"
+            reverse("api_v1:user-detail", kwargs={"username": user.username})
+            == f"/api/v1/users/{user.username}/"
         )
         assert (
-            resolve(f"/api/users/{user.username}/").view_name
-            == "api:user-detail"
+            resolve(f"/api/v1/users/{user.username}/").view_name
+            == "api_v1:user-detail"
         )
 
     @pytest.mark.parametrize(
         "url_name,expected_path",
         [
-            pytest.param("api:user-list", "/api/users/", id="list"),
-            pytest.param("api:user-me", "/api/users/me/", id="me"),
+            pytest.param("api_v1:user-list", "/api/v1/users/", id="list"),
+            pytest.param("api_v1:user-me", "/api/v1/users/me/", id="me"),
         ],
     )
     def test_static_url_resolution(

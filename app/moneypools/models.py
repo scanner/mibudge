@@ -126,7 +126,7 @@ class BankAccount(MoneyPoolBaseClass):
 
     # XXX Add a validator to make sure only digits are used
     account_number = EncryptedCharField(
-        max_length=12, null=True, default=None, editable=False, unique=True
+        max_length=12, null=True, blank=True, default=None, unique=True
     )
 
     account_type = models.CharField(
@@ -594,6 +594,7 @@ class Transaction(TransactionBaseClass):
         ACH_REVERSAL = "ach_reversal", "ACH Reversal"
         ADJUSTMENT = "adjustment", "Adjustment"
         SIGNATURE_RETURN = "signature_return", "Signature return"
+        FX_ORDER = "fx_order", "FX Order"
         NOT_SET = "", "--------"
 
     #

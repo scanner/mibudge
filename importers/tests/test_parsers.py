@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 # Project imports
-from importers.parsers.bofa_csv import parse
+from importers.parsers.bofa_csv import parse, validate_statement
 
 
 ########################################################################
@@ -33,7 +33,7 @@ class TestBofaCSVParser:
                beginning-balance rows are skipped)
         """
         path, _ = bofa_csv_factory(num_transactions=num_transactions)
-        assert len(list(parse(path))) == num_transactions
+        assert len(parse(path).transactions) == num_transactions
 
     ####################################################################
     #
@@ -57,7 +57,7 @@ class TestBofaCSVParser:
         THEN:  each transaction's field matches the corresponding generated row
         """
         path, rows = bofa_csv_factory(num_transactions=5)
-        for tx, row in zip(parse(path), rows):
+        for tx, row in zip(parse(path).transactions, rows):
             assert getattr(tx, tx_attr) == getattr(row, row_attr)
 
     ####################################################################
@@ -72,7 +72,7 @@ class TestBofaCSVParser:
         THEN:  every transaction has pending=False
         """
         path, _ = bofa_csv_factory(num_transactions=5)
-        for tx in parse(path):
+        for tx in parse(path).transactions:
             assert tx.pending is False
 
     ####################################################################
@@ -189,10 +189,21 @@ class TestBofaCSVParser:
                 id="missing-separator",
             ),
             pytest.param(
-                "Description,,Summary Amt.\nFoo,,1.00\n\n"
+                "Description,,Summary Amt.\n"
+                'Beginning balance as of 01/01/2025,,"1,000.00"\n'
+                'Total credits,,"0.00"\n'
+                'Total debits,,"0.00"\n'
+                'Ending balance as of 01/31/2025,,"1,000.00"\n'
+                "\n"
                 "Col1,Col2,Col3\n01/01/2025,foo,10.00\n",
                 "Unexpected columns",
                 id="wrong-columns",
+            ),
+            pytest.param(
+                "Description,,Summary Amt.\nFoo,,1.00\n\n"
+                "Date,Description,Amount,Running Bal.\n",
+                "missing required row",
+                id="missing-summary-rows",
             ),
         ],
     )
@@ -210,4 +221,90 @@ class TestBofaCSVParser:
         bad_csv = tmp_path / "bad.csv"
         bad_csv.write_text(content)
         with pytest.raises(ValueError, match=match):
-            list(parse(bad_csv))
+            parse(bad_csv)
+
+    ####################################################################
+    #
+    def test_parse_extracts_summary_metadata(
+        self,
+        bofa_csv_factory: Callable[..., tuple[Path, list]],
+    ) -> None:
+        """
+        GIVEN: a BofA CSV file with a summary section
+        WHEN:  parse() is called
+        THEN:  the ParsedStatement surfaces the beginning/ending balances,
+               dates, and credit/debit totals derived from the rows.
+        """
+        from decimal import Decimal
+
+        path, rows = bofa_csv_factory(
+            num_transactions=5, beginning_balance="1000.00"
+        )
+        stmt = parse(path)
+
+        assert stmt.beginning_balance == Decimal("1000.00")
+        assert stmt.ending_balance == rows[-1].running_balance
+        expected_credits = sum(
+            (r.amount for r in rows if r.amount > 0), Decimal("0")
+        )
+        expected_debits = sum(
+            (r.amount for r in rows if r.amount < 0), Decimal("0")
+        )
+        assert stmt.total_credits == expected_credits
+        assert stmt.total_debits == expected_debits
+
+    ####################################################################
+    #
+    def test_validate_statement_accepts_consistent_file(
+        self,
+        bofa_csv_factory: Callable[..., tuple[Path, list]],
+    ) -> None:
+        """
+        GIVEN: a BofA CSV whose rows walk cleanly from beginning to ending
+               balance and whose summary totals agree
+        WHEN:  validate_statement() is called
+        THEN:  it returns an empty error list
+        """
+        path, _ = bofa_csv_factory(num_transactions=8)
+        assert validate_statement(parse(path)) == []
+
+    ####################################################################
+    #
+    def test_validate_statement_flags_running_balance_mismatch(
+        self,
+        bofa_csv_factory: Callable[..., tuple[Path, list]],
+    ) -> None:
+        """
+        GIVEN: a parsed statement whose first transaction's running
+               balance disagrees with the beginning_balance + amount walk
+        WHEN:  validate_statement() is called
+        THEN:  it returns an error mentioning the running balance
+        """
+        from decimal import Decimal
+
+        path, _ = bofa_csv_factory(num_transactions=3)
+        stmt = parse(path)
+        stmt.transactions[0].running_balance += Decimal("100.00")
+        errors = validate_statement(stmt)
+        assert errors
+        assert any("running balance" in e for e in errors)
+
+    ####################################################################
+    #
+    def test_validate_statement_flags_summary_totals_mismatch(
+        self,
+        bofa_csv_factory: Callable[..., tuple[Path, list]],
+    ) -> None:
+        """
+        GIVEN: a parsed statement whose summary ending balance does not
+               equal beginning + credits + debits
+        WHEN:  validate_statement() is called
+        THEN:  it returns an error mentioning the summary totals
+        """
+        from decimal import Decimal
+
+        path, _ = bofa_csv_factory(num_transactions=3)
+        stmt = parse(path)
+        stmt.ending_balance += Decimal("1.00")
+        errors = validate_statement(stmt)
+        assert any("Summary totals mismatch" in e for e in errors)
