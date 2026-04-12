@@ -12,197 +12,72 @@ info:
     ## Permissions
 
     - **Banks**: read-only, any authenticated user.
-    - **Users**: list/retrieve/update restricted to staff; `/api/users/me/` available to all authenticated users.
-    - **All other resources** (accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does not bypass ownership checks.
+    - **Users**: list/retrieve/update restricted to staff; `/api/v1/users/me/` available to all authenticated users.
+    - **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does not bypass ownership checks.
 
     ## Money fields
 
     Monetary values are represented as a decimal amount paired with an ISO 4217 currency code (e.g. `amount` + `amount_currency`). Currency defaults to the account's currency if not specified.
 paths:
-  /api/accounts/:
-    get:
-      operationId: accounts_list
-      description: Return bank accounts owned by the authenticated user. Filterable
-        by account_type. Orderable by name or created_at.
-      summary: List bank accounts
-      parameters:
-      - in: query
-        name: account_type
-        schema:
-          type: string
-          enum:
-          - C
-          - S
-          - X
-        description: |-
-          * `C` - Checking
-          * `S` - Savings
-          * `X` - Credit Card
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      tags:
-      - accounts
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedBankAccountList'
-          description: ''
+  /api/token/:
     post:
-      operationId: accounts_create
-      description: Create a new bank account. The authenticated user is automatically
-        added as an owner. An 'Unallocated' budget is auto-created by a post_save
-        signal. Optionally set initial posted_balance, available_balance, and currency
-        (all immutable after creation).
-      summary: Create a bank account
+      operationId: api_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
       tags:
-      - accounts
+      - api
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BankAccountRequest'
+              $ref: '#/components/schemas/TokenObtainPairRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/BankAccountRequest'
+              $ref: '#/components/schemas/TokenObtainPairRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/BankAccountRequest'
+              $ref: '#/components/schemas/TokenObtainPairRequest'
         required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BankAccount'
-          description: ''
-  /api/accounts/{id}/:
-    get:
-      operationId: accounts_retrieve
-      description: Return a single bank account by UUID.
-      summary: Get bank account details
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - accounts
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BankAccount'
+                $ref: '#/components/schemas/TokenObtainPair'
           description: ''
-    put:
-      operationId: accounts_update
-      description: Full update of a bank account. Only 'name' is mutable after creation
-        -- bank, account_type, currency, and balances are rejected if changed.
-      summary: Update a bank account
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
+  /api/token/refresh/:
+    post:
+      operationId: api_token_refresh_create
+      description: |-
+        JWT refresh endpoint that reads the refresh token from the httpOnly
+        cookie rather than the request body.
+
+        On success, returns {"access": "<new_access_token>"} in JSON.
+        When token rotation is enabled, also rotates the refresh cookie so
+        the 14-day sliding window resets with each use.
       tags:
-      - accounts
+      - api
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BankAccountRequest'
+              $ref: '#/components/schemas/TokenRefreshRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/BankAccountRequest'
+              $ref: '#/components/schemas/TokenRefreshRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/BankAccountRequest'
+              $ref: '#/components/schemas/TokenRefreshRequest'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BankAccount'
+                $ref: '#/components/schemas/TokenRefresh'
           description: ''
-    patch:
-      operationId: accounts_partial_update
-      description: Partial update of a bank account. Only 'name' is mutable after
-        creation.
-      summary: Partially update a bank account
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - accounts
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedBankAccountRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedBankAccountRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedBankAccountRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BankAccount'
-          description: ''
-    delete:
-      operationId: accounts_destroy
-      description: Delete a bank account and all associated budgets, transactions,
-        and allocations.
-      summary: Delete a bank account
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - accounts
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/allocations/:
+  /api/v1/allocations/:
     get:
       operationId: allocations_list
       description: Return allocations belonging to the authenticated user's transactions.
@@ -228,6 +103,12 @@ paths:
         required: false
         in: query
         description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
         schema:
           type: integer
       - in: query
@@ -276,7 +157,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionAllocation'
           description: ''
-  /api/allocations/{id}/:
+  /api/v1/allocations/{id}/:
     get:
       operationId: allocations_retrieve
       description: Return a single transaction allocation by UUID.
@@ -387,7 +268,196 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/banks/:
+  /api/v1/bank-accounts/:
+    get:
+      operationId: bank_accounts_list
+      description: Return bank accounts owned by the authenticated user. Filterable
+        by account_type. Orderable by name or created_at.
+      summary: List bank accounts
+      parameters:
+      - in: query
+        name: account_type
+        schema:
+          type: string
+          enum:
+          - C
+          - S
+          - X
+        description: |-
+          * `C` - Checking
+          * `S` - Savings
+          * `X` - Credit Card
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBankAccountList'
+          description: ''
+    post:
+      operationId: bank_accounts_create
+      description: Create a new bank account. The authenticated user is automatically
+        added as an owner. An 'Unallocated' budget is auto-created by a post_save
+        signal. Optionally set initial posted_balance, available_balance, and currency
+        (all immutable after creation).
+      summary: Create a bank account
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAccount'
+          description: ''
+  /api/v1/bank-accounts/{id}/:
+    get:
+      operationId: bank_accounts_retrieve
+      description: Return a single bank account by UUID.
+      summary: Get bank account details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAccount'
+          description: ''
+    put:
+      operationId: bank_accounts_update
+      description: Full update of a bank account. Only 'name' is mutable after creation
+        -- bank, account_type, currency, and balances are rejected if changed.
+      summary: Update a bank account
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAccount'
+          description: ''
+    patch:
+      operationId: bank_accounts_partial_update
+      description: Partial update of a bank account. Only 'name' is mutable after
+        creation.
+      summary: Partially update a bank account
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBankAccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBankAccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBankAccountRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAccount'
+          description: ''
+    delete:
+      operationId: bank_accounts_destroy
+      description: Delete a bank account and all associated budgets, transactions,
+        and allocations.
+      summary: Delete a bank account
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/banks/:
     get:
       operationId: banks_list
       description: Return all banks in the system. Banks are shared reference data
@@ -395,10 +465,22 @@ paths:
         them.
       summary: List banks
       parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
       - name: page
         required: false
         in: query
         description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
         schema:
           type: integer
       tags:
@@ -412,7 +494,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedBankList'
           description: ''
-  /api/banks/{id}/:
+  /api/v1/banks/{id}/:
     get:
       operationId: banks_retrieve
       description: Return a single bank by UUID.
@@ -435,7 +517,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Bank'
           description: ''
-  /api/budgets/:
+  /api/v1/budgets/:
     get:
       operationId: budgets_list
       description: Return budgets belonging to the authenticated user's accounts.
@@ -474,6 +556,12 @@ paths:
         required: false
         in: query
         description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
         schema:
           type: integer
       - in: query
@@ -527,7 +615,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Budget'
           description: ''
-  /api/budgets/{id}/:
+  /api/v1/budgets/{id}/:
     get:
       operationId: budgets_retrieve
       description: Return a single budget by UUID.
@@ -638,7 +726,7 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/currencies/:
+  /api/v1/currencies/:
     get:
       operationId: currencies_retrieve
       description: Return all ISO 4217 currency codes supported by the system, sorted
@@ -652,7 +740,7 @@ paths:
       responses:
         '200':
           description: List of supported currencies.
-  /api/internal-transactions/:
+  /api/v1/internal-transactions/:
     get:
       operationId: internal_transactions_list
       description: Return budget-to-budget transfers belonging to the authenticated
@@ -690,6 +778,12 @@ paths:
         required: false
         in: query
         description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
         schema:
           type: integer
       - in: query
@@ -738,7 +832,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/InternalTransaction'
           description: ''
-  /api/internal-transactions/{id}/:
+  /api/v1/internal-transactions/{id}/:
     get:
       operationId: internal_transactions_retrieve
       description: Return a single internal transaction by UUID.
@@ -761,38 +855,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/InternalTransaction'
           description: ''
-  /api/token/refresh/:
-    post:
-      operationId: token_refresh_create
-      description: |-
-        JWT refresh endpoint that reads the refresh token from the httpOnly
-        cookie rather than the request body.
-
-        On success, returns {"access": "<new_access_token>"} in JSON.
-        When token rotation is enabled, also rotates the refresh cookie so
-        the 14-day sliding window resets with each use.
-      tags:
-      - token
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenRefresh'
-          description: ''
-  /api/transactions/:
+  /api/v1/transactions/:
     get:
       operationId: transactions_list
       description: Return transactions belonging to the authenticated user's accounts.
@@ -828,6 +891,12 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       - in: query
         name: pending
         schema:
@@ -855,6 +924,7 @@ paths:
           - check_deposit
           - courtesy_credit
           - fee
+          - fx_order
           - interest_credit
           - migration_interbank_transfer
           - pin_purchase
@@ -887,6 +957,7 @@ paths:
           * `ach_reversal` - ACH Reversal
           * `adjustment` - Adjustment
           * `signature_return` - Signature return
+          * `fx_order` - FX Order
           * `` - --------
       tags:
       - transactions
@@ -929,7 +1000,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
           description: ''
-  /api/transactions/{id}/:
+  /api/v1/transactions/{id}/:
     get:
       operationId: transactions_retrieve
       description: Return a single transaction by UUID.
@@ -1040,16 +1111,28 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/users/:
+  /api/v1/users/:
     get:
       operationId: users_list
       description: Return all users. Restricted to staff/admin users.
       summary: List users (staff only)
       parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
       - name: page
         required: false
         in: query
         description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
         schema:
           type: integer
       tags:
@@ -1063,7 +1146,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedUserList'
           description: ''
-  /api/users/{username}/:
+  /api/v1/users/{username}/:
     get:
       operationId: users_retrieve
       description: Return a single user by username. Restricted to staff/admin users.
@@ -1156,7 +1239,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
-  /api/users/me/:
+  /api/v1/users/me/:
     get:
       operationId: users_me_retrieve
       description: Return the authenticated user's own profile. Available to any authenticated
@@ -1228,12 +1311,13 @@ components:
         Serializer for bank accounts.
 
         On create the caller supplies name, bank (UUID), account_type,
-        and optionally currency and initial balances.  The view adds the
-        requesting user to owners.  The unallocated budget is auto-created
-        by the post_save signal and returned in the response.
+        and optionally currency, account_number, and initial balances.
+        The view adds the requesting user to owners.  The unallocated
+        budget is auto-created by the post_save signal and returned in
+        the response.
 
-        After creation only name is updatable.  Currency and balances are
-        immutable once the account exists.
+        After creation only name is updatable.  Currency, account_number,
+        and balances are immutable once the account exists.
 
         Group assignment is not yet supported via the API.
       properties:
@@ -1254,6 +1338,10 @@ components:
           readOnly: true
         account_type:
           $ref: '#/components/schemas/AccountTypeEnum'
+        account_number:
+          type: string
+          nullable: true
+          maxLength: 12
         currency:
           type: string
           description: ISO 4217 currency code (e.g. USD, EUR, GBP).
@@ -1301,12 +1389,13 @@ components:
         Serializer for bank accounts.
 
         On create the caller supplies name, bank (UUID), account_type,
-        and optionally currency and initial balances.  The view adds the
-        requesting user to owners.  The unallocated budget is auto-created
-        by the post_save signal and returned in the response.
+        and optionally currency, account_number, and initial balances.
+        The view adds the requesting user to owners.  The unallocated
+        budget is auto-created by the post_save signal and returned in
+        the response.
 
-        After creation only name is updatable.  Currency and balances are
-        immutable once the account exists.
+        After creation only name is updatable.  Currency, account_number,
+        and balances are immutable once the account exists.
 
         Group assignment is not yet supported via the API.
       properties:
@@ -1319,6 +1408,10 @@ components:
           format: uuid
         account_type:
           $ref: '#/components/schemas/AccountTypeEnum'
+        account_number:
+          type: string
+          nullable: true
+          maxLength: 12
         currency:
           type: string
           minLength: 1
@@ -2088,12 +2181,13 @@ components:
         Serializer for bank accounts.
 
         On create the caller supplies name, bank (UUID), account_type,
-        and optionally currency and initial balances.  The view adds the
-        requesting user to owners.  The unallocated budget is auto-created
-        by the post_save signal and returned in the response.
+        and optionally currency, account_number, and initial balances.
+        The view adds the requesting user to owners.  The unallocated
+        budget is auto-created by the post_save signal and returned in
+        the response.
 
-        After creation only name is updatable.  Currency and balances are
-        immutable once the account exists.
+        After creation only name is updatable.  Currency, account_number,
+        and balances are immutable once the account exists.
 
         Group assignment is not yet supported via the API.
       properties:
@@ -2106,6 +2200,10 @@ components:
           format: uuid
         account_type:
           $ref: '#/components/schemas/AccountTypeEnum'
+        account_number:
+          type: string
+          nullable: true
+          maxLength: 12
         currency:
           type: string
           minLength: 1
@@ -2271,6 +2369,32 @@ components:
           type: string
           title: Name of User
           maxLength: 255
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
     TokenRefresh:
       type: object
       properties:
@@ -2579,6 +2703,7 @@ components:
       - ach_reversal
       - adjustment
       - signature_return
+      - fx_order
       type: string
       description: |-
         * `signature_purchase` - Signature Purchase
@@ -2602,6 +2727,7 @@ components:
         * `ach_reversal` - ACH Reversal
         * `adjustment` - Adjustment
         * `signature_return` - Signature return
+        * `fx_order` - FX Order
         * `` - --------
     User:
       type: object

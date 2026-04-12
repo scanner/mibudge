@@ -9,8 +9,8 @@ All endpoints require JWT authentication via `Authorization: Bearer <token>` hea
 ## Permissions
 
 - **Banks**: read-only, any authenticated user.
-- **Users**: list/retrieve/update restricted to staff; `/api/users/me/` available to all authenticated users.
-- **All other resources** (accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does not bypass ownership checks.
+- **Users**: list/retrieve/update restricted to staff; `/api/v1/users/me/` available to all authenticated users.
+- **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does not bypass ownership checks.
 
 ## Money fields
 
@@ -24,251 +24,66 @@ Monetary values are represented as a decimal amount paired with an ISO 4217 curr
 
 ## Endpoints
 
-### accounts
+### api
 
-#### `GET /api/accounts/`
+#### `POST /api/token/`
 
-**Operation:** `accounts_list`
+**Operation:** `api_token_create`
 
-Return bank accounts owned by the authenticated user. Filterable by account_type. Orderable by name or created_at.
-
-**Parameters:**
-
-- `account_type` (query, optional) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-
-**Response 200:** 
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-#### `POST /api/accounts/`
-
-**Operation:** `accounts_create`
-
-Create a new bank account. The authenticated user is automatically added as an owner. An 'Unallocated' budget is auto-created by a post_save signal. Optionally set initial posted_balance, available_balance, and currency (all immutable after creation).
+Takes a set of user credentials and returns an access and refresh JSON web
+token pair to prove the authentication of those credentials.
 
 **Request Body** (`application/json`):
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
+- **`username`** (`string`) *(required)*
+- **`password`** (`string`) *(required)*
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
+- **`username`** (`string`) *(required)*
+- **`password`** (`string`) *(required)*
 
 **Request Body** (`multipart/form-data`):
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-
-**Response 201:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-#### `GET /api/accounts/{id}/`
-
-**Operation:** `accounts_retrieve`
-
-Return a single bank account by UUID.
-
-**Parameters:**
-
-- `id` (path, required)
+- **`username`** (`string`) *(required)*
+- **`password`** (`string`) *(required)*
 
 **Response 200:** 
 
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+- **`access`** (`string`) *(required, read-only)*
+- **`refresh`** (`string`) *(required, read-only)*
 
-#### `PUT /api/accounts/{id}/`
+#### `POST /api/token/refresh/`
 
-**Operation:** `accounts_update`
+**Operation:** `api_token_refresh_create`
 
-Full update of a bank account. Only 'name' is mutable after creation -- bank, account_type, currency, and balances are rejected if changed.
+JWT refresh endpoint that reads the refresh token from the httpOnly
+cookie rather than the request body.
 
-**Parameters:**
-
-- `id` (path, required)
+On success, returns {"access": "<new_access_token>"} in JSON.
+When token rotation is enabled, also rotates the refresh cookie so
+the 14-day sliding window resets with each use.
 
 **Request Body** (`application/json`):
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
+- **`refresh`** (`string`) *(required)*
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
+- **`refresh`** (`string`) *(required)*
 
 **Request Body** (`multipart/form-data`):
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
+- **`refresh`** (`string`) *(required)*
 
 **Response 200:** 
 
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-#### `PATCH /api/accounts/{id}/`
-
-**Operation:** `accounts_partial_update`
-
-Partial update of a bank account. Only 'name' is mutable after creation.
-
-**Parameters:**
-
-- `id` (path, required)
-
-**Request Body** (`application/json`):
-
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-#### `DELETE /api/accounts/{id}/`
-
-**Operation:** `accounts_destroy`
-
-Delete a bank account and all associated budgets, transactions, and allocations.
-
-**Parameters:**
-
-- `id` (path, required)
-
-**Response 204:** No response body
+- **`access`** (`string`) *(required, read-only)*
+- **`refresh`** (`string`) *(required)*
 
 ### allocations
 
-#### `GET /api/allocations/`
+#### `GET /api/v1/allocations/`
 
 **Operation:** `allocations_list`
 
@@ -280,6 +95,7 @@ Return allocations belonging to the authenticated user's transactions. Filterabl
 - `category` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
 - `transaction` (query, optional)
 
 **Response 200:** 
@@ -289,7 +105,7 @@ Return allocations belonging to the authenticated user's transactions. Filterabl
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
-#### `POST /api/allocations/`
+#### `POST /api/v1/allocations/`
 
 **Operation:** `allocations_create`
 
@@ -933,7 +749,7 @@ Allocate a portion of a transaction's amount to a budget. Required: transaction 
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `GET /api/allocations/{id}/`
+#### `GET /api/v1/allocations/{id}/`
 
 **Operation:** `allocations_retrieve`
 
@@ -1107,7 +923,7 @@ Return a single transaction allocation by UUID.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `PUT /api/allocations/{id}/`
+#### `PUT /api/v1/allocations/{id}/`
 
 **Operation:** `allocations_update`
 
@@ -1755,7 +1571,7 @@ Full update of an allocation. After creation, budget, category, and memo are upd
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `PATCH /api/allocations/{id}/`
+#### `PATCH /api/v1/allocations/{id}/`
 
 **Operation:** `allocations_partial_update`
 
@@ -2403,7 +2219,7 @@ Partial update of an allocation. After creation, budget, category, and memo are 
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `DELETE /api/allocations/{id}/`
+#### `DELETE /api/v1/allocations/{id}/`
 
 **Operation:** `allocations_destroy`
 
@@ -2415,17 +2231,22 @@ Delete a transaction allocation. Budget balance changes are reversed by the pre_
 
 **Response 204:** No response body
 
-### banks
+### bank-accounts
 
-#### `GET /api/banks/`
+#### `GET /api/v1/bank-accounts/`
 
-**Operation:** `banks_list`
+**Operation:** `bank_accounts_list`
 
-Return all banks in the system. Banks are shared reference data managed through the admin -- any authenticated user can list and retrieve them.
+Return bank accounts owned by the authenticated user. Filterable by account_type. Orderable by name or created_at.
 
 **Parameters:**
 
+- `account_type` (query, optional) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card
+- `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
 
 **Response 200:** 
 
@@ -2434,7 +2255,260 @@ Return all banks in the system. Banks are shared reference data managed through 
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
-#### `GET /api/banks/{id}/`
+#### `POST /api/v1/bank-accounts/`
+
+**Operation:** `bank_accounts_create`
+
+Create a new bank account. The authenticated user is automatically added as an owner. An 'Unallocated' budget is auto-created by a post_save signal. Optionally set initial posted_balance, available_balance, and currency (all immutable after creation).
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Response 201:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`owners`** (`array`) *(required, read-only)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`posted_balance_currency`** (`string`) *(required, read-only)*
+- **`available_balance`** (`string`)
+- **`available_balance_currency`** (`string`) *(required, read-only)*
+- **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `GET /api/v1/bank-accounts/{id}/`
+
+**Operation:** `bank_accounts_retrieve`
+
+Return a single bank account by UUID.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`owners`** (`array`) *(required, read-only)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`posted_balance_currency`** (`string`) *(required, read-only)*
+- **`available_balance`** (`string`)
+- **`available_balance_currency`** (`string`) *(required, read-only)*
+- **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `PUT /api/v1/bank-accounts/{id}/`
+
+**Operation:** `bank_accounts_update`
+
+Full update of a bank account. Only 'name' is mutable after creation -- bank, account_type, currency, and balances are rejected if changed.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`owners`** (`array`) *(required, read-only)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`posted_balance_currency`** (`string`) *(required, read-only)*
+- **`available_balance`** (`string`)
+- **`available_balance_currency`** (`string`) *(required, read-only)*
+- **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `PATCH /api/v1/bank-accounts/{id}/`
+
+**Operation:** `bank_accounts_partial_update`
+
+Partial update of a bank account. Only 'name' is mutable after creation.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`)
+- **`bank`** (`string`)
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`)
+- **`bank`** (`string`)
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`)
+- **`bank`** (`string`)
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`owners`** (`array`) *(required, read-only)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`posted_balance_currency`** (`string`) *(required, read-only)*
+- **`available_balance`** (`string`)
+- **`available_balance_currency`** (`string`) *(required, read-only)*
+- **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `DELETE /api/v1/bank-accounts/{id}/`
+
+**Operation:** `bank_accounts_destroy`
+
+Delete a bank account and all associated budgets, transactions, and allocations.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 204:** No response body
+
+### banks
+
+#### `GET /api/v1/banks/`
+
+**Operation:** `banks_list`
+
+Return all banks in the system. Banks are shared reference data managed through the admin -- any authenticated user can list and retrieve them.
+
+**Parameters:**
+
+- `ordering` (query, optional) — Which field to use when ordering the results.
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `GET /api/v1/banks/{id}/`
 
 **Operation:** `banks_retrieve`
 
@@ -2455,7 +2529,7 @@ Return a single bank by UUID.
 
 ### budgets
 
-#### `GET /api/budgets/`
+#### `GET /api/v1/budgets/`
 
 **Operation:** `budgets_list`
 
@@ -2470,6 +2544,7 @@ Return budgets belonging to the authenticated user's accounts. Filterable by ban
 * `A` - Associated Fill-up Goal
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
 - `paused` (query, optional)
 - `search` (query, optional) — A search term.
 
@@ -2480,7 +2555,7 @@ Return budgets belonging to the authenticated user's accounts. Filterable by ban
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
-#### `POST /api/budgets/`
+#### `POST /api/v1/budgets/`
 
 **Operation:** `budgets_create`
 
@@ -2570,7 +2645,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `GET /api/budgets/{id}/`
+#### `GET /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_retrieve`
 
@@ -2607,7 +2682,7 @@ Return a single budget by UUID.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `PUT /api/budgets/{id}/`
+#### `PUT /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_update`
 
@@ -2701,7 +2776,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `PATCH /api/budgets/{id}/`
+#### `PATCH /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_partial_update`
 
@@ -2795,7 +2870,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `DELETE /api/budgets/{id}/`
+#### `DELETE /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_destroy`
 
@@ -2809,7 +2884,7 @@ Delete a budget. The unallocated budget cannot be deleted -- returns 403.
 
 ### currencies
 
-#### `GET /api/currencies/`
+#### `GET /api/v1/currencies/`
 
 **Operation:** `currencies_retrieve`
 
@@ -2819,7 +2894,7 @@ Return all ISO 4217 currency codes supported by the system, sorted by code. Each
 
 ### internal-transactions
 
-#### `GET /api/internal-transactions/`
+#### `GET /api/v1/internal-transactions/`
 
 **Operation:** `internal_transactions_list`
 
@@ -2833,6 +2908,7 @@ Return budget-to-budget transfers belonging to the authenticated user's accounts
 - `dst_budget` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
 - `src_budget` (query, optional)
 
 **Response 200:** 
@@ -2842,7 +2918,7 @@ Return budget-to-budget transfers belonging to the authenticated user's accounts
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
-#### `POST /api/internal-transactions/`
+#### `POST /api/v1/internal-transactions/`
 
 **Operation:** `internal_transactions_create`
 
@@ -2885,7 +2961,7 @@ Transfer money between two budgets in the same bank account. Required: bank_acco
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `GET /api/internal-transactions/{id}/`
+#### `GET /api/v1/internal-transactions/{id}/`
 
 **Operation:** `internal_transactions_retrieve`
 
@@ -2911,39 +2987,9 @@ Return a single internal transaction by UUID.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-### token
-
-#### `POST /api/token/refresh/`
-
-**Operation:** `token_refresh_create`
-
-JWT refresh endpoint that reads the refresh token from the httpOnly
-cookie rather than the request body.
-
-On success, returns {"access": "<new_access_token>"} in JSON.
-When token rotation is enabled, also rotates the refresh cookie so
-the 14-day sliding window resets with each use.
-
-**Request Body** (`application/json`):
-
-- **`refresh`** (`string`) *(required)*
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`refresh`** (`string`) *(required)*
-
-**Request Body** (`multipart/form-data`):
-
-- **`refresh`** (`string`) *(required)*
-
-**Response 200:** 
-
-- **`access`** (`string`) *(required, read-only)*
-- **`refresh`** (`string`) *(required)*
-
 ### transactions
 
-#### `GET /api/transactions/`
+#### `GET /api/v1/transactions/`
 
 **Operation:** `transactions_list`
 
@@ -2956,6 +3002,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 - `date_to` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
 - `pending` (query, optional)
 - `search` (query, optional) — A search term.
 - `transaction_type` (query, optional) — * `signature_purchase` - Signature Purchase
@@ -2979,6 +3026,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 * `ach_reversal` - ACH Reversal
 * `adjustment` - Adjustment
 * `signature_return` - Signature return
+* `fx_order` - FX Order
 * `` - --------
 
 **Response 200:** 
@@ -2988,7 +3036,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
-#### `POST /api/transactions/`
+#### `POST /api/v1/transactions/`
 
 **Operation:** `transactions_create`
 
@@ -3055,7 +3103,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `GET /api/transactions/{id}/`
+#### `GET /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_retrieve`
 
@@ -3087,7 +3135,7 @@ Return a single transaction by UUID.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `PUT /api/transactions/{id}/`
+#### `PUT /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_update`
 
@@ -3158,7 +3206,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `PATCH /api/transactions/{id}/`
+#### `PATCH /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_partial_update`
 
@@ -3229,7 +3277,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-#### `DELETE /api/transactions/{id}/`
+#### `DELETE /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_destroy`
 
@@ -3243,7 +3291,7 @@ Delete a transaction. Balance changes are reversed by the pre_delete signal. Ass
 
 ### users
 
-#### `GET /api/users/`
+#### `GET /api/v1/users/`
 
 **Operation:** `users_list`
 
@@ -3251,7 +3299,9 @@ Return all users. Restricted to staff/admin users.
 
 **Parameters:**
 
+- `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
 
 **Response 200:** 
 
@@ -3260,7 +3310,7 @@ Return all users. Restricted to staff/admin users.
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
-#### `GET /api/users/{username}/`
+#### `GET /api/v1/users/{username}/`
 
 **Operation:** `users_retrieve`
 
@@ -3276,7 +3326,7 @@ Return a single user by username. Restricted to staff/admin users.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 
-#### `PUT /api/users/{username}/`
+#### `PUT /api/v1/users/{username}/`
 
 **Operation:** `users_update`
 
@@ -3307,7 +3357,7 @@ Full update of a user profile. Restricted to staff/admin users.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 
-#### `PATCH /api/users/{username}/`
+#### `PATCH /api/v1/users/{username}/`
 
 **Operation:** `users_partial_update`
 
@@ -3338,7 +3388,7 @@ Partial update of a user profile. Restricted to staff/admin users.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 
-#### `GET /api/users/me/`
+#### `GET /api/v1/users/me/`
 
 **Operation:** `users_me_retrieve`
 
@@ -3377,12 +3427,13 @@ Banks are shared reference data managed only through the admin.
 Serializer for bank accounts.
 
 On create the caller supplies name, bank (UUID), account_type,
-and optionally currency and initial balances.  The view adds the
-requesting user to owners.  The unallocated budget is auto-created
-by the post_save signal and returned in the response.
+and optionally currency, account_number, and initial balances.
+The view adds the requesting user to owners.  The unallocated
+budget is auto-created by the post_save signal and returned in
+the response.
 
-After creation only name is updatable.  Currency and balances are
-immutable once the account exists.
+After creation only name is updatable.  Currency, account_number,
+and balances are immutable once the account exists.
 
 Group assignment is not yet supported via the API.
 
@@ -3393,6 +3444,7 @@ Group assignment is not yet supported via the API.
 - **`account_type`** (`string`) — * `C` - Checking
 * `S` - Savings
 * `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`posted_balance_currency`** (`string`) *(required, read-only)*
@@ -3407,12 +3459,13 @@ Group assignment is not yet supported via the API.
 Serializer for bank accounts.
 
 On create the caller supplies name, bank (UUID), account_type,
-and optionally currency and initial balances.  The view adds the
-requesting user to owners.  The unallocated budget is auto-created
-by the post_save signal and returned in the response.
+and optionally currency, account_number, and initial balances.
+The view adds the requesting user to owners.  The unallocated
+budget is auto-created by the post_save signal and returned in
+the response.
 
-After creation only name is updatable.  Currency and balances are
-immutable once the account exists.
+After creation only name is updatable.  Currency, account_number,
+and balances are immutable once the account exists.
 
 Group assignment is not yet supported via the API.
 
@@ -3421,6 +3474,7 @@ Group assignment is not yet supported via the API.
 - **`account_type`** (`string`) — * `C` - Checking
 * `S` - Savings
 * `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
@@ -3765,12 +3819,13 @@ field declaration is needed.
 Serializer for bank accounts.
 
 On create the caller supplies name, bank (UUID), account_type,
-and optionally currency and initial balances.  The view adds the
-requesting user to owners.  The unallocated budget is auto-created
-by the post_save signal and returned in the response.
+and optionally currency, account_number, and initial balances.
+The view adds the requesting user to owners.  The unallocated
+budget is auto-created by the post_save signal and returned in
+the response.
 
-After creation only name is updatable.  Currency and balances are
-immutable once the account exists.
+After creation only name is updatable.  Currency, account_number,
+and balances are immutable once the account exists.
 
 Group assignment is not yet supported via the API.
 
@@ -3779,6 +3834,7 @@ Group assignment is not yet supported via the API.
 - **`account_type`** (`string`) — * `C` - Checking
 * `S` - Savings
 * `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
@@ -4015,6 +4071,16 @@ field declaration is needed.
 
 - **`username`** (`string`) — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+
+### TokenObtainPair
+
+- **`access`** (`string`) *(required, read-only)*
+- **`refresh`** (`string`) *(required, read-only)*
+
+### TokenObtainPairRequest
+
+- **`username`** (`string`) *(required)*
+- **`password`** (`string`) *(required)*
 
 ### TokenRefresh
 
@@ -4461,6 +4527,7 @@ field declaration is needed.
 * `ach_reversal` - ACH Reversal
 * `adjustment` - Adjustment
 * `signature_return` - Signature return
+* `fx_order` - FX Order
 * `` - --------
 
 
