@@ -97,6 +97,7 @@ THIRD_PARTY_APPS = [
     "django_extensions",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",
     "corsheaders",
     "djmoney",
     "recurrence",
@@ -356,8 +357,49 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/hour",
+        "user": "1000/hour",
+    },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 40,
+    "PAGE_SIZE": 100,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# drf-spectacular
+# ------------------------------------------------------------------------------
+SPECTACULAR_SETTINGS = {
+    "TITLE": "mibudge API",
+    "DESCRIPTION": (
+        "REST API for the mibudge personal budgeting service.\n\n"
+        "## Authentication\n\n"
+        "All endpoints require JWT authentication via "
+        "`Authorization: Bearer <token>` header. Obtain tokens "
+        "through the login flow; refresh via "
+        "`POST /api/token/refresh/` (httpOnly cookie).\n\n"
+        "## Permissions\n\n"
+        "- **Banks**: read-only, any authenticated user.\n"
+        "- **Users**: list/retrieve/update restricted to staff; "
+        "`/api/users/me/` available to all authenticated users.\n"
+        "- **All other resources** (accounts, budgets, transactions, "
+        "allocations, internal transactions): scoped to bank account "
+        "ownership. Only users in an account's `owners` M2M can "
+        "access that account and its related objects. Staff and "
+        "superuser status does not bypass ownership checks.\n\n"
+        "## Money fields\n\n"
+        "Monetary values are represented as a decimal amount paired "
+        "with an ISO 4217 currency code (e.g. `amount` + "
+        "`amount_currency`). Currency defaults to the account's "
+        "currency if not specified."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": "/api/",
 }
 
 # djangorestframework-simplejwt
@@ -443,6 +485,36 @@ if DEBUG:
 # Mibudge
 # ------------------------------------------------------------------------------
 DEFAULT_CURRENCY = "USD"
+
+# Restrict djmoney's currency choices to a curated list of major world
+# currencies.  This keeps migration snapshots small and the /api/currencies/
+# response focused.  djmoney reads this setting before falling back to the
+# full moneyed.CURRENCIES list (300+ entries), so changing this list will
+# produce a migration that updates the choices= on all CurrencyField columns
+# (a no-op at the database level -- varchar(3) with no DB constraint).
+#
+CURRENCIES = [
+    "USD",  # US Dollar
+    "EUR",  # Euro
+    "GBP",  # British Pound Sterling
+    "CAD",  # Canadian Dollar
+    "JPY",  # Japanese Yen
+    "AUD",  # Australian Dollar
+    "CHF",  # Swiss Franc
+    "CNY",  # Chinese Yuan
+    "HKD",  # Hong Kong Dollar
+    "SGD",  # Singapore Dollar
+    "NZD",  # New Zealand Dollar
+    "SEK",  # Swedish Krona
+    "NOK",  # Norwegian Krone
+    "DKK",  # Danish Krone
+    "MXN",  # Mexican Peso
+    "BRL",  # Brazilian Real
+    "INR",  # Indian Rupee
+    "KRW",  # South Korean Won
+    "ZAR",  # South African Rand
+    "TWD",  # New Taiwan Dollar
+]
 
 # django-fernet-encrypted-fields
 # ------------------------------------------------------------------------------

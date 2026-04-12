@@ -9,7 +9,13 @@ DOCKER_BUILDKIT := 1
 # at runtime via .env / docker-compose.
 BUILD_SALT_KEY := $(shell openssl rand -hex 32)
 
-.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build uv-sync uv-lock uv-add uv-add-dev uv-upgrade help
+.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+
+env: $(ROOT_DIR)/.env	## Copy deployment/dot-env.dev to .env if it does not exist
+
+$(ROOT_DIR)/.env:
+	@cp $(ROOT_DIR)/deployment/dot-env.dev $(ROOT_DIR)/.env
+	@echo "Created .env from deployment/dot-env.dev"
 
 build:	## Build prod and dev Docker images
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target prod --tag mibudge:latest .
@@ -62,7 +68,7 @@ createadmin: migrate   ## Create admin account (admin / testpass1234)
 logs:	## Tail the logs for backend, celeryworker, celerybeat
 	@docker compose logs -f backend celeryworker celerybeat
 
-test: .venv	## Run all of the tests
+test: .venv $(ROOT_DIR)/.env	## Run all of the tests
 	@$(UV_RUN) pytest app/
 
 uv-sync: .venv	## Sync .venv with uv.lock after dependency changes
@@ -87,6 +93,17 @@ uv-add-dev:	## Add a dev dependency (usage: make uv-add-dev PACKAGE=pytest-xdist
 
 uv-upgrade:	## Upgrade all dependencies to latest compatible versions
 	@uv sync --upgrade
+
+api-schema: .venv docs	## Generate OpenAPI schema YAML into docs/openapi.yaml
+	@PYTHONPATH=$(ROOT_DIR)/app $(UV_RUN) python app/manage.py spectacular --color --file docs/openapi.yaml
+	@echo "OpenAPI schema written to docs/openapi.yaml"
+
+api-docs: api-schema	## Generate API markdown docs from OpenAPI schema
+	@$(UV_RUN) python app/scripts/generate_api_docs.py docs/openapi.yaml docs/api.md
+	@echo "API docs written to docs/api.md"
+
+docs:
+	@mkdir -p $(ROOT_DIR)/docs
 
 help:	## Show this help.
 	@grep -hE '^[A-Za-z0-9_ \-]*?:.*##.*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'

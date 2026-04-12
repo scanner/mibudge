@@ -2,6 +2,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 from config.views import spa_shell_view
 from users.views import cookie_token_refresh_view
@@ -18,6 +23,18 @@ urlpatterns = [
     path("api/", include("config.api_router")),
     # JWT refresh -- reads refresh token from httpOnly cookie, returns new access token.
     path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
+    # OpenAPI schema + interactive docs
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
     # SPA shell -- serves index.html for /app/ and all sub-paths.
     # Vue Router handles all client-side navigation from here.
     path("app/", spa_shell_view, name="spa-shell"),

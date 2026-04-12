@@ -1,6 +1,7 @@
 # system imports
 #
 from datetime import UTC, datetime
+from typing import Any
 
 # 3rd party imports
 #
@@ -34,20 +35,55 @@ UNALLOCATED_BUDGET_NAME = "Unallocated"  # XXX I18N this..
 ####################################################################
 #
 @receiver(pre_save, sender=BankAccount)
-def bank_account_pre_save(sender, instance, **kwargs):
+def bank_account_pre_save(
+    sender: type[BankAccount], instance: BankAccount, **kwargs: Any
+) -> None:
+    """Propagate currency settings when a bank account is created.
+
+    On creation, if no currency is set, inherits the bank's
+    default_currency.  Always aligns posted_balance and
+    available_balance currencies with the account's currency.
+
+    Args:
+        sender: The BankAccount model class.
+        instance: The BankAccount instance about to be saved.
+        **kwargs: Additional signal keyword arguments.
     """
-    When a bank account is created
-    """
-    pass
+    bank_account = instance
+
+    if bank_account.pkid is None:
+        # Default to the bank's currency if the caller did not
+        # specify one.
+        #
+        if not bank_account.currency:
+            bank_account.currency = bank_account.bank.default_currency
+
+        # Align balance currencies with the account currency.
+        #
+        bank_account.posted_balance_currency = bank_account.currency
+        bank_account.available_balance_currency = bank_account.currency
 
 
 ####################################################################
 #
 @receiver(post_save, sender=BankAccount)
-def bank_account_post_save(sender, instance, created, **kwargs):
-    """
-    After a bank account is saved. This is where we create and setup the
-    'unallocated budget'.
+def bank_account_post_save(
+    sender: type[BankAccount],
+    instance: BankAccount,
+    created: bool,
+    **kwargs: Any,
+) -> None:
+    """Create the unallocated budget when a new bank account is saved.
+
+    The unallocated budget is created in post_save (not pre_save)
+    because it needs a saved BankAccount to reference via FK.  Its
+    initial balance matches the account's available_balance.
+
+    Args:
+        sender: The BankAccount model class.
+        instance: The BankAccount instance that was just saved.
+        created: True if this is a new record.
+        **kwargs: Additional signal keyword arguments.
     """
     bank_account = instance  # To make the code easier to read
 
@@ -71,6 +107,29 @@ def bank_account_post_save(sender, instance, created, **kwargs):
         BankAccount.objects.filter(id=bank_account.id).update(
             unallocated_budget_id=unallocated_budget.id
         )
+
+
+####################################################################
+#
+@receiver(pre_save, sender=Budget)
+def budget_pre_save(
+    sender: type[Budget], instance: Budget, **kwargs: Any
+) -> None:
+    """Inherit currency from the bank account on every save.
+
+    Sets balance_currency and target_balance_currency to match the
+    bank account's currency.  Runs on every save (not just creation)
+    so the currencies stay aligned if a budget is saved after its
+    bank account's currency was corrected.
+
+    Args:
+        sender: The Budget model class.
+        instance: The Budget instance about to be saved.
+        **kwargs: Additional signal keyword arguments.
+    """
+    acct_currency = instance.bank_account.currency
+    instance.balance_currency = acct_currency  # type: ignore[attr-defined]
+    instance.target_balance_currency = acct_currency  # type: ignore[attr-defined]
 
 
 ####################################################################
