@@ -20,7 +20,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: uv run mypy ./app/
+        entry: uv run mypy ./app/ ./importers/
         language: system
         pass_filenames: false
         types: [python]

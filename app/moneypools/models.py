@@ -553,7 +553,7 @@ class Transaction(TransactionBaseClass):
     A transaction detailing a credit/debit from some 3rd party
 
     NOTE: if this is associated with a budget, deleting the budget
-    moves it back to the 'safe to spend' budget.
+    moves it back to the 'unallocated' budget.
     """
 
     #####################################################################

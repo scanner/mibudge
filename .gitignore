@@ -283,3 +283,4 @@ project.css
 *.min.js
 vendors.js
 *.pem
+.ruff_formatted

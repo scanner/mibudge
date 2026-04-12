@@ -69,7 +69,7 @@ logs:	## Tail the logs for backend, celeryworker, celerybeat
 	@docker compose logs -f backend celeryworker celerybeat
 
 test: .venv $(ROOT_DIR)/.env	## Run all of the tests
-	@$(UV_RUN) pytest app/
+	@$(UV_RUN) pytest
 
 uv-sync: .venv	## Sync .venv with uv.lock after dependency changes
 	@uv sync

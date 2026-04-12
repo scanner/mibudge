@@ -24,18 +24,18 @@ $(ROOT_DIR)/.venv: pyproject.toml uv.lock $(ROOT_DIR)/.python-version
 .venv:: $(ROOT_DIR)/.venv
 
 squeegee: .venv ruff-format mypy
-	@$(UV_RUN) ruff check app/
+	@$(UV_RUN) ruff check app/ importers/
 
 lint: .venv .git/hooks/pre-commit
 	@$(UV_RUN) pre-commit run -a
 
-PY_FILES=$(shell find $(ROOT_DIR)/app/ -type f -name '*.py' 2>/dev/null)
+PY_FILES=$(shell find $(ROOT_DIR)/app/ $(ROOT_DIR)/importers/ -type f -name '*.py' 2>/dev/null)
 
 .ruff_formatted: $(PY_FILES) .venv
-	@$(UV_RUN) ruff format app/
+	@$(UV_RUN) ruff format app/ importers/
 	@touch .ruff_formatted
 
 ruff-format: .ruff_formatted
 
 mypy: .venv
-	@$(UV_RUN) mypy app/
+	@$(UV_RUN) mypy app/ importers/

@@ -7,6 +7,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from config.views import spa_shell_view
 from users.views import cookie_token_refresh_view
@@ -21,7 +22,12 @@ urlpatterns = [
     path("mp/", include("moneypools.urls")),
     # API
     path("api/", include("config.api_router")),
-    # JWT refresh -- reads refresh token from httpOnly cookie, returns new access token.
+    # JWT token endpoints.
+    # /api/token/        -- POST username+password, returns access+refresh pair.
+    #                       Used by scripts and native apps (no browser needed).
+    # /api/token/refresh/ -- reads refresh token from httpOnly cookie, returns
+    #                       new access token (browser SPA flow).
+    path("api/token/", TokenObtainPairView.as_view(), name="token-obtain"),
     path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
     # OpenAPI schema + interactive docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
