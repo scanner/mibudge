@@ -45,8 +45,7 @@ down:	## docker compose down
 purge:	## docker compose down, removing all volumes (destroys db data)
 	@docker compose down --remove-orphans --volumes
 
-restart:	## docker compose restart
-	@docker compose restart
+restart: down up	## docker compose down, then up
 
 shell:	## Make a bash shell in an ephemeral backend container
 	@docker compose run --rm backend /bin/bash

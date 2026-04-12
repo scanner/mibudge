@@ -585,6 +585,7 @@ class Transaction(TransactionBaseClass):
         )
         WIRE_TRANSFER = "wire_transfer", "Wire Transfer"
         CHECK_DEPOSIT = "check_deposit", "Check Deposit"
+        CHECK = "check", "Check"
         C2C = "c2c", "c2c"
         MIGRATION_INTERBANK_TRANSFER = (
             "migration_interbank_transfer",

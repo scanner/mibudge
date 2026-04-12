@@ -160,6 +160,15 @@ _TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bDIRECT\s+DEP(OSIT)?\b", re.IGNORECASE), "ach"),
     (re.compile(r"\bWIRE\b", re.IGNORECASE), "wire_transfer"),
     (re.compile(r"\bCHECK\s+DEPOSIT\b", re.IGNORECASE), "check_deposit"),
+    # Paper check written against the account (e.g. "Check 318").
+    # Must come after CHECK DEPOSIT so mobile deposits don't match first.
+    (re.compile(r"\bCheck\s+\d+\b", re.IGNORECASE), "check"),
+    # Class-action settlement credit paid by the bank (descriptions
+    # contain a case caption followed by "Class Settlement").
+    (
+        re.compile(r"\bClass\s+Settlement\b", re.IGNORECASE),
+        "bank_generated_credit",
+    ),
     (re.compile(r"\bINTEREST\b", re.IGNORECASE), "interest_credit"),
     (re.compile(r"\bSERVICE\s+CHARGE\b|\bFEE\b", re.IGNORECASE), "fee"),
     # ACH transactions -- DES: format is used for structured ACH entries.
@@ -171,7 +180,7 @@ _TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 ####################################################################
 #
-def _infer_transaction_type(description: str) -> str:
+def _infer_transaction_type(description: str, amount: Decimal) -> str:
     """
     Infer a TransactionType value from a BofA transaction description.
 
@@ -181,15 +190,30 @@ def _infer_transaction_type(description: str) -> str:
     type codes. Unmatched descriptions are logged so patterns can be
     extended iteratively.
 
+    If no pattern matches but the amount is a credit (positive), fall
+    back to ``bank_generated_credit``. One-off credits (settlements,
+    promotional credits, adjustments) are rare and highly varied in
+    wording -- chasing every new phrasing with a bespoke regex is not
+    worth the effort when a single catch-all is a reasonable default.
+
     Args:
         description: Raw description string from the CSV.
+        amount:      Signed decimal amount; positive = credit, negative = debit.
 
     Returns:
-        A TransactionType value string, or "" (NOT_SET) if no pattern matches.
+        A TransactionType value string, or "" (NOT_SET) if no pattern
+        matches and the amount is a debit.
     """
     for pattern, transaction_type in _TYPE_PATTERNS:
         if pattern.search(description):
             return transaction_type
+    if amount > 0:
+        logger.info(
+            "Unrecognized credit description, defaulting to "
+            "bank_generated_credit: %r",
+            description,
+        )
+        return "bank_generated_credit"
     logger.info("Unrecognized transaction type pattern: %r", description)
     return ""
 
@@ -370,7 +394,7 @@ def parse(source: str | Path) -> ParsedStatement:
         raw_description = row["Description"].strip()
         amount = _parse_amount(row["Amount"])
         running_balance = _parse_amount(row["Running Bal."])
-        transaction_type = _infer_transaction_type(raw_description)
+        transaction_type = _infer_transaction_type(raw_description, amount)
 
         transactions.append(
             ParsedTransaction(

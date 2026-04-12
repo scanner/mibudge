@@ -3,13 +3,18 @@
 # system imports
 import logging
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 
 # 3rd party imports
 import pytest
 
 # Project imports
-from importers.parsers.bofa_csv import parse, validate_statement
+from importers.parsers.bofa_csv import (
+    _infer_transaction_type,
+    parse,
+    validate_statement,
+)
 
 
 ########################################################################
@@ -140,6 +145,14 @@ class TestBofaCSVParser:
                 "atm_withdrawal",
                 id="atm-cash-withdrawal",
             ),
+            # Paper check written against the account
+            pytest.param("Check 318", "check", id="check-paper"),
+            # Class-action settlement credit paid by the bank
+            pytest.param(
+                "DOE v EXAMPLEBANK Class Settlement 1-555-000-0000",
+                "bank_generated_credit",
+                id="class-settlement",
+            ),
         ],
     )
     def test_transaction_type_inference(
@@ -152,9 +165,31 @@ class TestBofaCSVParser:
         WHEN:  _infer_transaction_type() is called
         THEN:  the correct TransactionType value is returned
         """
-        from importers.parsers.bofa_csv import _infer_transaction_type
+        # Amount sign only matters for the unrecognized-description
+        # fallback; for pattern matches a debit amount is fine.
+        assert (
+            _infer_transaction_type(description, Decimal("-10.00"))
+            == expected_type
+        )
 
-        assert _infer_transaction_type(description) == expected_type
+    ####################################################################
+    #
+    def test_unrecognized_credit_defaults_to_bank_generated_credit(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """
+        GIVEN: a description matching no known pattern and a positive amount
+        WHEN:  _infer_transaction_type() is called
+        THEN:  "bank_generated_credit" is returned and an INFO message is
+               logged
+        """
+        desc = "SOME UNRECOGNIZED CREDIT WORDING 9999"
+        with caplog.at_level(logging.INFO, logger="importers.parsers.bofa_csv"):
+            result = _infer_transaction_type(desc, Decimal("42.00"))
+
+        assert result == "bank_generated_credit"
+        assert any(desc in r.message for r in caplog.records)
 
     ####################################################################
     #
@@ -168,11 +203,9 @@ class TestBofaCSVParser:
         THEN:  "" (NOT_SET) is returned and an INFO message is logged
                containing the description
         """
-        from importers.parsers.bofa_csv import _infer_transaction_type
-
         desc = "TOTALLY UNKNOWN DATATOKEN XYZ 9999"
         with caplog.at_level(logging.INFO, logger="importers.parsers.bofa_csv"):
-            result = _infer_transaction_type(desc)
+            result = _infer_transaction_type(desc, Decimal("-10.00"))
 
         assert result == ""
         assert any(desc in r.message for r in caplog.records)
