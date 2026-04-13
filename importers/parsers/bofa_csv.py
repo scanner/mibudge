@@ -32,9 +32,11 @@ from description keywords; anything unrecognised is left as NOT_SET ("").
 import csv
 import logging
 import re
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Literal
 
 # Project imports
 from importers.parsers.common import ParsedStatement, ParsedTransaction
@@ -83,48 +85,132 @@ __all__ = [
 #   ARC  Accounts Receivable Check conversion
 #   RCK  Re-presented check entry
 #
-_TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\bATM\b.*\bWITHDRAWAL\b", re.IGNORECASE), "atm_withdrawal"),
-    (re.compile(r"\bATM\b", re.IGNORECASE), "atm_withdrawal"),
+@dataclass(frozen=True)
+class TypeRule:
+    """
+    A description-match rule mapping a BofA description to a TransactionType.
+
+    ``anchor="end"`` restricts the match to patterns that land at the end
+    of the description string (ignoring trailing whitespace). This is
+    useful for ACH Standard Entry Class codes, which are short 3-letter
+    tokens (PPD, CCD, WEB, etc.) that collide with real English words
+    when matched anywhere in the string.
+    """
+
+    name: str
+    pattern: re.Pattern[str]
+    transaction_type: str
+    anchor: Literal["any", "end"] = "any"
+
+    def matches(self, description: str) -> bool:
+        m = self.pattern.search(description)
+        if m is None:
+            return False
+        if self.anchor == "end":
+            return m.end() == len(description.rstrip())
+        return True
+
+
+_TYPE_RULES: list[TypeRule] = [
+    TypeRule(
+        "atm-withdrawal",
+        re.compile(r"\bATM\b.*\bWITHDRAWAL\b", re.IGNORECASE),
+        "atm_withdrawal",
+    ),
+    TypeRule(
+        "atm-generic",
+        re.compile(r"\bATM\b", re.IGNORECASE),
+        "atm_withdrawal",
+    ),
     # Internal transfer between own bank accounts (e.g. "Online Banking
     # transfer from CHK 2121 Confirmation# ...").
-    (
+    TypeRule(
+        "online-bank-transfer",
         re.compile(r"\bOnline Banking transfer\b", re.IGNORECASE),
         "shared_transfer",
     ),
     # Refunds from merchants (e.g. "TST*MERCHANT 10/26 REFUND ..." or
     # "AMAZON MKTPLACE PMTS 04/14 REFUND Amzn.com/bill WA"). Must come
-    # before the PURCHASE pattern because some refund rows also contain
+    # before the PURCHASE rule because some refund rows also contain
     # "PURCHASE".
-    (re.compile(r"\bREFUND\b", re.IGNORECASE), "signature_credit"),
+    TypeRule(
+        "refund",
+        re.compile(r"\bREFUND\b", re.IGNORECASE),
+        "signature_credit",
+    ),
     # BofA online bill pay (e.g. "Comcast Cable Communications Bill
     # Payment", "AT&T Mobility (Cingular) Bill Payment").
-    (re.compile(r"\bBill\s+Payment\b", re.IGNORECASE), "bill_payment"),
+    TypeRule(
+        "bill-payment",
+        re.compile(r"\bBill\s+Payment\b", re.IGNORECASE),
+        "bill_payment",
+    ),
     # BofA foreign currency order (e.g. "FX Order Confirmation# XXXXX62185").
-    (re.compile(r"\bFX\s+Order\b", re.IGNORECASE), "fx_order"),
-    (
+    TypeRule(
+        "fx-order",
+        re.compile(r"\bFX\s+Order\b", re.IGNORECASE),
+        "fx_order",
+    ),
+    TypeRule(
+        "purchase",
         re.compile(r"\b(MOBILE\s+)?PURCHASE\b", re.IGNORECASE),
         "signature_purchase",
     ),
-    (re.compile(r"\bPAYROLL\b", re.IGNORECASE), "ach"),
-    (re.compile(r"\bDIRECT\s+DEP(OSIT)?\b", re.IGNORECASE), "ach"),
-    (re.compile(r"\bWIRE\b", re.IGNORECASE), "wire_transfer"),
-    (re.compile(r"\bCHECK\s+DEPOSIT\b", re.IGNORECASE), "check_deposit"),
-    # Paper check written against the account (e.g. "Check 318").
-    # Must come after CHECK DEPOSIT so mobile deposits don't match first.
-    (re.compile(r"\bCheck\s+\d+\b", re.IGNORECASE), "check"),
+    TypeRule("payroll", re.compile(r"\bPAYROLL\b", re.IGNORECASE), "ach"),
+    TypeRule(
+        "direct-deposit",
+        re.compile(r"\bDIRECT\s+DEP(OSIT)?\b", re.IGNORECASE),
+        "ach",
+    ),
+    TypeRule(
+        "wire",
+        re.compile(r"\bWIRE\b", re.IGNORECASE),
+        "wire_transfer",
+    ),
+    # Paper check written against the account (e.g. "Check 318"). Must
+    # come after CHECK DEPOSIT so mobile deposits don't match first.
+    TypeRule(
+        "check-deposit",
+        re.compile(r"\bCHECK\s+DEPOSIT\b", re.IGNORECASE),
+        "check_deposit",
+    ),
+    TypeRule(
+        "check-paper",
+        re.compile(r"\bCheck\s+\d+\b", re.IGNORECASE),
+        "check",
+    ),
     # Class-action settlement credit paid by the bank (descriptions
     # contain a case caption followed by "Class Settlement").
-    (
+    TypeRule(
+        "class-settlement",
         re.compile(r"\bClass\s+Settlement\b", re.IGNORECASE),
         "bank_generated_credit",
     ),
-    (re.compile(r"\bINTEREST\b", re.IGNORECASE), "interest_credit"),
-    (re.compile(r"\bSERVICE\s+CHARGE\b|\bFEE\b", re.IGNORECASE), "fee"),
+    TypeRule(
+        "interest",
+        re.compile(r"\bINTEREST\b", re.IGNORECASE),
+        "interest_credit",
+    ),
+    TypeRule(
+        "fee",
+        re.compile(r"\bSERVICE\s+CHARGE\b|\bFEE\b", re.IGNORECASE),
+        "fee",
+    ),
     # ACH transactions -- DES: format is used for structured ACH entries.
-    # Standard Entry Class codes (PPD, CCD, WEB, etc.) follow at end.
-    (re.compile(r"\bDES:", re.IGNORECASE), "ach"),
-    (re.compile(r"\b(PPD|CCD|WEB|TEL|ARC|RCK)\b"), "ach"),
+    TypeRule(
+        "ach-des-prefix",
+        re.compile(r"\bDES:", re.IGNORECASE),
+        "ach",
+    ),
+    # ACH Standard Entry Class codes are always the trailing token on an
+    # ACH entry; anchor=end avoids false positives on merchant names
+    # that happen to contain the same 3-letter string (e.g. "WEBSTER").
+    TypeRule(
+        "ach-sec-code",
+        re.compile(r"\b(PPD|CCD|WEB|TEL|ARC|RCK)\b"),
+        "ach",
+        anchor="end",
+    ),
 ]
 
 
@@ -135,7 +221,7 @@ def _infer_transaction_type(description: str, amount: Decimal) -> str:
     Infer a TransactionType value from a BofA transaction description.
 
     NOTE: This is a hacky keyword-match approach -- see the comment on
-    ``_TYPE_PATTERNS`` above. It works well enough for the BofA CSV
+    ``_TYPE_RULES`` above. It works well enough for the BofA CSV
     export format but is not a substitute for a source with structured
     type codes. Unmatched descriptions are logged so patterns can be
     extended iteratively.
@@ -154,9 +240,15 @@ def _infer_transaction_type(description: str, amount: Decimal) -> str:
         A TransactionType value string, or "" (NOT_SET) if no pattern
         matches and the amount is a debit.
     """
-    for pattern, transaction_type in _TYPE_PATTERNS:
-        if pattern.search(description):
-            return transaction_type
+    for rule in _TYPE_RULES:
+        if rule.matches(description):
+            logger.debug(
+                "Rule %r matched description %r -> %s",
+                rule.name,
+                description,
+                rule.transaction_type,
+            )
+            return rule.transaction_type
     if amount > 0:
         logger.info(
             "Unrecognized credit description, defaulting to "

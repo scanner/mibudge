@@ -177,6 +177,44 @@ class TestBofaCSVParser:
 
     ####################################################################
     #
+    @pytest.mark.parametrize(
+        "description,expected",
+        [
+            # SEC code at end (the real ACH shape) -> matches.
+            pytest.param(
+                "SOME MERCHANT DES:BILLPAY ID:123 CO ID:456 WEB",
+                "ach",
+                id="sec-code-trailing-matches",
+            ),
+            # SEC code string mid-description with nothing that looks
+            # like an ACH entry otherwise -> must NOT match "ach".
+            # With no fallback rule this debit falls through to NOT_SET.
+            pytest.param(
+                "WEBSTER BANK BRANCH 10/01",
+                "",
+                id="sec-code-midstring-no-false-positive",
+            ),
+        ],
+    )
+    def test_ach_sec_code_end_anchored(
+        self,
+        description: str,
+        expected: str,
+    ) -> None:
+        """
+        GIVEN: a description where an ACH SEC-code token appears either
+               trailing (a real ACH entry) or mid-string (a merchant name
+               that happens to collide)
+        WHEN:  _infer_transaction_type() is called
+        THEN:  only the trailing case is classified as "ach"; mid-string
+               collisions do not produce a false positive
+        """
+        assert (
+            _infer_transaction_type(description, Decimal("-10.00")) == expected
+        )
+
+    ####################################################################
+    #
     def test_unrecognized_credit_defaults_to_bank_generated_credit(
         self,
         caplog: pytest.LogCaptureFixture,
