@@ -584,8 +584,9 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
     if dated:
         last = max(
             dated,
-            key=lambda s: s.ending_balance_as_of
-            or datetime.min.replace(tzinfo=UTC),
+            key=lambda s: (
+                s.ending_balance_as_of or datetime.min.replace(tzinfo=UTC)
+            ),
         )
         if last is not statements[-1]:
             logger.info(
