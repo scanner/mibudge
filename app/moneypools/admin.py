@@ -36,35 +36,60 @@ from .models import (
 #
 
 
-class BankForm(forms.ModelForm):
-    """Allow setting routing_number on creation."""
+####################################################################
+#
+def _apply_extra_fields(
+    form: forms.ModelForm, field_names: tuple[str, ...]
+) -> None:
+    """
+    Copy declared form fields (outside Meta.fields) onto the instance.
 
-    class Meta:
-        model = Bank
-        fields = ("name",)
-
-    # editable=False on the model, declared explicitly for creation.
-    routing_number = forms.CharField(max_length=9, required=False)
+    Django's ModelForm.save() only applies fields listed in Meta.fields
+    to self.instance. Fields declared on the form that correspond to
+    editable=False model attributes are left in cleaned_data and never
+    written to the instance, which yields NOT NULL integrity errors on
+    save. Call this from save() to push those values through.
+    """
+    for name in field_names:
+        if name in form.cleaned_data:
+            value = form.cleaned_data[name]
+            if value is not None:
+                setattr(form.instance, name, value)
 
 
 class BankAccountForm(forms.ModelForm):
-    """Allow setting bank, account_number, and initial balances on creation."""
+    """Allow setting bank and initial balances on creation."""
 
     class Meta:
         model = BankAccount
         # Editable model fields handled by Django's ModelForm machinery.
-        fields = ("name", "account_type", "owners", "group")
+        # account_number is editable on the model -- it can be filled
+        # in later, so it belongs to the regular ModelForm machinery
+        # rather than the editable=False override path below.
+        fields = (
+            "name",
+            "account_type",
+            "account_number",
+            "owners",
+            "group",
+        )
 
     # editable=False model fields declared explicitly so the creation
     # form can set them.
     bank = forms.ModelChoiceField(queryset=Bank.objects.all())
-    account_number = forms.CharField(max_length=12, required=False)
     posted_balance = forms.DecimalField(
         max_digits=MAX_DIGITS, decimal_places=DECIMAL_PLACES, required=False
     )
     available_balance = forms.DecimalField(
         max_digits=MAX_DIGITS, decimal_places=DECIMAL_PLACES, required=False
     )
+
+    def save(self, commit: bool = True) -> BankAccount:
+        _apply_extra_fields(
+            self,
+            ("bank", "posted_balance", "available_balance"),
+        )
+        return super().save(commit=commit)
 
 
 class BudgetForm(forms.ModelForm):
@@ -97,6 +122,10 @@ class BudgetForm(forms.ModelForm):
     bank_account: forms.ModelChoiceField = forms.ModelChoiceField(
         queryset=BankAccount.objects.all()
     )
+
+    def save(self, commit: bool = True) -> Budget:
+        _apply_extra_fields(self, ("bank_account",))
+        return super().save(commit=commit)
 
 
 ########################################################################
@@ -137,30 +166,6 @@ class BankAdmin(admin.ModelAdmin):
     search_fields = ("name", "routing_number")
     fields = ("name", "routing_number")
 
-    ####################################################################
-    #
-    def get_form(
-        self,
-        request: HttpRequest,
-        obj: Any | None = None,
-        change: bool = False,
-        **kwargs: Any,
-    ) -> type[forms.ModelForm]:
-        if obj is None:
-            return BankForm
-        kwargs["fields"] = ("name",)
-        return super().get_form(request, obj, change=change, **kwargs)
-
-    ####################################################################
-    #
-    def get_readonly_fields(
-        self, request: HttpRequest, obj: Bank | None = None
-    ) -> tuple[str, ...]:
-        """Allow routing_number on creation, read-only after."""
-        if obj is None:
-            return ()
-        return ("routing_number",)
-
 
 ########################################################################
 ########################################################################
@@ -193,6 +198,7 @@ class BankAccountAdmin(admin.ModelAdmin):
         "posted_balance",
         "available_balance",
         "unallocated_budget",
+        "link_aliases",
     )
 
     ####################################################################
@@ -208,7 +214,13 @@ class BankAccountAdmin(admin.ModelAdmin):
             return BankAccountForm
         # Existing object: editable=False fields are all in
         # readonly_fields so only pass the truly editable ones.
-        kwargs["fields"] = ("name", "account_type", "owners", "group")
+        kwargs["fields"] = (
+            "name",
+            "account_type",
+            "account_number",
+            "owners",
+            "group",
+        )
         return super().get_form(request, obj, change=change, **kwargs)
 
     ####################################################################
@@ -218,14 +230,14 @@ class BankAccountAdmin(admin.ModelAdmin):
     ) -> tuple[str, ...]:
         """
         On creation: allow setting bank, account_number, and initial
-        balances. After creation: these become read-only because signals
-        manage balance updates and the bank/account_number are immutable.
+        balances. After creation: bank and balances become read-only
+        (signals manage balance updates and bank is immutable), but
+        account_number remains editable so it can be filled in later.
         """
         if obj is None:
             return ("unallocated_budget",)
         return (
             "bank",
-            "account_number",
             "posted_balance",
             "available_balance",
             "unallocated_budget",
@@ -450,6 +462,12 @@ class InternalTransactionForm(forms.ModelForm):
             raise ValidationError("Amount must be greater than zero.")
 
         return cleaned
+
+    ####################################################################
+    #
+    def save(self, commit: bool = True) -> InternalTransaction:
+        _apply_extra_fields(self, ("amount", "src_budget", "dst_budget"))
+        return super().save(commit=commit)
 
 
 ########################################################################

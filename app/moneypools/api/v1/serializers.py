@@ -129,12 +129,13 @@ class BankAccountSerializer(serializers.ModelSerializer):
     """Serializer for bank accounts.
 
     On create the caller supplies name, bank (UUID), account_type,
-    and optionally currency and initial balances.  The view adds the
-    requesting user to owners.  The unallocated budget is auto-created
-    by the post_save signal and returned in the response.
+    and optionally currency, account_number, and initial balances.
+    The view adds the requesting user to owners.  The unallocated
+    budget is auto-created by the post_save signal and returned in
+    the response.
 
-    After creation only name is updatable.  Currency and balances are
-    immutable once the account exists.
+    After creation only name is updatable.  Currency, account_number,
+    and balances are immutable once the account exists.
 
     Group assignment is not yet supported via the API.
     """
@@ -175,6 +176,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "bank",
             "owners",
             "account_type",
+            "account_number",
             "currency",
             "posted_balance",
             "posted_balance_currency",
@@ -482,6 +484,16 @@ class TransactionSerializer(serializers.ModelSerializer):
         max_length=512, required=False, allow_blank=True
     )
 
+    # Counterpart on another account, populated asynchronously by the
+    # cross-account linker (moneypools.linking). Exposed as a plain
+    # UUID so the UI can render an affordance without needing a full
+    # nested serializer round-trip. Read-only: linking is controlled
+    # server-side, never by the client.
+    #
+    linked_transaction = serializers.SlugRelatedField(
+        slug_field="id", read_only=True
+    )
+
     class Meta:
         model = Transaction
         fields = [
@@ -496,6 +508,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "memo",
             "raw_description",
             "description",
+            "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
             "bank_account_available_balance",
@@ -509,6 +522,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "id",
             "amount_currency",
             "party",
+            "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
             "bank_account_available_balance",

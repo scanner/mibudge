@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 # app imports
 #
-from users.api.views import UserViewSet
+from users.api.v1.views import UserViewSet
 from users.models import User
 
 pytestmark = pytest.mark.django_db
@@ -76,7 +76,7 @@ class TestUserViewSet:
         assert response.data == {
             "username": user.username,
             "name": user.name,
-            "url": f"http://testserver/api/users/{user.username}/",
+            "url": f"http://testserver/api/v1/users/{user.username}/",
         }
 
 
@@ -104,7 +104,7 @@ class TestUserAPIPermissions:
         """
         client = APIClient()
         client.force_authenticate(user=user)
-        url = "/api/users/" + url_suffix.format(username=user.username)
+        url = "/api/v1/users/" + url_suffix.format(username=user.username)
         response = getattr(client, method)(url)
         assert response.status_code == 403
 
@@ -127,7 +127,7 @@ class TestUserAPIPermissions:
         user.save()
         client = APIClient()
         client.force_authenticate(user=user)
-        url = "/api/users/" + url_suffix.format(username=user.username)
+        url = "/api/v1/users/" + url_suffix.format(username=user.username)
         response = getattr(client, method)(url)
         assert response.status_code == 200
 
@@ -141,7 +141,7 @@ class TestUserAPIPermissions:
         """
         client = APIClient()
         client.force_authenticate(user=user)
-        response = client.get("/api/users/me/")
+        response = client.get("/api/v1/users/me/")
         assert response.status_code == 200
         assert response.data["username"] == user.username
 
@@ -154,5 +154,5 @@ class TestUserAPIPermissions:
         THEN:  the request is denied with 401
         """
         client = APIClient()
-        response = client.get("/api/users/me/")
+        response = client.get("/api/v1/users/me/")
         assert response.status_code == 401

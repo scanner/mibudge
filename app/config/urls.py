@@ -7,6 +7,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from config.views import spa_shell_view
 from users.views import cookie_token_refresh_view
@@ -19,19 +20,28 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     # Moneypools
     path("mp/", include("moneypools.urls")),
-    # API
-    path("api/", include("config.api_router")),
-    # JWT refresh -- reads refresh token from httpOnly cookie, returns new access token.
+    # REST API -- versioned. All resource endpoints live under /api/v1/
+    # so a future v2 can be added without breaking existing clients.
+    path("api/v1/", include("config.api_router")),
+    # JWT token endpoints are intentionally *outside* the versioned
+    # prefix -- auth is cross-version and changing URL on every API
+    # bump would churn every client for no reason.
+    # /api/token/         -- POST username+password, returns access+refresh pair.
+    #                        Used by scripts and native apps (no browser needed).
+    # /api/token/refresh/ -- reads refresh token from httpOnly cookie, returns
+    #                        new access token (browser SPA flow).
+    path("api/token/", TokenObtainPairView.as_view(), name="token-obtain"),
     path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
-    # OpenAPI schema + interactive docs
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    # OpenAPI schema + interactive docs for v1. The schema necessarily
+    # describes one API version, so it lives under that version's prefix.
+    path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
-        "api/schema/swagger-ui/",
+        "api/v1/schema/swagger-ui/",
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="swagger-ui",
     ),
     path(
-        "api/schema/redoc/",
+        "api/v1/schema/redoc/",
         SpectacularRedocView.as_view(url_name="schema"),
         name="redoc",
     ),

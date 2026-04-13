@@ -53,17 +53,17 @@ def auth_client(user: User) -> APIClient:
 ########################################################################
 #
 class TestCurrenciesAPI:
-    """Tests for the /api/currencies/ endpoint."""
+    """Tests for the /api/v1/currencies/ endpoint."""
 
     ####################################################################
     #
     def test_list_requires_auth(self, api_client: APIClient) -> None:
         """
         GIVEN: an unauthenticated client
-        WHEN:  GET /api/currencies/
+        WHEN:  GET /api/v1/currencies/
         THEN:  401 Unauthorized is returned
         """
-        response = api_client.get(reverse("api:currencies"))
+        response = api_client.get(reverse("api_v1:currencies"))
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     ####################################################################
@@ -71,11 +71,11 @@ class TestCurrenciesAPI:
     def test_list_currencies(self, auth_client: APIClient) -> None:
         """
         GIVEN: an authenticated client
-        WHEN:  GET /api/currencies/
+        WHEN:  GET /api/v1/currencies/
         THEN:  a list of currency objects is returned, each with code,
                name, and numeric fields, sorted by code
         """
-        response = auth_client.get(reverse("api:currencies"))
+        response = auth_client.get(reverse("api_v1:currencies"))
         assert response.status_code == status.HTTP_200_OK
         assert isinstance(response.data, list)
         assert len(response.data) > 0
@@ -90,17 +90,17 @@ class TestCurrenciesAPI:
 ########################################################################
 #
 class TestBankAPI:
-    """Tests for the read-only /api/banks/ endpoint."""
+    """Tests for the read-only /api/v1/banks/ endpoint."""
 
     ####################################################################
     #
     def test_list_requires_auth(self, api_client: APIClient) -> None:
         """
         GIVEN: an unauthenticated client
-        WHEN:  GET /api/banks/
+        WHEN:  GET /api/v1/banks/
         THEN:  401 Unauthorized is returned
         """
-        response = api_client.get(reverse("api:bank-list"))
+        response = api_client.get(reverse("api_v1:bank-list"))
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     ####################################################################
@@ -112,12 +112,12 @@ class TestBankAPI:
     ) -> None:
         """
         GIVEN: two banks exist
-        WHEN:  GET /api/banks/
+        WHEN:  GET /api/v1/banks/
         THEN:  both banks are returned with expected fields
         """
         bank_factory()
         bank_factory()
-        response = auth_client.get(reverse("api:bank-list"))
+        response = auth_client.get(reverse("api_v1:bank-list"))
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 2
         bank_data = response.data["results"][0]
@@ -134,12 +134,12 @@ class TestBankAPI:
     ) -> None:
         """
         GIVEN: a bank exists
-        WHEN:  GET /api/banks/<uuid>/
+        WHEN:  GET /api/v1/banks/<uuid>/
         THEN:  the bank detail is returned
         """
         bank = bank_factory()
         response = auth_client.get(
-            reverse("api:bank-detail", kwargs={"id": bank.id})
+            reverse("api_v1:bank-detail", kwargs={"id": bank.id})
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == bank.name
@@ -149,11 +149,11 @@ class TestBankAPI:
     def test_create_not_allowed(self, auth_client: APIClient) -> None:
         """
         GIVEN: an authenticated client
-        WHEN:  POST /api/banks/
+        WHEN:  POST /api/v1/banks/
         THEN:  405 Method Not Allowed is returned
         """
         response = auth_client.post(
-            reverse("api:bank-list"),
+            reverse("api_v1:bank-list"),
             {"name": "New Bank"},
         )
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
@@ -163,7 +163,7 @@ class TestBankAPI:
 ########################################################################
 #
 class TestBankAccountAPI:
-    """Tests for the /api/accounts/ endpoint."""
+    """Tests for the /api/v1/bank-accounts/ endpoint."""
 
     ####################################################################
     #
@@ -175,12 +175,12 @@ class TestBankAccountAPI:
     ) -> None:
         """
         GIVEN: a bank exists and an authenticated user
-        WHEN:  POST /api/accounts/ with name, bank, and account_type
+        WHEN:  POST /api/v1/bank-accounts/ with name, bank, and account_type
         THEN:  the account is created and the user is added as owner
         """
         bank = bank_factory()
         response = auth_client.post(
-            reverse("api:bankaccount-list"),
+            reverse("api_v1:bankaccount-list"),
             {
                 "name": "My Checking",
                 "bank": str(bank.id),
@@ -205,13 +205,13 @@ class TestBankAccountAPI:
     ) -> None:
         """
         GIVEN: a bank exists
-        WHEN:  POST /api/accounts/ with available_balance set
+        WHEN:  POST /api/v1/bank-accounts/ with available_balance set
         THEN:  the account is created with the specified balance and
                the unallocated budget receives that balance
         """
         bank = bank_factory()
         response = auth_client.post(
-            reverse("api:bankaccount-list"),
+            reverse("api_v1:bankaccount-list"),
             {
                 "name": "Savings",
                 "bank": str(bank.id),
@@ -239,12 +239,12 @@ class TestBankAccountAPI:
     ) -> None:
         """
         GIVEN: a bank exists
-        WHEN:  POST /api/accounts/ with currency=EUR
+        WHEN:  POST /api/v1/bank-accounts/ with currency=EUR
         THEN:  the account and its balances use EUR
         """
         bank = bank_factory()
         response = auth_client.post(
-            reverse("api:bankaccount-list"),
+            reverse("api_v1:bankaccount-list"),
             {
                 "name": "Euro Account",
                 "bank": str(bank.id),
@@ -268,13 +268,13 @@ class TestBankAccountAPI:
     ) -> None:
         """
         GIVEN: an existing bank account
-        WHEN:  PATCH /api/accounts/<uuid>/ with a different currency
+        WHEN:  PATCH /api/v1/bank-accounts/<uuid>/ with a different currency
         THEN:  400 Bad Request with a currency validation error
         """
         account = bank_account_factory(owners=[user])
         response = auth_client.patch(
             reverse(
-                "api:bankaccount-detail",
+                "api_v1:bankaccount-detail",
                 kwargs={"id": account.id},
             ),
             {"currency": "GBP"},
@@ -292,12 +292,12 @@ class TestBankAccountAPI:
     ) -> None:
         """
         GIVEN: two accounts exist -- one owned by the user, one by another
-        WHEN:  GET /api/accounts/
+        WHEN:  GET /api/v1/bank-accounts/
         THEN:  only the owned account is returned
         """
         bank_account_factory(owners=[user])
         bank_account_factory()  # owned by a different user
-        response = auth_client.get(reverse("api:bankaccount-list"))
+        response = auth_client.get(reverse("api_v1:bankaccount-list"))
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
 
@@ -311,13 +311,13 @@ class TestBankAccountAPI:
     ) -> None:
         """
         GIVEN: an existing bank account
-        WHEN:  PATCH /api/accounts/<uuid>/ with a new name
+        WHEN:  PATCH /api/v1/bank-accounts/<uuid>/ with a new name
         THEN:  the name is updated
         """
         account = bank_account_factory(owners=[user])
         response = auth_client.patch(
             reverse(
-                "api:bankaccount-detail",
+                "api_v1:bankaccount-detail",
                 kwargs={"id": account.id},
             ),
             {"name": "Renamed Account"},
@@ -331,7 +331,7 @@ class TestBankAccountAPI:
 ########################################################################
 #
 class TestBudgetAPI:
-    """Tests for the /api/budgets/ endpoint."""
+    """Tests for the /api/v1/budgets/ endpoint."""
 
     ####################################################################
     #
@@ -343,12 +343,12 @@ class TestBudgetAPI:
     ) -> None:
         """
         GIVEN: an owned bank account
-        WHEN:  POST /api/budgets/ with required fields
+        WHEN:  POST /api/v1/budgets/ with required fields
         THEN:  a new budget is created under that account
         """
         account = bank_account_factory(owners=[user])
         response = auth_client.post(
-            reverse("api:budget-list"),
+            reverse("api_v1:budget-list"),
             {
                 "name": "Groceries",
                 "bank_account": str(account.id),
@@ -372,7 +372,7 @@ class TestBudgetAPI:
     ) -> None:
         """
         GIVEN: budgets on two different owned accounts
-        WHEN:  GET /api/budgets/?bank_account=<uuid>
+        WHEN:  GET /api/v1/budgets/?bank_account=<uuid>
         THEN:  only budgets for the specified account are returned
         """
         acct1 = bank_account_factory(owners=[user])
@@ -381,7 +381,7 @@ class TestBudgetAPI:
         budget_factory(bank_account=acct2)
 
         response = auth_client.get(
-            reverse("api:budget-list"),
+            reverse("api_v1:budget-list"),
             {"bank_account": str(acct1.id)},
         )
         assert response.status_code == status.HTTP_200_OK
@@ -400,7 +400,7 @@ class TestBudgetAPI:
     ) -> None:
         """
         GIVEN: an account's unallocated budget
-        WHEN:  DELETE /api/budgets/<uuid>/
+        WHEN:  DELETE /api/v1/budgets/<uuid>/
         THEN:  403 Forbidden is returned
         """
         account = bank_account_factory(owners=[user])
@@ -408,7 +408,7 @@ class TestBudgetAPI:
         assert unalloc is not None
         response = auth_client.delete(
             reverse(
-                "api:budget-detail",
+                "api_v1:budget-detail",
                 kwargs={"id": unalloc.id},
             ),
         )
@@ -424,7 +424,7 @@ class TestBudgetAPI:
     ) -> None:
         """
         GIVEN: an account's unallocated budget
-        WHEN:  PATCH /api/budgets/<uuid>/ with a new name
+        WHEN:  PATCH /api/v1/budgets/<uuid>/ with a new name
         THEN:  400 Bad Request with a name validation error
         """
         account = bank_account_factory(owners=[user])
@@ -432,7 +432,7 @@ class TestBudgetAPI:
         assert unalloc is not None
         response = auth_client.patch(
             reverse(
-                "api:budget-detail",
+                "api_v1:budget-detail",
                 kwargs={"id": unalloc.id},
             ),
             {"name": "Sneaky Rename"},
@@ -457,7 +457,7 @@ class TestBudgetAPI:
         account = bank_account_factory(owners=[user])
         budget = budget_factory(bank_account=account, budget_type="G")
         response = auth_client.patch(
-            reverse("api:budget-detail", kwargs={"id": budget.id}),
+            reverse("api_v1:budget-detail", kwargs={"id": budget.id}),
             {"budget_type": "R"},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -468,7 +468,7 @@ class TestBudgetAPI:
 ########################################################################
 #
 class TestTransactionAPI:
-    """Tests for the /api/transactions/ endpoint."""
+    """Tests for the /api/v1/transactions/ endpoint."""
 
     ####################################################################
     #
@@ -480,13 +480,13 @@ class TestTransactionAPI:
     ) -> None:
         """
         GIVEN: an owned bank account
-        WHEN:  POST /api/transactions/ with required fields
+        WHEN:  POST /api/v1/transactions/ with required fields
         THEN:  a transaction is created and a default allocation to
                the unallocated budget is auto-created
         """
         account = bank_account_factory(owners=[user])
         response = auth_client.post(
-            reverse("api:transaction-list"),
+            reverse("api_v1:transaction-list"),
             {
                 "bank_account": str(account.id),
                 "amount": "-45.99",
@@ -525,7 +525,7 @@ class TestTransactionAPI:
         account = bank_account_factory(owners=[user])
         tx = transaction_factory(bank_account=account)
         response = auth_client.patch(
-            reverse("api:transaction-detail", kwargs={"id": tx.id}),
+            reverse("api_v1:transaction-detail", kwargs={"id": tx.id}),
             {"amount": "999.99"},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -548,7 +548,7 @@ class TestTransactionAPI:
         account = bank_account_factory(owners=[user])
         tx = transaction_factory(bank_account=account)
         response = auth_client.patch(
-            reverse("api:transaction-detail", kwargs={"id": tx.id}),
+            reverse("api_v1:transaction-detail", kwargs={"id": tx.id}),
             {"description": "Cleaned up description"},
         )
         assert response.status_code == status.HTTP_200_OK
@@ -566,7 +566,7 @@ class TestTransactionAPI:
     ) -> None:
         """
         GIVEN: transactions on different dates
-        WHEN:  GET /api/transactions/?date_from=...&date_to=...
+        WHEN:  GET /api/v1/transactions/?date_from=...&date_to=...
         THEN:  only transactions in the range are returned
         """
         account = bank_account_factory(owners=[user])
@@ -579,7 +579,7 @@ class TestTransactionAPI:
             transaction_date="2026-03-15T12:00:00Z",
         )
         response = auth_client.get(
-            reverse("api:transaction-list"),
+            reverse("api_v1:transaction-list"),
             {
                 "date_from": "2026-03-01T00:00:00Z",
                 "date_to": "2026-04-01T00:00:00Z",
@@ -599,7 +599,7 @@ class TestTransactionAPI:
     ) -> None:
         """
         GIVEN: transactions with different descriptions
-        WHEN:  GET /api/transactions/?search=GROCERY
+        WHEN:  GET /api/v1/transactions/?search=GROCERY
         THEN:  only matching transactions are returned
         """
         account = bank_account_factory(owners=[user])
@@ -612,7 +612,7 @@ class TestTransactionAPI:
             raw_description="GAS STATION #456",
         )
         response = auth_client.get(
-            reverse("api:transaction-list"),
+            reverse("api_v1:transaction-list"),
             {"search": "GROCERY"},
         )
         assert response.status_code == status.HTTP_200_OK
@@ -623,7 +623,7 @@ class TestTransactionAPI:
 ########################################################################
 #
 class TestTransactionAllocationAPI:
-    """Tests for the /api/allocations/ endpoint."""
+    """Tests for the /api/v1/allocations/ endpoint."""
 
     ####################################################################
     #
@@ -637,14 +637,14 @@ class TestTransactionAllocationAPI:
     ) -> None:
         """
         GIVEN: a transaction with room for more allocations
-        WHEN:  POST /api/allocations/ with transaction, budget, and amount
+        WHEN:  POST /api/v1/allocations/ with transaction, budget, and amount
         THEN:  the allocation is created
         """
         account = bank_account_factory(owners=[user])
         tx = transaction_factory(bank_account=account, amount=Money(100, "USD"))
         budget = budget_factory(bank_account=account)
         response = auth_client.post(
-            reverse("api:transactionallocation-list"),
+            reverse("api_v1:transactionallocation-list"),
             {
                 "transaction": str(tx.id),
                 "budget": str(budget.id),
@@ -671,7 +671,7 @@ class TestTransactionAllocationAPI:
         account = bank_account_factory(owners=[user])
         tx = transaction_factory(bank_account=account, amount=Money(100, "USD"))
         response = auth_client.post(
-            reverse("api:transactionallocation-list"),
+            reverse("api_v1:transactionallocation-list"),
             {
                 "transaction": str(tx.id),
                 "amount": "150.00",
@@ -704,7 +704,7 @@ class TestTransactionAllocationAPI:
         new_budget = budget_factory(bank_account=account)
         response = auth_client.patch(
             reverse(
-                "api:transactionallocation-detail",
+                "api_v1:transactionallocation-detail",
                 kwargs={"id": alloc.id},
             ),
             {"budget": str(new_budget.id)},
@@ -718,7 +718,7 @@ class TestTransactionAllocationAPI:
 ########################################################################
 #
 class TestInternalTransactionAPI:
-    """Tests for the /api/internal-transactions/ endpoint."""
+    """Tests for the /api/v1/internal-transactions/ endpoint."""
 
     ####################################################################
     #
@@ -731,14 +731,14 @@ class TestInternalTransactionAPI:
     ) -> None:
         """
         GIVEN: an owned account with two budgets
-        WHEN:  POST /api/internal-transactions/ with amount, src, dst
+        WHEN:  POST /api/v1/internal-transactions/ with amount, src, dst
         THEN:  the transfer is created and the actor is set to the user
         """
         account = bank_account_factory(owners=[user])
         src = budget_factory(bank_account=account, balance=Money(500, "USD"))
         dst = budget_factory(bank_account=account)
         response = auth_client.post(
-            reverse("api:internaltransaction-list"),
+            reverse("api_v1:internaltransaction-list"),
             {
                 "bank_account": str(account.id),
                 "amount": "100.00",
@@ -768,7 +768,7 @@ class TestInternalTransactionAPI:
         account = bank_account_factory(owners=[user])
         budget = budget_factory(bank_account=account)
         response = auth_client.post(
-            reverse("api:internaltransaction-list"),
+            reverse("api_v1:internaltransaction-list"),
             {
                 "bank_account": str(account.id),
                 "amount": "50.00",
@@ -792,7 +792,7 @@ class TestInternalTransactionAPI:
     ) -> None:
         """
         GIVEN: an existing internal transaction
-        WHEN:  PATCH or DELETE /api/internal-transactions/<uuid>/
+        WHEN:  PATCH or DELETE /api/v1/internal-transactions/<uuid>/
         THEN:  405 Method Not Allowed is returned
         """
         account = bank_account_factory(owners=[user])
@@ -805,7 +805,7 @@ class TestInternalTransactionAPI:
             actor=user,
         )
         url = reverse(
-            "api:internaltransaction-detail",
+            "api_v1:internaltransaction-detail",
             kwargs={"id": itx.id},
         )
         response = getattr(auth_client, method)(url)
@@ -834,9 +834,9 @@ class TestPermissions:
     @pytest.mark.parametrize(
         "factory_cls, detail_url_name",
         [
-            (BankAccountFactory, "api:bankaccount-detail"),
-            (BudgetFactory, "api:budget-detail"),
-            (TransactionFactory, "api:transaction-detail"),
+            (BankAccountFactory, "api_v1:bankaccount-detail"),
+            (BudgetFactory, "api_v1:budget-detail"),
+            (TransactionFactory, "api_v1:transaction-detail"),
         ],
         ids=["account", "budget", "transaction"],
     )
@@ -859,7 +859,7 @@ class TestPermissions:
     ) -> None:
         """
         GIVEN: an object belonging to another user's account
-        WHEN:  GET /api/<resource>/<uuid>/
+        WHEN:  GET /api/v1/<resource>/<uuid>/
         THEN:  404 Not Found -- ownership filtering is not bypassed by
                staff or superuser privilege
         """

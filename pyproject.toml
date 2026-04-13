@@ -47,6 +47,11 @@ dependencies = [
     "Pygments",
     "rich",
     "drf-spectacular>=0.29.0",
+    "httpx>=0.28.1",
+    "ofxparse>=0.21",
+    "click>=8.3.1",
+    "python-dotenv>=1.2.2",
+    "hvac>=2.4.0",
 ]
 
 [build-system]
@@ -97,7 +102,7 @@ select = ["E", "W", "F", "B", "C4", "UP", "I"]
 ignore = ["E501", "B008", "B905"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["moneypools", "users", "config"]
+known-first-party = ["moneypools", "users", "config", "importers"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -123,8 +128,8 @@ strict_settings = false
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 addopts = "--durations=10 --durations-min=0.1"
-testpaths = ["app/tests"]
-pythonpath = ["app"]
+testpaths = ["app/tests", "importers/tests"]
+pythonpath = ["app", "."]
 markers = [
     "smoke: marks tests as smoke",
     "integration",

@@ -31,7 +31,7 @@ steps:
       - uv sync --frozen
       - uv run ruff check .
       - uv run ruff format --check .
-      - uv run mypy app/
+      - uv run mypy app/ importers/
 
   - name: frontend lint
     image: "node:22"

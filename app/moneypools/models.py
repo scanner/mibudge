@@ -76,9 +76,8 @@ class Bank(MoneyPoolBaseClass):
     def __str__(self) -> str:
         return self.name
 
-    # XXX Add a validator to make sure only digits are used
     routing_number = models.CharField(
-        max_length=9, null=True, default=None, editable=False, unique=True
+        max_length=9, null=True, blank=True, default=None, unique=True
     )
 
     # ISO 4217 currency code.  Bank accounts created under this bank
@@ -124,9 +123,11 @@ class BankAccount(MoneyPoolBaseClass):
         help_text="Joint ownership group for this account.",
     )
 
-    # XXX Add a validator to make sure only digits are used
+    # max_length=32 comfortably covers OFX ACCTID (spec max A-22),
+    # SWIFT account-identifier segments, and the longer internal IDs
+    # fintech providers (Apple, etc.) use in their OFX exports.
     account_number = EncryptedCharField(
-        max_length=12, null=True, default=None, editable=False, unique=True
+        max_length=32, null=True, blank=True, default=None, unique=True
     )
 
     account_type = models.CharField(
@@ -183,6 +184,25 @@ class BankAccount(MoneyPoolBaseClass):
         to_field="id",
         blank=True,
         null=True,
+    )
+
+    # Free-form strings a counterpart transaction's description may
+    # contain to identify this account. Used by the cross-account
+    # transaction linker (moneypools.linking) to resolve merchant-
+    # visible names like "CHASE CREDIT CRD" or "APPLECARD GSBANK"
+    # back to the BankAccount they represent. Matched case-insensitive
+    # as substrings, so short, distinctive fragments work best. This
+    # supplements the automatic matches against ``name`` and the
+    # last-4 of ``account_number``.
+    #
+    link_aliases = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Substrings that may appear in a counterpart "
+            "transaction's description to identify this account "
+            '(e.g. "CHASE CREDIT CRD"). Case-insensitive.'
+        ),
     )
 
     #####################################################################
@@ -553,7 +573,7 @@ class Transaction(TransactionBaseClass):
     A transaction detailing a credit/debit from some 3rd party
 
     NOTE: if this is associated with a budget, deleting the budget
-    moves it back to the 'safe to spend' budget.
+    moves it back to the 'unallocated' budget.
     """
 
     #####################################################################
@@ -585,6 +605,7 @@ class Transaction(TransactionBaseClass):
         )
         WIRE_TRANSFER = "wire_transfer", "Wire Transfer"
         CHECK_DEPOSIT = "check_deposit", "Check Deposit"
+        CHECK = "check", "Check"
         C2C = "c2c", "c2c"
         MIGRATION_INTERBANK_TRANSFER = (
             "migration_interbank_transfer",
@@ -594,6 +615,7 @@ class Transaction(TransactionBaseClass):
         ACH_REVERSAL = "ach_reversal", "ACH Reversal"
         ADJUSTMENT = "adjustment", "Adjustment"
         SIGNATURE_RETURN = "signature_return", "Signature return"
+        FX_ORDER = "fx_order", "FX Order"
         NOT_SET = "", "--------"
 
     #

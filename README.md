@@ -72,11 +72,12 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 | Path                         | Handled by               | Purpose                                      |
 |------------------------------|--------------------------|----------------------------------------------|
 | `/`, `/accounts/`, `/admin/` | Django templates         | Login, auth, admin                           |
-| `/api/`                      | DRF                      | JWT-authenticated REST API                   |
+| `/api/v1/`                   | DRF                      | JWT-authenticated REST API (v1)              |
+| `/api/token/`                | `TokenObtainPairView`    | JWT access+refresh pair (cross-version)      |
 | `/api/token/refresh/`        | `CookieTokenRefreshView` | Silent token refresh via httpOnly cookie     |
-| `/api/schema/`               | drf-spectacular          | OpenAPI schema (YAML)                        |
-| `/api/schema/swagger-ui/`    | drf-spectacular          | Swagger UI (interactive docs)                |
-| `/api/schema/redoc/`         | drf-spectacular          | ReDoc (interactive docs)                     |
+| `/api/v1/schema/`            | drf-spectacular          | OpenAPI schema for v1 (YAML)                 |
+| `/api/v1/schema/swagger-ui/` | drf-spectacular          | Swagger UI (interactive docs)                |
+| `/api/v1/schema/redoc/`      | drf-spectacular          | ReDoc (interactive docs)                     |
 | `/app/*`                     | `SpaShellView`           | SPA shell; Vue Router handles all sub-routes |
 
 The machine-readable OpenAPI spec and generated API reference docs live in [`docs/openapi.yaml`](docs/openapi.yaml) and [`docs/api.md`](docs/api.md). Regenerate them after any API change with `make api-docs`.
@@ -84,7 +85,7 @@ The machine-readable OpenAPI spec and generated API reference docs live in [`doc
 ### API permissions
 
 - **Banks** are read-only reference data, accessible to any authenticated user.
-- **Users** list/retrieve/update is restricted to staff; `/api/users/me/` is available to all authenticated users.
+- **Users** list/retrieve/update is restricted to staff; `/api/v1/users/me/` is available to all authenticated users.
 - **All other resources** (accounts, budgets, transactions, allocations, internal transactions) are scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does **not** bypass ownership checks in the REST API.
 
 ### Auth: JWT two-token pattern

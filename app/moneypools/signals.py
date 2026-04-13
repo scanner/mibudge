@@ -5,6 +5,7 @@ from typing import Any
 
 # 3rd party imports
 #
+from django.db import transaction as db_transaction
 from django.db.models.signals import post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
@@ -219,6 +220,46 @@ def transaction_pre_save(sender, instance, **kwargs):
 
         if save_bank_account:
             transaction.bank_account.save()
+
+
+####################################################################
+#
+@receiver(post_save, sender=Transaction)
+def transaction_post_save_link(
+    sender: type[Transaction],
+    instance: Transaction,
+    created: bool,
+    **kwargs: Any,
+) -> None:
+    """
+    Enqueue the cross-account link attempt after a Transaction save.
+
+    Only fires for newly created Transactions that are not already
+    linked. The work runs in ``moneypools.tasks.attempt_link_transaction``
+    so the request does not block on cross-account DB queries. The
+    ``on_commit`` wrapper holds the dispatch until the surrounding
+    transaction commits, which guarantees the Celery worker can read
+    the row (and, importantly, that we do not enqueue work that gets
+    rolled back on a later failure in the same request).
+
+    Args:
+        sender:   The Transaction model class.
+        instance: The Transaction that was just saved.
+        created:  True iff this is a new row.
+        **kwargs: Additional signal keyword arguments.
+    """
+    if not created or instance.linked_transaction_id is not None:
+        return
+
+    # Import here rather than at module top to avoid the signals ->
+    # tasks -> linking -> models import chain firing during app ready().
+    #
+    from moneypools.tasks import attempt_link_transaction
+
+    transaction_id = str(instance.id)
+    db_transaction.on_commit(
+        lambda: attempt_link_transaction.delay(transaction_id)
+    )
 
 
 ####################################################################
