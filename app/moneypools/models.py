@@ -186,6 +186,25 @@ class BankAccount(MoneyPoolBaseClass):
         null=True,
     )
 
+    # Free-form strings a counterpart transaction's description may
+    # contain to identify this account. Used by the cross-account
+    # transaction linker (moneypools.linking) to resolve merchant-
+    # visible names like "CHASE CREDIT CRD" or "APPLECARD GSBANK"
+    # back to the BankAccount they represent. Matched case-insensitive
+    # as substrings, so short, distinctive fragments work best. This
+    # supplements the automatic matches against ``name`` and the
+    # last-4 of ``account_number``.
+    #
+    link_aliases = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Substrings that may appear in a counterpart "
+            "transaction's description to identify this account "
+            '(e.g. "CHASE CREDIT CRD"). Case-insensitive.'
+        ),
+    )
+
     #####################################################################
     #
     def __str__(self) -> str:

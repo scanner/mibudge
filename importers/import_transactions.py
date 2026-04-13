@@ -54,7 +54,7 @@ used to connect to Vault.
 # system imports
 import logging
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -569,7 +569,36 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
     """
     assert statements, "caller must ensure at least one statement"
     first = statements[0]
-    last = statements[-1]
+    # Pick the ending anchor. For formats that tag the ending balance
+    # with an "as of" timestamp (OFX LEDGERBAL <DTASOF>) prefer the
+    # statement with the freshest DTASOF rather than the statement
+    # with the latest ``beginning_date``: FIs like Apple populate
+    # LEDGERBAL with the download-moment balance, so an older file
+    # downloaded more recently is a better anchor than a file whose
+    # window ends later but was downloaded weeks ago (its LEDGERBAL
+    # misses any charges that were still authorizing at that time).
+    # Fall back to last-by-beginning_date when no statement carries
+    # ``ending_balance_as_of`` (BofA CSV, which binds ending balance
+    # to a calendar date rather than an instant).
+    dated = [s for s in statements if s.ending_balance_as_of is not None]
+    if dated:
+        last = max(
+            dated,
+            key=lambda s: s.ending_balance_as_of
+            or datetime.min.replace(tzinfo=UTC),
+        )
+        if last is not statements[-1]:
+            logger.info(
+                "Using %s as ending-balance anchor (LEDGERBAL as-of %s) "
+                "rather than %s (as-of %s); freshest DTASOF wins to "
+                "avoid stale pending-at-download-time drift.",
+                last.source_path,
+                last.ending_balance_as_of,
+                statements[-1].source_path,
+                statements[-1].ending_balance_as_of,
+            )
+    else:
+        last = statements[-1]
 
     # Intra-run dedup. Two common patterns produce duplicate
     # transactions across the combined file set:
@@ -604,6 +633,18 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
             "Dropped %d duplicate transaction(s) at statement boundaries.",
             duplicates,
         )
+
+    # Sort the combined transaction list chronologically. Within a
+    # single OFX file ``<STMTTRN>`` ordering is FI-dependent (Apple
+    # writes newest-first), and across multiple files the per-statement
+    # blocks yield runs that are each internally ordered but not
+    # globally so. The per-transaction ``bank_account_posted_balance``
+    # snapshot recorded by ``transaction_pre_save`` is only meaningful
+    # when rows are POSTed in date order, so normalize here. Ties on
+    # ``transaction_date`` keep their original relative order
+    # (``sort`` is stable) which preserves intra-day sequencing from
+    # the source file.
+    transactions.sort(key=lambda tx: tx.transaction_date)
 
     acct_id = next((s.acct_id for s in statements if s.acct_id), None)
     account_type = next(

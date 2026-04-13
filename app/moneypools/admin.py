@@ -198,6 +198,7 @@ class BankAccountAdmin(admin.ModelAdmin):
         "posted_balance",
         "available_balance",
         "unallocated_budget",
+        "link_aliases",
     )
 
     ####################################################################

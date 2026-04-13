@@ -14,7 +14,7 @@ Format-specific parsers live alongside this module; the dispatcher in
 
 # system imports
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -98,6 +98,14 @@ class ParsedStatement:
             than the statement-end balance -- when that is the case,
             the derived per-file beginning is not trustworthy and
             ``_combine_statements`` recomputes it from the walk).
+        ending_balance_as_of: Timestamp the ``ending_balance`` was
+            computed at. For OFX this is the LEDGERBAL ``DTASOF`` --
+            often the download moment rather than ``ending_date``, so
+            two files whose transaction lists overlap can carry very
+            different LEDGERBAL values. ``_combine_statements`` uses
+            this to pick the freshest anchor. ``None`` for formats
+            (BofA CSV) where the ending balance is bound to a
+            calendar date rather than an "as of" timestamp.
     """
 
     beginning_balance: Decimal
@@ -111,3 +119,4 @@ class ParsedStatement:
     account_type: str | None = None
     source_path: str | None = None
     beginning_balance_reported: bool = True
+    ending_balance_as_of: datetime | None = None

@@ -484,6 +484,16 @@ class TransactionSerializer(serializers.ModelSerializer):
         max_length=512, required=False, allow_blank=True
     )
 
+    # Counterpart on another account, populated asynchronously by the
+    # cross-account linker (moneypools.linking). Exposed as a plain
+    # UUID so the UI can render an affordance without needing a full
+    # nested serializer round-trip. Read-only: linking is controlled
+    # server-side, never by the client.
+    #
+    linked_transaction = serializers.SlugRelatedField(
+        slug_field="id", read_only=True
+    )
+
     class Meta:
         model = Transaction
         fields = [
@@ -498,6 +508,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "memo",
             "raw_description",
             "description",
+            "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
             "bank_account_available_balance",
@@ -511,6 +522,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "id",
             "amount_currency",
             "party",
+            "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
             "bank_account_available_balance",

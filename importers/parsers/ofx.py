@@ -242,6 +242,11 @@ def parse(source: str | Path) -> ParsedStatement:
     )
     ending_balance = Decimal(str(statement.balance))
     beginning_balance = (ending_balance - tx_sum).quantize(Decimal("0.01"))
+    # ``balance_date`` is the LEDGERBAL <DTASOF>. Apple populates it
+    # with the download moment rather than the statement-end date, so
+    # across a set of historical files this is the signal that tells
+    # the combiner which file's LEDGERBAL is freshest.
+    ending_balance_as_of = getattr(statement, "balance_date", None)
 
     running = beginning_balance
     total_credits = Decimal("0")
@@ -297,6 +302,7 @@ def parse(source: str | Path) -> ParsedStatement:
         # derived ``beginning_balance`` above is wrong and the
         # combiner must recompute it from the walk across all files.
         beginning_balance_reported=False,
+        ending_balance_as_of=ending_balance_as_of,
     )
 
 
