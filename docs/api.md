@@ -3020,6 +3020,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 * `bank_generated_credit` - Bank Generated Credit
 * `wire_transfer` - Wire Transfer
 * `check_deposit` - Check Deposit
+* `check` - Check
 * `c2c` - c2c
 * `migration_interbank_transfer` - Migration Interbank Transfer
 * `balance_sweep` - Balance Sweep
@@ -4521,6 +4522,7 @@ field declaration is needed.
 * `bank_generated_credit` - Bank Generated Credit
 * `wire_transfer` - Wire Transfer
 * `check_deposit` - Check Deposit
+* `check` - Check
 * `c2c` - c2c
 * `migration_interbank_transfer` - Migration Interbank Transfer
 * `balance_sweep` - Balance Sweep

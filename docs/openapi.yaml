@@ -921,6 +921,7 @@ paths:
           - bank_generated_credit
           - bill_payment
           - c2c
+          - check
           - check_deposit
           - courtesy_credit
           - fee
@@ -951,6 +952,7 @@ paths:
           * `bank_generated_credit` - Bank Generated Credit
           * `wire_transfer` - Wire Transfer
           * `check_deposit` - Check Deposit
+          * `check` - Check
           * `c2c` - c2c
           * `migration_interbank_transfer` - Migration Interbank Transfer
           * `balance_sweep` - Balance Sweep
@@ -1341,7 +1343,7 @@ components:
         account_number:
           type: string
           nullable: true
-          maxLength: 12
+          maxLength: 32
         currency:
           type: string
           description: ISO 4217 currency code (e.g. USD, EUR, GBP).
@@ -1411,7 +1413,7 @@ components:
         account_number:
           type: string
           nullable: true
-          maxLength: 12
+          maxLength: 32
         currency:
           type: string
           minLength: 1
@@ -2203,7 +2205,7 @@ components:
         account_number:
           type: string
           nullable: true
-          maxLength: 12
+          maxLength: 32
         currency:
           type: string
           minLength: 1
@@ -2697,6 +2699,7 @@ components:
       - bank_generated_credit
       - wire_transfer
       - check_deposit
+      - check
       - c2c
       - migration_interbank_transfer
       - balance_sweep
@@ -2721,6 +2724,7 @@ components:
         * `bank_generated_credit` - Bank Generated Credit
         * `wire_transfer` - Wire Transfer
         * `check_deposit` - Check Deposit
+        * `check` - Check
         * `c2c` - c2c
         * `migration_interbank_transfer` - Migration Interbank Transfer
         * `balance_sweep` - Balance Sweep

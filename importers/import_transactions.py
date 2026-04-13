@@ -1,30 +1,43 @@
 """
-Import transactions from a BofA CSV export into mibudge.
+Import bank-statement files into mibudge via its REST API.
+
+Supported formats:
+
+* ``.csv``                 -- Bank of America CSV export
+* ``.ofx`` / ``.qfx``      -- OFX / QFX statements (any FI)
+
+Files are dispatched to a parser module based on extension. For CSVs
+from other institutions that happen to use ``.csv`` we can add an
+explicit ``--parser`` override later -- OFX is a real spec and one
+parser handles everything, while CSVs are per-bank and their file
+extension alone cannot discriminate.
 
 This is a click.group with two subcommands:
 
-* ``import`` -- parse a BofA CSV export and POST its transactions to the
-  mibudge REST API, optionally creating the target bank account on the
-  fly from the CSV's own summary block.
+* ``import`` -- parse one or more statement files and POST their
+  transactions to the mibudge REST API, optionally creating the target
+  bank account on the fly.
 * ``banks`` -- list the banks visible to the authenticated user along
   with their UUIDs (the values accepted by ``--bank``).
 
 Typical usage::
 
-    # Import into an existing account:
-    uv run python -m importers import \\
-        --file ~/Downloads/stmt.csv \\
-        --account <bank-account-uuid>
+    # Import a pile of OFX files for an already-created account. The
+    # OFX ACCTID is matched against BankAccount.account_number, so no
+    # --account flag is needed:
+    uv run python -m importers import statements/*.ofx
 
-    # First-time import: create the account and seed its beginning
-    # balance from the CSV summary:
+    # First-time import from OFX -- the account type and account
+    # number come from the OFX file itself, only --name and --bank
+    # are still required:
     uv run python -m importers banks
-    uv run python -m importers import \\
-        --file ~/Downloads/stmt.csv \\
-        --create-account \\
-        --name "Personal Checking" \\
-        --bank <bank-uuid> \\
-        --account-type checking
+    uv run python -m importers import --create-account \\
+        --name "Personal Card" --bank <bank-uuid> \\
+        statements/*.ofx
+
+    # BofA CSV (no ACCTID in the file) -- explicit --account or
+    # --create-account with the full set of flags:
+    uv run python -m importers import -f stmt.csv --account <uuid>
 
 Configuration is resolved in this order (first wins):
 
@@ -63,12 +76,8 @@ from rich.table import Table
 
 # Project imports
 from importers.client import APIError, AuthenticationError, MibudgeClient
-from importers.parsers.bofa_csv import (
-    ParsedStatement,
-    ParsedTransaction,
-    parse,
-    validate_statement,
-)
+from importers.parsers import bofa_csv, ofx
+from importers.parsers.common import ParsedStatement, ParsedTransaction
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +266,7 @@ def import_statement(
     bank_account_id: str,
     client: MibudgeClient,
     progress_callback: Callable[[int, int], None] | None = None,
+    existing: dict[tuple[str, str, str], tuple[str, str]] | None = None,
 ) -> ImportResult:
     """
     Import transactions from an already-parsed BofA statement.
@@ -272,6 +282,11 @@ def import_statement(
         client: Authenticated MibudgeClient instance.
         progress_callback: Optional callback(current, total) invoked
             after processing each transaction.
+        existing: Optional pre-fetched dedup map. When None, this
+            function fetches the dedup window itself. The CLI layer
+            pre-fetches so it can wrap the fetch in a rich status
+            spinner (rich does not allow nested Live renderers, and
+            the POST progress bar is already a Live renderer).
 
     Returns:
         An ImportResult with counts and unrecognized descriptions.
@@ -294,8 +309,12 @@ def import_statement(
     start_date = min(tx.transaction_date for tx in transactions)
     end_date = max(tx.transaction_date for tx in transactions)
 
-    # Fetch existing transactions in this window.
-    existing = _fetch_existing(client, bank_account_id, start_date, end_date)
+    # Fetch existing transactions in this window (unless the caller
+    # pre-fetched so it could render a status spinner).
+    if existing is None:
+        existing = _fetch_existing(
+            client, bank_account_id, start_date, end_date
+        )
     logger.info(
         "Found %d existing transactions in date range %s to %s",
         len(existing),
@@ -349,38 +368,340 @@ def import_statement(
 ########################################################################
 ########################################################################
 #
+# File-extension -> (parse, validate_statement) dispatch table. We key
+# on extension deliberately: OFX/QFX is a real spec and one parser
+# handles any FI; CSVs are per-bank and their extension alone can't
+# discriminate, so adding a second CSV parser will mean adding a
+# ``--parser`` override flag rather than inventing an extension.
+#
+_PARSERS: dict[
+    str,
+    tuple[
+        Callable[[Path], ParsedStatement],
+        Callable[[ParsedStatement], list[str]],
+    ],
+] = {
+    ".csv": (bofa_csv.parse, bofa_csv.validate_statement),
+    ".ofx": (ofx.parse, ofx.validate_statement),
+    ".qfx": (ofx.parse, ofx.validate_statement),
+}
+
+
+####################################################################
+#
 def _parse_and_validate(file_path: Path) -> ParsedStatement:
     """
-    Parse the BofA CSV and verify internal consistency.
+    Parse a statement file and verify its internal consistency.
 
-    Runs ``parse()`` and then ``validate_statement()``. Any validation
-    errors are treated as fatal -- we refuse to import from a CSV that
-    does not internally balance because the symptoms after a partial
-    import are much harder to untangle than a clean abort up front.
+    Dispatches to a parser by file extension, then runs that parser's
+    ``validate_statement()``. Any validation errors are treated as
+    fatal -- we refuse to import from a file that does not internally
+    balance because the symptoms after a partial import are much
+    harder to untangle than a clean abort up front.
 
     Args:
-        file_path: Path to the BofA CSV export.
+        file_path: Path to a supported statement file (CSV or OFX/QFX).
 
     Returns:
         A validated ``ParsedStatement``.
 
     Raises:
-        click.ClickException: On parse or validation failure.
+        click.ClickException: On unsupported extension, parse failure,
+            or validation failure.
     """
+    suffix = file_path.suffix.lower()
+    if suffix not in _PARSERS:
+        raise click.ClickException(
+            f"No parser for {file_path.name} (extension {suffix!r}). "
+            f"Supported extensions: {sorted(_PARSERS)}."
+        )
+    parse_fn, validate_fn = _PARSERS[suffix]
+
     try:
-        statement = parse(file_path)
+        statement = parse_fn(file_path)
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(f"Failed to parse {file_path}: {e}") from e
 
-    errors = validate_statement(statement)
+    errors = validate_fn(statement)
     if errors:
-        msg = (
-            f"CSV {file_path} failed internal validation:\n  - "
-            + "\n  - ".join(errors)
+        msg = f"{file_path} failed internal validation:\n  - " + "\n  - ".join(
+            errors
         )
         raise click.ClickException(msg)
 
     return statement
+
+
+####################################################################
+#
+def _parse_all(
+    file_paths: list[Path],
+    console: Console,
+    interactive: bool,
+) -> list[ParsedStatement]:
+    """
+    Parse and validate every input file, sorted by statement start date.
+
+    Enforces two cross-file invariants:
+
+    1. All statements carrying an ``acct_id`` must report the *same*
+       ``acct_id``. This prevents accidentally mixing, e.g., an
+       ``apple-card/*.ofx`` glob with an ``apple-savings/*.ofx`` glob.
+       Statements without an ``acct_id`` (BofA CSVs) are skipped by
+       this check.
+    2. Gaps between consecutive statements are flagged as warnings
+       (not errors) -- the user may have legitimately not downloaded
+       a month with zero activity, and re-running the import with the
+       missing file added always dedups cleanly against what is
+       already on the server.
+
+    Args:
+        file_paths: One or more paths to statement files.
+        console:    Rich console for user-visible messages.
+        interactive: Whether to render rich output.
+
+    Returns:
+        Validated ``ParsedStatement`` objects sorted by
+        ``beginning_date``.
+
+    Raises:
+        click.ClickException: On parse/validation failure or mixed
+            ``acct_id`` across files.
+    """
+    # Parse + validate each file with a rich progress bar. On
+    # multi-file globs (e.g. 36 OFX statements) this phase can take
+    # tens of seconds; without feedback it looks like a hang.
+    statements: list[ParsedStatement] = []
+    if interactive and len(file_paths) > 1:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task(
+                "Parsing statements", total=len(file_paths)
+            )
+            for p in file_paths:
+                progress.update(task, description=f"Parsing {p.name}")
+                statements.append(_parse_and_validate(p))
+                progress.advance(task)
+    else:
+        statements = [_parse_and_validate(p) for p in file_paths]
+    statements.sort(key=lambda s: s.beginning_date)
+
+    # Per-file summary (DEBUG). Re-run with --verbose to see this
+    # table; it makes balance anomalies immediately diagnosable by
+    # showing how each file claims its beginning/ending balance vs.
+    # the transaction sum it carries.
+    if logger.isEnabledFor(logging.DEBUG) and len(statements) > 1:
+        logger.debug("Per-file statement summary (post-sort):")
+        for s in statements:
+            tx_sum = sum((t.amount for t in s.transactions), Decimal("0"))
+            logger.debug(
+                "  %s: %s -> %s | begin=%s end=%s sum_txs=%s (n=%d)",
+                s.source_path,
+                s.beginning_date,
+                s.ending_date,
+                s.beginning_balance,
+                s.ending_balance,
+                tx_sum,
+                len(s.transactions),
+            )
+
+    # Cross-file ACCTID consistency (where applicable).
+    ids = {s.acct_id for s in statements if s.acct_id}
+    if len(ids) > 1:
+        raise click.ClickException(
+            "Files do not all belong to the same account. Mixed "
+            f"ACCTID values found: {sorted(ids)}. Import one account's "
+            "files at a time."
+        )
+
+    # Gap detection. Ignored when there's only one statement.
+    for prev, curr in zip(statements, statements[1:]):
+        # A gap is any span between one statement's end_date and the
+        # next's beginning_date that's more than one day -- adjacent
+        # statements can end and begin on the same day or one apart.
+        delta = (curr.beginning_date - prev.ending_date).days
+        if delta > 1:
+            msg = (
+                f"Gap of {delta} days between {prev.source_path} "
+                f"(ends {prev.ending_date}) and {curr.source_path} "
+                f"(starts {curr.beginning_date}). Any transactions in "
+                f"that window will be missed unless you import the "
+                f"covering file(s); re-runs with added files dedup "
+                f"cleanly."
+            )
+            if interactive:
+                console.print(f"[yellow]Warning:[/yellow] {msg}")
+            else:
+                logger.warning(msg)
+
+    return statements
+
+
+####################################################################
+#
+def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
+    """
+    Flatten a list of per-file ``ParsedStatement`` objects into one.
+
+    The combined statement is what the API side of the importer sees:
+    one date range, one set of transactions, one beginning/ending
+    balance pair. The per-file objects remain available to the caller
+    for diagnostics (gap warnings, mixed-account errors) that only
+    make sense pre-combination.
+
+    Args:
+        statements: Parsed statements, already sorted by beginning_date.
+
+    Returns:
+        A synthetic ``ParsedStatement`` aggregating the inputs.
+        ``ending_balance`` comes from the latest statement (older
+        ending balances are stale once further activity is applied).
+        ``acct_id`` and ``account_type`` come from the first
+        statement that carries them; by the time we reach this
+        function cross-file consistency has already been enforced.
+    """
+    assert statements, "caller must ensure at least one statement"
+    first = statements[0]
+    last = statements[-1]
+
+    # Intra-run dedup. Two common patterns produce duplicate
+    # transactions across the combined file set:
+    #   1. Monthly statements that overlap at the period boundary
+    #      (the last day of month N reappears as the first day of
+    #      month N+1).
+    #   2. User-downloaded arbitrary date ranges that deliberately
+    #      overlap -- downloading "Jan 1 -> Jun 30" and "Apr 1 ->
+    #      today" is easier than being precise about seams, and
+    #      the importer should tolerate that.
+    # Server-side dedup does not catch either case when the account
+    # is brand new (nothing on the server to match against). Use the
+    # same (date, amount, raw_description) key that
+    # ``_fetch_existing`` uses so the in-file and cross-file dedup
+    # behaviours line up. The theoretical false-positive -- two
+    # genuinely-distinct txns on the same day for the same amount
+    # to the same merchant -- is rare in practice and far less
+    # painful than phantom duplicates.
+    transactions: list[ParsedTransaction] = []
+    seen: set[tuple[str, str, str]] = set()
+    duplicates = 0
+    for s in statements:
+        for tx in s.transactions:
+            key = _dedup_key(tx.transaction_date, tx.amount, tx.raw_description)
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            transactions.append(tx)
+    if duplicates:
+        logger.info(
+            "Dropped %d duplicate transaction(s) at statement boundaries.",
+            duplicates,
+        )
+
+    acct_id = next((s.acct_id for s in statements if s.acct_id), None)
+    account_type = next(
+        (s.account_type for s in statements if s.account_type), None
+    )
+
+    # Summary totals must match the dedup'd transaction list, not the
+    # raw sum across files -- otherwise validate_statement rejects
+    # the combined statement on the summary-totals check.
+    dedup_credits = sum(
+        (tx.amount for tx in transactions if tx.amount > 0), Decimal("0")
+    )
+    dedup_debits = sum(
+        (tx.amount for tx in transactions if tx.amount < 0), Decimal("0")
+    )
+
+    # Choose an authoritative combined beginning_balance. For sources
+    # that report beginning_balance (BofA CSV summary block) the
+    # earliest file's value is trustworthy; for sources where the
+    # parser derives it from LEDGERBAL (OFX/QFX) the derived value
+    # can be nonsense when the FI populates LEDGERBAL with the
+    # download-time balance instead of the statement-end balance
+    # (Apple's OFX exports do this). In that case derive the combined
+    # beginning balance from the walk instead: if every transaction
+    # in the combined run is applied to ``last.ending_balance`` in
+    # reverse, the remainder must equal the true opening balance.
+    sum_txs = sum((tx.amount for tx in transactions), Decimal("0"))
+    if first.beginning_balance_reported:
+        combined_beginning = first.beginning_balance
+    else:
+        combined_beginning = (last.ending_balance - sum_txs).quantize(
+            Decimal("0.01")
+        )
+        logger.info(
+            "Derived combined beginning balance %s from "
+            "ending %s - sum(transactions) %s (per-file beginnings "
+            "are not authoritative for this source format).",
+            combined_beginning,
+            last.ending_balance,
+            sum_txs,
+        )
+
+    # Sanity check on the combined statement. If
+    # ``combined_beginning + sum_txs != last.ending`` we would
+    # silently post garbage to the server. With the OFX-derivation
+    # above, this check effectively only fires for BofA-style
+    # reported-beginning sources that have gaps or overlaps.
+    expected_ending = combined_beginning + dedup_credits + dedup_debits
+    expected_ending = expected_ending.quantize(Decimal("0.01"))
+    actual_ending = last.ending_balance.quantize(Decimal("0.01"))
+    if expected_ending != actual_ending and len(statements) > 1:
+        logger.warning(
+            "Combined statement does not balance: "
+            "beginning (%s) + credits (%s) + debits (%s) = %s, "
+            "but latest file reports ending balance %s "
+            "(delta=%s). Re-run with --verbose for per-file details; "
+            "files may have overlapping windows or a source that "
+            "reports LEDGERBAL as the current balance rather than "
+            "the statement-end balance.",
+            first.beginning_balance,
+            dedup_credits,
+            dedup_debits,
+            expected_ending,
+            actual_ending,
+            (expected_ending - actual_ending).quantize(Decimal("0.01")),
+        )
+        for s in statements:
+            tx_sum = sum((t.amount for t in s.transactions), Decimal("0"))
+            logger.warning(
+                "  %s: %s -> %s | begin=%s end=%s sum_txs=%s (n=%d)",
+                s.source_path,
+                s.beginning_date,
+                s.ending_date,
+                s.beginning_balance,
+                s.ending_balance,
+                tx_sum,
+                len(s.transactions),
+            )
+
+    return ParsedStatement(
+        beginning_balance=combined_beginning,
+        beginning_date=first.beginning_date,
+        ending_balance=last.ending_balance,
+        ending_date=last.ending_date,
+        total_credits=dedup_credits,
+        total_debits=dedup_debits,
+        transactions=transactions,
+        acct_id=acct_id,
+        account_type=account_type,
+        # Propagate the reported/derived flag from the earliest file;
+        # consumers downstream may want to know (today, nothing does).
+        beginning_balance_reported=first.beginning_balance_reported,
+        source_path=(
+            first.source_path
+            if len(statements) == 1
+            else f"{len(statements)} files ({first.source_path} .. {last.source_path})"
+        ),
+    )
 
 
 ####################################################################
@@ -426,6 +747,32 @@ def _create_bank_account(
 
 ####################################################################
 #
+def _find_account_by_acctid(client: MibudgeClient, acct_id: str) -> dict | None:
+    """
+    Return the BankAccount dict whose ``account_number`` matches ``acct_id``.
+
+    ``account_number`` is an ``EncryptedCharField`` server-side so we
+    cannot filter on it via a query parameter -- encrypted values
+    don't compare at the DB level. We fetch the user's accessible
+    accounts instead and match client-side. The account list per user
+    is always small.
+
+    Args:
+        client:  Authenticated MibudgeClient.
+        acct_id: The OFX ACCTID to match against ``account_number``.
+
+    Returns:
+        The matching account dict, or ``None`` if no account has that
+        ``account_number``.
+    """
+    for account in client.get_all("/api/v1/bank-accounts/", {}):
+        if (account.get("account_number") or "") == acct_id:
+            return account
+    return None
+
+
+####################################################################
+#
 def _resolve_bank_account(
     client: MibudgeClient,
     *,
@@ -442,32 +789,107 @@ def _resolve_bank_account(
     """
     Return the target bank account UUID, creating the account if asked.
 
-    When ``create_account`` is True, POSTs a new account seeded with
-    the statement's beginning balance. Otherwise returns the supplied
-    ``account`` UUID unchanged.
+    Resolution order (first match wins):
+
+    1. Explicit ``--account <uuid>`` -- use it as-is (oldest and
+       simplest mode; still required for formats like BofA CSV that
+       don't carry an account identifier).
+    2. Statement-carried ``acct_id`` (OFX) -> look up a BankAccount
+       whose ``account_number`` equals that value. If found and the
+       user did NOT pass ``--create-account``, use it. If found and
+       the user DID pass ``--create-account``, refuse -- the command
+       as given implies first-time import, but the account already
+       exists.
+    3. ``--create-account`` -- POST a new account seeded with the
+       statement's beginning balance. ``account_type`` and
+       ``account_number`` are derived from the statement when
+       available (OFX); otherwise they come from the corresponding
+       CLI flags.
+
+    If none of the above apply, we can't guess what the user wants
+    and an explicit error is the only safe answer.
 
     Args:
-        client: Authenticated MibudgeClient.
-        statement: The parsed statement (provides ``beginning_balance``
-            when creating).
-        account: UUID of an existing account, if not creating.
-        create_account: True to create a new account.
-        name, bank_id, account_type, account_number: Required/optional
-            create-time fields (validated by the caller).
-        console: Rich console for user-visible messages.
-        interactive: Whether to render rich output.
+        client:         Authenticated MibudgeClient.
+        statement:      The combined parsed statement (carries
+            beginning_balance, acct_id, account_type).
+        account:        UUID of an existing account from --account.
+        create_account: Whether --create-account was passed.
+        name, bank_id:  Required for --create-account.
+        account_type:   CLI-supplied type; auto-filled from OFX when
+            the statement has one.
+        account_number: CLI-supplied number (CSV path only); for OFX
+            the statement's acct_id is used.
+        console:        Rich console for user-visible messages.
+        interactive:    Whether to render rich output.
 
     Returns:
         The bank account UUID to import into.
 
     Raises:
-        click.ClickException: On API failure.
+        click.ClickException: On ambiguous or impossible input, or
+            API failure.
     """
-    if not create_account:
-        assert account is not None  # guaranteed by CLI validation
+    # 1. Explicit UUID.
+    if account is not None:
         return account
 
-    assert name is not None and bank_id is not None and account_type is not None
+    # 2. ACCTID lookup (OFX).
+    matched: dict | None = None
+    if statement.acct_id:
+        matched = _find_account_by_acctid(client, statement.acct_id)
+
+    if matched is not None:
+        if create_account:
+            raise click.ClickException(
+                "--create-account was supplied, but an account already "
+                f"exists for ACCTID {statement.acct_id!r} "
+                f"(name={matched.get('name')!r}, id={matched.get('id')}). "
+                "Drop --create-account to import into the existing "
+                "account, or pass --account <uuid> to target a "
+                "different one explicitly."
+            )
+        if interactive:
+            console.print(
+                f"[dim]Matched ACCTID {statement.acct_id} -> "
+                f"existing account '{matched.get('name')}' "
+                f"({matched.get('id')}).[/dim]"
+            )
+        else:
+            logger.info(
+                "Matched ACCTID %s -> existing account %s",
+                statement.acct_id,
+                matched.get("id"),
+            )
+        return matched["id"]
+
+    # 3. --create-account path.
+    if not create_account:
+        if statement.acct_id:
+            raise click.ClickException(
+                f"No BankAccount found with account_number={statement.acct_id!r}. "
+                "Re-run with --create-account (plus --name and --bank) to "
+                "set it up, or --account <uuid> to target an existing "
+                "account explicitly."
+            )
+        raise click.ClickException(
+            "Either --account or --create-account must be supplied. "
+            "(The source file does not carry an account identifier "
+            "the importer can use to match an existing account.)"
+        )
+
+    assert name is not None and bank_id is not None
+    # account_type and account_number: prefer the statement's values
+    # (OFX) over the CLI flags, which on the OFX path are not even
+    # accepted by the CLI validation.
+    effective_type = statement.account_type or account_type
+    if effective_type is None:
+        raise click.ClickException(
+            "--account-type is required when the source file does not "
+            "identify the account type itself (this file does not)."
+        )
+    effective_number = statement.acct_id or account_number
+
     if interactive:
         console.print(
             f"[bold]Creating bank account[/bold] '{name}' "
@@ -478,8 +900,8 @@ def _resolve_bank_account(
             client,
             name=name,
             bank_id=bank_id,
-            account_type=account_type,
-            account_number=account_number,
+            account_type=effective_type,
+            account_number=effective_number,
             beginning_balance=statement.beginning_balance,
         )
     except APIError as e:
@@ -893,28 +1315,49 @@ def cli_group(
 ########################################################################
 ########################################################################
 #
-@cli_group.command("import", help="Import a BofA CSV export into mibudge.")
+@cli_group.command(
+    "import",
+    help=(
+        "Import one or more statement files (CSV or OFX/QFX) into "
+        "mibudge. Files can be passed via -f (repeatable) or as "
+        "positional arguments, so shell globs like *.ofx work."
+    ),
+)
 @click.option(
     "--file",
     "-f",
-    "file_path",
+    "flag_files",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    required=True,
-    help="Path to the BofA CSV export file.",
+    multiple=True,
+    help=(
+        "Path to a statement file. Repeatable. Positional arguments "
+        "are also accepted, so shell globs (e.g. '*.ofx') work too."
+    ),
+)
+@click.argument(
+    "positional_files",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    nargs=-1,
 )
 @click.option(
     "--account",
     "-a",
     default=None,
-    help="Bank account UUID to import into (omit with --create-account).",
+    help=(
+        "Bank account UUID to import into. Overrides any ACCTID "
+        "auto-match. Omit with --create-account, or when importing "
+        "OFX whose ACCTID already matches an existing account."
+    ),
 )
 @click.option(
     "--create-account",
     is_flag=True,
     help=(
-        "Create the target bank account from the CSV summary before "
-        "importing. Requires --name, --bank, and --account-type. "
-        "Mutually exclusive with --account."
+        "Create the target bank account before importing. For OFX the "
+        "account type and account number are taken from the file; for "
+        "CSV they must be supplied via --account-type and optionally "
+        "--account-number. Always requires --name and --bank. Refused "
+        "if an account already matches the OFX ACCTID."
     ),
 )
 @click.option(
@@ -935,17 +1378,24 @@ def cli_group(
     "--account-type",
     type=click.Choice(list(_ACCOUNT_TYPE_CHOICES.keys())),
     default=None,
-    help="Account type (with --create-account).",
+    help=(
+        "Account type for --create-account. Required for CSV imports; "
+        "ignored for OFX (the statement carries the type)."
+    ),
 )
 @click.option(
     "--account-number",
     default=None,
-    help="Optional account number (with --create-account).",
+    help=(
+        "Account number for --create-account (CSV path). Ignored for "
+        "OFX -- the statement's ACCTID is used."
+    ),
 )
 @click.pass_context
 def import_cmd(
     ctx: click.Context,
-    file_path: Path,
+    flag_files: tuple[Path, ...],
+    positional_files: tuple[Path, ...],
     account: str | None,
     create_account: bool,
     name: str | None,
@@ -953,27 +1403,26 @@ def import_cmd(
     account_type: str | None,
     account_number: str | None,
 ) -> None:
-    """CLI entry point for the BofA CSV importer."""
+    """CLI entry point for the statement importer."""
     console: Console = ctx.obj["console"]
     interactive: bool = ctx.obj["interactive"]
 
-    # --- Validate flag combinations ---
+    # --- Collect and validate inputs ---
+    file_paths: list[Path] = list(flag_files) + list(positional_files)
+    if not file_paths:
+        raise click.UsageError(
+            "At least one statement file is required. Pass paths "
+            "positionally (e.g. 'import *.ofx') or with -f."
+        )
+
     if create_account and account:
         raise click.UsageError(
             "--create-account and --account are mutually exclusive."
         )
-    if not create_account and not account:
-        raise click.UsageError(
-            "Either --account or --create-account must be supplied."
-        )
     if create_account:
         missing = [
             flag
-            for flag, val in [
-                ("--name", name),
-                ("--bank", bank),
-                ("--account-type", account_type),
-            ]
+            for flag, val in [("--name", name), ("--bank", bank)]
             if not val
         ]
         if missing:
@@ -981,8 +1430,8 @@ def import_cmd(
                 f"--create-account requires: {', '.join(missing)}."
             )
     else:
-        # --account mode: reject create-only flags so the user doesn't
-        # think they've supplied data that will be respected.
+        # Not creating: reject create-only flags so the user notices
+        # rather than silently having them ignored.
         stray = [
             flag
             for flag, val in [
@@ -998,12 +1447,13 @@ def import_cmd(
                 f"{', '.join(stray)} only apply with --create-account."
             )
 
-    # --- Parse + validate up front (abort before any API calls) ---
-    statement = _parse_and_validate(file_path)
+    # --- Parse + validate every file up front (abort before any API calls) ---
+    per_file_statements = _parse_all(file_paths, console, interactive)
+    statement = _combine_statements(per_file_statements)
     if interactive:
         console.print(
             f"[dim]Parsed {len(statement.transactions)} transaction(s) "
-            f"from {file_path} "
+            f"from {len(per_file_statements)} file(s) "
             f"({statement.beginning_date} -> {statement.ending_date}).[/dim]"
         )
 
@@ -1045,6 +1495,29 @@ def import_cmd(
                 interactive=interactive,
             )
 
+            # Pre-fetch the dedup window up here so we can wrap it in
+            # a status spinner; rich does not allow a status Live
+            # inside the Progress Live we start below.
+            txs = statement.transactions
+            dedup_start = (
+                min(tx.transaction_date for tx in txs) if txs else None
+            )
+            dedup_end = max(tx.transaction_date for tx in txs) if txs else None
+            existing: dict[tuple[str, str, str], tuple[str, str]] = {}
+            if txs and dedup_start is not None and dedup_end is not None:
+                if interactive:
+                    with console.status(
+                        f"[bold]Fetching existing transactions "
+                        f"({dedup_start} -> {dedup_end})..."
+                    ):
+                        existing = _fetch_existing(
+                            client, account_id, dedup_start, dedup_end
+                        )
+                else:
+                    existing = _fetch_existing(
+                        client, account_id, dedup_start, dedup_end
+                    )
+
             if interactive:
                 progress = Progress(
                     SpinnerColumn(),
@@ -1072,7 +1545,11 @@ def import_cmd(
 
                 with progress:
                     result = import_statement(
-                        statement, account_id, client, _progress_cb
+                        statement,
+                        account_id,
+                        client,
+                        _progress_cb,
+                        existing=existing,
                     )
                     progress.update(
                         task_id,
@@ -1081,7 +1558,9 @@ def import_cmd(
                         failed=result.failed,
                     )
             else:
-                result = import_statement(statement, account_id, client)
+                result = import_statement(
+                    statement, account_id, client, existing=existing
+                )
 
             # Post-import cross-check -- error-level, non-fatal.
             _verify_final_balance(client, account_id, statement.ending_balance)

@@ -1,8 +1,9 @@
-"""Tests for the BofA CSV parser."""
+"""Tests for the BofA CSV and OFX statement parsers."""
 
 # system imports
 import logging
 from collections.abc import Callable
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,11 +11,13 @@ from pathlib import Path
 import pytest
 
 # Project imports
+from importers.parsers import ofx as ofx_parser
 from importers.parsers.bofa_csv import (
     _infer_transaction_type,
     parse,
     validate_statement,
 )
+from importers.tests.factories import OFXTxnSpec
 
 
 ########################################################################
@@ -341,3 +344,156 @@ class TestBofaCSVParser:
         stmt.ending_balance += Decimal("1.00")
         errors = validate_statement(stmt)
         assert any("Summary totals mismatch" in e for e in errors)
+
+
+########################################################################
+########################################################################
+#
+class TestOFXParser:
+    """Tests for importers.parsers.ofx.parse()."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "ofx_acct_type,expected_code",
+        [("CHECKING", "C"), ("SAVINGS", "S")],
+    )
+    def test_account_id_and_type_surface_on_statement(
+        self,
+        ofx_acct_type: str,
+        expected_code: str,
+        ofx_file_factory: Callable[..., tuple[Path, list[OFXTxnSpec]]],
+    ) -> None:
+        """
+        GIVEN: an OFX file with an ACCTID and a known ACCTTYPE
+        WHEN:  parse() is called
+        THEN:  the ParsedStatement carries acct_id and the mibudge
+               account_type code mapped from ACCTTYPE
+        """
+        path, _ = ofx_file_factory(
+            acct_id="9876543210", account_type=ofx_acct_type
+        )
+        stmt = ofx_parser.parse(path)
+        assert stmt.acct_id == "9876543210"
+        assert stmt.account_type == expected_code
+
+    ####################################################################
+    #
+    def test_beginning_balance_derived_from_ending_and_sum(
+        self,
+        ofx_file_factory: Callable[..., tuple[Path, list[OFXTxnSpec]]],
+        ofx_txn_spec_factory: Callable[..., OFXTxnSpec],
+    ) -> None:
+        """
+        GIVEN: an OFX file whose LEDGERBAL is known and whose transactions
+               sum to a known amount
+        WHEN:  parse() is called
+        THEN:  beginning_balance == ending_balance - sum(amounts)
+        """
+        specs = [
+            ofx_txn_spec_factory(
+                amount=Decimal("-40.00"), transaction_date=date(2025, 6, 1)
+            ),
+            ofx_txn_spec_factory(
+                amount=Decimal("-60.00"), transaction_date=date(2025, 6, 2)
+            ),
+            ofx_txn_spec_factory(
+                amount=Decimal("200.00"),
+                trntype="DEP",
+                transaction_date=date(2025, 6, 3),
+            ),
+        ]
+        path, _ = ofx_file_factory(
+            specs=specs,
+            ending_balance=Decimal("1100.00"),
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 30),
+        )
+        stmt = ofx_parser.parse(path)
+        # 1100 - (-40 + -60 + 200) = 1100 - 100 = 1000
+        assert stmt.beginning_balance == Decimal("1000.00")
+        assert stmt.ending_balance == Decimal("1100.00")
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "trntype,expected",
+        [
+            ("POS", "signature_purchase"),
+            ("ATM", "atm_withdrawal"),
+            ("CHECK", "check"),
+            ("INT", "interest_credit"),
+            ("FEE", "fee"),
+            ("XFER", "shared_transfer"),
+            ("DEP", "check_deposit"),
+            ("PAYMENT", "bill_payment"),
+            ("DIRECTDEP", "ach"),
+            ("DIRECTDEBIT", "ach"),
+        ],
+    )
+    def test_trntype_maps_to_expected_transaction_type(
+        self,
+        trntype: str,
+        expected: str,
+        ofx_file_factory: Callable[..., tuple[Path, list[OFXTxnSpec]]],
+        ofx_txn_spec_factory: Callable[..., OFXTxnSpec],
+    ) -> None:
+        """
+        GIVEN: an OFX transaction with a specific TRNTYPE
+        WHEN:  parse() runs
+        THEN:  the ParsedTransaction carries the mibudge-mapped type
+        """
+        spec = ofx_txn_spec_factory(trntype=trntype)
+        path, _ = ofx_file_factory(specs=[spec])
+        stmt = ofx_parser.parse(path)
+        assert stmt.transactions[0].transaction_type == expected
+
+    ####################################################################
+    #
+    def test_check_description_includes_checknum(
+        self,
+        ofx_file_factory: Callable[..., tuple[Path, list[OFXTxnSpec]]],
+        ofx_txn_spec_factory: Callable[..., OFXTxnSpec],
+    ) -> None:
+        """
+        GIVEN: an OFX CHECK transaction with a CHECKNUM
+        WHEN:  parse() builds the description
+        THEN:  the description starts with "Check <num>"
+        """
+        spec = ofx_txn_spec_factory(
+            trntype="CHECK",
+            checknum="318",
+            name="PAPER CHECK",
+            amount=Decimal("-125.00"),
+        )
+        path, _ = ofx_file_factory(specs=[spec])
+        desc = ofx_parser.parse(path).transactions[0].raw_description
+        assert desc.startswith("Check 318")
+
+    ####################################################################
+    #
+    def test_validate_statement_accepts_derived_walk(
+        self,
+        ofx_file_factory: Callable[..., tuple[Path, list[OFXTxnSpec]]],
+    ) -> None:
+        """
+        GIVEN: an OFX file whose running balances are derived by the parser
+        WHEN:  validate_statement() is called
+        THEN:  the walk is clean (empty error list) -- the check is
+               tautological by construction but guarantees uniform shape
+        """
+        path, _ = ofx_file_factory(num_transactions=5)
+        assert ofx_parser.validate_statement(ofx_parser.parse(path)) == []
+
+    ####################################################################
+    #
+    def test_empty_or_malformed_file_raises(self, tmp_path: Path) -> None:
+        """
+        GIVEN: a file that is not a recognisable OFX statement
+        WHEN:  parse() is called
+        THEN:  ValueError is raised
+        """
+        bad = tmp_path / "not_ofx.ofx"
+        bad.write_text("this is not OFX content at all\n")
+        with pytest.raises(ValueError):
+            ofx_parser.parse(bad)

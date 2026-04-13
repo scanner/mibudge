@@ -76,9 +76,8 @@ class Bank(MoneyPoolBaseClass):
     def __str__(self) -> str:
         return self.name
 
-    # XXX Add a validator to make sure only digits are used
     routing_number = models.CharField(
-        max_length=9, null=True, default=None, editable=False, unique=True
+        max_length=9, null=True, blank=True, default=None, unique=True
     )
 
     # ISO 4217 currency code.  Bank accounts created under this bank
@@ -124,9 +123,11 @@ class BankAccount(MoneyPoolBaseClass):
         help_text="Joint ownership group for this account.",
     )
 
-    # XXX Add a validator to make sure only digits are used
+    # max_length=32 comfortably covers OFX ACCTID (spec max A-22),
+    # SWIFT account-identifier segments, and the longer internal IDs
+    # fintech providers (Apple, etc.) use in their OFX exports.
     account_number = EncryptedCharField(
-        max_length=12, null=True, blank=True, default=None, unique=True
+        max_length=32, null=True, blank=True, default=None, unique=True
     )
 
     account_type = models.CharField(

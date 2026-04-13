@@ -32,71 +32,21 @@ from description keywords; anything unrecognised is left as NOT_SET ("").
 import csv
 import logging
 import re
-from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+# Project imports
+from importers.parsers.common import ParsedStatement, ParsedTransaction
+
 logger = logging.getLogger(__name__)
 
-
-########################################################################
-########################################################################
-#
-@dataclass
-class ParsedTransaction:
-    """
-    A single transaction extracted from a BofA CSV export.
-
-    Args:
-        transaction_date: Settlement date (no time component in CSV exports).
-        raw_description:  Description string exactly as it appears in the CSV.
-        amount:           Signed decimal amount. Negative = debit, positive = credit.
-        running_balance:  Account running balance after this transaction.
-        transaction_type: One of Transaction.TransactionType values, or "" (NOT_SET).
-        pending:          Always False -- CSV exports contain only settled transactions.
-    """
-
-    transaction_date: date
-    raw_description: str
-    amount: Decimal
-    running_balance: Decimal
-    transaction_type: str
-    pending: bool = False
-
-
-########################################################################
-########################################################################
-#
-@dataclass
-class ParsedStatement:
-    """
-    A full Bank of America CSV statement -- summary metadata plus
-    transactions.
-
-    The summary section of a BofA CSV reports the account's balance
-    and activity totals over the statement window. We surface all of
-    it here so callers can (a) create a new bank account seeded with
-    the correct starting balance and (b) verify after import that the
-    sum of imported transactions reproduces the CSV's stated totals.
-
-    Args:
-        beginning_balance: Account balance at *beginning_date*.
-        beginning_date:    First date covered by the statement.
-        ending_balance:    Account balance at *ending_date*.
-        ending_date:       Last date covered by the statement.
-        total_credits:     Sum of credits (positive, from the summary).
-        total_debits:      Sum of debits (negative, from the summary).
-        transactions:      Parsed transactions in file order.
-    """
-
-    beginning_balance: Decimal
-    beginning_date: date
-    ending_balance: Decimal
-    ending_date: date
-    total_credits: Decimal
-    total_debits: Decimal
-    transactions: list[ParsedTransaction] = field(default_factory=list)
+__all__ = [
+    "ParsedStatement",
+    "ParsedTransaction",
+    "parse",
+    "validate_statement",
+]
 
 
 ########################################################################
@@ -414,6 +364,7 @@ def parse(source: str | Path) -> ParsedStatement:
         total_credits=summary["total_credits"],  # type: ignore[arg-type]
         total_debits=summary["total_debits"],  # type: ignore[arg-type]
         transactions=transactions,
+        source_path=str(path),
     )
 
 

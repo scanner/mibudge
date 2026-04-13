@@ -57,21 +57,6 @@ def _apply_extra_fields(
                 setattr(form.instance, name, value)
 
 
-class BankForm(forms.ModelForm):
-    """Allow setting routing_number on creation."""
-
-    class Meta:
-        model = Bank
-        fields = ("name",)
-
-    # editable=False on the model, declared explicitly for creation.
-    routing_number = forms.CharField(max_length=9, required=False)
-
-    def save(self, commit: bool = True) -> Bank:
-        _apply_extra_fields(self, ("routing_number",))
-        return super().save(commit=commit)
-
-
 class BankAccountForm(forms.ModelForm):
     """Allow setting bank and initial balances on creation."""
 
@@ -180,30 +165,6 @@ class BankAdmin(admin.ModelAdmin):
     list_display = ("name", "routing_number", "id")
     search_fields = ("name", "routing_number")
     fields = ("name", "routing_number")
-
-    ####################################################################
-    #
-    def get_form(
-        self,
-        request: HttpRequest,
-        obj: Any | None = None,
-        change: bool = False,
-        **kwargs: Any,
-    ) -> type[forms.ModelForm]:
-        if obj is None:
-            return BankForm
-        kwargs["fields"] = ("name",)
-        return super().get_form(request, obj, change=change, **kwargs)
-
-    ####################################################################
-    #
-    def get_readonly_fields(
-        self, request: HttpRequest, obj: Bank | None = None
-    ) -> tuple[str, ...]:
-        """Allow routing_number on creation, read-only after."""
-        if obj is None:
-            return ()
-        return ("routing_number",)
 
 
 ########################################################################
