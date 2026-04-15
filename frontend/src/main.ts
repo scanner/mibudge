@@ -4,8 +4,8 @@
 // Order matters:
 //   1. Create the app
 //   2. Install Pinia (stores must be available before any component setup runs)
-//   3. Install Vue Router
-//   4. Initialise the auth store (reads window.__INITIAL_TOKEN__ if present)
+//   3. Initialise the auth store (reads window.__INITIAL_TOKEN__ if present)
+//   4. Install Vue Router (its `beforeEach` guard reads the auth store)
 //   5. Mount
 //
 
@@ -27,10 +27,12 @@ import "./style.css";
 const app = createApp(App);
 
 app.use(createPinia());
-app.use(router);
 
-// NOTE: Auth store must be initialised after Pinia is installed but before
-//       mount so that the first render already has the token in state.
+// NOTE: Auth store must be initialised after Pinia is installed but
+//       before the router is installed so that the very first
+//       navigation guard already sees the token.
 useAuthStore().init();
+
+app.use(router);
 
 app.mount("#app");

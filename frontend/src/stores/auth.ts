@@ -14,11 +14,12 @@
 // 3rd party imports
 //
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 // app imports
 //
 import { apiFetch, authFetch, ApiError, AuthError } from "@/api/client";
+import type { User } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -34,6 +35,9 @@ export const useAuthStore = defineStore("auth", () => {
   ////////////////////////////////////////////////////////////////////
   //
   const accessToken = ref<string | null>(null);
+  const user = ref<User | null>(null);
+
+  const isAuthenticated = computed(() => accessToken.value !== null);
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -53,6 +57,37 @@ export const useAuthStore = defineStore("auth", () => {
   //
   function clear() {
     accessToken.value = null;
+    user.value = null;
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Exchange username + password for an access token.  The backend
+  // also sets the httpOnly refresh cookie on the response, so nothing
+  // else is needed here.  Throws ApiError(401) on bad credentials.
+  //
+  async function login(username: string, password: string): Promise<void> {
+    const data = await authFetch<TokenResponse>("/token/", null, {
+      method: "POST",
+      body: { username, password } as unknown as BodyInit,
+    });
+    accessToken.value = data.access;
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Fetch the current user and cache it on the store.  Safe to call
+  // more than once; `force` re-fetches if the cache is already warm.
+  //
+  async function loadUser(force = false): Promise<User | null> {
+    if (!force && user.value) return user.value;
+    try {
+      const me = await request<User>("/users/me/");
+      user.value = me;
+      return me;
+    } catch {
+      return null;
+    }
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -91,5 +126,15 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  return { accessToken, init, clear, refresh, request };
+  return {
+    accessToken,
+    user,
+    isAuthenticated,
+    init,
+    clear,
+    refresh,
+    login,
+    loadUser,
+    request,
+  };
 });
