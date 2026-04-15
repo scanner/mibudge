@@ -18,7 +18,7 @@ import { ref } from "vue";
 
 // app imports
 //
-import { apiFetch, ApiError, AuthError } from "@/api/client";
+import { apiFetch, authFetch, ApiError, AuthError } from "@/api/client";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -62,7 +62,7 @@ export const useAuthStore = defineStore("auth", () => {
   //
   async function refresh(): Promise<boolean> {
     try {
-      const data = await apiFetch<TokenResponse>("/token/refresh/", null, {
+      const data = await authFetch<TokenResponse>("/token/refresh/", null, {
         method: "POST",
       });
       accessToken.value = data.access;

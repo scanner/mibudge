@@ -1,45 +1,47 @@
 /*
- * Global styles — minimal reset only.
- * Component-specific styles live in their respective .vue files.
+ * Global styles.
+ *
+ * Tailwind is the primary styling mechanism; this file loads its layers
+ * and applies the base typography tokens from UI_SPEC.md §2.1.
+ *
+ * IBM Plex Sans provides a slashed zero by default.  IBM Plex Mono is
+ * used for every monetary amount — applied via the `font-mono` utility
+ * or the <MoneyAmount> component.
  */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
-body {
-  margin: 0;
-  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  color: #111;
-  background: #fff;
-  -webkit-font-smoothing: antialiased;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@media (prefers-color-scheme: dark) {
+@layer base {
+  html,
   body {
-    color: #f3f4f6;
-    background: #111;
+    @apply font-sans text-neutral-900 bg-white antialiased;
+    font-size: 14px;
+    line-height: 1.5;
   }
-}
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  margin: 0 0 0.5em;
-  line-height: 1.2;
-}
+  body {
+    margin: 0;
+  }
 
-p {
-  margin: 0 0 1em;
-}
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0 0 0.5em;
+    line-height: 1.2;
+  }
 
-a {
-  color: inherit;
+  p {
+    margin: 0 0 1em;
+  }
+
+  a {
+    color: inherit;
+  }
 }
