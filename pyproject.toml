@@ -138,4 +138,7 @@ filterwarnings = [
     # WhiteNoise fires this on every request when staticfiles/ doesn't exist
     # locally (it's created by collectstatic, not present in the source tree).
     "ignore:No directory at.*staticfiles:UserWarning",
+    # ofxparse calls BeautifulSoup's deprecated findAll (renamed to find_all
+    # in bs4 4.0). Upstream fix has not shipped.
+    "ignore:Call to deprecated method findAll.*:DeprecationWarning:ofxparse.ofxparse",
 ]

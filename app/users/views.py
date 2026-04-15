@@ -31,7 +31,7 @@ User = get_user_model()
 ########################################################################
 #
 # Cookie name used for the httpOnly refresh token throughout the auth flow.
-# Defined here so SpaLoginView and CookieTokenRefreshView stay in sync.
+# Shared by CookieTokenObtainPairView and CookieTokenRefreshView.
 #
 REFRESH_COOKIE_NAME = "refresh_token"
 

@@ -1,8 +1,7 @@
-"""Tests for JWT-related auth views: SpaLoginView and CookieTokenRefreshView."""
+"""Tests for JWT-related auth views: CookieTokenObtainPairView, CookieTokenRefreshView, SpaShellView."""
 
 # system imports
 #
-import re
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -50,48 +49,73 @@ def vite_dev_mode(settings: LazySettings) -> None:
 ########################################################################
 ########################################################################
 #
-class TestSpaLoginView:
-    """Tests for SpaLoginView -- the allauth → SPA JWT handoff."""
+class TestCookieTokenObtainPairView:
+    """Tests for CookieTokenObtainPairView -- SPA login endpoint."""
 
     ####################################################################
     #
-    def test_unauthenticated_redirects_to_login(self, client: Client) -> None:
+    def test_invalid_credentials_returns_401(self, client: Client) -> None:
         """
-        GIVEN: an unauthenticated request
-        WHEN:  GET /users/~spa-login/
-        THEN:  the response is a redirect to the login page
+        GIVEN: a request with invalid credentials
+        WHEN:  POST /api/token/
+        THEN:  the response status is 401 and no refresh cookie is set
         """
-        response = client.get(reverse("users:spa-login"))
-        assert response.status_code == 302
-        assert "/accounts/login/" in response["Location"]
+        response = client.post(
+            reverse("token-obtain"),
+            data={"username": "nobody", "password": "wrong"},
+            content_type="application/json",
+        )
+        assert response.status_code == 401
+        assert REFRESH_COOKIE_NAME not in response.cookies
 
     ####################################################################
     #
-    def test_sets_httponly_refresh_cookie(
-        self, client: Client, user: User
+    def test_valid_credentials_set_httponly_refresh_cookie(
+        self, client: Client, user_factory: object
     ) -> None:
         """
-        GIVEN: an authenticated user
-        WHEN:  GET /users/~spa-login/
-        THEN:  the response sets an httpOnly cookie named REFRESH_COOKIE_NAME
+        GIVEN: valid credentials
+        WHEN:  POST /api/token/
+        THEN:  the response sets an httpOnly refresh cookie and the body
+               contains an access token (but NOT a refresh token)
         """
-        client.force_login(user)
-        response = client.get(reverse("users:spa-login"))
+        password = "test-password-123!"
+        # user_factory fixture created by pytest-factoryboy; typed loosely
+        # here to avoid importing the factory class directly.
+        user = user_factory(password=password)  # type: ignore[operator]
+        response = client.post(
+            reverse("token-obtain"),
+            data={"username": user.username, "password": password},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "access" in body
+        assert "refresh" not in body
         assert REFRESH_COOKIE_NAME in response.cookies
         assert response.cookies[REFRESH_COOKIE_NAME]["httponly"]
 
     ####################################################################
     #
     def test_refresh_cookie_max_age_matches_jwt_lifetime(
-        self, client: Client, user: User, settings: LazySettings
+        self,
+        client: Client,
+        user_factory: object,
+        settings: LazySettings,
     ) -> None:
         """
-        GIVEN: an authenticated user
-        WHEN:  GET /users/~spa-login/
-        THEN:  the refresh cookie's max-age matches SIMPLE_JWT REFRESH_TOKEN_LIFETIME
+        GIVEN: a successful login
+        WHEN:  POST /api/token/
+        THEN:  the refresh cookie's max-age matches SIMPLE_JWT
+               REFRESH_TOKEN_LIFETIME
         """
-        client.force_login(user)
-        response = client.get(reverse("users:spa-login"))
+        password = "test-password-123!"
+        user = user_factory(password=password)  # type: ignore[operator]
+        response = client.post(
+            reverse("token-obtain"),
+            data={"username": user.username, "password": password},
+            content_type="application/json",
+        )
         lifetime = cast(
             timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
         )
@@ -100,25 +124,24 @@ class TestSpaLoginView:
 
     ####################################################################
     #
-    def test_embedded_access_token_is_valid_jwt_for_user(
-        self, client: Client, user: User
+    def test_returned_access_token_is_valid_jwt_for_user(
+        self, client: Client, user_factory: object
     ) -> None:
         """
-        GIVEN: an authenticated user
-        WHEN:  GET /users/~spa-login/
-        THEN:  the page contains a window.__INITIAL_TOKEN__ assignment whose
-               value is a valid JWT with a user_id claim matching the user
+        GIVEN: valid credentials
+        WHEN:  POST /api/token/
+        THEN:  the ``access`` token in the body is a valid JWT whose
+               ``user_id`` claim matches the authenticated user
         """
-        client.force_login(user)
-        response = client.get(reverse("users:spa-login"))
-        content = response.content.decode()
-
-        match = re.search(r'window\.__INITIAL_TOKEN__ = "([^"]+)"', content)
-        assert match is not None, "Access token not found in page"
-
-        # simplejwt stubs incorrectly type UntypedToken(token) as Token | None;
-        # it accepts a raw string at runtime — revisit if stubs improve
-        token = UntypedToken(str(match.group(1)))  # type: ignore[arg-type]
+        password = "test-password-123!"
+        user = user_factory(password=password)  # type: ignore[operator]
+        response = client.post(
+            reverse("token-obtain"),
+            data={"username": user.username, "password": password},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        token = UntypedToken(response.json()["access"])
         assert int(token["user_id"]) == user.pk
 
 
@@ -218,15 +241,29 @@ class TestSpaShellView:
 
     ####################################################################
     #
-    def test_unauthenticated_redirects_to_login(self, client: Client) -> None:
+    @pytest.mark.parametrize(
+        "path",
+        [
+            pytest.param("/app/", id="root"),
+            pytest.param("/app/dashboard/", id="subpath"),
+            pytest.param("/app/some/deep/route", id="deep-subpath"),
+            pytest.param("/app/login/", id="login"),
+        ],
+    )
+    def test_shell_returns_200_unauthenticated(
+        self,
+        client: Client,
+        vite_dev_mode: None,
+        path: str,
+    ) -> None:
         """
         GIVEN: an unauthenticated request
-        WHEN:  GET /app/
-        THEN:  the response is a redirect to the login page
+        WHEN:  GET /app/ or any sub-path under /app/
+        THEN:  the response status is 200 -- the SPA is self-authenticating
+               and owns its own login UI, so Django does not gate /app/
         """
-        response = client.get("/app/")
-        assert response.status_code == 302
-        assert "/accounts/login/" in response["Location"]
+        response = client.get(path)
+        assert response.status_code == 200
 
     ####################################################################
     #
