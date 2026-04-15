@@ -124,7 +124,9 @@ AUTHENTICATION_BACKENDS = [
     "guardian.backends.ObjectPermissionBackend",
 ]
 AUTH_USER_MODEL = "users.User"
-LOGIN_REDIRECT_URL = "users:spa-login"
+# The SPA owns its own auth flow (silent refresh + /app/login/), so there
+# is no allauth-to-SPA handoff URL.  allauth remains mounted for password
+# reset flows only.
 LOGIN_URL = "account_login"
 
 # PASSWORDS
@@ -182,6 +184,7 @@ STATICFILES_FINDERS = [
 DJANGO_VITE = {
     "default": {
         "dev_mode": env.bool("DJANGO_VITE_DEV_MODE", default=DEBUG),
+        "dev_server_protocol": "https",
         "dev_server_port": 5173,
         "manifest_path": REPO_DIR
         / "frontend"

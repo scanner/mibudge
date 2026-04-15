@@ -36,8 +36,11 @@ deployment/ssl/ssl_key.pem deployment/ssl/ssl_crt.pem: | ssl
 
 certs: ssl deployment/ssl/ssl_key.pem deployment/ssl/ssl_crt.pem	## uses `mkcert` to create certificates for local development.
 
-up: build dirs certs	## Build and docker compose up
+up: build dirs certs	## Build backend stack, bring it up, then run Vite in the foreground
 	@docker compose up --remove-orphans --detach
+	@echo "Backend stack running in the background. Starting Vite dev server..."
+	@echo "(Ctrl-C stops Vite; backend containers keep running -- use 'make down' to stop them.)"
+	@cd $(ROOT_DIR)/frontend && pnpm dev
 
 down:	## docker compose down
 	@docker compose down --remove-orphans

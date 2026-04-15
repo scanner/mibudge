@@ -6,9 +6,9 @@
 // server; the browser sends it automatically on POST /api/token/refresh/
 // without JS ever touching it.
 //
-// On SPA load, the web server app injects the initial access token as
-// window.__INITIAL_TOKEN__ in the page HTML.  main.ts reads it once,
-// stores it here, and removes it from the DOM.
+// On cold boot, main.ts calls refresh() -- if the refresh cookie is still
+// valid the SPA becomes authenticated before the first router guard runs;
+// otherwise the guard redirects to /app/login/.
 //
 
 // 3rd party imports
@@ -38,20 +38,6 @@ export const useAuthStore = defineStore("auth", () => {
   const user = ref<User | null>(null);
 
   const isAuthenticated = computed(() => accessToken.value !== null);
-
-  ////////////////////////////////////////////////////////////////////
-  //
-  // Initialise the token from window.__INITIAL_TOKEN__ if present.
-  // Called once from main.ts immediately after the store is available.
-  //
-  function init() {
-    const w = window as Window & { __INITIAL_TOKEN__?: string };
-    if (w.__INITIAL_TOKEN__) {
-      accessToken.value = w.__INITIAL_TOKEN__;
-      // Remove from the DOM so the token is not readable after page load.
-      delete w.__INITIAL_TOKEN__;
-    }
-  }
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -130,7 +116,6 @@ export const useAuthStore = defineStore("auth", () => {
     accessToken,
     user,
     isAuthenticated,
-    init,
     clear,
     refresh,
     login,

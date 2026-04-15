@@ -10,17 +10,17 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import AbstractBaseUser
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
+from django.http import HttpRequest
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
-from django.views import View
 from django.views.generic import DetailView, RedirectView, UpdateView
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 # app imports
 #
@@ -93,43 +93,49 @@ user_redirect_view = UserRedirectView.as_view()
 ########################################################################
 ########################################################################
 #
-class SpaLoginView(LoginRequiredMixin, View):
-    """
-    Post-login handoff from allauth to the Vue SPA.
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Attach the httpOnly refresh cookie to ``response``."""
+    lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+    response.set_cookie(
+        REFRESH_COOKIE_NAME,
+        refresh_token,
+        max_age=int(lifetime.total_seconds()),
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Strict",
+    )
 
-    allauth authenticates the user and redirects here (LOGIN_REDIRECT_URL).
-    This view issues a JWT pair: the refresh token goes into an httpOnly
-    cookie; the access token is injected into the page as
-    window.__INITIAL_TOKEN__ so the SPA can read it once on load.
+
+########################################################################
+########################################################################
+#
+class CookieTokenObtainPairView(TokenObtainPairView):
+    """
+    JWT obtain endpoint that stores the refresh token in an httpOnly
+    cookie and returns only the access token in the response body.
+
+    This is the browser-SPA login flow: JS receives the short-lived
+    access token (kept in memory); the refresh token is a
+    Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
+    and that the browser sends automatically to /api/token/refresh/.
     """
 
     ####################################################################
     #
-    def get(self, request: HttpRequest) -> HttpResponse:
-        # LoginRequiredMixin guarantees an authenticated user; django-stubs
-        # cannot narrow AbstractBaseUser | AnonymousUser -- cast is safe here.
-        refresh = RefreshToken.for_user(cast(AbstractBaseUser, request.user))
-
-        response = render(
-            request,
-            "spa/token_handoff.html",
-            {"access_token": str(refresh.access_token)},
-        )
-        lifetime = cast(
-            timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
-        )
-        response.set_cookie(
-            REFRESH_COOKIE_NAME,
-            str(refresh),
-            max_age=int(lifetime.total_seconds()),
-            httponly=True,
-            secure=not settings.DEBUG,
-            samesite="Strict",
-        )
+    def post(
+        self, request: HttpRequest, *args: object, **kwargs: object
+    ) -> Response:
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK and isinstance(
+            response.data, dict
+        ):
+            refresh = response.data.pop("refresh", None)
+            if refresh:
+                _set_refresh_cookie(response, refresh)
         return response
 
 
-spa_login_view = SpaLoginView.as_view()
+cookie_token_obtain_pair_view = CookieTokenObtainPairView.as_view()
 
 
 ########################################################################
@@ -170,17 +176,7 @@ class CookieTokenRefreshView(TokenRefreshView):
 
         if "refresh" in validated:
             # Rotation produced a new refresh token -- update the cookie.
-            lifetime = cast(
-                timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
-            )
-            response.set_cookie(
-                REFRESH_COOKIE_NAME,
-                validated["refresh"],
-                max_age=int(lifetime.total_seconds()),
-                httponly=True,
-                secure=not settings.DEBUG,
-                samesite="Strict",
-            )
+            _set_refresh_cookie(response, validated["refresh"])
 
         return response
 

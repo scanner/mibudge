@@ -1,6 +1,13 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'node:fs'
+
+// The main Django dev server is served over HTTPS (via the reverse proxy
+// using the repo-level mkcert certs in deployment/ssl/).  Browsers block
+// mixed content, so the Vite dev server must also be HTTPS -- reuse the
+// same mkcert cert/key so the browser's existing trust carries over.
+const sslDir = fileURLToPath(new URL('../deployment/ssl', import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,10 +20,10 @@ export default defineConfig({
     },
   },
 
-  // In production Django serves static files from /static/.
-  // In dev, django-vite points script tags directly at the Vite dev server,
-  // so the base value is not used.
-  base: process.env.NODE_ENV === 'production' ? '/static/' : '/',
+  // django-vite joins STATIC_URL (/static/) into the dev-server asset URLs
+  // (e.g. https://localhost:5173/static/@vite/client), so Vite must serve
+  // from /static/ in both dev and production.
+  base: '/static/',
 
   build: {
     // manifest.json is required by django-vite to resolve hashed asset filenames.
@@ -35,5 +42,9 @@ export default defineConfig({
     strictPort: true,
     // Allow the Django dev server (different origin) to load assets.
     cors: true,
+    https: {
+      cert: readFileSync(`${sslDir}/ssl_crt.pem`),
+      key: readFileSync(`${sslDir}/ssl_key.pem`),
+    },
   },
 })

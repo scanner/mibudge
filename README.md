@@ -93,13 +93,21 @@ The machine-readable OpenAPI spec and generated API reference docs live in [`doc
 - **Access token** (60 min): held in JS memory only, sent as `Authorization: Bearer` header
 - **Refresh token** (14 days, sliding): `httpOnly; Secure; SameSite=Strict` cookie, never readable by JS
 - **Rotation**: `ROTATE_REFRESH_TOKENS = True`, `BLACKLIST_AFTER_ROTATION = True` -- each refresh call resets the 14-day clock
-- **Login flow**:
-  1. django-allauth handles credentials at `/accounts/login/`
-  2. `LOGIN_REDIRECT_URL` sends the authenticated user to `SpaLoginView`
-  3. `SpaLoginView` issues a JWT pair, sets the refresh token as an httpOnly cookie, and renders a minimal handoff page
-  4. The handoff page sets `window.__INITIAL_TOKEN__` and immediately redirects to `/app/`
-  5. The Vue SPA reads the token once into the Pinia auth store and removes it from `window`
-- **Silent refresh**: when the access token expires the auth store calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie automatically, returning a new access token and rotating the refresh cookie
+- **Login flow**: the SPA owns its own auth UI at `/app/login/`. It posts
+  username+password to `POST /api/token/` (`CookieTokenObtainPairView`), which
+  returns the access token in the JSON body and sets the refresh token as the
+  `httpOnly; Secure; SameSite=Strict` cookie.
+- **Cold-boot silent refresh**: on first load, `main.ts` calls
+  `authStore.refresh()` before installing the router. If the refresh cookie is
+  still valid, the SPA becomes authenticated before the first route guard runs
+  and returning users skip the login screen entirely.
+- **Silent refresh on 401**: when the access token expires, the auth store
+  calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie
+  automatically, returning a new access token and rotating the refresh cookie.
+- **django-allauth**: remains mounted at `/accounts/` for password reset flows
+  only; it is not part of the SPA login path. See
+  `task-mibudge-crispy-allauth` for the follow-up work required before the
+  allauth templates can render.
 
 ## Project structure
 
@@ -115,7 +123,7 @@ mibudge/
       moneypools/         # Moneypools tests and model factories
     scripts/              # Container startup scripts (one per service: app, celery worker,
                           #   celery beat, flower). Selected via docker-compose `command:`
-    templates/            # Django templates: SPA shell, JWT handoff page, allauth overrides
+    templates/            # Django templates: SPA shell, allauth overrides
     static/               # Static files served by Django
   frontend/               # Vue 3 SPA
     src/                  # TypeScript source: components, Pinia stores, Vue Router, API client
