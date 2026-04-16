@@ -98,6 +98,45 @@ class TestBudget:
 
     ####################################################################
     #
+    def test_fillup_budget_created_for_recurring_with_fillup_goal(
+        self,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Recurring budget created with with_fillup_goal=True
+        WHEN:  the budget is saved
+        THEN:  an associated type-A fill-up budget is created and linked
+        """
+        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget.refresh_from_db()
+        assert budget.fillup_goal is not None
+        fillup = budget.fillup_goal
+        assert fillup.budget_type == "A"
+        assert fillup.name == f"{budget.name} Fill-up"
+        assert fillup.bank_account == budget.bank_account
+
+    ####################################################################
+    #
+    def test_fillup_budget_deleted_when_parent_deleted(
+        self,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Recurring budget with an associated fill-up goal
+        WHEN:  the parent budget is deleted
+        THEN:  the fill-up goal budget is also deleted
+        """
+        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget.refresh_from_db()
+        fillup_id = budget.fillup_goal_id
+        assert fillup_id is not None
+
+        budget.delete()
+
+        assert not Budget.objects.filter(id=fillup_id).exists()
+
+    ####################################################################
+    #
     @pytest.mark.parametrize(
         "budget_type,expected_complete_after_spend",
         [

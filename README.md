@@ -43,6 +43,13 @@ For example: you have a monthly grocery budget with a $500 target. Throughout th
 
 A **Capped** budget tops itself up to a fixed cap amount on a funding schedule. Each funding event deposits a fixed amount (up to the cap) into the budget; when the balance is already at or above the cap, no funding occurs. As soon as spending brings the balance below the cap, the next scheduled funding event resumes automatically. Unlike a Goal (which is complete once funded) or a Recurring budget (which resets on a cycle), a Capped budget is perpetual -- it is marked complete only while its balance equals or exceeds the cap, and reverts to active the moment any spending draws it down. Think of it as a reservoir that stays full as long as you keep it topped up: an emergency buffer, a standing household expense fund, or any amount you always want available.
 
+### Budget lifecycle
+
+Budgets are never hard-deleted once they have transaction history. The rule is:
+
+- **Delete**: only allowed if the budget has no transaction allocations at all (i.e., it was created by mistake and never used). The API returns 400 if you attempt to delete a budget that has allocations.
+- **Archive**: the correct way to retire a budget. Archiving moves any remaining balance to the Unallocated budget via an internal transaction, marks the budget hidden, and records `archived_at`. If the budget has an associated fill-up goal, that is archived and drained first. Archived budgets retain their full transaction history and can be retrieved via the API with `archived=true`.
+
 ### Accounts
 
 mibudge supports multiple bank accounts -- checking, savings, credit cards -- each with their own set of budgets. Accounts can be shared between users (family members) or private to one user.

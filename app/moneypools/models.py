@@ -523,7 +523,7 @@ class Budget(MoneyPoolBaseClass):
     # recurring budget.
     #
     fillup_goal = models.ForeignKey(
-        "self", to_field="id", null=True, on_delete=models.CASCADE
+        "self", to_field="id", null=True, blank=True, on_delete=models.SET_NULL
     )
 
     archived = models.BooleanField(default=False, editable=False)

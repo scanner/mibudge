@@ -21,7 +21,6 @@ import { useRouter } from "vue-router";
 // app imports
 //
 import FillUpBand from "./FillUpBand.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
 import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
@@ -95,16 +94,10 @@ const fundingSchedule = computed(() =>
       <!-- Progress bar -->
       <ProgressBar class="mt-2.5" :value="pct" :tone="tone" :height="5" />
 
-      <!-- Row 3: schedule + status chip -->
+      <!-- Row 3: funding schedule + status chip -->
       <div class="mt-2 flex items-center justify-between gap-2">
         <span v-if="fundingSchedule" class="truncate text-[12px] text-neutral-500">
-          <MoneyAmount
-            v-if="budget.target_balance"
-            :amount="budget.target_balance"
-            :currency="budget.target_balance_currency"
-            size="sm"
-            class="text-neutral-600"
-          />&thinsp;·&thinsp;{{ fundingSchedule }}
+          Funded&thinsp;·&thinsp;{{ fundingSchedule }}
         </span>
         <span v-else class="flex-1" />
         <StatusChip :status="status" class="flex-none" />

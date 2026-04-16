@@ -78,11 +78,10 @@ export function budgetMeta(budget: Budget): string {
     return "Goal";
   }
   if (budget.budget_type === "C") {
-    const sched = budget.funding_schedule ? rruleHuman(budget.funding_schedule) : null;
-    return sched ? `Capped · ${sched}` : "Capped";
+    return "Capped";
   }
   if (budget.recurrance_schedule) {
-    return `Recurring · ${rruleHuman(budget.recurrance_schedule)}`;
+    return `Recurring · resets ${rruleHuman(budget.recurrance_schedule)}`;
   }
   return "Recurring";
 }

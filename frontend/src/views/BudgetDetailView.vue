@@ -13,6 +13,7 @@
 // 3rd party imports
 //
 import {
+  IconArchive,
   IconArrowsRightLeft,
   IconCalendar,
   IconClock,
@@ -20,7 +21,6 @@ import {
   IconPlayerPause,
   IconRefresh,
   IconTarget,
-  IconTrash,
 } from "@tabler/icons-vue";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -32,7 +32,7 @@ import BudgetForm from "@/components/budgets/BudgetForm.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { deleteBudget, getBudget, updateBudget } from "@/api/budgets";
+import { archiveBudget, getBudget, updateBudget } from "@/api/budgets";
 import { listBudgets } from "@/api/budgets";
 import { createInternalTransaction } from "@/api/internalTransactions";
 import { useAccountContextStore } from "@/stores/accountContext";
@@ -53,7 +53,7 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 
 const showEditSheet = ref(false);
-const showDeleteConfirm = ref(false);
+const showArchiveConfirm = ref(false);
 const showMoveMoneyForm = ref(false);
 
 ////////////////////////////////////////////////////////////////////////
@@ -96,14 +96,15 @@ async function togglePause() {
   }
 }
 
-async function confirmDelete() {
+async function confirmArchive() {
   if (!budget.value) return;
   try {
-    await deleteBudget(budget.value.id);
+    const updated = await archiveBudget(budget.value.id);
+    store.upsert(updated);
     router.push("/budgets/");
   } catch {
-    error.value = "Failed to delete budget.";
-    showDeleteConfirm.value = false;
+    error.value = "Failed to archive budget.";
+    showArchiveConfirm.value = false;
   }
 }
 
@@ -190,9 +191,14 @@ async function submitMove() {
     // Refresh both affected budgets so the store cache (and TopBar) reflect
     // the new balances immediately without a page reload.
     await Promise.all([store.fetchOne(moveSrcId.value), store.fetchOne(moveDstId.value)]);
-    // Also update the local budget ref if this view's budget was one of them.
+    // Update the local budget ref if this view's budget was one of the sides.
     const updated = store.byId(props.id);
     if (updated) budget.value = updated;
+    // Also refresh the fill-up budget ref if it was involved in the transfer.
+    if (fillupBudget.value) {
+      const updatedFillup = store.byId(fillupBudget.value.id);
+      if (updatedFillup) fillupBudget.value = updatedFillup;
+    }
   } catch {
     moveError.value = "Transfer failed. Check the amount and try again.";
   } finally {
@@ -361,24 +367,24 @@ async function submitMove() {
           </button>
           <button
             type="button"
-            class="flex-1 rounded-full border border-coral-400 py-3 text-sm font-medium text-coral-600 hover:bg-coral-50"
-            @click="showDeleteConfirm = true"
+            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            @click="showArchiveConfirm = true"
           >
-            <IconTrash class="mr-1 inline-block h-4 w-4" />
-            Delete
+            <IconArchive class="mr-1 inline-block h-4 w-4" />
+            Archive
           </button>
         </div>
       </div>
     </template>
 
-    <!-- Delete confirmation sheet -->
+    <!-- Archive confirmation sheet -->
     <ConfirmSheet
-      :open="showDeleteConfirm"
-      title="Delete budget?"
-      :message="`All transactions allocated to '${budget?.name}' will be moved to Unallocated. This cannot be undone.`"
-      confirm-label="Delete"
-      @confirm="confirmDelete"
-      @cancel="showDeleteConfirm = false"
+      :open="showArchiveConfirm"
+      title="Archive budget?"
+      :message="`'${budget?.name}' will be hidden and any remaining balance moved to Unallocated. Transaction history is preserved.`"
+      confirm-label="Archive"
+      @confirm="confirmArchive"
+      @cancel="showArchiveConfirm = false"
     />
 
     <!-- Edit sheet (full-page overlay) -->

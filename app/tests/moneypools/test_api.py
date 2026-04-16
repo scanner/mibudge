@@ -463,6 +463,136 @@ class TestBudgetAPI:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "budget_type" in response.data
 
+    ####################################################################
+    #
+    def test_delete_blocked_when_budget_has_allocations(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+    ) -> None:
+        """
+        GIVEN: a budget with at least one transaction allocation
+        WHEN:  DELETE /api/v1/budgets/<uuid>/
+        THEN:  400 Bad Request is returned and the budget still exists
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account)
+        txn = transaction_factory(bank_account=account, amount=-50)
+        transaction_allocation_factory(
+            transaction=txn, budget=budget, amount=-50
+        )
+
+        response = auth_client.delete(
+            reverse("api_v1:budget-detail", kwargs={"id": budget.id})
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Budget.objects.filter(id=budget.id).exists()
+
+    ####################################################################
+    #
+    def test_delete_allowed_when_budget_has_no_allocations(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget with no transaction allocations
+        WHEN:  DELETE /api/v1/budgets/<uuid>/
+        THEN:  204 No Content is returned and the budget no longer exists
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account)
+
+        response = auth_client.delete(
+            reverse("api_v1:budget-detail", kwargs={"id": budget.id})
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Budget.objects.filter(id=budget.id).exists()
+
+    ####################################################################
+    #
+    def test_archive_moves_balance_to_unallocated(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget with a non-zero balance
+        WHEN:  POST /api/v1/budgets/<uuid>/archive/
+        THEN:  200 OK, budget is archived, its balance is moved to unallocated,
+               and archived_at is set
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account, balance=300)
+        assert account.unallocated_budget is not None
+        unalloc_balance_before = account.unallocated_budget.balance
+
+        response = auth_client.post(
+            reverse("api_v1:budget-archive", kwargs={"id": budget.id})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["archived"] is True
+        assert response.data["archived_at"] is not None
+
+        assert account.unallocated_budget is not None
+        unalloc = Budget.objects.get(id=account.unallocated_budget.id)
+        assert unalloc.balance == unalloc_balance_before + budget.balance
+
+    ####################################################################
+    #
+    def test_archive_also_archives_fillup_goal(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Recurring budget with a fill-up goal (both with balances)
+        WHEN:  POST /api/v1/budgets/<uuid>/archive/
+        THEN:  both the budget and its fill-up goal are archived, and both
+               balances are moved to unallocated
+        """
+        from moneyed import USD, Money
+
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(
+            bank_account=account,
+            budget_type="R",
+            with_fillup_goal=True,
+            balance=200,
+        )
+        budget.refresh_from_db()
+        fillup = budget.fillup_goal
+        assert fillup is not None
+        fillup.balance = Money(100, USD)
+        fillup.save()
+
+        assert account.unallocated_budget is not None
+        unalloc_balance_before = Budget.objects.get(
+            id=account.unallocated_budget.id
+        ).balance
+
+        response = auth_client.post(
+            reverse("api_v1:budget-archive", kwargs={"id": budget.id})
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        fillup.refresh_from_db()
+        assert fillup.archived is True
+
+        assert account.unallocated_budget is not None
+        unalloc = Budget.objects.get(id=account.unallocated_budget.id)
+        assert unalloc.balance == unalloc_balance_before + Money(300, USD)
+
 
 ########################################################################
 ########################################################################

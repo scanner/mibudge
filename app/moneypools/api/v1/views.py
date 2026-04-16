@@ -11,17 +11,20 @@ Banks are read-only reference data.  All other resources support the
 standard CRUD operations with restrictions documented per-viewset.
 """
 
+# system imports
+
 # 3rd party imports
 import moneyed
+from django.db import transaction as db_transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
     extend_schema_view,
 )
-from rest_framework import mixins, viewsets
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -198,8 +201,9 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     destroy=extend_schema(
         summary="Delete a budget",
         description=(
-            "Delete a budget. The unallocated budget cannot be "
-            "deleted -- returns 403."
+            "Delete a budget. The unallocated budget cannot be deleted "
+            "(403). A budget with existing transaction allocations cannot "
+            "be deleted (400) -- archive it instead."
         ),
     ),
 )
@@ -219,11 +223,84 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     ####################################################################
     #
     def perform_destroy(self, instance: Budget) -> None:
-        """Prevent deletion of the unallocated budget."""
-        bank_account = instance.bank_account
-        if bank_account.unallocated_budget_id == instance.id:
+        """Delete a budget, subject to two guards.
+
+        Raises:
+            PermissionDenied: If the budget is the account's unallocated budget.
+            ValidationError: If the budget has existing transaction allocations;
+                the caller should archive the budget instead.
+        """
+        if instance.bank_account.unallocated_budget_id == instance.id:
             raise PermissionDenied("Cannot delete the unallocated budget.")
+        if instance.transaction_allocations.exists():
+            raise ValidationError(
+                "Cannot delete a budget that has transaction allocations. "
+                "Archive it instead."
+            )
         instance.delete()
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Archive a budget",
+        description=(
+            "Archive a budget. Any remaining balance is transferred to the "
+            "account's unallocated budget. If the budget has an associated "
+            "fill-up goal, that budget is also archived and its balance moved "
+            "to unallocated. The unallocated budget cannot be archived."
+        ),
+        responses={200: BudgetSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="archive")
+    def archive(self, request: Request, id: str | None = None) -> Response:
+        """Archive a budget and move its funds to unallocated."""
+        budget = self.get_object()
+
+        if budget.bank_account.unallocated_budget_id == budget.id:
+            raise PermissionDenied("Cannot archive the unallocated budget.")
+        if budget.archived:
+            raise ValidationError("Budget is already archived.")
+
+        unallocated = budget.bank_account.unallocated_budget
+        if unallocated is None:
+            raise ValidationError(
+                "No unallocated budget found for this account."
+            )
+
+        with db_transaction.atomic():
+            # Archive and drain the fill-up goal first, if present.
+            if budget.fillup_goal_id:
+                fillup = Budget.objects.get(id=budget.fillup_goal_id)
+                if fillup.balance.amount > 0:
+                    InternalTransaction.objects.create(
+                        bank_account=budget.bank_account,
+                        src_budget=fillup,
+                        dst_budget=unallocated,
+                        amount=fillup.balance,
+                        actor=request.user,
+                    )
+                fillup.archived = True
+                fillup.save()
+
+            # Drain this budget's balance (re-fetch after potential fill-up transfer).
+            budget.refresh_from_db()
+            if budget.balance.amount > 0:
+                InternalTransaction.objects.create(
+                    bank_account=budget.bank_account,
+                    src_budget=budget,
+                    dst_budget=unallocated,
+                    amount=budget.balance,
+                    actor=request.user,
+                )
+
+            budget.refresh_from_db()
+            budget.archived = True
+            budget.save()
+
+        budget.refresh_from_db()
+        return Response(
+            self.get_serializer(budget).data, status=status.HTTP_200_OK
+        )
 
 
 ########################################################################

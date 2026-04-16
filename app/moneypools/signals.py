@@ -6,7 +6,11 @@ from typing import Any
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
-from django.db.models.signals import post_save, pre_delete, pre_save
+from django.db.models.signals import (
+    post_save,
+    pre_delete,
+    pre_save,
+)
 from django.dispatch import receiver
 
 # Project imports
@@ -148,6 +152,10 @@ def budget_pre_save(
     instance.balance_currency = acct_currency  # type: ignore[attr-defined]
     instance.target_balance_currency = acct_currency  # type: ignore[attr-defined]
 
+    # Set archived_at the first time a budget is archived.
+    if instance.archived and instance.archived_at is None:
+        instance.archived_at = datetime.now(UTC)
+
     # Manage 'complete' for budget types with meaningful funding targets.
     # target_balance of 0 means "no cap set" -- skip those.
     #
@@ -167,6 +175,82 @@ def budget_pre_save(
                 # spending from a capped budget immediately re-enables
                 # automatic funding.
                 instance.complete = balance >= target
+
+
+####################################################################
+#
+@receiver(post_save, sender=Budget)
+def budget_post_save(
+    sender: type[Budget],
+    instance: Budget,
+    **kwargs: Any,
+) -> None:
+    """Create an associated fill-up goal budget when a recurring budget enables one.
+
+    When a Recurring budget is saved with with_fillup_goal=True and no
+    fill-up budget yet exists (fillup_goal_id is None), a type-A
+    (ASSOCIATED_FILLUP_GOAL) budget is created and linked back to the
+    parent via the fillup_goal FK.
+
+    The parent FK is updated via a queryset .update() call to avoid
+    re-triggering this signal recursively.
+
+    Args:
+        sender: The Budget model class.
+        instance: The Budget instance that was just saved.
+        **kwargs: Additional signal keyword arguments.
+    """
+    if not (
+        instance.budget_type == Budget.BudgetType.RECURRING
+        and instance.with_fillup_goal
+        and instance.fillup_goal_id is None
+    ):
+        return
+
+    fillup = Budget(
+        name=f"{instance.name} Fill-up",
+        bank_account=instance.bank_account,
+        budget_type=Budget.BudgetType.ASSOCIATED_FILLUP_GOAL,
+        funding_schedule=instance.funding_schedule,
+        target_balance=instance.target_balance,
+    )
+    fillup.save()
+    # Use queryset .update() to set the FK without triggering this signal again.
+    Budget.objects.filter(id=instance.id).update(fillup_goal_id=fillup.id)
+    instance.fillup_goal = fillup
+
+
+####################################################################
+#
+@receiver(pre_delete, sender=Budget)
+def budget_pre_delete(
+    sender: type[Budget],
+    instance: Budget,
+    **kwargs: Any,
+) -> None:
+    """Cascade-delete the associated fill-up goal when its parent is deleted.
+
+    The fillup_goal FK uses SET_NULL so that directly deleting a fill-up
+    budget doesn't cascade-delete the parent.  Here we handle the reverse:
+    when the parent Recurring budget is deleted its fill-up is deleted too.
+
+    The parent's fillup_goal FK is nulled out first to prevent Django's
+    SET_NULL handler from issuing an UPDATE on the row being deleted.
+
+    Args:
+        sender: The Budget model class.
+        instance: The Budget instance about to be deleted.
+        **kwargs: Additional signal keyword arguments.
+    """
+    if instance.fillup_goal_id is None:
+        return
+
+    fillup_id = instance.fillup_goal_id
+    # Null the FK on the parent first so Django's SET_NULL doesn't try to
+    # update a row that is itself about to be deleted.
+    Budget.objects.filter(id=instance.id).update(fillup_goal_id=None)
+    instance.fillup_goal_id = None
+    Budget.objects.filter(id=fillup_id).delete()
 
 
 ####################################################################

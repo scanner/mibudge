@@ -45,3 +45,11 @@ export function deleteBudget(id: string): Promise<null> {
     method: "DELETE",
   });
 }
+
+////////////////////////////////////////////////////////////////////////
+//
+export function archiveBudget(id: string): Promise<import("@/types/api").Budget> {
+  return useAuthStore().request<import("@/types/api").Budget>(`/budgets/${id}/archive/`, {
+    method: "POST",
+  });
+}
