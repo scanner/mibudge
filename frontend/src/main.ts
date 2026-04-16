@@ -19,6 +19,7 @@ import { createPinia } from "pinia";
 //
 import App from "./App.vue";
 import router from "./router";
+import { useAccountContextStore } from "./stores/accountContext";
 import { useAuthStore } from "./stores/auth";
 import "./style.css";
 
@@ -34,7 +35,13 @@ async function bootstrap() {
   // and the user lands directly on their intended route.  A failure
   // here is expected (cold boot with no session) and leaves the store
   // unauthenticated; the router guard will bounce the user to /login/.
-  await useAuthStore().refresh();
+  const authenticated = await useAuthStore().refresh();
+  if (authenticated) {
+    // Load account context so TopBar and account-scoped views have
+    // data on cold boot (page refresh).  On a fresh login this is also
+    // called by LoginView, but that's safe -- init() is idempotent.
+    await useAccountContextStore().init();
+  }
 
   app.use(router);
   app.mount("#app");

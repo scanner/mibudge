@@ -12,7 +12,7 @@
 // 3rd party imports
 //
 import { IconChevronDown, IconChevronLeft } from "@tabler/icons-vue";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 // app imports
@@ -58,6 +58,19 @@ const unallocated = computed(() => {
   if (!id) return null;
   return budgets.byId(id);
 });
+
+// Fetch the unallocated budget whenever the active account changes so
+// TopBar always has a balance to display without waiting for a view to
+// load it.
+watch(
+  () => ctx.unallocatedBudgetId,
+  (id) => {
+    if (id && !budgets.byId(id)) {
+      budgets.fetchOne(id);
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
