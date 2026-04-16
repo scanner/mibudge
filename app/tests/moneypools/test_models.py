@@ -7,6 +7,7 @@ from collections.abc import Callable
 # 3rd party imports
 #
 import pytest
+from django.core.exceptions import ValidationError
 from moneyed import USD, Money
 
 # app imports
@@ -62,6 +63,76 @@ class TestBankAccount:
 ########################################################################
 ########################################################################
 #
+class TestBudget:
+    """Tests for Budget signal-driven complete flag logic."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "budget_type,balance,expected_complete",
+        [
+            ("G", 200, True),
+            ("G", 100, False),
+            ("R", 200, True),
+            ("R", 100, False),
+            ("C", 200, True),
+            ("C", 100, False),
+        ],
+    )
+    def test_complete_flag_on_save(
+        self,
+        budget_type: str,
+        balance: int,
+        expected_complete: bool,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget of the given type with the given balance vs. a 200 target
+        WHEN:  the budget is saved
+        THEN:  complete matches expected_complete
+        """
+        budget = budget_factory(
+            balance=balance, target_balance=200, budget_type=budget_type
+        )
+        assert budget.complete is expected_complete
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "budget_type,expected_complete_after_spend",
+        [
+            # Goal: stays complete once funded regardless of spending.
+            ("G", True),
+            # Capped: recomputed on every save, so spending clears it.
+            ("C", False),
+        ],
+    )
+    def test_complete_after_spending(
+        self,
+        budget_type: str,
+        expected_complete_after_spend: bool,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget at its target (complete=True)
+        WHEN:  the balance drops below the target
+        THEN:  complete reflects the type's clearing semantics
+               (Goal stays True; Capped reverts to False)
+        """
+        budget = budget_factory(
+            balance=200, target_balance=200, budget_type=budget_type
+        )
+        assert budget.complete is True
+
+        budget.balance = Money(100, USD)
+        budget.save()
+        budget.refresh_from_db()
+        assert budget.complete is expected_complete_after_spend
+
+
+########################################################################
+########################################################################
+#
 class TestInternalTransaction:
     """Tests for InternalTransaction creation, updates, and deletion."""
 
@@ -89,6 +160,22 @@ class TestInternalTransaction:
         assert dst_budget.balance == Money(150, USD)
         assert it.src_budget_balance == Money(50, USD)
         assert it.dst_budget_balance == Money(150, USD)
+
+    ####################################################################
+    #
+    def test_same_src_dst_budget_raises_validation_error(
+        self,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: an InternalTransaction with the same budget as both src and dst
+        WHEN:  clean() is called
+        THEN:  a ValidationError is raised
+        """
+        budget = budget_factory(balance=100)
+        it = InternalTransaction(src_budget=budget, dst_budget=budget)
+        with pytest.raises(ValidationError):
+            it.clean()
 
     ####################################################################
     #

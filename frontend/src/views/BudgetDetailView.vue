@@ -1,18 +1,508 @@
 <script setup lang="ts">
 //
-// Placeholder — filled in during Phase 3.
+// BudgetDetailView — full detail screen for a single budget.
+// (UI_SPEC §4.3)
 //
+// Sections:
+//  1. Hero block (BudgetDetailHero)
+//  2. "Move money" CTA → inline internal transaction form
+//  3. Configuration rows (read-only display, editing via BudgetForm sheet)
+//  4. Pause / delete action row
+//
+
+// 3rd party imports
+//
+import {
+  IconArrowsRightLeft,
+  IconCalendar,
+  IconClock,
+  IconPencil,
+  IconPlayerPause,
+  IconRefresh,
+  IconTarget,
+  IconTrash,
+} from "@tabler/icons-vue";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
 // app imports
 //
+import BudgetDetailHero from "@/components/budgets/BudgetDetailHero.vue";
+import BudgetForm from "@/components/budgets/BudgetForm.vue";
 import AppShell from "@/components/layout/AppShell.vue";
+import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
+import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import { deleteBudget, getBudget, updateBudget } from "@/api/budgets";
+import { listBudgets } from "@/api/budgets";
+import { createInternalTransaction } from "@/api/internalTransactions";
+import { useAccountContextStore } from "@/stores/accountContext";
+import { useBudgetsStore } from "@/stores/budgets";
+import { rruleHuman } from "@/utils/rrule";
+import type { Budget } from "@/types/api";
+
+////////////////////////////////////////////////////////////////////////
+//
+const props = defineProps<{ id: string }>();
+const router = useRouter();
+const ctx = useAccountContextStore();
+const store = useBudgetsStore();
+
+const budget = ref<Budget | null>(null);
+const fillupBudget = ref<Budget | null>(null);
+const loading = ref(true);
+const error = ref<string | null>(null);
+
+const showEditSheet = ref(false);
+const showDeleteConfirm = ref(false);
+const showMoveMoneyForm = ref(false);
+
+////////////////////////////////////////////////////////////////////////
+//
+const accountName = computed(() => ctx.activeBankAccount?.name);
+const isUnallocated = computed(() => budget.value?.id === ctx.unallocatedBudgetId);
+
+////////////////////////////////////////////////////////////////////////
+//
+async function load() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const b = await getBudget(props.id);
+    budget.value = b;
+    store.upsert(b);
+    // Fetch fill-up budget if present
+    if (b.with_fillup_goal && b.fillup_goal) {
+      fillupBudget.value = await getBudget(b.fillup_goal);
+    }
+  } catch {
+    error.value = "Failed to load budget.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(load);
+
+////////////////////////////////////////////////////////////////////////
+//
+async function togglePause() {
+  if (!budget.value) return;
+  try {
+    const updated = await updateBudget(budget.value.id, { paused: !budget.value.paused });
+    budget.value = updated;
+    store.upsert(updated);
+  } catch {
+    error.value = "Failed to update budget.";
+  }
+}
+
+async function confirmDelete() {
+  if (!budget.value) return;
+  try {
+    await deleteBudget(budget.value.id);
+    router.push("/budgets/");
+  } catch {
+    error.value = "Failed to delete budget.";
+    showDeleteConfirm.value = false;
+  }
+}
+
+function onSaved(updated: Budget) {
+  budget.value = updated;
+  store.upsert(updated);
+  showEditSheet.value = false;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// "Move money" internal transaction form state.
+//
+// Both From and To are full pickers.  From defaults to the current
+// budget so moving out is the fast path, but swapping to another
+// source (e.g. Unallocated) lets the user move money in.
+//
+const allPickableBudgets = ref<Budget[]>([]);
+const moveSrcId = ref("");
+const moveDstId = ref("");
+const moveAmount = ref("");
+const moveSaving = ref(false);
+const moveError = ref<string | null>(null);
+
+// Map from fill-up budget id → parent budget name, used to label type 'A'
+// budgets in the picker as e.g. "Groceries (fill-up)" instead of their
+// internal name which may not be recognisable in isolation.
+const fillupParentNames = computed(() => {
+  const map = new Map<string, string>();
+  for (const b of allPickableBudgets.value) {
+    if (b.fillup_goal) map.set(b.fillup_goal, b.name);
+  }
+  return map;
+});
+
+function budgetPickerLabel(b: Budget): string {
+  if (b.budget_type === "A") {
+    const parent = fillupParentNames.value.get(b.id);
+    return parent ? `${parent} (fill-up)` : `${b.name} (fill-up)`;
+  }
+  return b.name;
+}
+
+async function openMoveMoneyForm() {
+  if (!ctx.activeBankAccountId) return;
+  const page = await listBudgets({ bank_account: ctx.activeBankAccountId, archived: false });
+  // Include type 'A' fill-up budgets so users can transfer directly into
+  // a recurring budget's fill-up goal.
+  allPickableBudgets.value = page.results;
+  moveSrcId.value = props.id;
+  // Default destination: first budget that isn't this one
+  const others = allPickableBudgets.value.filter((b) => b.id !== props.id);
+  moveDstId.value = others[0]?.id ?? "";
+  moveAmount.value = "";
+  moveError.value = null;
+  showMoveMoneyForm.value = true;
+}
+
+// If the user picks the same budget on both sides, swap the other side
+// rather than blocking the selection.  This way two-budget accounts
+// (e.g. Eating Out + Unallocated) always work.
+function onMoveSrcChange(id: string) {
+  if (id === moveDstId.value) moveDstId.value = moveSrcId.value;
+  moveSrcId.value = id;
+}
+
+function onMoveDstChange(id: string) {
+  if (id === moveSrcId.value) moveSrcId.value = moveDstId.value;
+  moveDstId.value = id;
+}
+
+async function submitMove() {
+  if (!moveSrcId.value || !moveDstId.value || !moveAmount.value || !budget.value) return;
+  moveSaving.value = true;
+  moveError.value = null;
+  try {
+    await createInternalTransaction({
+      bank_account: budget.value.bank_account,
+      src_budget: moveSrcId.value,
+      dst_budget: moveDstId.value,
+      amount: moveAmount.value,
+    });
+    showMoveMoneyForm.value = false;
+    // Refresh both affected budgets so the store cache (and TopBar) reflect
+    // the new balances immediately without a page reload.
+    await Promise.all([store.fetchOne(moveSrcId.value), store.fetchOne(moveDstId.value)]);
+    // Also update the local budget ref if this view's budget was one of them.
+    const updated = store.byId(props.id);
+    if (updated) budget.value = updated;
+  } catch {
+    moveError.value = "Transfer failed. Check the amount and try again.";
+  } finally {
+    moveSaving.value = false;
+  }
+}
 </script>
 
 <template>
   <AppShell>
-    <section class="mt-4">
-      <h1 class="text-xl font-medium text-neutral-900">Budget detail</h1>
-      <p class="mt-2 text-sm text-neutral-500">Coming in Phase 3.</p>
-    </section>
+    <template #action>
+      <button
+        v-if="budget && !isUnallocated"
+        type="button"
+        class="flex h-10 items-center rounded-full px-3 text-sm font-medium text-ocean-600 hover:bg-ocean-50"
+        @click="showEditSheet = true"
+      >
+        <IconPencil class="mr-1 h-4 w-4" />
+        Edit
+      </button>
+    </template>
+
+    <!-- Loading skeleton -->
+    <div v-if="loading" class="space-y-4 pt-4">
+      <div class="h-48 animate-pulse rounded-card bg-neutral-100" />
+      <div class="h-14 animate-pulse rounded-card bg-neutral-100" />
+      <div class="h-32 animate-pulse rounded-card bg-neutral-100" />
+    </div>
+
+    <!-- Error -->
+    <div
+      v-else-if="error && !budget"
+      class="mt-4 rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+    >
+      {{ error }}
+    </div>
+
+    <template v-else-if="budget">
+      <div class="space-y-4 pt-4">
+        <!-- Hero -->
+        <BudgetDetailHero
+          :budget="budget"
+          :account-name="accountName"
+          :fillup-budget="fillupBudget ?? undefined"
+        />
+
+        <!-- Move money CTA (not for unallocated budget) -->
+        <button
+          v-if="!isUnallocated"
+          type="button"
+          class="flex w-full items-start gap-3 rounded-card border border-neutral-200 bg-ocean-50 px-4 py-3 text-left"
+          @click="openMoveMoneyForm"
+        >
+          <IconArrowsRightLeft class="mt-0.5 h-5 w-5 flex-none text-ocean-400" />
+          <div>
+            <div class="text-[15px] font-medium text-ocean-600">Move money</div>
+            <div class="text-xs text-neutral-500">Transfer to or from another budget</div>
+          </div>
+        </button>
+
+        <!-- Configuration section -->
+        <section
+          v-if="!isUnallocated"
+          class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+        >
+          <h2
+            class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
+            Configuration
+          </h2>
+
+          <!-- Goal-specific rows -->
+          <template v-if="budget.budget_type === 'G'">
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconTarget class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Target amount</span>
+              <MoneyAmount
+                v-if="budget.target_balance"
+                :amount="budget.target_balance"
+                :currency="budget.target_balance_currency"
+                size="md"
+              />
+              <span v-else class="text-sm text-neutral-400">—</span>
+            </div>
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconCalendar class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Target date</span>
+              <span class="text-sm text-neutral-600">
+                {{
+                  budget.target_date
+                    ? new Date(budget.target_date).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : "—"
+                }}
+              </span>
+            </div>
+            <div class="flex items-center gap-3 px-4 py-3">
+              <IconClock class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
+              <span class="text-right text-sm text-neutral-600">
+                {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
+              </span>
+            </div>
+          </template>
+
+          <!-- Recurring-specific rows -->
+          <template v-else>
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconRefresh class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Refresh cycle</span>
+              <span class="text-right text-sm text-neutral-600">
+                {{ budget.recurrance_schedule ? rruleHuman(budget.recurrance_schedule) : "—" }}
+              </span>
+            </div>
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconClock class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
+              <span class="text-right text-sm text-neutral-600">
+                {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
+              </span>
+            </div>
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconTarget class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Target amount</span>
+              <MoneyAmount
+                v-if="budget.target_balance"
+                :amount="budget.target_balance"
+                :currency="budget.target_balance_currency"
+                size="md"
+              />
+              <span v-else class="text-sm text-neutral-400">—</span>
+            </div>
+            <div class="flex items-center justify-between gap-3 px-4 py-3">
+              <span class="text-sm text-neutral-700">Fill-up goal</span>
+              <span
+                class="rounded-full px-2 py-0.5 text-xs font-medium"
+                :class="
+                  budget.with_fillup_goal
+                    ? 'bg-mint-50 text-mint-600'
+                    : 'bg-neutral-100 text-neutral-500'
+                "
+              >
+                {{ budget.with_fillup_goal ? "Enabled" : "Disabled" }}
+              </span>
+            </div>
+          </template>
+        </section>
+
+        <!-- Inline error banner -->
+        <p v-if="error" class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600">
+          {{ error }}
+        </p>
+
+        <!-- Bottom action row -->
+        <div v-if="!isUnallocated" class="flex gap-2 pb-4">
+          <button
+            type="button"
+            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            @click="togglePause"
+          >
+            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
+            {{ budget.paused ? "Resume budget" : "Pause budget" }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-full border border-coral-400 py-3 text-sm font-medium text-coral-600 hover:bg-coral-50"
+            @click="showDeleteConfirm = true"
+          >
+            <IconTrash class="mr-1 inline-block h-4 w-4" />
+            Delete
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete confirmation sheet -->
+    <ConfirmSheet
+      :open="showDeleteConfirm"
+      title="Delete budget?"
+      :message="`All transactions allocated to '${budget?.name}' will be moved to Unallocated. This cannot be undone.`"
+      confirm-label="Delete"
+      @confirm="confirmDelete"
+      @cancel="showDeleteConfirm = false"
+    />
+
+    <!-- Edit sheet (full-page overlay) -->
+    <Teleport to="body">
+      <Transition name="slide-up">
+        <div
+          v-if="showEditSheet && budget"
+          class="fixed inset-0 z-40 overflow-y-auto bg-neutral-50"
+        >
+          <div class="mx-auto max-w-lg px-4 pb-8 pt-4">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-[18px] font-medium text-neutral-900">Edit budget</h2>
+            </div>
+            <BudgetForm
+              mode="edit"
+              :budget="budget"
+              @saved="onSaved"
+              @cancel="showEditSheet = false"
+            />
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Move money sheet -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="showMoveMoneyForm"
+          class="fixed inset-0 z-40 flex items-end justify-center md:items-center"
+        >
+          <div class="absolute inset-0 bg-neutral-900/40" @click="showMoveMoneyForm = false" />
+          <div
+            class="relative w-full rounded-t-2xl bg-white p-5 shadow-xl md:w-[480px] md:rounded-card"
+          >
+            <h2 class="mb-4 text-[18px] font-medium text-neutral-900">Move money</h2>
+
+            <div class="space-y-3">
+              <div>
+                <label class="mb-1 block text-[13px] font-medium text-neutral-700">From</label>
+                <select
+                  :value="moveSrcId"
+                  class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
+                  @change="onMoveSrcChange(($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="b in allPickableBudgets" :key="b.id" :value="b.id">
+                    {{ budgetPickerLabel(b) }}
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label class="mb-1 block text-[13px] font-medium text-neutral-700">To</label>
+                <select
+                  :value="moveDstId"
+                  class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
+                  @change="onMoveDstChange(($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="b in allPickableBudgets" :key="b.id" :value="b.id">
+                    {{ budgetPickerLabel(b) }}
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label class="mb-1 block text-[13px] font-medium text-neutral-700">Amount</label>
+                <input
+                  v-model="moveAmount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
+                />
+              </div>
+
+              <p v-if="moveError" class="text-sm text-coral-600">{{ moveError }}</p>
+
+              <div class="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                  @click="showMoveMoneyForm = false"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  :disabled="!moveSrcId || !moveDstId || !moveAmount || moveSaving"
+                  class="flex-1 rounded-full py-3 text-sm font-medium text-white transition-colors"
+                  :class="
+                    moveSrcId && moveDstId && moveAmount && !moveSaving
+                      ? 'bg-ocean-400 hover:bg-ocean-600'
+                      : 'cursor-not-allowed bg-neutral-300'
+                  "
+                  @click="submitMove"
+                >
+                  {{ moveSaving ? "Transferring…" : "Transfer" }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </AppShell>
 </template>
+
+<style scoped>
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 250ms ease-out;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 120ms ease-out;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

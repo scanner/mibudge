@@ -329,6 +329,13 @@ class BudgetSerializer(serializers.ModelSerializer):
         decimal_places=DECIMAL_PLACES,
         default_currency=get_default_currency(),
     )
+    funding_amount = DRFMoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default_currency=get_default_currency(),
+        required=False,
+        allow_null=True,
+    )
 
     funding_schedule = RecurrenceSerializerField(
         required=False, allow_blank=True
@@ -349,6 +356,8 @@ class BudgetSerializer(serializers.ModelSerializer):
             "balance_currency",
             "target_balance",
             "target_balance_currency",
+            "funding_amount",
+            "funding_amount_currency",
             "budget_type",
             "funding_type",
             "target_date",
@@ -356,6 +365,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "fillup_goal",
             "archived",
             "archived_at",
+            "complete",
             "paused",
             "funding_schedule",
             "recurrance_schedule",
@@ -369,6 +379,8 @@ class BudgetSerializer(serializers.ModelSerializer):
             "balance",
             "balance_currency",
             "target_balance_currency",
+            "funding_amount_currency",
+            "complete",
             "archived",
             "archived_at",
             "created_at",

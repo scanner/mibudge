@@ -20,7 +20,7 @@ export interface Paginated<T> {
 ////////////////////////////////////////////////////////////////////////
 //
 export type AccountType = "C" | "S" | "X";
-export type BudgetType = "G" | "R" | "A";
+export type BudgetType = "G" | "R" | "A" | "C";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -52,15 +52,18 @@ export interface Budget {
   balance_currency: string;
   target_balance: string | null;
   target_balance_currency: string;
-  // GAP-5: confirm the backend enum values for funding_type.
-  funding_type: string;
+  funding_amount: string | null;
+  funding_amount_currency: string;
+  funding_type: "D" | "F"; // D = Target Date, F = Fixed Amount
   target_date: string | null;
   with_fillup_goal: boolean;
   fillup_goal: string | null;
+  complete: boolean;
   paused: boolean;
   archived: boolean;
   funding_schedule: string;
-  recurrence_schedule: string | null;
+  // NOTE: field is spelled with a typo in the model and serializer.
+  recurrance_schedule: string | null;
   memo: string | null;
   auto_spend: unknown;
   created_at: string;
