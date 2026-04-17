@@ -6,7 +6,7 @@ Personal budgeting service inspired by [Simple Bank](https://en.wikipedia.org/wi
 
 ## What is this?
 
-Simple Bank had a budgeting model that let you divide your checking account balance into virtual sub-accounts called "goals" and "expenses." When Simple shut down, nothing else replicated that experience well. mibudge is an attempt to rebuild and improve on that model for personal and family use.
+Simple Bank had a budgeting model that let you divide your checking account balance into virtual sub-accounts called "goals" and "expenses." When Simple shut down, nothing else replicated that experience well. mibudge is an attempt to rebuild and improve on that model.
 
 ### The core idea
 

@@ -49,6 +49,10 @@ export default defineConfig({
     strictPort: true,
     // Allow the Django dev server (different origin) to load assets.
     cors: true,
+    // Make asset URLs (fonts, images) in CSS point back to Vite's origin,
+    // not the page origin (Django). Without this, url() in @font-face
+    // resolves to localhost:8000/static/ instead of localhost:5173/static/.
+    origin: `http${httpsConfig ? 's' : ''}://localhost:5173`,
     https: httpsConfig,
   },
 })

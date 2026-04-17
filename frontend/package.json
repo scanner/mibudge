@@ -12,6 +12,8 @@
     "fmt:check": "oxfmt --check src/"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
     "@tabler/icons-vue": "^3.41.1",
     "@tailwindcss/forms": "^0.5.11",
     "autoprefixer": "^10.5.0",
