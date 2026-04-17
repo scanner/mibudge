@@ -20,7 +20,7 @@ import { computed, ref } from "vue";
 import SchedulePicker from "./SchedulePicker.vue";
 import { createBudget, updateBudget } from "@/api/budgets";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { DEFAULT_RRULE } from "@/utils/rrule";
+import { combineDtstart, DEFAULT_RRULE, extractDtstart } from "@/utils/rrule";
 import type { Budget, BudgetType } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -49,7 +49,11 @@ const targetDate = ref(props.budget?.target_date ?? "");
 const fundingType = ref<"D" | "F">(props.budget?.funding_type ?? "D");
 const fundingAmount = ref(props.budget?.funding_amount ?? "");
 const fundingSchedule = ref(props.budget?.funding_schedule ?? DEFAULT_RRULE);
-const recurranceSchedule = ref(props.budget?.recurrance_schedule ?? DEFAULT_RRULE);
+
+const existingRecurrance = extractDtstart(props.budget?.recurrance_schedule ?? DEFAULT_RRULE);
+const recurranceSchedule = ref(existingRecurrance.rrule);
+const nextDueDate = ref(existingRecurrance.dtstart ?? "");
+
 const withFillupGoal = ref(props.budget?.with_fillup_goal ?? false);
 const paused = ref(props.budget?.paused ?? false);
 
@@ -87,7 +91,9 @@ async function submit() {
       payload.funding_amount = fundingAmount.value || null;
     }
   } else if (isRecurring.value) {
-    payload.recurrance_schedule = recurranceSchedule.value;
+    payload.recurrance_schedule = nextDueDate.value
+      ? combineDtstart(recurranceSchedule.value, nextDueDate.value)
+      : recurranceSchedule.value;
     payload.with_fillup_goal = withFillupGoal.value;
   } else if (isCapped.value) {
     // Capped always uses Fixed Amount funding.
@@ -330,7 +336,22 @@ async function submit() {
 
     <!-- Recurring-specific fields -->
     <template v-else-if="isRecurring">
-      <SchedulePicker v-model="recurranceSchedule" label="Refresh cycle" />
+      <SchedulePicker v-model="recurranceSchedule" label="Refresh cycle" interval-only />
+
+      <!-- Next due date (stored as DTSTART in recurrance_schedule) -->
+      <div>
+        <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="next-due-date">
+          Next due date
+        </label>
+        <p class="mb-1.5 text-[11px] text-neutral-500">When the budgeted expense actually hits</p>
+        <input
+          id="next-due-date"
+          v-model="nextDueDate"
+          type="date"
+          class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
+        />
+      </div>
+
       <SchedulePicker v-model="fundingSchedule" label="Funding schedule" />
 
       <!-- Fill-up goal toggle -->

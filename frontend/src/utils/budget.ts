@@ -1,6 +1,7 @@
 //
-// Budget domain helpers: status chip value, progress percentage, and
-// one-line meta text.  All derived from the Budget object alone.
+// Budget domain helpers: status chip value, progress percentage,
+// one-line meta text, and next funding amount.  All derived from the
+// Budget object alone.
 //
 
 // app imports
@@ -9,6 +10,17 @@ import type { Budget } from "@/types/api";
 import type { BudgetStatus } from "@/components/shared/StatusChip.vue";
 import type { ProgressTone } from "@/components/shared/ProgressBar.vue";
 import { rruleHuman } from "@/utils/rrule";
+
+////////////////////////////////////////////////////////////////////////
+//
+// Parse a date-only string ("2026-08-01") as a local-time date.
+// new Date("2026-08-01") parses as UTC midnight which shifts
+// backward a day in western timezones.
+//
+export function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -36,7 +48,7 @@ export function budgetStatus(budget: Budget): BudgetStatus {
   if (budget.budget_type === "G" && budget.target_date && target > 0) {
     const now = Date.now();
     const created = new Date(budget.created_at).getTime();
-    const end = new Date(budget.target_date).getTime();
+    const end = parseLocalDate(budget.target_date).getTime();
     const span = end - created;
     if (span > 0) {
       const expectedFraction = Math.min(1, (now - created) / span);
@@ -71,7 +83,7 @@ export function progressTone(status: BudgetStatus): ProgressTone {
 export function budgetMeta(budget: Budget): string {
   if (budget.budget_type === "G") {
     if (budget.target_date) {
-      const d = new Date(budget.target_date);
+      const d = parseLocalDate(budget.target_date);
       const label = d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
       return `Goal · by ${label}`;
     }

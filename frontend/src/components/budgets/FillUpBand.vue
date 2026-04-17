@@ -16,9 +16,8 @@ import { computed } from "vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import { budgetProgress, progressTone, budgetStatus } from "@/utils/budget";
-import { rruleHuman } from "@/utils/rrule";
 import type { Budget } from "@/types/api";
-import { IconArrowBarToDown } from "@tabler/icons-vue";
+import { IconCashPlus } from "@tabler/icons-vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -26,16 +25,13 @@ const props = defineProps<{ budget: Budget }>();
 
 const pct = computed(() => budgetProgress(props.budget));
 const tone = computed(() => progressTone(budgetStatus(props.budget)));
-const schedule = computed(() =>
-  props.budget.funding_schedule ? rruleHuman(props.budget.funding_schedule) : null,
-);
 </script>
 
 <template>
   <div class="border-t border-[#D4E9F7] bg-[#F5FAFF] px-4 pb-3 pt-2">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-1.5 text-[13px] text-ocean-600">
-        <IconArrowBarToDown class="h-3.5 w-3.5 flex-none" />
+        <IconCashPlus class="h-3.5 w-3.5 flex-none" />
         <span>Next cycle saving</span>
       </div>
       <div class="text-right">
@@ -54,9 +50,5 @@ const schedule = computed(() =>
     </div>
 
     <ProgressBar class="mt-1.5" :value="pct" :tone="tone" :height="3" />
-
-    <p v-if="schedule" class="mt-1.5 text-[11px] text-neutral-500">
-      {{ schedule }} · ready at cycle reset
-    </p>
   </div>
 </template>

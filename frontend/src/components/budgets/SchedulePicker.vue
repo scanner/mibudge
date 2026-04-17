@@ -30,6 +30,7 @@ import type { RruleMonthly, RruleWeekly, RruleYearly, Weekday } from "@/utils/rr
 interface Props {
   modelValue: string;
   label: string;
+  intervalOnly?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -58,10 +59,10 @@ function applyParsed(rule: string) {
   freq.value = parsed.freq;
   if (parsed.freq === "WEEKLY") {
     weeklyInterval.value = parsed.interval;
-    weeklyDays.value = new Set(parsed.byday);
+    weeklyDays.value = new Set(parsed.byday.length > 0 ? parsed.byday : ["MO"]);
   } else if (parsed.freq === "MONTHLY") {
     monthlyInterval.value = parsed.interval;
-    monthlyDays.value = new Set(parsed.bymonthday);
+    monthlyDays.value = new Set(parsed.bymonthday.length > 0 ? parsed.bymonthday : [1]);
   } else {
     yearlyInterval.value = parsed.interval;
     yearlyMonth.value = parsed.bymonth;
@@ -83,6 +84,18 @@ watch(
 // Rebuild and emit whenever internal state changes.
 //
 const currentRrule = computed((): string => {
+  if (props.intervalOnly) {
+    const parts = [`RRULE:FREQ=${freq.value}`];
+    const iv =
+      freq.value === "WEEKLY"
+        ? weeklyInterval.value
+        : freq.value === "MONTHLY"
+          ? monthlyInterval.value
+          : yearlyInterval.value;
+    if (iv > 1) parts.push(`INTERVAL=${iv}`);
+    return parts.join(";");
+  }
+
   if (freq.value === "WEEKLY") {
     const days = [...weeklyDays.value].filter((d): d is Weekday =>
       WEEKDAY_ORDER.includes(d as Weekday),
@@ -147,7 +160,7 @@ const WEEKLY_INTERVAL_OPTIONS: { value: 1 | 2 | 4; label: string }[] = [
 const MONTHLY_INTERVAL_OPTIONS: { value: 1 | 2 | 3 | 6; label: string }[] = [
   { value: 1, label: "Every month" },
   { value: 2, label: "Every 2 months" },
-  { value: 3, label: "Every quarter" },
+  { value: 3, label: "Every 3 months" },
   { value: 6, label: "Every 6 months" },
 ];
 
@@ -199,7 +212,7 @@ function yearlyDayLabel(n: number): string {
           </option>
         </select>
 
-        <div class="flex gap-1.5">
+        <div v-if="!intervalOnly" class="flex gap-1.5">
           <button
             v-for="d in WEEKDAY_ORDER"
             :key="d"
@@ -232,7 +245,7 @@ function yearlyDayLabel(n: number): string {
         </select>
 
         <!-- Day-of-month grid: 1–31 + Last -->
-        <div class="grid grid-cols-8 gap-1">
+        <div v-if="!intervalOnly" class="grid grid-cols-8 gap-1">
           <button
             v-for="d in Array.from({ length: 31 }, (_, i) => i + 1)"
             :key="d"
@@ -273,7 +286,7 @@ function yearlyDayLabel(n: number): string {
           <option :value="2">Every 2 years</option>
         </select>
 
-        <div class="grid grid-cols-2 gap-2">
+        <div v-if="!intervalOnly" class="grid grid-cols-2 gap-2">
           <select
             :value="yearlyMonth"
             class="rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
@@ -297,9 +310,8 @@ function yearlyDayLabel(n: number): string {
       </template>
 
       <!-- Preview block -->
-      <div class="rounded-subcard bg-neutral-50 px-3 py-2">
+      <div v-if="!intervalOnly" class="rounded-subcard bg-neutral-50 px-3 py-2">
         <p class="text-sm text-neutral-700">{{ rruleHuman(currentRrule) }}</p>
-        <p class="mt-0.5 font-mono text-[11px] text-neutral-400">{{ currentRrule }}</p>
       </div>
     </div>
   </div>

@@ -486,7 +486,10 @@ class Budget(MoneyPoolBaseClass):
         default=FundingType.TARGET_DATE,
     )
 
-    # Only relevant if the FundingType is 'target_date'
+    # Only relevant for Goal budgets with FundingType 'target_date'.
+    # The date by which the budget should be fully funded.  Recurring
+    # budgets encode their "next due" date as the DTSTART of the
+    # recurrance_schedule recurrence instead.
     #
     target_date = models.DateField(null=True, blank=True)
 

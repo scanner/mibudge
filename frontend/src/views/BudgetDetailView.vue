@@ -17,6 +17,7 @@ import {
   IconArrowsRightLeft,
   IconCalendar,
   IconClock,
+  IconCoin,
   IconPencil,
   IconPlayerPause,
   IconRefresh,
@@ -37,6 +38,7 @@ import { listBudgets } from "@/api/budgets";
 import { createInternalTransaction } from "@/api/internalTransactions";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { parseLocalDate } from "@/utils/budget";
 import { rruleHuman } from "@/utils/rrule";
 import type { Budget } from "@/types/api";
 
@@ -289,7 +291,7 @@ async function submitMove() {
               <span class="text-sm text-neutral-600">
                 {{
                   budget.target_date
-                    ? new Date(budget.target_date).toLocaleDateString(undefined, {
+                    ? parseLocalDate(budget.target_date).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
@@ -297,6 +299,39 @@ async function submitMove() {
                     : "—"
                 }}
               </span>
+            </div>
+            <div class="flex items-center gap-3 px-4 py-3">
+              <IconClock class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
+              <span class="text-right text-sm text-neutral-600">
+                {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
+              </span>
+            </div>
+          </template>
+
+          <!-- Capped-specific rows -->
+          <template v-else-if="budget.budget_type === 'C'">
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconTarget class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Cap</span>
+              <MoneyAmount
+                v-if="budget.target_balance"
+                :amount="budget.target_balance"
+                :currency="budget.target_balance_currency"
+                size="md"
+              />
+              <span v-else class="text-sm text-neutral-400">—</span>
+            </div>
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconCoin class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Amount per event</span>
+              <MoneyAmount
+                v-if="budget.funding_amount"
+                :amount="budget.funding_amount"
+                :currency="budget.funding_amount_currency"
+                size="md"
+              />
+              <span v-else class="text-sm text-neutral-400">—</span>
             </div>
             <div class="flex items-center gap-3 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
