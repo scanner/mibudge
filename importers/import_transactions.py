@@ -511,6 +511,8 @@ def import_statement(
     client: MibudgeClient,
     progress_callback: Callable[[int, int], None] | None = None,
     existing: dict[tuple[str, ...], tuple[str, str]] | None = None,
+    *,
+    dry_run: bool = False,
 ) -> ImportResult:
     """
     Import transactions from an already-parsed BofA statement.
@@ -531,6 +533,8 @@ def import_statement(
             pre-fetches so it can wrap the fetch in a rich status
             spinner (rich does not allow nested Live renderers, and
             the POST progress bar is already a Live renderer).
+        dry_run: When True, classify each transaction (import / skip /
+            update) but do not POST or PATCH anything.
 
     Returns:
         An ImportResult with counts and unrecognized descriptions.
@@ -583,7 +587,11 @@ def import_statement(
             # re-run the import" work as the update path with no
             # separate backfill step.
             if existing_type == "" and tx.transaction_type != "":
-                if _patch_transaction_type(client, tx_id, tx.transaction_type):
+                if dry_run:
+                    result.updated += 1
+                elif _patch_transaction_type(
+                    client, tx_id, tx.transaction_type
+                ):
                     result.updated += 1
                     existing[key] = (tx_id, tx.transaction_type)
                 else:
@@ -591,11 +599,14 @@ def import_statement(
             else:
                 result.skipped += 1
         else:
-            resp = _post_transaction(client, bank_account_id, tx)
-            if resp is not None:
+            if dry_run:
                 result.imported += 1
             else:
-                result.failed += 1
+                resp = _post_transaction(client, bank_account_id, tx)
+                if resp is not None:
+                    result.imported += 1
+                else:
+                    result.failed += 1
 
         if progress_callback:
             progress_callback(i + 1, total)
@@ -837,7 +848,7 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
                 statements[-1].ending_balance_as_of,
             )
     else:
-        last = statements[-1]
+        last = max(statements, key=lambda s: s.ending_date)
 
     # Intra-run dedup. Two common patterns produce duplicate
     # transactions across the combined file set:
@@ -1473,16 +1484,22 @@ def _print_summary(
     console: Console,
     result: ImportResult,
     interactive: bool,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """Print the import summary to the console."""
     if interactive:
-        table = Table(title="Import Summary", show_header=False)
+        title = "Dry Run Summary" if dry_run else "Import Summary"
+        verb = "Would import" if dry_run else "Imported"
+        update_verb = "Would update" if dry_run else "Updated"
+        table = Table(title=title, show_header=False)
         table.add_column("Metric", style="bold")
         table.add_column("Count", justify="right")
-        table.add_row("Imported", f"[green]{result.imported}[/green]")
+        table.add_row(verb, f"[green]{result.imported}[/green]")
         table.add_row("Skipped (duplicates)", f"[dim]{result.skipped}[/dim]")
         table.add_row(
-            "Updated (type backfill)", f"[cyan]{result.updated}[/cyan]"
+            f"{update_verb} (type backfill)",
+            f"[cyan]{result.updated}[/cyan]",
         )
         if result.failed:
             table.add_row("Failed", f"[red]{result.failed}[/red]")
@@ -1503,10 +1520,13 @@ def _print_summary(
                     seen.add(desc)
                     console.print(f"  [dim]{desc}[/dim]")
     else:
+        prefix = "DRY RUN. " if dry_run else "Done. "
+        verb = "Would import" if dry_run else "Imported"
+        update_verb = "Would update" if dry_run else "Updated"
         print(
-            f"Done. Imported: {result.imported}, "
+            f"{prefix}{verb}: {result.imported}, "
             f"Skipped (duplicates): {result.skipped}, "
-            f"Updated: {result.updated}, "
+            f"{update_verb}: {result.updated}, "
             f"Failed: {result.failed}."
         )
         if result.unrecognized:
@@ -1558,6 +1578,16 @@ def _print_summary(
     help=(
         "Trust the project-local mkcert cert at "
         "deployment/ssl/ssl_crt.pem (relative to the current directory)."
+    ),
+)
+@click.option(
+    "--dry-run",
+    "-n",
+    is_flag=True,
+    help=(
+        "Show what would be imported without making any changes. "
+        "Parses files, authenticates, and checks for duplicates, "
+        "but does not POST or PATCH any transactions."
     ),
 )
 @click.option(
@@ -1648,6 +1678,7 @@ def cli_cmd(
     vault_path: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
+    dry_run: bool,
     verbose: bool,
     plain: bool,
     flag_files: tuple[Path, ...],
@@ -1672,6 +1703,10 @@ def cli_cmd(
             "positionally (e.g. '*.ofx') or with -f."
         )
 
+    if dry_run and create_account:
+        raise click.UsageError(
+            "--dry-run and --create-account are mutually exclusive."
+        )
     if create_account and account:
         raise click.UsageError(
             "--create-account and --account are mutually exclusive."
@@ -1712,6 +1747,10 @@ def cli_cmd(
             f"[dim]Parsed {len(statement.transactions)} transaction(s) "
             f"from {len(per_file_statements)} file(s) "
             f"({statement.beginning_date} -> {statement.ending_date}).[/dim]"
+        )
+    if dry_run and interactive:
+        console.print(
+            "[bold yellow]DRY RUN[/bold yellow] — no changes will be made."
         )
 
     bank_id_str: str | None = bank
@@ -1807,6 +1846,7 @@ def cli_cmd(
                         client,
                         _progress_cb,
                         existing=existing,
+                        dry_run=dry_run,
                     )
                     progress.update(
                         task_id,
@@ -1816,18 +1856,25 @@ def cli_cmd(
                     )
             else:
                 result = import_statement(
-                    statement, account_id, client, existing=existing
+                    statement,
+                    account_id,
+                    client,
+                    existing=existing,
+                    dry_run=dry_run,
                 )
 
-            # Post-import cross-check -- error-level, non-fatal.
-            _verify_final_balance(client, account_id, statement.ending_balance)
+            if not dry_run:
+                # Post-import cross-check -- error-level, non-fatal.
+                _verify_final_balance(
+                    client, account_id, statement.ending_balance
+                )
 
     except AuthenticationError as e:
         raise click.ClickException(str(e)) from e
     except KeyboardInterrupt as e:
         raise click.Abort() from e
 
-    _print_summary(console, result, interactive)
+    _print_summary(console, result, interactive, dry_run=dry_run)
 
     if result.failed > 0:
         raise SystemExit(1)
