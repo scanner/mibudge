@@ -4,7 +4,8 @@
 // (UI_SPEC §4.6)
 //
 // Transactions are read-only imports.  Mutable fields: description,
-// memo, image, document.  Allocations have full CRUD.
+// memo, image, document.  Allocations are managed via the declarative
+// splits endpoint: POST /api/v1/transactions/<id>/splits/.
 //
 
 // 3rd party imports
@@ -20,13 +21,13 @@ import AllocationCard from "@/components/transactions/AllocationCard.vue";
 import BudgetPickerSheet from "@/components/transactions/BudgetPickerSheet.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import { listAllocations } from "@/api/allocations";
 import {
-  createAllocation,
-  deleteAllocation,
-  listAllocations,
-  updateAllocation,
-} from "@/api/allocations";
-import { getTransaction, updateTransaction, uploadTransactionAttachment } from "@/api/transactions";
+  getTransaction,
+  splitTransaction,
+  updateTransaction,
+  uploadTransactionAttachment,
+} from "@/api/transactions";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
@@ -135,8 +136,15 @@ const accountName = computed(() => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Allocation status indicator.
+// Allocation computeds — filter out the unallocated budget.
 //
+const unallocId = computed(() => ctx.unallocatedBudgetId);
+
+const visibleAllocations = computed(() => {
+  const uid = unallocId.value;
+  return allocations.value.filter((a) => a.budget !== null && a.budget !== uid);
+});
+
 const allocationStatus = computed<{
   label: string;
   amount: string;
@@ -147,17 +155,13 @@ const allocationStatus = computed<{
   if (!tx) return { label: "", amount: "0.00", bg: "", text: "" };
 
   const txAmount = new Decimal(tx.amount).abs();
-  const unallocId = ctx.unallocatedBudgetId;
-  const realAllocations = allocations.value.filter(
-    (a) => a.budget !== null && a.budget !== unallocId,
-  );
-  const allocated = realAllocations.reduce(
+  const allocated = visibleAllocations.value.reduce(
     (sum, a) => sum.plus(new Decimal(a.amount).abs()),
     new Decimal(0),
   );
   const diff = txAmount.minus(allocated);
 
-  if (realAllocations.length > 0 && diff.isZero()) {
+  if (visibleAllocations.value.length > 0 && diff.isZero()) {
     return {
       label: "Fully allocated",
       amount: txAmount.toFixed(2),
@@ -185,25 +189,44 @@ const remaining = computed(() => {
   const tx = transaction.value;
   if (!tx) return "0.00";
   const txAmount = new Decimal(tx.amount).abs();
-  const unallocId = ctx.unallocatedBudgetId;
-  const allocated = allocations.value
-    .filter((a) => a.budget !== null && a.budget !== unallocId)
-    .reduce((sum, a) => sum.plus(new Decimal(a.amount).abs()), new Decimal(0));
+  const allocated = visibleAllocations.value.reduce(
+    (sum, a) => sum.plus(new Decimal(a.amount).abs()),
+    new Decimal(0),
+  );
   return txAmount.minus(allocated).toFixed(2);
 });
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Budget name helpers.
-//
-const visibleAllocations = computed(() => {
-  const unallocId = ctx.unallocatedBudgetId;
-  return allocations.value.filter((a) => a.budget !== null && a.budget !== unallocId);
-});
-
 function budgetName(budgetId: string | null): string {
   if (!budgetId) return "Unallocated";
   return budgets.byId(budgetId)?.name ?? "Budget";
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// Build a splits dict from visible allocations.
+//
+function currentSplits(): Record<string, string> {
+  const splits: Record<string, string> = {};
+  for (const a of visibleAllocations.value) {
+    if (a.budget) {
+      splits[a.budget] = new Decimal(a.amount).abs().toFixed(2);
+    }
+  }
+  return splits;
+}
+
+async function applySplits(splits: Record<string, string>) {
+  const id = txId.value;
+  if (!id) return;
+  try {
+    allocations.value = await splitTransaction(id, splits);
+    await refreshBudgetBalances();
+  } catch {
+    const page = await listAllocations({ transaction: id });
+    allocations.value = page.results;
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -225,7 +248,6 @@ async function load() {
     description.value = tx.description;
     memo.value = tx.memo ?? "";
 
-    // Ensure budgets are cached for name lookups.
     if (ctx.activeBankAccountId) {
       await budgets.fetchList({ bank_account: ctx.activeBankAccountId });
     }
@@ -251,7 +273,6 @@ function onDescriptionInput() {
       const updated = await updateTransaction(id, { description: description.value });
       transaction.value = updated;
     } catch {
-      // Revert on failure.
       description.value = transaction.value?.description ?? "";
     }
   }, 800);
@@ -278,9 +299,6 @@ function onMemoInput() {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Refresh budget balances in the store so TopBar's unallocated
-// amount stays current after allocation changes.
-//
 async function refreshBudgetBalances() {
   const accountId = ctx.activeBankAccountId;
   if (accountId) {
@@ -290,121 +308,37 @@ async function refreshBudgetBalances() {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Allocation CRUD.
+// Allocation mutations — all go through applySplits.
 //
 async function onUpdateAllocation(id: string, amount: string) {
-  try {
-    const updated = await updateAllocation(id, { amount });
-    const idx = allocations.value.findIndex((a) => a.id === id);
-    if (idx !== -1) allocations.value[idx] = updated;
-    await refreshBudgetBalances();
-  } catch {
-    const page = await listAllocations({ transaction: txId.value });
-    allocations.value = page.results;
-  }
+  const alloc = visibleAllocations.value.find((a) => a.id === id);
+  if (!alloc?.budget) return;
+  const splits = currentSplits();
+  splits[alloc.budget] = new Decimal(amount).abs().toFixed(2);
+  await applySplits(splits);
 }
 
 async function onRemoveAllocation(id: string) {
-  const unallocId = ctx.unallocatedBudgetId;
-  const isLast = visibleAllocations.value.length === 1;
-  try {
-    if (isLast && unallocId) {
-      // Last real allocation — reassign to unallocated rather than delete.
-      const updated = await updateAllocation(id, { budget: unallocId });
-      const idx = allocations.value.findIndex((a) => a.id === id);
-      if (idx !== -1) allocations.value[idx] = updated;
-    } else {
-      await deleteAllocation(id);
-      allocations.value = allocations.value.filter((a) => a.id !== id);
-    }
-    await refreshBudgetBalances();
-  } catch {
-    const page = await listAllocations({ transaction: txId.value });
-    allocations.value = page.results;
-  }
+  const alloc = visibleAllocations.value.find((a) => a.id === id);
+  if (!alloc?.budget) return;
+  const splits = currentSplits();
+  delete splits[alloc.budget];
+  await applySplits(splits);
 }
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Budget picker state.
+// Budget picker — assign or add a split.
 //
-type PickerMode = "assign" | "split" | "reassign";
-const pickerMode = ref<PickerMode>("assign");
-const reassignAllocationId = ref<string | null>(null);
-
-function openPicker(mode: PickerMode, allocationId?: string) {
-  pickerMode.value = mode;
-  reassignAllocationId.value = allocationId ?? null;
+function openPicker() {
   pickerOpen.value = true;
 }
 
 async function onBudgetSelected(budget: { id: string }, amount: string) {
   pickerOpen.value = false;
-  const tx = transaction.value;
-  if (!tx) return;
-
-  const unallocId = ctx.unallocatedBudgetId;
-
-  try {
-    if (pickerMode.value === "reassign" && reassignAllocationId.value) {
-      const updated = await updateAllocation(reassignAllocationId.value, {
-        budget: budget.id,
-      });
-      const idx = allocations.value.findIndex((a) => a.id === updated.id);
-      if (idx !== -1) allocations.value[idx] = updated;
-    } else if (pickerMode.value === "assign") {
-      const unallocAlloc = allocations.value.find(
-        (a) => a.budget === unallocId || a.budget === null,
-      );
-      const isPartial =
-        unallocAlloc && !new Decimal(amount).abs().equals(new Decimal(unallocAlloc.amount).abs());
-
-      if (unallocAlloc && !isPartial) {
-        // Full assign — repoint existing unallocated allocation.
-        const updated = await updateAllocation(unallocAlloc.id, {
-          budget: budget.id,
-        });
-        const idx = allocations.value.findIndex((a) => a.id === updated.id);
-        if (idx !== -1) allocations.value[idx] = updated;
-      } else if (unallocAlloc && isPartial) {
-        // Partial assign — reduce the unallocated allocation's amount,
-        // then create a new allocation for the chosen budget.
-        const unallocAmount = new Decimal(unallocAlloc.amount).abs();
-        const partialAmount = new Decimal(amount).abs();
-        const remainderAmount = unallocAmount.minus(partialAmount);
-        const remainderStr = `-${remainderAmount.toFixed(2)}`;
-
-        await updateAllocation(unallocAlloc.id, { amount: remainderStr });
-        const alloc = await createAllocation({
-          transaction: tx.id,
-          budget: budget.id,
-          amount,
-        });
-        allocations.value = [...allocations.value, alloc];
-        const page = await listAllocations({ transaction: txId.value });
-        allocations.value = page.results;
-      } else {
-        const alloc = await createAllocation({
-          transaction: tx.id,
-          budget: budget.id,
-          amount,
-        });
-        allocations.value = [...allocations.value, alloc];
-      }
-    } else {
-      // split — create new allocation with the specified amount.
-      const alloc = await createAllocation({
-        transaction: tx.id,
-        budget: budget.id,
-        amount,
-      });
-      allocations.value = [...allocations.value, alloc];
-    }
-    await refreshBudgetBalances();
-  } catch {
-    const page = await listAllocations({ transaction: txId.value });
-    allocations.value = page.results;
-  }
+  const splits = currentSplits();
+  splits[budget.id] = new Decimal(amount).abs().toFixed(2);
+  await applySplits(splits);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -563,7 +497,7 @@ function navigateBudget(budgetId: string) {
             :currency="transaction.amount_currency"
             @update="onUpdateAllocation"
             @remove="onRemoveAllocation"
-            @reassign="(id: string) => openPicker('reassign', id)"
+            @reassign="() => openPicker()"
             @navigate-budget="navigateBudget"
           />
         </div>
@@ -586,7 +520,7 @@ function navigateBudget(budgetId: string) {
         <button
           type="button"
           class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ocean-300 px-3 py-2 text-sm font-medium text-ocean-600 transition-colors hover:border-ocean-400 hover:bg-ocean-50"
-          @click="openPicker(visibleAllocations.length > 0 ? 'split' : 'assign')"
+          @click="openPicker()"
         >
           <IconPlus class="h-4 w-4" />
           {{ visibleAllocations.length > 0 ? "Add split" : "Assign to budget" }}

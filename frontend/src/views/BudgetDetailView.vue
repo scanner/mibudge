@@ -34,11 +34,11 @@ import AppShell from "@/components/layout/AppShell.vue";
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
-import { deleteAllocation, listAllocations, updateAllocation } from "@/api/allocations";
+import { listAllocations } from "@/api/allocations";
 import { archiveBudget, getBudget, updateBudget } from "@/api/budgets";
 import { listBudgets } from "@/api/budgets";
 import { createInternalTransaction } from "@/api/internalTransactions";
-import { getTransaction } from "@/api/transactions";
+import { getTransaction, splitTransaction } from "@/api/transactions";
 import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -137,19 +137,19 @@ async function onRemoveTransaction(transactionId: string) {
   const allocs = budgetAllocsByTx.value.get(transactionId);
   if (!allocs) return;
 
-  const unallocId = ctx.unallocatedBudgetId;
   const allocForThisBudget = allocs.find((a) => a.budget === props.id);
   if (!allocForThisBudget) return;
 
   try {
-    // Check if this is the only allocation on the transaction.
+    // Build a splits dict from all current allocations, minus this budget.
     const allTxAllocs = await listAllocations({ transaction: transactionId });
-    if (allTxAllocs.results.length <= 1 && unallocId) {
-      // Last allocation — reassign to unallocated.
-      await updateAllocation(allocForThisBudget.id, { budget: unallocId });
-    } else {
-      await deleteAllocation(allocForThisBudget.id);
+    const splits: Record<string, string> = {};
+    for (const a of allTxAllocs.results) {
+      if (a.budget && a.budget !== props.id) {
+        splits[a.budget] = Math.abs(parseFloat(a.amount)).toString();
+      }
     }
+    await splitTransaction(transactionId, splits);
 
     // Remove from local lists.
     budgetTransactions.value = budgetTransactions.value.filter((tx) => tx.id !== transactionId);

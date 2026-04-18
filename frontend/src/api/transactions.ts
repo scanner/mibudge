@@ -6,7 +6,12 @@
 
 import { useAuthStore } from "@/stores/auth";
 import { qs } from "@/api/util";
-import type { Paginated, Transaction, TransactionListParams } from "@/types/api";
+import type {
+  Paginated,
+  Transaction,
+  TransactionAllocation,
+  TransactionListParams,
+} from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -62,5 +67,17 @@ export function uploadTransactionAttachment(
   return useAuthStore().request<Transaction>(`/transactions/${id}/`, {
     method: "PATCH",
     body: form,
+  });
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export function splitTransaction(
+  id: string,
+  splits: Record<string, string>,
+): Promise<TransactionAllocation[]> {
+  return useAuthStore().request<TransactionAllocation[]>(`/transactions/${id}/splits/`, {
+    method: "POST",
+    body: { splits } as unknown as BodyInit,
   });
 }
