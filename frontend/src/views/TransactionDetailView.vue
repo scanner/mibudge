@@ -9,14 +9,15 @@
 
 // 3rd party imports
 //
-import { IconArrowLeft, IconPlus } from "@tabler/icons-vue";
+import { IconArrowLeft, IconChevronDown, IconChevronUp, IconPlus } from "@tabler/icons-vue";
 import Decimal from "decimal.js";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 // app imports
 //
 import AllocationCard from "@/components/transactions/AllocationCard.vue";
+import BudgetPickerSheet from "@/components/transactions/BudgetPickerSheet.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import {
@@ -28,6 +29,7 @@ import {
 import { getTransaction, updateTransaction, uploadTransactionAttachment } from "@/api/transactions";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { useTransactionNavStore } from "@/stores/transactionNav";
 import { TRANSACTION_TYPE_LABELS } from "@/types/api";
 import type { Transaction, TransactionAllocation } from "@/types/api";
 
@@ -37,6 +39,39 @@ const route = useRoute();
 const router = useRouter();
 const ctx = useAccountContextStore();
 const budgets = useBudgetsStore();
+const txNav = useTransactionNavStore();
+
+////////////////////////////////////////////////////////////////////////
+//
+const pickerOpen = ref(false);
+
+////////////////////////////////////////////////////////////////////////
+//
+const prevTxId = computed(() => txNav.prevId(txId.value));
+const nextTxId = computed(() => txNav.nextId(txId.value));
+
+function goToPrev() {
+  if (prevTxId.value) router.replace(`/transactions/${prevTxId.value}/`);
+}
+function goToNext() {
+  if (nextTxId.value) router.replace(`/transactions/${nextTxId.value}/`);
+}
+
+function onKeyNav(e: KeyboardEvent) {
+  if (pickerOpen.value) return;
+  const tag = (e.target as HTMLElement)?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    goToPrev();
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    goToNext();
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onKeyNav));
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeyNav));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -44,6 +79,11 @@ const transaction = ref<Transaction | null>(null);
 const allocations = ref<TransactionAllocation[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
+
+const isCredit = computed(() => {
+  const tx = transaction.value;
+  return tx ? Number.parseFloat(tx.amount) > 0 : false;
+});
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -73,13 +113,20 @@ const typeLabel = computed(() => {
 const formattedDate = computed(() => {
   const tx = transaction.value;
   if (!tx) return "";
-  const d = new Date(tx.transaction_date + "T00:00:00");
-  return d.toLocaleDateString(undefined, {
+  const d = new Date(tx.transaction_date);
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0 || d.getSeconds() !== 0;
+  const datePart = d.toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
   });
+  if (!hasTime) return datePart;
+  const timePart = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${datePart} at ${timePart}`;
 });
 
 const accountName = computed(() => {
@@ -231,6 +278,18 @@ function onMemoInput() {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Refresh budget balances in the store so TopBar's unallocated
+// amount stays current after allocation changes.
+//
+async function refreshBudgetBalances() {
+  const accountId = ctx.activeBankAccountId;
+  if (accountId) {
+    await budgets.fetchList({ bank_account: accountId });
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // Allocation CRUD.
 //
 async function onUpdateAllocation(id: string, amount: string) {
@@ -238,34 +297,90 @@ async function onUpdateAllocation(id: string, amount: string) {
     const updated = await updateAllocation(id, { amount });
     const idx = allocations.value.findIndex((a) => a.id === id);
     if (idx !== -1) allocations.value[idx] = updated;
+    await refreshBudgetBalances();
   } catch {
-    // Reload on error.
     const page = await listAllocations({ transaction: txId.value });
     allocations.value = page.results;
   }
 }
 
-async function onDeleteAllocation(id: string) {
+async function onRemoveAllocation(id: string) {
+  const unallocId = ctx.unallocatedBudgetId;
+  const isLast = visibleAllocations.value.length === 1;
   try {
-    await deleteAllocation(id);
-    allocations.value = allocations.value.filter((a) => a.id !== id);
+    if (isLast && unallocId) {
+      // Last real allocation — reassign to unallocated rather than delete.
+      const updated = await updateAllocation(id, { budget: unallocId });
+      const idx = allocations.value.findIndex((a) => a.id === id);
+      if (idx !== -1) allocations.value[idx] = updated;
+    } else {
+      await deleteAllocation(id);
+      allocations.value = allocations.value.filter((a) => a.id !== id);
+    }
+    await refreshBudgetBalances();
   } catch {
-    // Reload on error.
     const page = await listAllocations({ transaction: txId.value });
     allocations.value = page.results;
   }
 }
 
-async function onAddSplit() {
+////////////////////////////////////////////////////////////////////////
+//
+// Budget picker state.
+//
+type PickerMode = "assign" | "split" | "reassign";
+const pickerMode = ref<PickerMode>("assign");
+const reassignAllocationId = ref<string | null>(null);
+
+function openPicker(mode: PickerMode, allocationId?: string) {
+  pickerMode.value = mode;
+  reassignAllocationId.value = allocationId ?? null;
+  pickerOpen.value = true;
+}
+
+async function onBudgetSelected(budget: { id: string }) {
+  pickerOpen.value = false;
   const tx = transaction.value;
   if (!tx) return;
+
+  const unallocId = ctx.unallocatedBudgetId;
+
   try {
-    const alloc = await createAllocation({
-      transaction: tx.id,
-      budget: null,
-      amount: remaining.value,
-    });
-    allocations.value = [...allocations.value, alloc];
+    if (pickerMode.value === "reassign" && reassignAllocationId.value) {
+      const updated = await updateAllocation(reassignAllocationId.value, {
+        budget: budget.id,
+      });
+      const idx = allocations.value.findIndex((a) => a.id === updated.id);
+      if (idx !== -1) allocations.value[idx] = updated;
+    } else if (pickerMode.value === "assign") {
+      // Re-assign the existing unallocated allocation instead of creating new.
+      const unallocAlloc = allocations.value.find(
+        (a) => a.budget === unallocId || a.budget === null,
+      );
+      if (unallocAlloc) {
+        const updated = await updateAllocation(unallocAlloc.id, {
+          budget: budget.id,
+        });
+        const idx = allocations.value.findIndex((a) => a.id === updated.id);
+        if (idx !== -1) allocations.value[idx] = updated;
+      } else {
+        const alloc = await createAllocation({
+          transaction: tx.id,
+          budget: budget.id,
+          amount: remaining.value,
+        });
+        allocations.value = [...allocations.value, alloc];
+      }
+    } else {
+      // split — create new allocation with remaining amount.
+      const alloc = await createAllocation({
+        transaction: tx.id,
+        budget: budget.id,
+        amount: remaining.value,
+      });
+      allocations.value = [...allocations.value, alloc];
+    }
+    await refreshBudgetBalances();
   } catch {
     const page = await listAllocations({ transaction: txId.value });
     allocations.value = page.results;
@@ -301,14 +416,34 @@ function navigateBudget(budgetId: string) {
 <template>
   <AppShell>
     <template #action>
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-        aria-label="Back"
-        @click="router.back()"
-      >
-        <IconArrowLeft class="h-5 w-5" />
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          aria-label="Back"
+          @click="router.back()"
+        >
+          <IconArrowLeft class="h-5 w-5" />
+        </button>
+        <button
+          v-if="prevTxId"
+          type="button"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          aria-label="Previous transaction"
+          @click="goToPrev"
+        >
+          <IconChevronUp class="h-5 w-5" />
+        </button>
+        <button
+          v-if="nextTxId"
+          type="button"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          aria-label="Next transaction"
+          @click="goToNext"
+        >
+          <IconChevronDown class="h-5 w-5" />
+        </button>
+      </div>
     </template>
 
     <!-- Loading -->
@@ -393,8 +528,8 @@ function navigateBudget(budgetId: string) {
         </div>
       </section>
 
-      <!-- Allocations section -->
-      <section class="mt-6">
+      <!-- Allocations section (debits only — credits go to unallocated) -->
+      <section v-if="!isCredit" class="mt-6">
         <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
           Allocations
         </h2>
@@ -405,10 +540,10 @@ function navigateBudget(budgetId: string) {
             :key="alloc.id"
             :allocation="alloc"
             :budget-name="budgetName(alloc.budget)"
-            :is-only="visibleAllocations.length === 1"
             :currency="transaction.amount_currency"
             @update="onUpdateAllocation"
-            @delete="onDeleteAllocation"
+            @remove="onRemoveAllocation"
+            @reassign="(id: string) => openPicker('reassign', id)"
             @navigate-budget="navigateBudget"
           />
         </div>
@@ -431,7 +566,7 @@ function navigateBudget(budgetId: string) {
         <button
           type="button"
           class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ocean-300 px-3 py-2 text-sm font-medium text-ocean-600 transition-colors hover:border-ocean-400 hover:bg-ocean-50"
-          @click="onAddSplit"
+          @click="openPicker(visibleAllocations.length > 0 ? 'split' : 'assign')"
         >
           <IconPlus class="h-4 w-4" />
           {{ visibleAllocations.length > 0 ? "Add split" : "Assign to budget" }}
@@ -475,5 +610,14 @@ function navigateBudget(budgetId: string) {
         Transactions are imported from bank statements and cannot be created or deleted.
       </p>
     </template>
+
+    <!-- Budget picker sheet -->
+    <BudgetPickerSheet
+      :open="pickerOpen"
+      :budgets="budgets.all"
+      :unallocated-budget-id="ctx.unallocatedBudgetId"
+      @select="onBudgetSelected"
+      @cancel="pickerOpen = false"
+    />
   </AppShell>
 </template>

@@ -26,13 +26,16 @@ import EmptyState from "@/components/shared/EmptyState.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
 import { listAllocations } from "@/api/allocations";
 import { listTransactions, listTransactionsNext } from "@/api/transactions";
+import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
-import type { Paginated, Transaction, TransactionAllocation } from "@/types/api";
+import { useTransactionNavStore } from "@/stores/transactionNav";
+import type { Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const ctx = useAccountContextStore();
+const txNav = useTransactionNavStore();
 const budgets = useBudgetsStore();
 
 ////////////////////////////////////////////////////////////////////////
@@ -40,7 +43,7 @@ const budgets = useBudgetsStore();
 // Filter chips — each maps to API params or a client-side predicate.
 //
 type Filter = "all" | "unallocated" | "pending" | "income" | "last30";
-const activeFilter = ref<Filter>("all");
+const activeFilter = ref<Filter>((txNav.savedFilter as Filter) || "all");
 
 const filterChips: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
@@ -65,8 +68,8 @@ const error = ref<string | null>(null);
 //
 // Search state.
 //
-const searchOpen = ref(false);
-const searchQuery = ref("");
+const searchOpen = ref(!!txNav.savedSearch);
+const searchQuery = ref(txNav.savedSearch);
 const searchResults = ref<Transaction[] | null>(null);
 let fzfDebounce: ReturnType<typeof setTimeout> | null = null;
 let serverDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -165,7 +168,7 @@ async function loadTransactions() {
   loading.value = true;
   error.value = null;
   try {
-    const [txPage, allocPage, _budgets] = await Promise.all([
+    const [txPage, allocFirstPage, _budgets] = await Promise.all([
       listTransactions({
         bank_account: accountId,
         ordering: "-transaction_date",
@@ -176,7 +179,9 @@ async function loadTransactions() {
 
     transactions.value = txPage.results;
     nextPageUrl.value = txPage.next;
-    indexAllocations(allocPage);
+
+    const allAllocs = await fetchAllPages(allocFirstPage);
+    indexAllocations(allAllocs);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to load transactions.";
   } finally {
@@ -184,9 +189,9 @@ async function loadTransactions() {
   }
 }
 
-function indexAllocations(page: Paginated<TransactionAllocation>) {
+function indexAllocations(allocs: TransactionAllocation[]) {
   const map = new Map<string, TransactionAllocation[]>();
-  for (const a of page.results) {
+  for (const a of allocs) {
     const list = map.get(a.transaction) ?? [];
     list.push(a);
     map.set(a.transaction, list);
@@ -287,14 +292,34 @@ function toggleSearch() {
   if (!searchOpen.value) {
     searchQuery.value = "";
     searchResults.value = null;
+    txNav.savedSearch = "";
   }
 }
+
+////////////////////////////////////////////////////////////////////////
+//
+// Persist search/filter state so it survives navigating to detail and back.
+//
+watch(searchQuery, (q) => {
+  txNav.savedSearch = q;
+});
+watch(activeFilter, (f) => {
+  txNav.savedFilter = f;
+});
 
 ////////////////////////////////////////////////////////////////////////
 //
 // Watch account changes and re-setup observer when sentinel remounts.
 //
 watch(() => ctx.activeBankAccountId, loadTransactions, { immediate: true });
+
+// Re-run search after data loads if there's a restored query.
+watch(transactions, (txs) => {
+  txNav.setIds(txs.map((t) => t.id));
+  if (searchQuery.value.trim() && txs.length > 0 && !searchResults.value) {
+    onSearchInput();
+  }
+});
 
 watch(sentinel, (el) => {
   if (el && observer) observer.observe(el);

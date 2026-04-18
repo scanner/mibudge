@@ -33,14 +33,18 @@ import BudgetForm from "@/components/budgets/BudgetForm.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import TransactionRow from "@/components/transactions/TransactionRow.vue";
+import { listAllocations } from "@/api/allocations";
 import { archiveBudget, getBudget, updateBudget } from "@/api/budgets";
 import { listBudgets } from "@/api/budgets";
 import { createInternalTransaction } from "@/api/internalTransactions";
+import { getTransaction } from "@/api/transactions";
+import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 import { parseLocalDate } from "@/utils/budget";
 import { rruleHuman } from "@/utils/rrule";
-import type { Budget } from "@/types/api";
+import type { Budget, Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -84,6 +88,50 @@ async function load() {
 }
 
 onMounted(load);
+
+////////////////////////////////////////////////////////////////////////
+//
+// Transactions associated with this budget via allocations.
+//
+const budgetTransactions = ref<Transaction[]>([]);
+const budgetAllocsByTx = ref(new Map<string, TransactionAllocation[]>());
+const txLoading = ref(false);
+
+const budgetNames = computed(() => {
+  const map = new Map<string, string>();
+  for (const b of store.all) map.set(b.id, b.name);
+  return map;
+});
+
+async function loadBudgetTransactions() {
+  txLoading.value = true;
+  try {
+    const firstPage = await listAllocations({ budget: props.id });
+    const allAllocs = await fetchAllPages(firstPage);
+
+    // Index allocations by transaction and fetch the unique transactions.
+    const allocMap = new Map<string, TransactionAllocation[]>();
+    const txIds = new Set<string>();
+    for (const a of allAllocs) {
+      txIds.add(a.transaction);
+      const list = allocMap.get(a.transaction) ?? [];
+      list.push(a);
+      allocMap.set(a.transaction, list);
+    }
+    budgetAllocsByTx.value = allocMap;
+
+    const txPromises = Array.from(txIds).map((id) => getTransaction(id));
+    const txs = await Promise.all(txPromises);
+    txs.sort((a, b) => (a.transaction_date > b.transaction_date ? -1 : 1));
+    budgetTransactions.value = txs;
+  } catch {
+    // Non-fatal — the budget detail still shows, transactions section just stays empty.
+  } finally {
+    txLoading.value = false;
+  }
+}
+
+onMounted(loadBudgetTransactions);
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -383,6 +431,32 @@ async function submitMove() {
               </span>
             </div>
           </template>
+        </section>
+
+        <!-- Transactions section -->
+        <section class="mt-2">
+          <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            Transactions
+          </h2>
+
+          <div v-if="txLoading" class="space-y-2">
+            <div v-for="i in 3" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
+          </div>
+
+          <div v-else-if="budgetTransactions.length > 0" class="space-y-2">
+            <TransactionRow
+              v-for="tx in budgetTransactions"
+              :key="tx.id"
+              :transaction="tx"
+              :allocations="budgetAllocsByTx.get(tx.id)"
+              :budget-names="budgetNames"
+              :unallocated-budget-id="ctx.unallocatedBudgetId"
+            />
+          </div>
+
+          <p v-else class="py-4 text-center text-sm text-neutral-500">
+            No transactions assigned to this budget yet.
+          </p>
         </section>
 
         <!-- Inline error banner -->
