@@ -843,6 +843,115 @@ class TestTransactionAllocationAPI:
         alloc.refresh_from_db()
         assert alloc.budget == new_budget
 
+    ####################################################################
+    #
+    def test_update_allocation_amount(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a -100 transaction with a -100 allocation
+        WHEN:  PATCH the allocation amount to -60
+        THEN:  the amount is updated and the budget balance reflects
+               the delta
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account, balance=Money(500, "USD"))
+        tx = transaction_factory(
+            bank_account=account, amount=Money(-100, "USD")
+        )
+        alloc = transaction_allocation_factory(
+            transaction=tx, budget=budget, amount=Money(-100, "USD")
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(400, "USD")
+
+        response = auth_client.patch(
+            reverse(
+                "api_v1:transactionallocation-detail",
+                kwargs={"id": alloc.id},
+            ),
+            {"amount": "-60.00"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        alloc.refresh_from_db()
+        assert alloc.amount == Money(-60, "USD")
+
+        budget.refresh_from_db()
+        assert budget.balance == Money(440, "USD")
+
+    ####################################################################
+    #
+    def test_update_allocation_amount_exceeds_transaction(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a -100 transaction with a -100 allocation
+        WHEN:  PATCH the allocation amount to -150
+        THEN:  400 Bad Request — total would exceed the transaction
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account)
+        tx = transaction_factory(
+            bank_account=account, amount=Money(-100, "USD")
+        )
+        alloc = transaction_allocation_factory(
+            transaction=tx, budget=budget, amount=Money(-100, "USD")
+        )
+        response = auth_client.patch(
+            reverse(
+                "api_v1:transactionallocation-detail",
+                kwargs={"id": alloc.id},
+            ),
+            {"amount": "-150.00"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    ####################################################################
+    #
+    def test_update_allocation_rejects_sign_flip(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a -50 allocation (debit)
+        WHEN:  PATCH the amount to +50 (credit)
+        THEN:  400 Bad Request — sign change is rejected
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account)
+        tx = transaction_factory(
+            bank_account=account, amount=Money(-100, "USD")
+        )
+        alloc = transaction_allocation_factory(
+            transaction=tx, budget=budget, amount=Money(-50, "USD")
+        )
+        response = auth_client.patch(
+            reverse(
+                "api_v1:transactionallocation-detail",
+                kwargs={"id": alloc.id},
+            ),
+            {"amount": "50.00"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
 
 ########################################################################
 ########################################################################

@@ -34,7 +34,7 @@ import AppShell from "@/components/layout/AppShell.vue";
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
-import { listAllocations } from "@/api/allocations";
+import { deleteAllocation, listAllocations, updateAllocation } from "@/api/allocations";
 import { archiveBudget, getBudget, updateBudget } from "@/api/budgets";
 import { listBudgets } from "@/api/budgets";
 import { createInternalTransaction } from "@/api/internalTransactions";
@@ -132,6 +132,42 @@ async function loadBudgetTransactions() {
 }
 
 onMounted(loadBudgetTransactions);
+
+async function onRemoveTransaction(transactionId: string) {
+  const allocs = budgetAllocsByTx.value.get(transactionId);
+  if (!allocs) return;
+
+  const unallocId = ctx.unallocatedBudgetId;
+  const allocForThisBudget = allocs.find((a) => a.budget === props.id);
+  if (!allocForThisBudget) return;
+
+  try {
+    // Check if this is the only allocation on the transaction.
+    const allTxAllocs = await listAllocations({ transaction: transactionId });
+    if (allTxAllocs.results.length <= 1 && unallocId) {
+      // Last allocation — reassign to unallocated.
+      await updateAllocation(allocForThisBudget.id, { budget: unallocId });
+    } else {
+      await deleteAllocation(allocForThisBudget.id);
+    }
+
+    // Remove from local lists.
+    budgetTransactions.value = budgetTransactions.value.filter((tx) => tx.id !== transactionId);
+    budgetAllocsByTx.value.delete(transactionId);
+
+    // Refresh budget to update balance.
+    const updated = await getBudget(props.id);
+    budget.value = updated;
+    store.upsert(updated);
+    // Refresh all budgets so TopBar stays current.
+    if (ctx.activeBankAccountId) {
+      await store.fetchList({ bank_account: ctx.activeBankAccountId });
+    }
+  } catch {
+    // Reload on error.
+    await loadBudgetTransactions();
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -451,6 +487,8 @@ async function submitMove() {
               :allocations="budgetAllocsByTx.get(tx.id)"
               :budget-names="budgetNames"
               :unallocated-budget-id="ctx.unallocatedBudgetId"
+              removable
+              @remove="onRemoveTransaction"
             />
           </div>
 

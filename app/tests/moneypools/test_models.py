@@ -658,6 +658,42 @@ class TestTransactionAllocation:
 
     ####################################################################
     #
+    def test_amount_change_adjusts_budget_balance(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+    ) -> None:
+        """
+        GIVEN: a -100 allocation against a budget with $500 balance
+        WHEN:  the allocation amount is changed to -60
+        THEN:  the budget balance reflects the delta (+40)
+        """
+        BUDGET_BAL = 500
+        OLD_AMT = -100
+        NEW_AMT = -60
+
+        budget = budget_factory(balance=BUDGET_BAL)
+        bank_account = bank_account_factory(available_balance=1000)
+        txn = transaction_factory(
+            amount=OLD_AMT,
+            raw_description="Test purchase",
+            bank_account=bank_account,
+        )
+        alloc = transaction_allocation_factory(
+            transaction=txn, budget=budget, amount=OLD_AMT
+        )
+        assert budget.balance == Money(BUDGET_BAL + OLD_AMT, USD)
+
+        alloc.amount = Money(NEW_AMT, USD)
+        alloc.save()
+
+        budget = Budget.objects.get(id=budget.id)
+        assert budget.balance == Money(BUDGET_BAL + NEW_AMT, USD)
+
+    ####################################################################
+    #
     def test_split_transaction_multiple_allocations(
         self,
         bank_account_factory: Callable[..., BankAccount],

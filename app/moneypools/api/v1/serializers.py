@@ -729,7 +729,10 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     ####################################################################
     #
     def validate_amount(self, value: Decimal) -> Decimal:
-        """Prevent changing the amount after creation.
+        """Validate the allocation amount.
+
+        Ensures the sign of the amount does not change on update
+        (prevents flipping a debit to a credit or vice-versa).
 
         Args:
             value: The allocation amount (Decimal or Money).
@@ -738,12 +741,20 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
             The validated amount.
 
         Raises:
-            ValidationError: If this is an update.
+            ValidationError: If the sign would change.
         """
         if self.instance is not None:
-            raise serializers.ValidationError(
-                "Cannot change the allocation amount after creation."
+            old_amount = self.instance.amount
+            old_val = (
+                old_amount.amount
+                if hasattr(old_amount, "amount")
+                else old_amount
             )
+            new_val = value.amount if hasattr(value, "amount") else value
+            if (old_val > 0) != (new_val > 0) and new_val != 0:
+                raise serializers.ValidationError(
+                    "Cannot change the sign of an allocation amount."
+                )
         return value
 
     ####################################################################
@@ -772,8 +783,9 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     def validate(self, attrs: dict) -> dict:
         """Validate that total allocations do not exceed the transaction amount.
 
-        On create, sums the existing allocations for the transaction and
-        adds the new amount.  The total must not exceed the absolute
+        On create or update, sums the existing allocations for the
+        transaction (excluding the current instance on update) and adds
+        the new/updated amount.  The total must not exceed the absolute
         value of the transaction amount.
 
         Args:
@@ -786,17 +798,22 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
             ValidationError: If the allocation total would exceed the
                 transaction amount.
         """
-        # Only validate allocation totals on create.
-        #
         if self.instance is not None:
-            return attrs
+            transaction = self.instance.transaction
+            new_amount = attrs.get("amount", self.instance.amount)
+        else:
+            transaction = attrs["transaction"]
+            new_amount = attrs["amount"]
 
-        transaction = attrs["transaction"]
-        new_amount = attrs["amount"]
-
-        existing_total = TransactionAllocation.objects.filter(
+        existing_qs = TransactionAllocation.objects.filter(
             transaction=transaction
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        )
+        if self.instance is not None:
+            existing_qs = existing_qs.exclude(id=self.instance.id)
+
+        existing_total = existing_qs.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
 
         # Transaction amounts can be negative (debits) so compare
         # absolute values.  new_amount may be a Money instance from

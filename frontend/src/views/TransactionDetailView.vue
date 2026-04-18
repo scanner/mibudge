@@ -338,7 +338,7 @@ function openPicker(mode: PickerMode, allocationId?: string) {
   pickerOpen.value = true;
 }
 
-async function onBudgetSelected(budget: { id: string }) {
+async function onBudgetSelected(budget: { id: string }, amount: string) {
   pickerOpen.value = false;
   const tx = transaction.value;
   if (!tx) return;
@@ -353,30 +353,50 @@ async function onBudgetSelected(budget: { id: string }) {
       const idx = allocations.value.findIndex((a) => a.id === updated.id);
       if (idx !== -1) allocations.value[idx] = updated;
     } else if (pickerMode.value === "assign") {
-      // Re-assign the existing unallocated allocation instead of creating new.
       const unallocAlloc = allocations.value.find(
         (a) => a.budget === unallocId || a.budget === null,
       );
-      if (unallocAlloc) {
+      const isPartial =
+        unallocAlloc && !new Decimal(amount).abs().equals(new Decimal(unallocAlloc.amount).abs());
+
+      if (unallocAlloc && !isPartial) {
+        // Full assign — repoint existing unallocated allocation.
         const updated = await updateAllocation(unallocAlloc.id, {
           budget: budget.id,
         });
         const idx = allocations.value.findIndex((a) => a.id === updated.id);
         if (idx !== -1) allocations.value[idx] = updated;
+      } else if (unallocAlloc && isPartial) {
+        // Partial assign — reduce the unallocated allocation's amount,
+        // then create a new allocation for the chosen budget.
+        const unallocAmount = new Decimal(unallocAlloc.amount).abs();
+        const partialAmount = new Decimal(amount).abs();
+        const remainderAmount = unallocAmount.minus(partialAmount);
+        const remainderStr = `-${remainderAmount.toFixed(2)}`;
+
+        await updateAllocation(unallocAlloc.id, { amount: remainderStr });
+        const alloc = await createAllocation({
+          transaction: tx.id,
+          budget: budget.id,
+          amount,
+        });
+        allocations.value = [...allocations.value, alloc];
+        const page = await listAllocations({ transaction: txId.value });
+        allocations.value = page.results;
       } else {
         const alloc = await createAllocation({
           transaction: tx.id,
           budget: budget.id,
-          amount: remaining.value,
+          amount,
         });
         allocations.value = [...allocations.value, alloc];
       }
     } else {
-      // split — create new allocation with remaining amount.
+      // split — create new allocation with the specified amount.
       const alloc = await createAllocation({
         transaction: tx.id,
         budget: budget.id,
-        amount: remaining.value,
+        amount,
       });
       allocations.value = [...allocations.value, alloc];
     }
@@ -616,6 +636,7 @@ function navigateBudget(budgetId: string) {
       :open="pickerOpen"
       :budgets="budgets.all"
       :unallocated-budget-id="ctx.unallocatedBudgetId"
+      :default-amount="remaining"
       @select="onBudgetSelected"
       @cancel="pickerOpen = false"
     />

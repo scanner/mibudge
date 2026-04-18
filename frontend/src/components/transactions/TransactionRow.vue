@@ -13,6 +13,7 @@
 
 // 3rd party imports
 //
+import { IconX } from "@tabler/icons-vue";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 
@@ -24,11 +25,19 @@ import type { Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const props = defineProps<{
-  transaction: Transaction;
-  allocations?: TransactionAllocation[];
-  budgetNames?: Map<string, string>;
-  unallocatedBudgetId?: string | null;
+const props = withDefaults(
+  defineProps<{
+    transaction: Transaction;
+    allocations?: TransactionAllocation[];
+    budgetNames?: Map<string, string>;
+    unallocatedBudgetId?: string | null;
+    removable?: boolean;
+  }>(),
+  { removable: false },
+);
+
+const emit = defineEmits<{
+  (e: "remove", transactionId: string): void;
 }>();
 
 const router = useRouter();
@@ -89,23 +98,33 @@ const allocInfo = computed<{ text: string; isUnallocated: boolean; isSplit: bool
 
 <template>
   <article
-    class="cursor-pointer rounded-card border border-neutral-200 bg-white transition-colors hover:bg-neutral-50"
+    class="group/row cursor-pointer rounded-card border border-neutral-200 bg-white transition-colors hover:bg-neutral-50"
     :class="allocInfo.isUnallocated ? 'border-l-[3px] border-l-ocean-400' : ''"
     @click="router.push(`/transactions/${transaction.id}/`)"
   >
     <div class="px-4 py-3">
-      <!-- Row 1: party name + amount -->
+      <!-- Row 1: party name + amount + optional remove -->
       <div class="flex items-start justify-between gap-2">
         <span class="min-w-0 truncate text-[15px] font-medium text-neutral-900">
           {{ partyName }}
         </span>
-        <MoneyAmount
-          :amount="transaction.amount"
-          :currency="transaction.amount_currency"
-          size="md"
-          coloured
-          class="flex-none"
-        />
+        <div class="flex flex-none items-center gap-1.5">
+          <MoneyAmount
+            :amount="transaction.amount"
+            :currency="transaction.amount_currency"
+            size="md"
+            coloured
+          />
+          <button
+            v-if="removable"
+            type="button"
+            class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 opacity-0 transition-opacity hover:bg-coral-50 hover:text-coral-600 group-hover/row:opacity-100"
+            aria-label="Remove from budget"
+            @click.stop="emit('remove', transaction.id)"
+          >
+            <IconX class="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <!-- Row 2: allocation info + type label -->

@@ -2,12 +2,13 @@
 //
 // BudgetPickerSheet — bottom sheet / modal for selecting a budget.
 // Used when assigning a transaction allocation to a budget.
-// Includes fzf substring search for filtering the budget list.
+// Includes fzf substring search and an editable amount field.
 //
 
 // 3rd party imports
 //
 import { Fzf } from "fzf";
+import Decimal from "decimal.js";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 // app imports
@@ -17,20 +18,25 @@ import type { Budget } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const props = defineProps<{
-  open: boolean;
-  budgets: Budget[];
-  unallocatedBudgetId?: string | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    budgets: Budget[];
+    unallocatedBudgetId?: string | null;
+    defaultAmount?: string;
+  }>(),
+  { defaultAmount: "" },
+);
 
 const emit = defineEmits<{
-  (e: "select", budget: Budget): void;
+  (e: "select", budget: Budget, amount: string): void;
   (e: "cancel"): void;
 }>();
 
 ////////////////////////////////////////////////////////////////////////
 //
 const query = ref("");
+const amount = ref("");
 
 const visibleBudgets = computed(() => {
   const unallocId = props.unallocatedBudgetId;
@@ -49,8 +55,29 @@ const visibleBudgets = computed(() => {
   return fzf.find(q).map((r) => r.item);
 });
 
+const amountError = computed(() => {
+  if (!amount.value || !props.defaultAmount) return "";
+  try {
+    const entered = new Decimal(amount.value).abs();
+    const max = new Decimal(props.defaultAmount).abs();
+    if (entered.greaterThan(max)) return "Exceeds unallocated amount";
+  } catch {
+    return "Invalid amount";
+  }
+  return "";
+});
+
+function effectiveAmount(): string {
+  return amount.value || props.defaultAmount;
+}
+
 ////////////////////////////////////////////////////////////////////////
 //
+function selectBudget(budget: Budget) {
+  if (amountError.value) return;
+  emit("select", budget, effectiveAmount());
+}
+
 function onKey(e: KeyboardEvent) {
   if (!props.open) return;
   if (e.key === "Escape") emit("cancel");
@@ -58,7 +85,7 @@ function onKey(e: KeyboardEvent) {
 
 function onSearchKeydown(e: KeyboardEvent) {
   if (e.key === "Enter" && visibleBudgets.value.length === 1) {
-    emit("select", visibleBudgets.value[0]);
+    selectBudget(visibleBudgets.value[0]);
   }
 }
 
@@ -72,9 +99,11 @@ watch(
   (isOpen) => {
     document.body.style.overflow = isOpen ? "hidden" : "";
     if (isOpen) {
+      amount.value = props.defaultAmount;
       nextTick(() => searchInput.value?.focus());
     } else {
       query.value = "";
+      amount.value = "";
     }
   },
 );
@@ -102,8 +131,8 @@ watch(
             </button>
           </div>
 
-          <!-- Search -->
-          <div class="border-b border-neutral-100 px-5 py-2">
+          <!-- Search + Amount -->
+          <div class="space-y-2 border-b border-neutral-100 px-5 py-2">
             <input
               ref="searchInput"
               v-model="query"
@@ -112,6 +141,28 @@ watch(
               class="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-ocean-400"
               @keydown="onSearchKeydown"
             />
+            <div v-if="defaultAmount">
+              <div class="flex items-center gap-2">
+                <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                  Amount
+                </label>
+                <input
+                  v-model="amount"
+                  type="text"
+                  inputmode="decimal"
+                  class="w-full rounded-lg border bg-neutral-50 px-3 py-1.5 font-mono text-sm text-neutral-900 outline-none"
+                  :class="
+                    amountError
+                      ? 'border-coral-400 focus:border-coral-400'
+                      : 'border-neutral-200 focus:border-ocean-400'
+                  "
+                  @keydown="onSearchKeydown"
+                />
+              </div>
+              <p v-if="amountError" class="mt-0.5 text-[11px] text-coral-600">
+                {{ amountError }}
+              </p>
+            </div>
           </div>
 
           <!-- Budget list -->
@@ -121,7 +172,9 @@ watch(
               :key="budget.id"
               type="button"
               class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-neutral-50"
-              @click="emit('select', budget)"
+              :class="amountError ? 'cursor-not-allowed opacity-50' : ''"
+              :disabled="!!amountError"
+              @click="selectBudget(budget)"
             >
               <span class="text-sm font-medium text-neutral-900">{{ budget.name }}</span>
               <MoneyAmount :amount="budget.balance" :currency="budget.balance_currency" size="sm" />

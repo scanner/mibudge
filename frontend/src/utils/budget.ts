@@ -42,6 +42,7 @@ export function budgetStatus(budget: Budget): BudgetStatus {
   const target = parseFloat(budget.target_balance ?? "0");
 
   if (balance < 0) return "over";
+  if (budget.complete) return "funded";
   if (target > 0 && balance >= target) return "funded";
 
   // For goal budgets with a target date, flag if we're behind pace.
