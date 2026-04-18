@@ -838,6 +838,64 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
 ########################################################################
 ########################################################################
 #
+class TransactionSplitsSerializer(serializers.Serializer):
+    """Serializer for the declarative splits endpoint.
+
+    Accepts a dict mapping budget UUIDs to amounts.  The backend
+    reconciles existing allocations to match the declared state.
+    Any remainder goes to the unallocated budget.
+    """
+
+    splits = serializers.DictField(
+        child=serializers.DecimalField(
+            max_digits=MAX_DIGITS,
+            decimal_places=DECIMAL_PLACES,
+        ),
+        allow_empty=True,
+        help_text=(
+            "Map of budget UUID → amount.  Amounts must not exceed "
+            "the transaction total.  Omitted remainder is assigned "
+            "to the unallocated budget."
+        ),
+    )
+
+    def validate_splits(self, value: dict[str, Decimal]) -> dict[str, Decimal]:
+        """Validate budget UUIDs exist and amounts are sensible."""
+        transaction: Transaction = self.context["transaction"]
+        tx_abs = abs(transaction.amount.amount)
+        is_debit = transaction.amount.amount < 0
+
+        budget_ids = list(value.keys())
+        budgets = Budget.objects.filter(id__in=budget_ids)
+        found_ids = {str(b.id) for b in budgets}
+        missing = set(budget_ids) - found_ids
+        if missing:
+            raise serializers.ValidationError(
+                f"Unknown budget IDs: {', '.join(sorted(missing))}"
+            )
+
+        total = Decimal("0")
+        for budget_id, amount in value.items():
+            if amount <= 0:
+                raise serializers.ValidationError(
+                    f"Amount for budget {budget_id} must be positive."
+                )
+            total += amount
+
+        if total > tx_abs:
+            raise serializers.ValidationError(
+                f"Split total ({total}) exceeds transaction amount ({tx_abs})."
+            )
+
+        # Store the sign convention and resolved budgets for the view.
+        self._is_debit = is_debit
+        self._budgets_by_id = {str(b.id): b for b in budgets}
+        return value
+
+
+########################################################################
+########################################################################
+#
 class InternalTransactionSerializer(serializers.ModelSerializer):
     """Serializer for internal transactions (budget-to-budget transfers).
 

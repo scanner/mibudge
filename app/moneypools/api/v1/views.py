@@ -12,6 +12,7 @@ standard CRUD operations with restrictions documented per-viewset.
 """
 
 # system imports
+from decimal import Decimal
 
 # 3rd party imports
 import moneyed
@@ -54,6 +55,7 @@ from .serializers import (
     InternalTransactionSerializer,
     TransactionAllocationSerializer,
     TransactionSerializer,
+    TransactionSplitsSerializer,
 )
 
 
@@ -382,6 +384,129 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             budget=transaction.bank_account.unallocated_budget,
             amount=transaction.amount,
         )
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Declare transaction splits",
+        description=(
+            "Declaratively set how a transaction's amount is split "
+            "across budgets. The backend reconciles existing "
+            "allocations to match: creating, updating, or deleting "
+            "as needed. Any unallocated remainder gets an allocation "
+            "to the account's unallocated budget. Returns all "
+            "allocations for this transaction after reconciliation."
+        ),
+        request=TransactionSplitsSerializer,
+        responses={200: TransactionAllocationSerializer(many=True)},
+    )
+    @action(detail=True, methods=["post"], url_path="splits")
+    def splits(self, request: Request, id: str | None = None) -> Response:
+        """Reconcile transaction allocations to match declared splits.
+
+        Accepts a dict mapping budget UUIDs to positive amounts.  The
+        backend creates, updates, or deletes allocations so that each
+        budget listed receives exactly its declared amount.  Any
+        remainder (transaction amount minus the sum of splits) is
+        assigned to the bank account's unallocated budget.  The
+        entire operation runs inside a database transaction.
+
+        Args:
+            request: DRF request with body
+                ``{"splits": {"<budget-uuid>": "<amount>", ...}}``.
+                Amounts are positive decimals; sign is inferred from
+                the transaction (negative for debits, positive for
+                credits).  An empty dict ``{}`` moves the full amount
+                back to the unallocated budget.
+            id: UUID of the transaction to split.
+
+        Returns:
+            Response containing the full list of
+            ``TransactionAllocation`` objects for this transaction
+            after reconciliation.
+        """
+        transaction = self.get_object()
+
+        serializer = TransactionSplitsSerializer(
+            data=request.data,
+            context={"transaction": transaction},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        splits: dict[str, Decimal] = serializer.validated_data["splits"]
+        is_debit: bool = serializer._is_debit
+        budgets_by_id: dict[str, Budget] = serializer._budgets_by_id
+        unallocated = transaction.bank_account.unallocated_budget
+
+        with db_transaction.atomic():
+            existing = list(
+                TransactionAllocation.objects.filter(
+                    transaction=transaction
+                ).select_related("budget")
+            )
+
+            # Index existing allocations by budget UUID.
+            existing_by_budget: dict[str, TransactionAllocation] = {}
+            for alloc in existing:
+                if alloc.budget is not None:
+                    key = str(alloc.budget.id)
+                    existing_by_budget[key] = alloc
+
+            touched_ids: set[str] = set()
+
+            # Create or update allocations for each declared split.
+            for budget_id, abs_amount in splits.items():
+                signed = -abs_amount if is_debit else abs_amount
+                budget = budgets_by_id[budget_id]
+
+                if budget_id in existing_by_budget:
+                    alloc = existing_by_budget[budget_id]
+                    if alloc.amount.amount != signed:
+                        alloc.amount = signed
+                        alloc.save()
+                else:
+                    TransactionAllocation.objects.create(
+                        transaction=transaction,
+                        budget=budget,
+                        amount=signed,
+                    )
+                touched_ids.add(budget_id)
+
+            # Compute unallocated remainder.
+            tx_abs = abs(transaction.amount.amount)
+            split_total = sum(splits.values(), Decimal("0"))
+            remainder = tx_abs - split_total
+
+            unalloc_key = str(unallocated.id) if unallocated else None
+
+            if remainder > 0 and unallocated:
+                signed_remainder = -remainder if is_debit else remainder
+                if unalloc_key and unalloc_key in existing_by_budget:
+                    alloc = existing_by_budget[unalloc_key]
+                    if alloc.amount.amount != signed_remainder:
+                        alloc.amount = signed_remainder
+                        alloc.save()
+                else:
+                    TransactionAllocation.objects.create(
+                        transaction=transaction,
+                        budget=unallocated,
+                        amount=signed_remainder,
+                    )
+                if unalloc_key:
+                    touched_ids.add(unalloc_key)
+
+            # Delete allocations no longer needed.
+            for alloc in existing:
+                budget_key = str(alloc.budget.id) if alloc.budget else None
+                if budget_key not in touched_ids:
+                    alloc.delete()
+
+        # Return all allocations for this transaction.
+        final = TransactionAllocation.objects.filter(
+            transaction=transaction
+        ).select_related("budget")
+        response_serializer = TransactionAllocationSerializer(final, many=True)
+        return Response(response_serializer.data)
 
 
 ########################################################################
