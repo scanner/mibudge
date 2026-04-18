@@ -12,7 +12,8 @@
 
 // 3rd party imports
 //
-import { IconPlus } from "@tabler/icons-vue";
+import { Fzf } from "fzf";
+import { IconPlus, IconSearch, IconX } from "@tabler/icons-vue";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
@@ -41,6 +42,40 @@ const error = ref<string | null>(null);
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Search state.
+//
+const searchOpen = ref(false);
+const searchQuery = ref("");
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+const searchMatchIds = ref<Set<string> | null>(null);
+
+function onSearchInput() {
+  const q = searchQuery.value.trim();
+  if (!q) {
+    searchMatchIds.value = null;
+    return;
+  }
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    const fzf = new Fzf(allBudgets.value, {
+      selector: (b: Budget) => b.name,
+      casing: "case-insensitive",
+      fuzzy: false,
+    });
+    searchMatchIds.value = new Set(fzf.find(q).map((r) => r.item.id));
+  }, 150);
+}
+
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value;
+  if (!searchOpen.value) {
+    searchQuery.value = "";
+    searchMatchIds.value = null;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // Map from fill-up budget UUID → Budget (type 'A' budgets).
 //
 const fillupMap = computed(() => {
@@ -62,7 +97,10 @@ function fillupFor(b: Budget): Budget | undefined {
 //
 const standaloneByTab = computed(() => {
   const unallocId = ctx.unallocatedBudgetId;
-  let list = allBudgets.value.filter((b) => b.budget_type !== "A" && b.id !== unallocId);
+  const ids = searchMatchIds.value;
+  let list = allBudgets.value.filter(
+    (b) => b.budget_type !== "A" && b.id !== unallocId && (!ids || ids.has(b.id)),
+  );
   switch (activeTab.value) {
     case "recurring":
       return list.filter((b) => b.budget_type === "R");
@@ -110,15 +148,46 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
 <template>
   <AppShell>
     <template #action>
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-        aria-label="Create budget"
-        @click="router.push('/budgets/create/')"
-      >
-        <IconPlus class="h-5 w-5" />
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          aria-label="Search budgets"
+          @click="toggleSearch"
+        >
+          <IconSearch v-if="!searchOpen" class="h-5 w-5" />
+          <IconX v-else class="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          aria-label="Create budget"
+          @click="router.push('/budgets/create/')"
+        >
+          <IconPlus class="h-5 w-5" />
+        </button>
+      </div>
     </template>
+
+    <!-- Search bar -->
+    <Transition
+      enter-active-class="transition-all duration-200 ease-out"
+      enter-from-class="max-h-0 opacity-0"
+      enter-to-class="max-h-12 opacity-100"
+      leave-active-class="transition-all duration-150 ease-in"
+      leave-from-class="max-h-12 opacity-100"
+      leave-to-class="max-h-0 opacity-0"
+    >
+      <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search budgets…"
+          class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
+          @input="onSearchInput"
+        />
+      </div>
+    </Transition>
 
     <!-- Filter tabs -->
     <div class="-mx-4 mb-4 flex border-b border-neutral-200 px-4 pt-3">

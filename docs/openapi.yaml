@@ -23,8 +23,13 @@ paths:
     post:
       operationId: api_token_create
       description: |-
-        Takes a set of user credentials and returns an access and refresh JSON web
-        token pair to prove the authentication of those credentials.
+        JWT obtain endpoint that stores the refresh token in an httpOnly
+        cookie and returns only the access token in the response body.
+
+        This is the browser-SPA login flow: JS receives the short-lived
+        access token (kept in memory); the refresh token is a
+        Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
+        and that the browser sends automatically to /api/token/refresh/.
       tags:
       - api
       requestBody:
@@ -84,6 +89,11 @@ paths:
         Filterable by transaction, budget, and category. Orderable by created_at.
       summary: List transaction allocations
       parameters:
+      - in: query
+        name: bank_account
+        schema:
+          type: string
+          format: uuid
       - in: query
         name: budget
         schema:
@@ -540,12 +550,14 @@ paths:
           type: string
           enum:
           - A
+          - C
           - G
           - R
         description: |-
           * `G` - Goal
           * `R` - Recurring
           * `A` - Associated Fill-up Goal
+          * `C` - Capped
       - name: ordering
         required: false
         in: query
@@ -709,8 +721,9 @@ paths:
           description: ''
     delete:
       operationId: budgets_destroy
-      description: Delete a budget. The unallocated budget cannot be deleted -- returns
-        403.
+      description: Delete a budget. The unallocated budget cannot be deleted (403).
+        A budget with existing transaction allocations cannot be deleted (400) --
+        archive it instead.
       summary: Delete a budget
       parameters:
       - in: path
@@ -726,6 +739,44 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/budgets/{id}/archive/:
+    post:
+      operationId: budgets_archive_create
+      description: Archive a budget. Any remaining balance is transferred to the account's
+        unallocated budget. If the budget has an associated fill-up goal, that budget
+        is also archived and its balance moved to unallocated. The unallocated budget
+        cannot be archived.
+      summary: Archive a budget
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - budgets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BudgetRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BudgetRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+          description: ''
   /api/v1/currencies/:
     get:
       operationId: currencies_retrieve
@@ -1471,6 +1522,15 @@ components:
         target_balance_currency:
           type: string
           readOnly: true
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        funding_amount_currency:
+          type: string
+          readOnly: true
+          nullable: true
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -1493,6 +1553,11 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        complete:
+          type: boolean
+          readOnly: true
+          description: True when this budget has reached its target and should not
+            be funded further.  Managed by signals and funding tasks; do not set manually.
         paused:
           type: boolean
           description: A paused budget does not get automatically funded on its schedule.
@@ -1520,7 +1585,9 @@ components:
       - balance
       - balance_currency
       - bank_account
+      - complete
       - created_at
+      - funding_amount_currency
       - id
       - modified_at
       - name
@@ -1550,6 +1617,11 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -1586,11 +1658,13 @@ components:
       - G
       - R
       - A
+      - C
       type: string
       description: |-
         * `G` - Goal
         * `R` - Recurring
         * `A` - Associated Fill-up Goal
+        * `C` - Capped
     CategoryEnum:
       enum:
       - Business:Business Clothing
@@ -2243,6 +2317,11 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -2471,6 +2550,10 @@ components:
         description:
           type: string
           maxLength: 512
+        linked_transaction:
+          type: string
+          format: uuid
+          readOnly: true
         bank_account_posted_balance:
           type: string
           format: decimal
@@ -2515,6 +2598,7 @@ components:
       - bank_account_posted_balance_currency
       - created_at
       - id
+      - linked_transaction
       - modified_at
       - party
       - raw_description

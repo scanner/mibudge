@@ -77,8 +77,11 @@ class TransactionFilter(filters.FilterSet):
 ########################################################################
 #
 class TransactionAllocationFilter(filters.FilterSet):
-    """Filter allocations by transaction, budget, and category."""
+    """Filter allocations by bank account, transaction, budget, and category."""
 
+    bank_account = filters.UUIDFilter(
+        field_name="transaction__bank_account__id",
+    )
     transaction = filters.UUIDFilter(field_name="transaction__id")
     budget = filters.UUIDFilter(field_name="budget__id")
     category = filters.CharFilter()
@@ -86,6 +89,7 @@ class TransactionAllocationFilter(filters.FilterSet):
     class Meta:
         model = TransactionAllocation
         fields = [
+            "bank_account",
             "transaction",
             "budget",
             "category",

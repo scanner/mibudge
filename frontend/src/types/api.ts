@@ -234,6 +234,7 @@ export interface TransactionListParams {
 }
 
 export interface AllocationListParams {
+  bank_account?: string;
   transaction?: string;
   budget?: string;
   category?: string;
