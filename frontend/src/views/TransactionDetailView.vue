@@ -367,18 +367,25 @@ function navigateBudget(budgetId: string) {
           <p class="mt-0.5 text-sm text-neutral-600">{{ transaction.raw_description }}</p>
         </div>
 
-        <div v-if="typeLabel" class="flex items-center justify-between">
-          <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <div v-if="typeLabel" class="flex items-center gap-2">
+          <label
+            class="flex-none text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Type
           </label>
-          <span class="text-sm text-neutral-700">{{ typeLabel }}</span>
+          <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
+          <span class="flex-none text-sm text-neutral-700">{{ typeLabel }}</span>
         </div>
 
-        <div class="flex items-center justify-between">
-          <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-            Balance after
+        <div class="flex items-center gap-2">
+          <label
+            class="flex-none text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
+            {{ accountName }} balance after
           </label>
+          <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
           <MoneyAmount
+            class="flex-none"
             :amount="transaction.bank_account_posted_balance"
             :currency="transaction.bank_account_posted_balance_currency"
             size="sm"

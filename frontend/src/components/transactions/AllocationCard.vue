@@ -104,6 +104,18 @@ const budgetId = computed(() => props.allocation.budget);
       </template>
     </div>
 
+    <!-- Budget balance after this allocation -->
+    <div class="mt-1 flex items-center gap-2 text-xs text-neutral-500">
+      <span class="flex-none">Budget balance after</span>
+      <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
+      <MoneyAmount
+        class="flex-none"
+        :amount="allocation.budget_balance"
+        :currency="allocation.budget_balance_currency"
+        size="sm"
+      />
+    </div>
+
     <!-- Category -->
     <div v-if="allocation.category" class="mt-1 text-xs text-neutral-500">
       {{ allocation.category }}
