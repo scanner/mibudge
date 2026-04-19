@@ -329,43 +329,63 @@ def _dedup_key(
     tx_date: date | str,
     amount: Decimal | str,
     raw_description: str,
-    running_balance: Decimal | str | None = None,
-) -> tuple[str, ...]:
+) -> tuple[str, str, str]:
     """
-    Build a hashable dedup key from transaction fields.
+    Build a hashable 3-tuple dedup key from transaction fields.
 
-    Normalizes date to YYYY-MM-DD and amounts to two-decimal strings
-    so that values from the parser and from the API response can be
-    compared directly.
-
-    When ``running_balance`` is provided the key is a 4-tuple; without
-    it (legacy callers, formats where the balance is unavailable) the
-    key is a 3-tuple.  The 4-tuple form eliminates false positives on
-    same-day, same-amount, same-merchant transactions (e.g. two
-    separate $4.99 Apple charges) because each has a different running
-    balance.
+    Used for **server-side dedup** (CSV vs already-imported
+    transactions).  The key is (date, amount, raw_description).
+    Count-based matching handles same-day, same-amount,
+    same-merchant transactions correctly without needing the running
+    balance (which diverges between BofA's CSV and the server's
+    computed ``bank_account_posted_balance``).
 
     Args:
         tx_date: A date object or ISO datetime string from the API.
         amount: A Decimal or string representation of the amount.
         raw_description: The raw description string.
-        running_balance: Account running balance after this
-            transaction.  For BofA CSV this is the "Running Bal."
-            column; for server-side transactions it is
-            ``bank_account_posted_balance``.
 
     Returns:
-        A tuple suitable as a dict/set key.
+        A 3-tuple suitable as a dict/set key.
     """
     if isinstance(tx_date, str):
         # API returns ISO datetime like "2025-01-15T00:00:00Z".
         tx_date = datetime.fromisoformat(tx_date.replace("Z", "+00:00")).date()
     date_str = tx_date.isoformat()
     amount_str = str(Decimal(str(amount)).quantize(Decimal("0.01")))
-    if running_balance is not None:
-        bal_str = str(Decimal(str(running_balance)).quantize(Decimal("0.01")))
-        return (date_str, amount_str, raw_description, bal_str)
     return (date_str, amount_str, raw_description)
+
+
+####################################################################
+#
+def _intra_run_dedup_key(
+    tx_date: date,
+    amount: Decimal | str,
+    raw_description: str,
+    running_balance: Decimal,
+) -> tuple[str, str, str, str]:
+    """
+    Build a hashable 4-tuple dedup key for intra-run dedup.
+
+    Used when merging multiple CSV files within a single import run.
+    The running balance is included because within a bank's CSV
+    export it is consistent and distinguishes genuinely separate
+    same-day, same-amount, same-merchant transactions (e.g. two
+    $4.99 Apple charges each with a different running balance).
+
+    Args:
+        tx_date: Transaction date.
+        amount: Transaction amount.
+        raw_description: The raw description string.
+        running_balance: BofA "Running Bal." column value.
+
+    Returns:
+        A 4-tuple suitable as a dict/set key.
+    """
+    date_str = tx_date.isoformat()
+    amount_str = str(Decimal(str(amount)).quantize(Decimal("0.01")))
+    bal_str = str(Decimal(str(running_balance)).quantize(Decimal("0.01")))
+    return (date_str, amount_str, raw_description, bal_str)
 
 
 ####################################################################
@@ -375,9 +395,18 @@ def _fetch_existing(
     bank_account_id: str,
     start_date: date,
     end_date: date,
-) -> dict[tuple[str, ...], tuple[str, str]]:
+) -> dict[tuple[str, str, str], list[tuple[str, str]]]:
     """
     Query the API for transactions in the date range and index them.
+
+    Returns a mapping from the 3-tuple dedup key (date, amount,
+    raw_description) to a **list** of ``(transaction_id,
+    transaction_type)`` pairs.  Multiple entries under the same key
+    represent genuinely distinct same-day, same-amount,
+    same-description transactions (e.g. two coffee purchases).
+
+    During import, the list is consumed (popped) so that each server
+    transaction is matched to at most one CSV row.
 
     Args:
         client: Authenticated MibudgeClient.
@@ -386,11 +415,10 @@ def _fetch_existing(
         end_date: Latest date in the import file.
 
     Returns:
-        A mapping from dedup key -> (transaction_id, transaction_type)
-        so the caller can both dedup and, where appropriate, PATCH an
-        existing transaction whose type is empty.
+        A mapping from 3-tuple dedup key to a list of
+        ``(transaction_id, transaction_type)`` entries.
     """
-    existing: dict[tuple[str, ...], tuple[str, str]] = {}
+    existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
     for tx in client.get_all(
         "/api/v1/transactions/",
         {
@@ -404,9 +432,9 @@ def _fetch_existing(
             tx["transaction_date"],
             tx["amount"],
             tx["raw_description"],
-            tx.get("bank_account_posted_balance"),
         )
-        existing[key] = (tx["id"], tx.get("transaction_type") or "")
+        entry = (tx["id"], tx.get("transaction_type") or "")
+        existing.setdefault(key, []).append(entry)
     return existing
 
 
@@ -510,7 +538,7 @@ def import_statement(
     bank_account_id: str,
     client: MibudgeClient,
     progress_callback: Callable[[int, int], None] | None = None,
-    existing: dict[tuple[str, ...], tuple[str, str]] | None = None,
+    existing: (dict[tuple[str, str, str], list[tuple[str, str]]] | None) = None,
     *,
     dry_run: bool = False,
 ) -> ImportResult:
@@ -576,11 +604,15 @@ def import_statement(
             tx.transaction_date,
             tx.amount,
             tx.raw_description,
-            tx.running_balance,
         )
-        match = existing.get(key)
-        if match is not None:
-            tx_id, existing_type = match
+        matches = existing.get(key)
+        if matches:
+            # Pop one match so each server-side transaction is
+            # consumed at most once.  This handles the "two coffees"
+            # case: if the CSV has 2 entries and the server has 2,
+            # both are skipped; if the server has 1, the second CSV
+            # row is imported.
+            tx_id, existing_type = matches.pop(0)
             # Backfill the transaction_type on duplicates when the
             # server has it empty but the parser has since learned to
             # classify this description. This lets "add a pattern and
@@ -593,7 +625,6 @@ def import_statement(
                     client, tx_id, tx.transaction_type
                 ):
                     result.updated += 1
-                    existing[key] = (tx_id, tx.transaction_type)
                 else:
                     result.failed += 1
             else:
@@ -859,7 +890,7 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
     #      overlap -- downloading "Jan 1 -> Jun 30" and "Apr 1 ->
     #      today" is easier than being precise about seams, and
     #      the importer should tolerate that.
-    # The dedup key is (date, amount, raw_description,
+    # The intra-run key is (date, amount, raw_description,
     # running_balance). Including the running balance eliminates
     # false positives on same-day, same-amount, same-merchant
     # transactions (e.g. two $4.99 Apple charges): each has a
@@ -867,12 +898,18 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
     # covering the same date range will carry the same running
     # balance for the same transaction, so true duplicates are
     # still caught.
+    #
+    # NOTE: this 4-tuple key is intentionally different from the
+    # 3-tuple used for server-side dedup.  Within BofA's CSV
+    # exports the running balance is consistent across downloads,
+    # but the server's ``bank_account_posted_balance`` diverges
+    # because it is computed at import time.
     transactions: list[ParsedTransaction] = []
-    seen: set[tuple[str, ...]] = set()
+    seen: set[tuple[str, str, str, str]] = set()
     duplicates = 0
     for s in statements:
         for tx in s.transactions:
-            key = _dedup_key(
+            key = _intra_run_dedup_key(
                 tx.transaction_date,
                 tx.amount,
                 tx.raw_description,
@@ -1799,7 +1836,7 @@ def cli_cmd(
                 min(tx.transaction_date for tx in txs) if txs else None
             )
             dedup_end = max(tx.transaction_date for tx in txs) if txs else None
-            existing: dict[tuple[str, ...], tuple[str, str]] = {}
+            existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
             if txs and dedup_start is not None and dedup_end is not None:
                 if interactive:
                     with console.status(

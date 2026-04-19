@@ -14,7 +14,7 @@ factory. This keeps credential/TLS plumbing out of the test path.
 
 # system imports
 from collections.abc import Callable, Iterator
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -339,8 +339,6 @@ class TestImportCmd:
         csv_path, rows = bofa_csv_factory(num_transactions=4)
 
         # Seed the fake with identical rows so the dedup key matches.
-        from datetime import datetime
-
         for row in rows:
             tx_id = fake_client._mint_id("tx")
             fake_client.transactions[tx_id] = {
@@ -385,8 +383,6 @@ class TestImportCmd:
         acct = _seed_account(fake_client)
         csv_path, rows = bofa_csv_factory(num_transactions=1)
         row = rows[0]
-
-        from datetime import datetime
 
         tx_id = fake_client._mint_id("tx")
         fake_client.transactions[tx_id] = {
@@ -504,6 +500,59 @@ class TestImportCmd:
             if c[0] == "POST" and c[1] == "/api/v1/transactions/"
         ]
         assert len(posts) == 4
+
+    ####################################################################
+    #
+    def test_dedup_ignores_server_running_balance(
+        self,
+        fake_client: FakeClient,
+        bofa_csv_factory: Callable[..., tuple[Path, list[Any]]],
+    ) -> None:
+        """
+        GIVEN: a CSV whose rows already exist server-side but whose
+               ``bank_account_posted_balance`` differs from the CSV's
+               ``Running Bal.`` (as happens after re-importing
+               overlapping CSV files)
+        WHEN:  ``import`` runs
+        THEN:  existing transactions are still matched by (date,
+               amount, raw_description) and skipped — the balance
+               mismatch does not cause duplicates
+        """
+        acct = _seed_account(fake_client)
+        csv_path, rows = bofa_csv_factory(num_transactions=4)
+
+        # Seed server with the same transactions but a different
+        # posted balance (simulates a prior overlapping import).
+        for row in rows:
+            tx_id = fake_client._mint_id("tx")
+            fake_client.transactions[tx_id] = {
+                "id": tx_id,
+                "bank_account": acct["id"],
+                "transaction_date": datetime.combine(
+                    row.transaction_date, datetime.min.time()
+                ).isoformat(),
+                "amount": str(row.amount),
+                "raw_description": row.description,
+                "transaction_type": "PUR",
+                # Server balance intentionally different from CSV
+                # running balance -- simulates prior import that
+                # shifted the account's running total.
+                "bank_account_posted_balance": str(
+                    row.running_balance + Decimal("906.44")
+                ),
+            }
+        pre_tx_count = len(fake_client.transactions)
+
+        result = _invoke("-f", str(csv_path), "--account", acct["id"])
+
+        assert result.exit_code == 0, result.output
+        assert len(fake_client.transactions) == pre_tx_count
+        posts = [
+            c
+            for c in fake_client.calls
+            if c[0] == "POST" and c[1] == "/api/v1/transactions/"
+        ]
+        assert posts == []
 
     ####################################################################
     #

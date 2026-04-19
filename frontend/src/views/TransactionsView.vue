@@ -171,7 +171,7 @@ async function loadTransactions() {
     const [txPage, allocFirstPage, _budgets] = await Promise.all([
       listTransactions({
         bank_account: accountId,
-        ordering: "-transaction_date",
+        ordering: "-transaction_date,-created_at",
       }),
       listAllocations({ bank_account: accountId }),
       budgets.fetchList({ bank_account: accountId }),
@@ -273,7 +273,7 @@ function onSearchInput() {
       const page = await listTransactions({
         bank_account: accountId,
         search: q,
-        ordering: "-transaction_date",
+        ordering: "-transaction_date,-created_at",
       });
       // Merge server results with local fzf results, deduplicating.
       const localIds = new Set((searchResults.value ?? []).map((tx) => tx.id));

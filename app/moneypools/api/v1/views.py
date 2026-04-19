@@ -368,7 +368,7 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     filterset_class = TransactionFilter
     search_fields = ["description", "raw_description", "party"]
     ordering_fields = ["transaction_date", "amount", "created_at"]
-    ordering = ["-transaction_date"]
+    ordering = ["-transaction_date", "-created_at"]
 
     ####################################################################
     #
