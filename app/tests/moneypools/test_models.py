@@ -3,6 +3,7 @@
 # system imports
 #
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 # 3rd party imports
 #
@@ -540,6 +541,7 @@ class TestTransactionAllocation:
         )
 
         assert budget.balance == Money(BUDGET_BAL + ALLOC_AMT, USD)
+        alloc.refresh_from_db()
         assert alloc.budget_balance == budget.balance
 
     ####################################################################
@@ -740,3 +742,191 @@ class TestTransactionAllocation:
         )
         assert home_budget.balance == Money(HOME_BAL + HOME_AMT, USD)
         assert txn.allocations.count() == 2
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        ("early_date", "late_date"),
+        [
+            (
+                datetime(2026, 4, 8, tzinfo=UTC),
+                datetime(2026, 4, 10, tzinfo=UTC),
+            ),
+            (
+                datetime(2026, 4, 8, tzinfo=UTC),
+                datetime(2026, 4, 8, tzinfo=UTC),
+            ),
+        ],
+        ids=["different-dates", "same-date"],
+    )
+    def test_out_of_order_allocation_corrects_running_balances(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        early_date: datetime,
+        late_date: datetime,
+    ) -> None:
+        """
+        GIVEN: a budget with $500 and two transactions
+        WHEN:  the chronologically later allocation is created first
+        THEN:  budget_balance snapshots reflect chronological order,
+               not creation order — first shows $340, second shows
+               $180
+
+        When both transactions share a date, chronological order is
+        determined by transaction.created_at (creation order).
+        """
+        bank_account = bank_account_factory(available_balance=2000)
+        budget = budget_factory(
+            bank_account=bank_account,
+            balance=Money(500, USD),
+        )
+
+        # Create earlier_tx first so it gets the earlier created_at.
+        # For same-date ties, created_at determines chronological
+        # order.
+        earlier_tx = transaction_factory(
+            bank_account=bank_account,
+            amount=Money(-160, USD),
+            transaction_date=early_date,
+            raw_description="Check 322",
+        )
+        later_tx = transaction_factory(
+            bank_account=bank_account,
+            amount=Money(-160, USD),
+            transaction_date=late_date,
+            raw_description="Check 323",
+        )
+
+        # Allocate the later transaction first (out of order).
+        transaction_allocation_factory(
+            transaction=later_tx,
+            budget=budget,
+            amount=Money(-160, USD),
+        )
+        # Then allocate the earlier one.
+        transaction_allocation_factory(
+            transaction=earlier_tx,
+            budget=budget,
+            amount=Money(-160, USD),
+        )
+
+        alloc_early = TransactionAllocation.objects.get(
+            transaction=earlier_tx, budget=budget
+        )
+        alloc_late = TransactionAllocation.objects.get(
+            transaction=later_tx, budget=budget
+        )
+
+        # Chronologically first: 500 - 160 = 340
+        assert alloc_early.budget_balance == Money(340, USD)
+        # Chronologically second: 340 - 160 = 180
+        assert alloc_late.budget_balance == Money(180, USD)
+
+    ####################################################################
+    #
+    def test_mid_insert_only_updates_subsequent_balances(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+    ) -> None:
+        """
+        GIVEN: 20 transactions with allocations spread across 3 days
+        WHEN:  a new allocation is inserted in the middle (day 2)
+        THEN:  allocations before the insertion are untouched,
+               allocations at and after the insertion have correct
+               running balances
+        """
+        bank_account = bank_account_factory(available_balance=50000)
+        budget = budget_factory(
+            bank_account=bank_account,
+            balance=Money(10000, USD),
+        )
+
+        # 20 transactions: 7 on day 1, 6 on day 2, 7 on day 3.
+        # Each is a -100 debit.
+        days = [
+            datetime(2026, 4, 6, tzinfo=UTC),
+            datetime(2026, 4, 7, tzinfo=UTC),
+            datetime(2026, 4, 8, tzinfo=UTC),
+        ]
+        counts = [7, 6, 7]
+        txns: list[Transaction] = []
+        for day, count in zip(days, counts):
+            for i in range(count):
+                txns.append(
+                    transaction_factory(
+                        bank_account=bank_account,
+                        amount=Money(-100, USD),
+                        transaction_date=day,
+                        raw_description=f"Tx {day.day}-{i}",
+                    )
+                )
+
+        # Allocate all 20 in chronological order.
+        for tx in txns:
+            transaction_allocation_factory(
+                transaction=tx,
+                budget=budget,
+                amount=Money(-100, USD),
+            )
+
+        # Snapshot budget_balance values before the insert.
+        allocs_before = {
+            a.pk: a.budget_balance.amount
+            for a in TransactionAllocation.objects.filter(
+                budget=budget
+            ).select_related("transaction")
+        }
+
+        # Insert a new -250 transaction in the middle of day 2.
+        mid_tx = transaction_factory(
+            bank_account=bank_account,
+            amount=Money(-250, USD),
+            transaction_date=days[1],
+            raw_description="Mid-insert",
+        )
+        transaction_allocation_factory(
+            transaction=mid_tx,
+            budget=budget,
+            amount=Money(-250, USD),
+        )
+
+        # Re-fetch all allocations ordered chronologically.
+        all_allocs = list(
+            TransactionAllocation.objects.filter(budget=budget)
+            .order_by(
+                "transaction__transaction_date",
+                "transaction__created_at",
+                "created_at",
+            )
+            .select_related("transaction")
+        )
+        assert len(all_allocs) == 21
+
+        # Find the position of the inserted allocation.
+        insert_idx = next(
+            i for i, a in enumerate(all_allocs) if a.transaction_id == mid_tx.id
+        )
+
+        # Allocations before the insert must be untouched.
+        for a in all_allocs[:insert_idx]:
+            assert a.budget_balance.amount == allocs_before[a.pk]
+
+        # Verify the full running balance is correct.
+        # Baseline: budget balance minus sum of all allocation
+        # amounts.
+        total_alloc = sum(a.amount.amount for a in all_allocs)
+        running = budget.balance.amount - total_alloc
+        for a in all_allocs:
+            running += a.amount.amount
+            assert a.budget_balance.amount == running, (
+                f"Allocation {a.pk} (tx date "
+                f"{a.transaction.transaction_date}): "
+                f"expected {running}, got "
+                f"{a.budget_balance.amount}"
+            )

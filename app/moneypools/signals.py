@@ -1,12 +1,15 @@
 # system imports
 #
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
+from django.db.models import Q, Sum
 from django.db.models.signals import (
+    post_delete,
     post_save,
     pre_delete,
     pre_save,
@@ -412,6 +415,104 @@ def transaction_pre_delete(sender, instance, **kwargs):
 
 ####################################################################
 #
+def _recalculate_running_balances(
+    budget: Budget,
+    from_transaction: Transaction,
+) -> None:
+    """Recalculate budget_balance snapshots from a chronological point
+    forward.
+
+    Only updates the allocation at the given transaction's position
+    and any that follow it.  In the common case (allocation added at
+    the end) this touches one row.
+
+    Ordering: transaction_date, then transaction.created_at for ties.
+
+    Args:
+        budget: The budget whose allocations need recalculation.
+        from_transaction: The transaction at which to start.
+    """
+    tx_date = from_transaction.transaction_date
+    tx_created = from_transaction.created_at
+
+    chronological = (
+        "transaction__transaction_date",
+        "transaction__created_at",
+        "created_at",
+    )
+
+    # The allocation immediately before the starting point gives us
+    # the running balance to start from.
+    #
+    prior = (
+        TransactionAllocation.objects.filter(budget=budget)
+        .filter(
+            Q(transaction__transaction_date__lt=tx_date)
+            | Q(
+                transaction__transaction_date=tx_date,
+                transaction__created_at__lt=tx_created,
+            )
+        )
+        .order_by(
+            "-transaction__transaction_date",
+            "-transaction__created_at",
+            "-created_at",
+        )
+        .select_related("transaction")
+        .first()
+    )
+
+    if prior is not None:
+        running = (
+            prior.budget_balance.amount
+            if hasattr(prior.budget_balance, "amount")
+            else prior.budget_balance
+        )
+    else:
+        # This is the chronologically first allocation.  Baseline is
+        # the budget's current balance minus the sum of ALL its
+        # allocation amounts.
+        #
+        total = TransactionAllocation.objects.filter(budget=budget).aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0")
+        running = budget.balance.amount - total
+
+    # Walk forward, updating only rows whose snapshot is stale.
+    #
+    forward = (
+        TransactionAllocation.objects.filter(budget=budget)
+        .filter(
+            Q(transaction__transaction_date__gt=tx_date)
+            | Q(
+                transaction__transaction_date=tx_date,
+                transaction__created_at__gte=tx_created,
+            )
+        )
+        .order_by(*chronological)
+        .select_related("transaction")
+    )
+
+    for alloc in forward:
+        alloc_amount = (
+            alloc.amount.amount
+            if hasattr(alloc.amount, "amount")
+            else alloc.amount
+        )
+        running += alloc_amount
+        current = (
+            alloc.budget_balance.amount
+            if hasattr(alloc.budget_balance, "amount")
+            else alloc.budget_balance
+        )
+        if current != running:
+            TransactionAllocation.objects.filter(pk=alloc.pk).update(
+                budget_balance=running
+            )
+
+
+####################################################################
+#
 @receiver(pre_save, sender=TransactionAllocation)
 def allocation_pre_save(sender, instance, **kwargs):
     """
@@ -436,12 +537,16 @@ def allocation_pre_save(sender, instance, **kwargs):
             allocation.transaction.bank_account.unallocated_budget
         )
 
+    # Stash for post_save so running balances can be recalculated
+    # on both old and new budgets when a reassignment happens.
+    #
+    allocation._prev_budget = None
+
     if allocation.pkid is None:
         # New allocation: credit the budget by the allocation amount.
         #
         allocation.budget.balance += allocation.amount
         allocation.budget.save()
-        allocation.budget_balance = allocation.budget.balance
     else:
         # Existing allocation being updated.
         #
@@ -459,7 +564,7 @@ def allocation_pre_save(sender, instance, **kwargs):
             previous.budget.save()
             allocation.budget.balance += previous.amount
             allocation.budget.save()
-            allocation.budget_balance = allocation.budget.balance
+            allocation._prev_budget = previous.budget
 
         # If the amount changed, adjust the budget balance by the delta.
         #
@@ -467,7 +572,28 @@ def allocation_pre_save(sender, instance, **kwargs):
             allocation.budget.balance -= previous.amount
             allocation.budget.balance += allocation.amount
             allocation.budget.save()
-            allocation.budget_balance = allocation.budget.balance
+
+
+####################################################################
+#
+@receiver(post_save, sender=TransactionAllocation)
+def allocation_post_save(sender, instance, **kwargs):
+    """Recalculate running budget_balance snapshots after an
+    allocation is created or updated.
+
+    Only touches allocations at or after this transaction's
+    chronological position.  If the budget was changed, both the
+    old and new budget's running balances are recalculated.
+    """
+    allocation = instance
+    tx = allocation.transaction
+
+    if allocation.budget is not None:
+        _recalculate_running_balances(allocation.budget, tx)
+
+    prev = getattr(allocation, "_prev_budget", None)
+    if prev is not None:
+        _recalculate_running_balances(prev, tx)
 
 
 ####################################################################
@@ -485,6 +611,23 @@ def allocation_pre_delete(sender, instance, **kwargs):
     if allocation.budget is not None:
         allocation.budget.balance -= allocation.amount
         allocation.budget.save()
+
+    # Stash for post_delete recalculation.
+    allocation._delete_budget = allocation.budget
+    allocation._delete_transaction = allocation.transaction
+
+
+####################################################################
+#
+@receiver(post_delete, sender=TransactionAllocation)
+def allocation_post_delete(sender, instance, **kwargs):
+    """Recalculate running budget_balance snapshots after an
+    allocation is deleted.
+    """
+    budget = getattr(instance, "_delete_budget", None)
+    tx = getattr(instance, "_delete_transaction", None)
+    if budget is not None and tx is not None:
+        _recalculate_running_balances(budget, tx)
 
 
 ####################################################################

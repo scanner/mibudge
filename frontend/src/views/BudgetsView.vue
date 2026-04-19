@@ -14,7 +14,7 @@
 //
 import { Fzf } from "fzf";
 import { IconPlus, IconSearch, IconX } from "@tabler/icons-vue";
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
@@ -66,13 +66,32 @@ function onSearchInput() {
   }, 150);
 }
 
+const searchInput = ref<HTMLInputElement | null>(null);
+
 function toggleSearch() {
   searchOpen.value = !searchOpen.value;
   if (!searchOpen.value) {
     searchQuery.value = "";
     searchMatchIds.value = null;
+  } else {
+    nextTick(() => searchInput.value?.focus());
   }
 }
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    if (!searchOpen.value) {
+      searchOpen.value = true;
+    }
+    nextTick(() => searchInput.value?.focus());
+  } else if (e.key === "Escape" && searchOpen.value) {
+    toggleSearch();
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onSearchKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onSearchKeydown));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -180,6 +199,7 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
     >
       <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
         <input
+          ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search budgets…"

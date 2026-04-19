@@ -568,7 +568,7 @@ function navigateBudget(budgetId: string) {
     <!-- Budget picker sheet -->
     <BudgetPickerSheet
       :open="pickerOpen"
-      :budgets="budgets.all"
+      :budgets="budgets.all.filter((b) => b.bank_account === transaction?.bank_account)"
       :unallocated-budget-id="ctx.unallocatedBudgetId"
       :default-amount="remaining"
       @select="onBudgetSelected"

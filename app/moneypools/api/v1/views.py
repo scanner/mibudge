@@ -391,11 +391,13 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         summary="Declare transaction splits",
         description=(
             "Declaratively set how a transaction's amount is split "
-            "across budgets. The backend reconciles existing "
-            "allocations to match: creating, updating, or deleting "
-            "as needed. Any unallocated remainder gets an allocation "
-            "to the account's unallocated budget. Returns all "
-            "allocations for this transaction after reconciliation."
+            "across budgets. All referenced budgets must belong to "
+            "the same bank account as the transaction. The backend "
+            "reconciles existing allocations to match: creating, "
+            "updating, or deleting as needed. Any unallocated "
+            "remainder gets an allocation to the account's "
+            "unallocated budget. Returns all allocations for this "
+            "transaction after reconciliation."
         ),
         request=TransactionSplitsSerializer,
         responses={200: TransactionAllocationSerializer(many=True)},
@@ -527,8 +529,10 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             "Allocate a portion of a transaction's amount to a "
             "budget. Required: transaction (UUID) and amount. "
             "Optional: budget (UUID, defaults to unallocated) and "
-            "category. The total allocated across all allocations "
-            "for a transaction must not exceed the transaction amount."
+            "category. The budget must belong to the same bank "
+            "account as the transaction. The total allocated across "
+            "all allocations for a transaction must not exceed the "
+            "transaction amount."
         ),
     ),
     retrieve=extend_schema(
@@ -539,15 +543,22 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         summary="Update an allocation",
         description=(
             "Full update of an allocation. After creation, budget, "
-            "category, and memo are updatable. Amount and transaction "
-            "are immutable."
+            "amount, category, and memo are updatable. The budget "
+            "must belong to the same bank account as the transaction. "
+            "Amount changes must preserve the original sign (cannot "
+            "flip a debit to a credit) and the total across all "
+            "allocations must not exceed the transaction amount. "
+            "Transaction is immutable."
         ),
     ),
     partial_update=extend_schema(
         summary="Partially update an allocation",
         description=(
             "Partial update of an allocation. After creation, budget, "
-            "category, and memo are updatable."
+            "amount, category, and memo are updatable. The budget "
+            "must belong to the same bank account as the transaction. "
+            "Amount changes must preserve the original sign and must "
+            "not cause the total to exceed the transaction amount."
         ),
     ),
     destroy=extend_schema(

@@ -952,6 +952,52 @@ class TestTransactionAllocationAPI:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "same_owner",
+        [True, False],
+        ids=["same-owner-different-account", "different-owner"],
+    )
+    def test_cross_account_budget_rejected(
+        self,
+        auth_client: APIClient,
+        user: User,
+        user_factory: Callable[..., User],
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+        same_owner: bool,
+    ) -> None:
+        """
+        GIVEN: a transaction on account A and a budget on account B
+               (B owned by the same user or a different user)
+        WHEN:  PATCH the allocation to point at the cross-account budget
+        THEN:  400 Bad Request — budget must be in the same account
+        """
+        account_a = bank_account_factory(owners=[user])
+        other_owner = [user] if same_owner else [user_factory()]
+        account_b = bank_account_factory(owners=other_owner)
+        budget_b = budget_factory(bank_account=account_b)
+        tx = transaction_factory(
+            bank_account=account_a, amount=Money(-100, "USD")
+        )
+        alloc = transaction_allocation_factory(
+            transaction=tx,
+            budget=account_a.unallocated_budget,
+            amount=Money(-100, "USD"),
+        )
+
+        response = auth_client.patch(
+            reverse(
+                "api_v1:transactionallocation-detail",
+                kwargs={"id": alloc.id},
+            ),
+            {"budget": str(budget_b.id)},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
 
 ########################################################################
 ########################################################################
@@ -1202,6 +1248,53 @@ class TestTransactionSplitsAPI:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "same_owner",
+        [True, False],
+        ids=["same-owner-different-account", "different-owner"],
+    )
+    def test_cross_account_budget_rejected(
+        self,
+        auth_client: APIClient,
+        user: User,
+        user_factory: Callable[..., User],
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+        same_owner: bool,
+    ) -> None:
+        """
+        GIVEN: a transaction on account A and a budget on account B
+               (B owned by the same user or a different user)
+        WHEN:  POST splits referencing the cross-account budget
+        THEN:  400 Bad Request — budget must be in the same account
+        """
+        account_a = bank_account_factory(owners=[user])
+        other_owner = [user] if same_owner else [user_factory()]
+        account_b = bank_account_factory(owners=other_owner)
+        budget_b = budget_factory(bank_account=account_b)
+        tx = transaction_factory(
+            bank_account=account_a, amount=Money(-100, "USD")
+        )
+        transaction_allocation_factory(
+            transaction=tx,
+            budget=account_a.unallocated_budget,
+            amount=Money(-100, "USD"),
+        )
+
+        response = auth_client.post(
+            reverse(
+                "api_v1:transaction-splits",
+                kwargs={"id": tx.id},
+            ),
+            {"splits": {str(budget_b.id): "50.00"}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
 
 ########################################################################
 ########################################################################
@@ -1263,6 +1356,63 @@ class TestInternalTransactionAPI:
                 "amount": "50.00",
                 "src_budget": str(budget.id),
                 "dst_budget": str(budget.id),
+            },
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        ("which_cross", "same_owner"),
+        [
+            ("src", True),
+            ("dst", True),
+            ("src", False),
+            ("dst", False),
+        ],
+        ids=[
+            "src-same-owner",
+            "dst-same-owner",
+            "src-different-owner",
+            "dst-different-owner",
+        ],
+    )
+    def test_cross_account_budget_rejected(
+        self,
+        auth_client: APIClient,
+        user: User,
+        user_factory: Callable[..., User],
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        which_cross: str,
+        same_owner: bool,
+    ) -> None:
+        """
+        GIVEN: two bank accounts (same or different owner) with
+               budgets on each
+        WHEN:  POST an internal transaction whose src or dst budget
+               belongs to a different account than bank_account
+        THEN:  400 Bad Request
+        """
+        account = bank_account_factory(owners=[user])
+        other_owner = [user] if same_owner else [user_factory()]
+        other_account = bank_account_factory(owners=other_owner)
+
+        budget_here = budget_factory(bank_account=account)
+        budget_there = budget_factory(bank_account=other_account)
+
+        if which_cross == "src":
+            src, dst = budget_there, budget_here
+        else:
+            src, dst = budget_here, budget_there
+
+        response = auth_client.post(
+            reverse("api_v1:internaltransaction-list"),
+            {
+                "bank_account": str(account.id),
+                "amount": "50.00",
+                "src_budget": str(src.id),
+                "dst_budget": str(dst.id),
             },
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST

@@ -17,7 +17,7 @@
 //
 import { Fzf } from "fzf";
 import { IconSearch, IconX } from "@tabler/icons-vue";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
 
 // app imports
 //
@@ -287,14 +287,33 @@ function onSearchInput() {
   }, 300);
 }
 
+const searchInput = ref<HTMLInputElement | null>(null);
+
 function toggleSearch() {
   searchOpen.value = !searchOpen.value;
   if (!searchOpen.value) {
     searchQuery.value = "";
     searchResults.value = null;
     txNav.savedSearch = "";
+  } else {
+    nextTick(() => searchInput.value?.focus());
   }
 }
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    if (!searchOpen.value) {
+      searchOpen.value = true;
+    }
+    nextTick(() => searchInput.value?.focus());
+  } else if (e.key === "Escape" && searchOpen.value) {
+    toggleSearch();
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onSearchKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onSearchKeydown));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -351,6 +370,7 @@ watch(sentinel, (el) => {
     >
       <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
         <input
+          ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"

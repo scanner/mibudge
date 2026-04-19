@@ -60,40 +60,62 @@ const typeLabel = computed(() => {
 // Allocation display logic.  Determines what to show in the second
 // row of the transaction card.
 //
-const allocInfo = computed<{ text: string; isUnallocated: boolean; isSplit: boolean }>(() => {
+interface AllocDisplay {
+  name: string;
+  balance: string;
+  currency: string;
+}
+
+const allocInfo = computed<{
+  text: string;
+  isUnallocated: boolean;
+  isSplit: boolean;
+  budgets: AllocDisplay[];
+}>(() => {
   const allocs = props.allocations;
   if (!allocs || allocs.length === 0) {
-    return { text: "", isUnallocated: false, isSplit: false };
+    return { text: "", isUnallocated: false, isSplit: false, budgets: [] };
   }
 
   // Credits go to unallocated by design — don't prompt for assignment.
   if (Number.parseFloat(props.transaction.amount) > 0) {
-    return { text: "", isUnallocated: false, isSplit: false };
+    return { text: "", isUnallocated: false, isSplit: false, budgets: [] };
   }
 
   const unallocId = props.unallocatedBudgetId;
   const names = props.budgetNames;
 
-  if (allocs.length === 1) {
-    const a = allocs[0];
-    if (a.budget === unallocId || a.budget === null) {
-      return { text: "Unallocated — tap to assign", isUnallocated: true, isSplit: false };
-    }
-    const name = names?.get(a.budget) ?? "Budget";
-    return { text: `From ${name}`, isUnallocated: false, isSplit: false };
-  }
-
   const allUnallocated = allocs.every((a) => a.budget === unallocId || a.budget === null);
   if (allUnallocated) {
-    return { text: "Unallocated — tap to assign", isUnallocated: true, isSplit: false };
+    return {
+      text: "Unallocated — tap to assign",
+      isUnallocated: true,
+      isSplit: false,
+      budgets: [],
+    };
   }
 
-  const budgetLabels = allocs
+  const budgets: AllocDisplay[] = allocs
     .filter((a) => a.budget && a.budget !== unallocId)
-    .map((a) => names?.get(a.budget!) ?? "Budget");
-  const unique = [...new Set(budgetLabels)];
-  return { text: `Split: ${unique.join(", ")}`, isUnallocated: false, isSplit: true };
+    .map((a) => ({
+      name: names?.get(a.budget!) ?? "Budget",
+      balance: a.budget_balance,
+      currency: a.budget_balance_currency,
+    }));
+
+  if (allocs.length === 1) {
+    return { text: "", isUnallocated: false, isSplit: false, budgets };
+  }
+
+  return { text: "", isUnallocated: false, isSplit: true, budgets };
 });
+
+function fmtBalance(b: AllocDisplay): string {
+  const n = Number.parseFloat(b.balance);
+  const abs = Math.abs(n);
+  const formatted = abs % 1 === 0 ? `$${abs.toFixed(0)}` : `$${abs.toFixed(2)}`;
+  return n < 0 ? `-${formatted}` : formatted;
+}
 </script>
 
 <template>
@@ -130,20 +152,20 @@ const allocInfo = computed<{ text: string; isUnallocated: boolean; isSplit: bool
       <!-- Row 2: allocation info + type label -->
       <div class="mt-0.5 flex items-center justify-between gap-2">
         <span
-          v-if="allocInfo.text"
-          class="min-w-0 truncate text-[12px]"
-          :class="
-            allocInfo.isUnallocated
-              ? 'italic text-neutral-500'
-              : allocInfo.isSplit
-                ? 'text-ocean-600'
-                : 'text-neutral-500'
-          "
+          v-if="allocInfo.isUnallocated"
+          class="min-w-0 truncate text-[12px] italic text-neutral-500"
         >
-          <template v-if="!allocInfo.isUnallocated && !allocInfo.isSplit">
-            <span class="text-ocean-600">{{ allocInfo.text.replace("From ", "") }}</span>
+          Unallocated — tap to assign
+        </span>
+        <span
+          v-else-if="allocInfo.budgets.length > 0"
+          class="min-w-0 truncate text-[12px] text-ocean-600"
+        >
+          <template v-for="(b, i) in allocInfo.budgets" :key="i">
+            <template v-if="i > 0">, </template>
+            {{ b.name }}
+            <span class="text-neutral-400">({{ fmtBalance(b) }} left)</span>
           </template>
-          <template v-else>{{ allocInfo.text }}</template>
         </span>
         <span v-else class="flex-1" />
         <span v-if="typeLabel" class="flex-none text-[12px] text-neutral-400">

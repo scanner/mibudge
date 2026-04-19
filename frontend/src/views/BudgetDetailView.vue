@@ -23,7 +23,7 @@ import {
   IconRefresh,
   IconTarget,
 } from "@tabler/icons-vue";
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
@@ -204,23 +204,20 @@ function onSaved(updated: Budget) {
 //
 // "Move money" internal transaction form state.
 //
-// Both From and To are full pickers.  From defaults to the current
-// budget so moving out is the fast path, but swapping to another
-// source (e.g. Unallocated) lets the user move money in.
+// One side is always this budget.  The user picks a direction
+// (into or out of) and the other budget.
 //
-const allPickableBudgets = ref<Budget[]>([]);
-const moveSrcId = ref("");
-const moveDstId = ref("");
+const otherBudgets = ref<Budget[]>([]);
+const moveDirection = ref<"into" | "outof">("outof");
+const moveOtherId = ref("");
 const moveAmount = ref("");
 const moveSaving = ref(false);
 const moveError = ref<string | null>(null);
+const moveAmountInput = ref<HTMLInputElement | null>(null);
 
-// Map from fill-up budget id → parent budget name, used to label type 'A'
-// budgets in the picker as e.g. "Groceries (fill-up)" instead of their
-// internal name which may not be recognisable in isolation.
 const fillupParentNames = computed(() => {
   const map = new Map<string, string>();
-  for (const b of allPickableBudgets.value) {
+  for (const b of otherBudgets.value) {
     if (b.fillup_goal) map.set(b.fillup_goal, b.name);
   }
   return map;
@@ -237,50 +234,36 @@ function budgetPickerLabel(b: Budget): string {
 async function openMoveMoneyForm() {
   if (!ctx.activeBankAccountId) return;
   const page = await listBudgets({ bank_account: ctx.activeBankAccountId, archived: false });
-  // Include type 'A' fill-up budgets so users can transfer directly into
-  // a recurring budget's fill-up goal.
-  allPickableBudgets.value = page.results;
-  moveSrcId.value = props.id;
-  // Default destination: first budget that isn't this one
-  const others = allPickableBudgets.value.filter((b) => b.id !== props.id);
-  moveDstId.value = others[0]?.id ?? "";
+  otherBudgets.value = page.results.filter((b) => b.id !== props.id);
+  moveDirection.value = "into";
+  const unallocId = ctx.unallocatedBudgetId;
+  const unalloc = unallocId ? otherBudgets.value.find((b) => b.id === unallocId) : null;
+  moveOtherId.value = unalloc?.id ?? otherBudgets.value[0]?.id ?? "";
   moveAmount.value = "";
   moveError.value = null;
   showMoveMoneyForm.value = true;
-}
-
-// If the user picks the same budget on both sides, swap the other side
-// rather than blocking the selection.  This way two-budget accounts
-// (e.g. Eating Out + Unallocated) always work.
-function onMoveSrcChange(id: string) {
-  if (id === moveDstId.value) moveDstId.value = moveSrcId.value;
-  moveSrcId.value = id;
-}
-
-function onMoveDstChange(id: string) {
-  if (id === moveSrcId.value) moveSrcId.value = moveDstId.value;
-  moveDstId.value = id;
+  nextTick(() => moveAmountInput.value?.focus());
 }
 
 async function submitMove() {
-  if (!moveSrcId.value || !moveDstId.value || !moveAmount.value || !budget.value) return;
+  if (!moveOtherId.value || !moveAmount.value || !budget.value) return;
   moveSaving.value = true;
   moveError.value = null;
+
+  const srcId = moveDirection.value === "outof" ? props.id : moveOtherId.value;
+  const dstId = moveDirection.value === "outof" ? moveOtherId.value : props.id;
+
   try {
     await createInternalTransaction({
       bank_account: budget.value.bank_account,
-      src_budget: moveSrcId.value,
-      dst_budget: moveDstId.value,
+      src_budget: srcId,
+      dst_budget: dstId,
       amount: moveAmount.value,
     });
     showMoveMoneyForm.value = false;
-    // Refresh both affected budgets so the store cache (and TopBar) reflect
-    // the new balances immediately without a page reload.
-    await Promise.all([store.fetchOne(moveSrcId.value), store.fetchOne(moveDstId.value)]);
-    // Update the local budget ref if this view's budget was one of the sides.
+    await Promise.all([store.fetchOne(srcId), store.fetchOne(dstId)]);
     const updated = store.byId(props.id);
     if (updated) budget.value = updated;
-    // Also refresh the fill-up budget ref if it was involved in the transfer.
     if (fillupBudget.value) {
       const updatedFillup = store.byId(fillupBudget.value.id);
       if (updatedFillup) fillupBudget.value = updatedFillup;
@@ -540,6 +523,7 @@ async function submitMove() {
         <div
           v-if="showEditSheet && budget"
           class="fixed inset-0 z-40 overflow-y-auto bg-neutral-50"
+          @keydown.esc="showEditSheet = false"
         >
           <div class="mx-auto max-w-lg px-4 pb-8 pt-4">
             <div class="mb-4 flex items-center justify-between">
@@ -562,6 +546,7 @@ async function submitMove() {
         <div
           v-if="showMoveMoneyForm"
           class="fixed inset-0 z-40 flex items-end justify-center md:items-center"
+          @keydown.esc="showMoveMoneyForm = false"
         >
           <div class="absolute inset-0 bg-neutral-900/40" @click="showMoveMoneyForm = false" />
           <div
@@ -571,26 +556,44 @@ async function submitMove() {
 
             <div class="space-y-3">
               <div>
-                <label class="mb-1 block text-[13px] font-medium text-neutral-700">From</label>
-                <select
-                  :value="moveSrcId"
-                  class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
-                  @change="onMoveSrcChange(($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-for="b in allPickableBudgets" :key="b.id" :value="b.id">
-                    {{ budgetPickerLabel(b) }}
-                  </option>
-                </select>
+                <label class="mb-1 block text-[13px] font-medium text-neutral-700">Direction</label>
+                <div class="flex rounded-subcard border border-neutral-200">
+                  <button
+                    type="button"
+                    class="flex-1 rounded-l-subcard py-2.5 text-sm font-medium transition-colors"
+                    :class="
+                      moveDirection === 'outof'
+                        ? 'bg-ocean-400 text-white'
+                        : 'text-neutral-600 hover:bg-neutral-50'
+                    "
+                    @click="moveDirection = 'outof'"
+                  >
+                    Out of this budget
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 rounded-r-subcard py-2.5 text-sm font-medium transition-colors"
+                    :class="
+                      moveDirection === 'into'
+                        ? 'bg-ocean-400 text-white'
+                        : 'text-neutral-600 hover:bg-neutral-50'
+                    "
+                    @click="moveDirection = 'into'"
+                  >
+                    Into this budget
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label class="mb-1 block text-[13px] font-medium text-neutral-700">To</label>
+                <label class="mb-1 block text-[13px] font-medium text-neutral-700">
+                  {{ moveDirection === "outof" ? "To" : "From" }}
+                </label>
                 <select
-                  :value="moveDstId"
+                  v-model="moveOtherId"
                   class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
-                  @change="onMoveDstChange(($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="b in allPickableBudgets" :key="b.id" :value="b.id">
+                  <option v-for="b in otherBudgets" :key="b.id" :value="b.id">
                     {{ budgetPickerLabel(b) }}
                   </option>
                 </select>
@@ -599,12 +602,14 @@ async function submitMove() {
               <div>
                 <label class="mb-1 block text-[13px] font-medium text-neutral-700">Amount</label>
                 <input
+                  ref="moveAmountInput"
                   v-model="moveAmount"
                   type="number"
                   min="0.01"
                   step="0.01"
                   placeholder="0.00"
                   class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
+                  @keydown.enter="moveOtherId && moveAmount && !moveSaving && submitMove()"
                 />
               </div>
 
@@ -620,10 +625,10 @@ async function submitMove() {
                 </button>
                 <button
                   type="button"
-                  :disabled="!moveSrcId || !moveDstId || !moveAmount || moveSaving"
+                  :disabled="!moveOtherId || !moveAmount || moveSaving"
                   class="flex-1 rounded-full py-3 text-sm font-medium text-white transition-colors"
                   :class="
-                    moveSrcId && moveDstId && moveAmount && !moveSaving
+                    moveOtherId && moveAmount && !moveSaving
                       ? 'bg-ocean-400 hover:bg-ocean-600'
                       : 'cursor-not-allowed bg-neutral-300'
                   "
