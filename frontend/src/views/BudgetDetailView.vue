@@ -217,6 +217,7 @@ function onSaved(updated: Budget) {
 //
 const otherBudgets = ref<Budget[]>([]);
 const moveDirection = ref<"into" | "outof">("outof");
+const moveTargetFillup = ref(false);
 const moveOtherId = ref("");
 const moveAmount = ref("");
 const moveSaving = ref(false);
@@ -229,6 +230,14 @@ const fillupParentNames = computed(() => {
     if (b.fillup_goal) map.set(b.fillup_goal, b.name);
   }
   return map;
+});
+
+// When targeting the fill-up goal, exclude it from the "other budget" picker.
+const movePickerBudgets = computed(() => {
+  if (moveTargetFillup.value && fillupBudget.value) {
+    return otherBudgets.value.filter((b) => b.id !== fillupBudget.value!.id);
+  }
+  return otherBudgets.value;
 });
 
 function budgetPickerLabel(b: Budget): string {
@@ -244,6 +253,7 @@ async function openMoveMoneyForm() {
   const page = await listBudgets({ bank_account: ctx.activeBankAccountId, archived: false });
   otherBudgets.value = page.results.filter((b) => b.id !== props.id);
   moveDirection.value = "into";
+  moveTargetFillup.value = false;
   const unallocId = ctx.unallocatedBudgetId;
   const unalloc = unallocId ? otherBudgets.value.find((b) => b.id === unallocId) : null;
   moveOtherId.value = unalloc?.id ?? otherBudgets.value[0]?.id ?? "";
@@ -253,13 +263,27 @@ async function openMoveMoneyForm() {
   nextTick(() => moveAmountInput.value?.focus());
 }
 
+function setMoveTarget(toFillup: boolean) {
+  moveTargetFillup.value = toFillup;
+  // Reset the counterpart picker to its first valid option.
+  const unallocId = ctx.unallocatedBudgetId;
+  const pool =
+    toFillup && fillupBudget.value
+      ? otherBudgets.value.filter((b) => b.id !== fillupBudget.value!.id)
+      : otherBudgets.value;
+  const unalloc = unallocId ? pool.find((b) => b.id === unallocId) : null;
+  moveOtherId.value = unalloc?.id ?? pool[0]?.id ?? "";
+}
+
 async function submitMove() {
   if (!moveOtherId.value || !moveAmount.value || !budget.value) return;
   moveSaving.value = true;
   moveError.value = null;
 
-  const srcId = moveDirection.value === "outof" ? props.id : moveOtherId.value;
-  const dstId = moveDirection.value === "outof" ? moveOtherId.value : props.id;
+  const thisBudgetId =
+    moveTargetFillup.value && fillupBudget.value ? fillupBudget.value.id : props.id;
+  const srcId = moveDirection.value === "outof" ? thisBudgetId : moveOtherId.value;
+  const dstId = moveDirection.value === "outof" ? moveOtherId.value : thisBudgetId;
 
   try {
     await createInternalTransaction({
@@ -593,6 +617,38 @@ async function submitMove() {
                 </div>
               </div>
 
+              <div v-if="fillupBudget">
+                <label class="mb-1 block text-[13px] font-medium text-neutral-700"
+                  >This budget</label
+                >
+                <div class="flex rounded-subcard border border-neutral-200">
+                  <button
+                    type="button"
+                    class="flex-1 rounded-l-subcard py-2.5 text-sm font-medium transition-colors"
+                    :class="
+                      !moveTargetFillup
+                        ? 'bg-ocean-400 text-white'
+                        : 'text-neutral-600 hover:bg-neutral-50'
+                    "
+                    @click="setMoveTarget(false)"
+                  >
+                    {{ budget?.name }}
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 rounded-r-subcard py-2.5 text-sm font-medium transition-colors"
+                    :class="
+                      moveTargetFillup
+                        ? 'bg-ocean-400 text-white'
+                        : 'text-neutral-600 hover:bg-neutral-50'
+                    "
+                    @click="setMoveTarget(true)"
+                  >
+                    {{ fillupBudget.name }} (fill-up)
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label class="mb-1 block text-[13px] font-medium text-neutral-700">
                   {{ moveDirection === "outof" ? "To" : "From" }}
@@ -601,7 +657,7 @@ async function submitMove() {
                   v-model="moveOtherId"
                   class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
                 >
-                  <option v-for="b in otherBudgets" :key="b.id" :value="b.id">
+                  <option v-for="b in movePickerBudgets" :key="b.id" :value="b.id">
                     {{ budgetPickerLabel(b) }}
                   </option>
                 </select>
