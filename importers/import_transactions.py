@@ -71,6 +71,7 @@ from rich.table import Table
 from importers.client import APIError, AuthenticationError, MibudgeClient
 from importers.parsers import bofa_csv, ofx
 from importers.parsers.common import ParsedStatement, ParsedTransaction
+from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
 
@@ -817,7 +818,7 @@ def _parse_all(
                 f"cleanly."
             )
             if interactive:
-                console.print(f"[yellow]Warning:[/yellow] {msg}")
+                console.print(f"[warning]Warning:[/warning] {msg}")
             else:
                 logger.warning(msg)
 
@@ -1248,7 +1249,7 @@ def _resolve_bank_account(
 
     account_id: str = created["id"]
     if interactive:
-        console.print(f"[green]Created account {account_id}[/green]")
+        console.print(f"[success]Created account {account_id}[/success]")
     else:
         logger.info("Created bank account %s", account_id)
     return account_id
@@ -1532,14 +1533,14 @@ def _print_summary(
         table = Table(title=title, show_header=False)
         table.add_column("Metric", style="bold")
         table.add_column("Count", justify="right")
-        table.add_row(verb, f"[green]{result.imported}[/green]")
+        table.add_row(verb, f"[success]{result.imported}[/success]")
         table.add_row("Skipped (duplicates)", f"[dim]{result.skipped}[/dim]")
         table.add_row(
             f"{update_verb} (type backfill)",
-            f"[cyan]{result.updated}[/cyan]",
+            f"[accent]{result.updated}[/accent]",
         )
         if result.failed:
-            table.add_row("Failed", f"[red]{result.failed}[/red]")
+            table.add_row("Failed", f"[error]{result.failed}[/error]")
         else:
             table.add_row("Failed", "0")
         console.print()
@@ -1548,8 +1549,8 @@ def _print_summary(
         if result.unrecognized:
             console.print()
             console.print(
-                f"[yellow]{len(result.unrecognized)} transaction(s) "
-                f"with unrecognized type:[/yellow]"
+                f"[warning]{len(result.unrecognized)} transaction(s) "
+                f"with unrecognized type:[/warning]"
             )
             seen: set[str] = set()
             for desc in result.unrecognized:
@@ -1638,6 +1639,7 @@ def _print_summary(
     is_flag=True,
     help="Disable rich output (auto-disabled when not a TTY).",
 )
+@theme_option
 @click.option(
     "--file",
     "-f",
@@ -1718,6 +1720,7 @@ def cli_cmd(
     dry_run: bool,
     verbose: bool,
     plain: bool,
+    theme_name: str,
     flag_files: tuple[Path, ...],
     positional_files: tuple[Path, ...],
     account: str | None,
@@ -1728,7 +1731,7 @@ def cli_cmd(
     account_number: str | None,
 ) -> None:
     """CLI entry point for the statement importer."""
-    console = Console(stderr=True)
+    console = Console(theme=get_theme(theme_name).rich, stderr=True)
     interactive = console.is_terminal and not plain
     _setup_logging(verbose, interactive, console=console)
 
@@ -1787,7 +1790,7 @@ def cli_cmd(
         )
     if dry_run and interactive:
         console.print(
-            "[bold yellow]DRY RUN[/bold yellow] — no changes will be made."
+            "[bold warning]DRY RUN[/bold warning] — no changes will be made."
         )
 
     bank_id_str: str | None = bank
@@ -1810,7 +1813,7 @@ def cli_cmd(
             if interactive:
                 with console.status("[bold]Authenticating..."):
                     client.authenticate()
-                console.print("[green]Authenticated.[/green]")
+                console.print("[success]Authenticated.[/success]")
             else:
                 client.authenticate()
                 logger.info("Authenticated.")
@@ -1858,9 +1861,9 @@ def cli_cmd(
                     BarColumn(),
                     MofNCompleteColumn(),
                     TextColumn(
-                        "[green]+{task.fields[imported]}[/green] "
+                        "[success]+{task.fields[imported]}[/success] "
                         "[dim]~{task.fields[skipped]}[/dim] "
-                        "[red]-{task.fields[failed]}[/red]"
+                        "[error]-{task.fields[failed]}[/error]"
                     ),
                     TimeElapsedColumn(),
                     console=console,

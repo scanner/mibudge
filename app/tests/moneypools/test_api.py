@@ -1249,6 +1249,191 @@ class TestTransactionSplitsAPI:
 ########################################################################
 ########################################################################
 #
+class TestRunningBalanceWithInternalTransactions:
+    """Verify that budget_balance snapshots on TransactionAllocations
+    account for InternalTransaction top-ups that occur between
+    allocations chronologically.
+
+    These tests mimic the backfill_budget command flow:
+
+    1. Bank account starts with enough available_balance so
+       the auto-created Unallocated budget has funds.
+    2. Transactions are imported first -- each gets an allocation
+       to Unallocated (the import pipeline's behavior).
+    3. An InternalTransaction funds the target budget from
+       Unallocated (the monthly top-up).
+    4. The splits API moves each allocation from Unallocated
+       to the target budget (the interactive allocation step).
+    5. At a month boundary another InternalTransaction top-up
+       occurs, then more splits follow.
+    """
+
+    ####################################################################
+    #
+    def test_backfill_flow_running_balances(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+        internal_transaction_factory: Callable[..., InternalTransaction],
+    ) -> None:
+        """
+        GIVEN: a bank account with $5000 available, 10 imported
+               transactions (each allocated to Unallocated),
+               and a recurring budget with $0 starting balance
+        WHEN:  the backfill flow runs --
+                 1. fund budget to $500 from Unallocated
+                 2. split 5 January transactions to the budget
+                 3. fund budget back to $500 from Unallocated
+                 4. split 5 February transactions to the budget
+        THEN:  every allocation's budget_balance snapshot
+               correctly reflects both the allocation amounts
+               AND the InternalTransaction funding that
+               preceded it
+
+        Timeline (mimics backfill_budget month-by-month):
+            Step 1:  InternalTransaction +$500 Unallocated -> budget
+            Step 2:  Split T1..T5 (-$40 each) to budget
+            Step 3:  InternalTransaction +$200 Unallocated -> budget
+                     (top up from $300 back to $500)
+            Step 4:  Split T6..T10 (-$40 each) to budget
+
+        Expected running budget_balance after each split:
+            T1:  500 - 40 = 460
+            T2:  460 - 40 = 420
+            T3:  420 - 40 = 380
+            T4:  380 - 40 = 340
+            T5:  340 - 40 = 300
+            -- InternalTransaction +200 -> balance now 500 --
+            T6:  500 - 40 = 460
+            T7:  460 - 40 = 420
+            T8:  420 - 40 = 380
+            T9:  380 - 40 = 340
+            T10: 340 - 40 = 300
+
+        Final budget balance: $300
+        """
+        # -- Setup: bank account with $5000 so Unallocated starts
+        # with enough to cover all funding and transactions. --
+        account = bank_account_factory(
+            owners=[user],
+            available_balance=Money(5000, "USD"),
+            posted_balance=Money(5000, "USD"),
+        )
+        unalloc = account.unallocated_budget
+        assert unalloc is not None
+        assert unalloc.balance == Money(5000, "USD")
+
+        budget = budget_factory(bank_account=account, balance=Money(0, "USD"))
+
+        # -- Step 0: Import all 10 transactions up front. --
+        # Each gets an allocation to Unallocated, just like the
+        # import pipeline does.
+        imported_txs = []
+        for i in range(10):
+            tx = transaction_factory(
+                bank_account=account,
+                amount=Money(-40, "USD"),
+                transaction_date=datetime(2024, 1, i + 1, tzinfo=UTC),
+            )
+            transaction_allocation_factory(
+                transaction=tx,
+                budget=unalloc,
+                amount=Money(-40, "USD"),
+            )
+            imported_txs.append(tx)
+
+        # -- Step 1: Initial funding -- top budget up to $500. --
+        unalloc.refresh_from_db()
+        internal_transaction_factory(
+            bank_account=account,
+            src_budget=unalloc,
+            dst_budget=budget,
+            amount=Money(500, "USD"),
+            actor=user,
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(500, "USD")
+
+        # -- Step 2: Split first 5 transactions to the budget,
+        # checking the budget_balance snapshot after each one. --
+        expected_first_batch = [460, 420, 380, 340, 300]
+        for i, tx in enumerate(imported_txs[:5]):
+            response = auth_client.post(
+                reverse(
+                    "api_v1:transaction-splits",
+                    kwargs={"id": tx.id},
+                ),
+                {"splits": {str(budget.id): "40.00"}},
+                format="json",
+            )
+            assert response.status_code == status.HTTP_200_OK
+
+            # Validate the budget_balance on the allocation
+            # returned by this split call.
+            for alloc_data in response.data:
+                if str(alloc_data["budget"]) == str(budget.id):
+                    assert Decimal(alloc_data["budget_balance"]) == Decimal(
+                        expected_first_batch[i]
+                    ), (
+                        f"Split {i + 1}: expected "
+                        f"budget_balance="
+                        f"{expected_first_batch[i]}, "
+                        f"got {alloc_data['budget_balance']}"
+                    )
+
+        # After 5x -$40, budget should be at $300.
+        budget.refresh_from_db()
+        assert budget.balance == Money(300, "USD")
+
+        # -- Step 3: Top-up -- fund back to $500. --
+        unalloc.refresh_from_db()
+        internal_transaction_factory(
+            bank_account=account,
+            src_budget=unalloc,
+            dst_budget=budget,
+            amount=Money(200, "USD"),
+            actor=user,
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(500, "USD")
+
+        # -- Step 4: Split remaining 5 transactions, again
+        # checking each budget_balance snapshot immediately. --
+        expected_second_batch = [460, 420, 380, 340, 300]
+        for i, tx in enumerate(imported_txs[5:]):
+            response = auth_client.post(
+                reverse(
+                    "api_v1:transaction-splits",
+                    kwargs={"id": tx.id},
+                ),
+                {"splits": {str(budget.id): "40.00"}},
+                format="json",
+            )
+            assert response.status_code == status.HTTP_200_OK
+
+            for alloc_data in response.data:
+                if str(alloc_data["budget"]) == str(budget.id):
+                    assert Decimal(alloc_data["budget_balance"]) == Decimal(
+                        expected_second_batch[i]
+                    ), (
+                        f"Split {i + 6}: expected "
+                        f"budget_balance="
+                        f"{expected_second_batch[i]}, "
+                        f"got {alloc_data['budget_balance']}"
+                    )
+
+        # Final budget balance: 500 - 200 + 200 - 200 = 300.
+        budget.refresh_from_db()
+        assert budget.balance == Money(300, "USD")
+
+
+########################################################################
+########################################################################
+#
 class TestInternalTransactionAPI:
     """Tests for the /api/v1/internal-transactions/ endpoint."""
 

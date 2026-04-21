@@ -52,6 +52,7 @@ dependencies = [
     "click>=8.3.1",
     "python-dotenv>=1.2.2",
     "hvac>=2.4.0",
+    "django-settings-export>=1.2.1",
 ]
 
 [build-system]

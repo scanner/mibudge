@@ -415,6 +415,44 @@ def transaction_pre_delete(sender, instance, **kwargs):
 
 ####################################################################
 #
+def _money_amount(value: Any) -> Decimal:
+    """Extract a plain Decimal from a Money or Decimal value."""
+    return value.amount if hasattr(value, "amount") else value
+
+
+####################################################################
+#
+def _internal_transaction_delta(
+    budget: Budget,
+    after: datetime,
+    before: datetime,
+) -> Decimal:
+    """Sum the net effect of InternalTransactions on *budget* whose
+    ``created_at`` falls in the half-open interval ``(after, before]``.
+
+    Credits (budget is ``dst_budget``) are positive, debits (budget is
+    ``src_budget``) are negative.
+
+    Args:
+        budget: The budget to check.
+        after:  Exclusive lower bound on ``created_at``.
+        before: Inclusive upper bound on ``created_at``.
+
+    Returns:
+        Net balance change from InternalTransactions in the window.
+    """
+    window = Q(created_at__gt=after, created_at__lte=before)
+    credits = InternalTransaction.objects.filter(dst_budget=budget).filter(
+        window
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    debits = InternalTransaction.objects.filter(src_budget=budget).filter(
+        window
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    return Decimal(credits) - Decimal(debits)
+
+
+####################################################################
+#
 def _recalculate_running_balances(
     budget: Budget,
     from_transaction: Transaction,
@@ -425,6 +463,12 @@ def _recalculate_running_balances(
     Only updates the allocation at the given transaction's position
     and any that follow it.  In the common case (allocation added at
     the end) this touches one row.
+
+    Between consecutive allocations the walk also accounts for any
+    InternalTransactions that changed the budget's balance (e.g.
+    monthly top-ups from Unallocated).  These are detected by
+    ``created_at`` falling between the two allocations' creation
+    timestamps.
 
     Ordering: transaction_date, then transaction.created_at for ties.
 
@@ -463,22 +507,33 @@ def _recalculate_running_balances(
     )
 
     if prior is not None:
-        running = (
-            prior.budget_balance.amount
-            if hasattr(prior.budget_balance, "amount")
-            else prior.budget_balance
-        )
+        running = _money_amount(prior.budget_balance)
+        prev_created = prior.created_at
     else:
         # This is the chronologically first allocation.  Baseline is
         # the budget's current balance minus the sum of ALL its
-        # allocation amounts.
+        # allocation amounts AND all InternalTransaction effects.
         #
-        total = TransactionAllocation.objects.filter(budget=budget).aggregate(
-            total=Sum("amount")
-        )["total"] or Decimal("0")
-        running = budget.balance.amount - total
+        total_allocs = TransactionAllocation.objects.filter(
+            budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_credits = InternalTransaction.objects.filter(
+            dst_budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_debits = InternalTransaction.objects.filter(
+            src_budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        running = (
+            budget.balance.amount
+            - Decimal(total_allocs)
+            - Decimal(total_credits)
+            + Decimal(total_debits)
+        )
+        prev_created = datetime.min.replace(tzinfo=UTC)
 
     # Walk forward, updating only rows whose snapshot is stale.
+    # Between each pair of allocations, account for any
+    # InternalTransactions that changed the budget balance.
     #
     forward = (
         TransactionAllocation.objects.filter(budget=budget)
@@ -494,21 +549,19 @@ def _recalculate_running_balances(
     )
 
     for alloc in forward:
-        alloc_amount = (
-            alloc.amount.amount
-            if hasattr(alloc.amount, "amount")
-            else alloc.amount
+        # Add the net effect of any InternalTransactions created
+        # between the previous allocation and this one.
+        running += _internal_transaction_delta(
+            budget, after=prev_created, before=alloc.created_at
         )
-        running += alloc_amount
-        current = (
-            alloc.budget_balance.amount
-            if hasattr(alloc.budget_balance, "amount")
-            else alloc.budget_balance
-        )
+
+        running += _money_amount(alloc.amount)
+        current = _money_amount(alloc.budget_balance)
         if current != running:
             TransactionAllocation.objects.filter(pk=alloc.pk).update(
                 budget_balance=running
             )
+        prev_created = alloc.created_at
 
 
 ####################################################################

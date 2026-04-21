@@ -930,3 +930,111 @@ class TestTransactionAllocation:
                 f"expected {running}, got "
                 f"{a.budget_balance.amount}"
             )
+
+    ####################################################################
+    #
+    def test_internal_transaction_between_allocations(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        internal_transaction_factory: Callable[..., InternalTransaction],
+    ) -> None:
+        """
+        GIVEN: a budget at $0, funded to $500 via InternalTransaction,
+               then two -$100 allocations
+        WHEN:  a second InternalTransaction adds $200 and a third
+               allocation of -$100 is created
+        THEN:  the third allocation's budget_balance reflects the
+               top-up: (500 - 100 - 100) + 200 - 100 = 400,
+               not (500 - 100 - 100 - 100) = 200
+        """
+        account = bank_account_factory(
+            available_balance=Money(5000, USD),
+            posted_balance=Money(5000, USD),
+        )
+        unalloc = account.unallocated_budget
+        assert unalloc is not None
+        budget = budget_factory(bank_account=account, balance=Money(0, USD))
+
+        # Fund the budget: +$500.
+        internal_transaction_factory(
+            bank_account=account,
+            src_budget=unalloc,
+            dst_budget=budget,
+            amount=Money(500, USD),
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(500, USD)
+
+        # Two allocations before the top-up.
+        tx1 = transaction_factory(
+            bank_account=account,
+            amount=Money(-100, USD),
+            transaction_date=datetime(2024, 1, 1, tzinfo=UTC),
+        )
+        a1 = transaction_allocation_factory(
+            transaction=tx1,
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        tx2 = transaction_factory(
+            bank_account=account,
+            amount=Money(-100, USD),
+            transaction_date=datetime(2024, 1, 2, tzinfo=UTC),
+        )
+        a2 = transaction_allocation_factory(
+            transaction=tx2,
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        a1.refresh_from_db()
+        a2.refresh_from_db()
+        assert a1.budget_balance == Money(400, USD)
+        assert a2.budget_balance == Money(300, USD)
+
+        # Mid-stream top-up: +$200 -> budget now $500.
+        budget.refresh_from_db()
+        assert budget.balance == Money(300, USD)
+        unalloc.refresh_from_db()
+
+        internal_transaction_factory(
+            bank_account=account,
+            src_budget=unalloc,
+            dst_budget=budget,
+            amount=Money(200, USD),
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(500, USD)
+
+        # Third allocation after the top-up.
+        tx3 = transaction_factory(
+            bank_account=account,
+            amount=Money(-100, USD),
+            transaction_date=datetime(2024, 1, 3, tzinfo=UTC),
+        )
+        a3 = transaction_allocation_factory(
+            transaction=tx3,
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        budget.refresh_from_db()
+        assert budget.balance == Money(400, USD)
+
+        # The prior two should be unchanged.
+        a1.refresh_from_db()
+        a2.refresh_from_db()
+        assert a1.budget_balance == Money(400, USD)
+        assert a2.budget_balance == Money(300, USD)
+
+        # The third must reflect the +$200 top-up:
+        # 300 + 200 - 100 = 400, not 300 - 100 = 200.
+        a3.refresh_from_db()
+        assert a3.budget_balance == Money(400, USD), (
+            f"Expected budget_balance=$400 (reflecting +$200 "
+            f"top-up), got {a3.budget_balance}"
+        )

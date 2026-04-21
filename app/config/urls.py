@@ -8,13 +8,15 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
-from config.views import spa_shell_view
+from config.views import home_view, spa_shell_view
 from users.views import (
     cookie_token_obtain_pair_view,
     cookie_token_refresh_view,
 )
 
 urlpatterns = [
+    # Landing page
+    path("", home_view, name="home"),
     # Django Admin
     path(settings.ADMIN_URL, admin.site.urls),
     # User management

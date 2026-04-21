@@ -32,3 +32,15 @@ class SpaShellView(TemplateView):
 
 
 spa_shell_view = SpaShellView.as_view()
+
+
+########################################################################
+########################################################################
+#
+class HomeView(TemplateView):
+    """Landing page served at /."""
+
+    template_name = "pages/home.html"
+
+
+home_view = HomeView.as_view()

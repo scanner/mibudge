@@ -61,6 +61,16 @@ ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 TIME_ZONE = env("TIME_ZONE", default="America/Los_Angeles")
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1
+REPOSITORY_URL = env(
+    "REPOSITORY_URL", default="https://github.com/scanner/mibudge"
+)
+
+# Settings exported to the Django template context via django-settings-export.
+# Access in templates as {{ settings.VARIABLE_NAME }}.
+#
+SETTINGS_EXPORT = [
+    "REPOSITORY_URL",
+]
 USE_I18N = False
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -235,6 +245,7 @@ TEMPLATES = [
                 "django.template.context_processors.static",
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
+                "django_settings_export.settings_export",
             ],
         },
     }

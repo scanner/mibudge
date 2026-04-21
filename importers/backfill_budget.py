@@ -33,6 +33,7 @@ importer (CLI flags → env vars → .env file → Vault).
 """
 
 # system imports
+import calendar
 import json
 import logging
 import re
@@ -57,6 +58,7 @@ from importers.import_transactions import (
     _resolve_account_by_query,
     _setup_logging,
 )
+from importers.theme import _Theme, get_theme, theme_option
 
 logger = logging.getLogger(__name__)
 
@@ -449,8 +451,8 @@ def _fund_to_target(
 
     deficit = (target - balance).quantize(Decimal("0.01"))
     console.print(
-        f"[bold green]{label}Funding[/bold green] '{budget['name']}': "
-        f"+[green]{deficit}[/green]  "
+        f"[bold success]{label}Funding[/bold success] '{budget['name']}': "
+        f"+[success]{deficit}[/success]  "
         f"([dim]{balance} → {target}[/dim])"
     )
     try:
@@ -464,7 +466,7 @@ def _fund_to_target(
             },
         )
     except APIError as e:
-        console.print(f"[red]Failed to fund budget: {e}[/red]")
+        console.print(f"[error]Failed to fund budget: {e}[/error]")
 
 
 ########################################################################
@@ -506,7 +508,7 @@ def _allocate_to_budget(
         )
         return True
     except APIError as e:
-        console.print(f"[red]  Allocation failed: {e}[/red]")
+        console.print(f"[error]  Allocation failed: {e}[/error]")
         return False
 
 
@@ -545,8 +547,8 @@ def _format_amount(amount_str: str) -> str:
     except Exception:
         return amount_str
     if val < 0:
-        return f"[red]{val:+.2f}[/red]"
-    return f"[green]+{val:.2f}[/green]"
+        return f"[money_neg]{val:+.2f}[/money_neg]"
+    return f"[money_pos]+{val:.2f}[/money_pos]"
 
 
 ########################################################################
@@ -579,7 +581,7 @@ def _prompt_user(
     amount_display = _format_amount(str(amount_str))
 
     console.print(
-        f"  [bold]{tx_date}[/bold]  {amount_display}  [cyan]{vendor}[/cyan]"
+        f"  [bold]{tx_date}[/bold]  {amount_display}  [accent]{vendor}[/accent]"
     )
     console.print(f"  [dim]{raw_desc}[/dim]")
 
@@ -629,6 +631,7 @@ def _process_month(
     skip_vendors: set[str],
     *,
     console: Console,
+    theme: _Theme,
 ) -> tuple[int, int, int, bool]:
     """
     Interactively process one month's candidate transactions.
@@ -652,14 +655,12 @@ def _process_month(
         ``(allocated, skipped, auto_allocated, quit_requested)`` where
         *quit_requested* is True if the user pressed ``q``.
     """
-    import calendar
-
     month_name = calendar.month_name[month]
     console.print(
         Rule(
             f"[bold]{month_name} {year}[/bold]  "
             f"({len(candidates)} candidate transaction(s))",
-            style="blue",
+            style=theme.rule_style,
         )
     )
 
@@ -729,6 +730,7 @@ def _run_backfill(
     funding_amount: Decimal,
     *,
     console: Console,
+    theme: _Theme,
 ) -> None:
     """
     Run the full month-by-month backfill loop for the target budget.
@@ -759,7 +761,7 @@ def _run_backfill(
         )
     if not all_transactions:
         console.print(
-            "[yellow]No transactions found for this account.[/yellow]"
+            "[warning]No transactions found for this account.[/warning]"
         )
         return
     console.print(f"[dim]Loaded {len(all_transactions)} transaction(s).[/dim]")
@@ -795,7 +797,7 @@ def _run_backfill(
 
     sorted_months = sorted(months.keys())
     if not sorted_months:
-        console.print("[yellow]No transactions to process.[/yellow]")
+        console.print("[warning]No transactions to process.[/warning]")
         return
 
     # ----------------------------------------------------------------
@@ -848,8 +850,6 @@ def _run_backfill(
             candidates.append((tx, str(alloc["id"])))
 
         if not candidates:
-            import calendar
-
             console.print(
                 Rule(
                     f"[dim]{calendar.month_name[month]} {year} "
@@ -867,6 +867,7 @@ def _run_backfill(
                 rules,
                 skip_vendors,
                 console=console,
+                theme=theme,
             )
             total_allocated += allocated
             total_auto += auto_alloc
@@ -877,7 +878,7 @@ def _run_backfill(
 
             if quit_requested:
                 console.print(
-                    "\n[yellow]Quit requested. Saving rules…[/yellow]"
+                    "\n[warning]Quit requested. Saving rules…[/warning]"
                 )
                 _save_rules(target_budget["id"], rules)
                 break
@@ -899,12 +900,12 @@ def _run_backfill(
     # ----------------------------------------------------------------
     # 7. Summary.
     # ----------------------------------------------------------------
-    console.print(Rule("Summary", style="bold"))
+    console.print(Rule("Summary", style=f"bold {theme.rule_style}"))
     table = Table(show_header=False)
     table.add_column("Metric", style="bold")
     table.add_column("Count", justify="right")
-    table.add_row("Allocated (manual)", f"[green]{total_allocated}[/green]")
-    table.add_row("Allocated (auto-rule)", f"[cyan]{total_auto}[/cyan]")
+    table.add_row("Allocated (manual)", f"[success]{total_allocated}[/success]")
+    table.add_row("Allocated (auto-rule)", f"[accent]{total_auto}[/accent]")
     table.add_row("Skipped", f"[dim]{total_skipped}[/dim]")
     console.print(table)
     if rules:
@@ -985,6 +986,7 @@ def _run_backfill(
     is_flag=True,
     help="Disable rich output (auto-disabled when not a TTY).",
 )
+@theme_option
 def cli_cmd(
     url: str | None,
     username: str | None,
@@ -996,9 +998,11 @@ def cli_cmd(
     budget: str,
     verbose: bool,
     plain: bool,
+    theme_name: str,
 ) -> None:
     """CLI entry point for the budget backfill tool."""
-    console = Console(stderr=False)
+    theme = get_theme(theme_name)
+    console = Console(theme=theme.rich, stderr=False)
     interactive = console.is_terminal and not plain
     _setup_logging(verbose, interactive, console=console)
 
@@ -1017,7 +1021,7 @@ def cli_cmd(
             if interactive:
                 with console.status("[bold]Authenticating…"):
                     client.authenticate()
-                console.print("[green]Authenticated.[/green]")
+                console.print("[success]Authenticated.[/success]")
             else:
                 client.authenticate()
 
@@ -1071,7 +1075,7 @@ def cli_cmd(
                     f"[bold]Monthly target (target_balance):[/bold] {funding_amount}\n"
                     f"[bold]Rules file:[/bold] {_RULES_PATH}",
                     title="Backfill Configuration",
-                    border_style="blue",
+                    border_style=theme.border_style,
                 )
             )
 
@@ -1082,6 +1086,7 @@ def cli_cmd(
                 unallocated_id,
                 funding_amount,
                 console=console,
+                theme=theme,
             )
 
     except AuthenticationError as e:
