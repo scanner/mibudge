@@ -103,6 +103,43 @@ const budgetNames = computed(() => {
   return map;
 });
 
+interface DateGroup {
+  date: string;
+  label: string;
+  transactions: Transaction[];
+}
+
+function formatDateHeader(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (d.getTime() === today.getTime()) return "Today";
+  if (d.getTime() === yesterday.getTime()) return "Yesterday";
+
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+const displayTransactions = computed(() => {
+  const map = new Map<string, DateGroup>();
+  for (const tx of budgetTransactions.value) {
+    const date = tx.transaction_date.slice(0, 10);
+    let group = map.get(date);
+    if (!group) {
+      group = { date, label: formatDateHeader(date), transactions: [] };
+      map.set(date, group);
+    }
+    group.transactions.push(tx);
+  }
+  return Array.from(map.values()).sort((a, b) => (a.date > b.date ? -1 : 1));
+});
+
 async function loadBudgetTransactions() {
   txLoading.value = true;
   try {
@@ -494,17 +531,26 @@ async function submitMove() {
             <div v-for="i in 3" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
           </div>
 
-          <div v-else-if="budgetTransactions.length > 0" class="space-y-2">
-            <TransactionRow
-              v-for="tx in budgetTransactions"
-              :key="tx.id"
-              :transaction="tx"
-              :allocations="budgetAllocsByTx.get(tx.id)"
-              :budget-names="budgetNames"
-              :unallocated-budget-id="ctx.unallocatedBudgetId"
-              removable
-              @remove="onRemoveTransaction"
-            />
+          <div v-else-if="displayTransactions.length > 0" class="space-y-4">
+            <section v-for="group in displayTransactions" :key="group.date">
+              <h3
+                class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 backdrop-blur-sm"
+              >
+                {{ group.label }}
+              </h3>
+              <div class="space-y-2">
+                <TransactionRow
+                  v-for="tx in group.transactions"
+                  :key="tx.id"
+                  :transaction="tx"
+                  :allocations="budgetAllocsByTx.get(tx.id)"
+                  :budget-names="budgetNames"
+                  :unallocated-budget-id="ctx.unallocatedBudgetId"
+                  removable
+                  @remove="onRemoveTransaction"
+                />
+              </div>
+            </section>
           </div>
 
           <p v-else class="py-4 text-center text-sm text-neutral-500">
