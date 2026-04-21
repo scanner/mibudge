@@ -279,7 +279,8 @@ def _load_rules(budget_id: str) -> dict[str, bool]:
         budget_id: UUID of the target budget.
 
     Returns:
-        Dict mapping normalized vendor name to ``True`` (always allocate).
+        Dict mapping normalized vendor name to a bool: ``True`` means
+        always allocate, ``False`` means always skip.
         Empty dict if the file does not exist or cannot be read.
     """
     if not _RULES_PATH.exists():
@@ -306,7 +307,8 @@ def _save_rules(budget_id: str, rules: dict[str, bool]) -> None:
 
     Args:
         budget_id: UUID of the target budget.
-        rules: Dict mapping normalized vendor name to ``True``.
+        rules: Dict mapping normalized vendor name to a bool (``True``
+            = always allocate, ``False`` = always skip).
     """
     _RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
@@ -673,9 +675,9 @@ def _process_month(
         vendor = _extract_vendor(raw_desc)
         vendor_key = _normalize_vendor(vendor)
 
-        # Session-level skip set (user pressed 's' for this vendor earlier).
+        # Skip vendors flagged either this session or by a saved rule.
         if vendor_key in skip_vendors:
-            console.print(f"  [dim]skipping {vendor} (session rule)[/dim]")
+            console.print(f"  [dim]skipping {vendor} (skip rule)[/dim]")
             skipped += 1
             continue
 
@@ -689,9 +691,8 @@ def _process_month(
 
         if choice == "s":
             skip_vendors.add(vendor_key)
-            console.print(
-                f"  [dim]Skipping all '{vendor}' transactions this session.[/dim]"
-            )
+            rules[vendor_key] = False
+            console.print(f"  [dim]Saved rule: always skip '{vendor}'.[/dim]")
             skipped += 1
             continue
 
@@ -804,9 +805,12 @@ def _run_backfill(
     # 4. Load vendor auto-rules.
     # ----------------------------------------------------------------
     rules = _load_rules(target_budget["id"])
+    always_alloc = sum(1 for v in rules.values() if v is True)
+    always_skip = sum(1 for v in rules.values() if v is False)
     if rules:
         console.print(
-            f"[dim]Loaded {len(rules)} vendor rule(s) for this budget.[/dim]"
+            f"[dim]Loaded {always_alloc} always-allocate and "
+            f"{always_skip} always-skip rule(s) for this budget.[/dim]"
         )
 
     # ----------------------------------------------------------------
@@ -829,7 +833,9 @@ def _run_backfill(
     total_allocated = 0
     total_auto = 0
     total_skipped = 0
-    skip_vendors: set[str] = set()  # session-level skip list (vendor keys)
+    # Pre-populate skip set from saved rules so persistent skips take
+    # effect immediately without prompting.
+    skip_vendors: set[str] = {k for k, v in rules.items() if v is False}
 
     for month_idx, (year, month) in enumerate(sorted_months):
         txs = months[(year, month)]
@@ -909,8 +915,11 @@ def _run_backfill(
     table.add_row("Skipped", f"[dim]{total_skipped}[/dim]")
     console.print(table)
     if rules:
+        n_alloc = sum(1 for v in rules.values() if v is True)
+        n_skip = sum(1 for v in rules.values() if v is False)
         console.print(
-            f"[dim]{len(rules)} vendor rule(s) saved to {_RULES_PATH}[/dim]"
+            f"[dim]{n_alloc} always-allocate, {n_skip} always-skip "
+            f"rule(s) saved to {_RULES_PATH}[/dim]"
         )
 
 
