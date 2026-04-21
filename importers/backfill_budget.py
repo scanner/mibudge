@@ -962,8 +962,8 @@ def _run_backfill(
     "--trust-local-certs",
     is_flag=True,
     help=(
-        "Trust the project-local mkcert cert at "
-        "deployment/ssl/ssl_crt.pem (relative to the current directory)."
+        "Trust the mkcert root CA (located via `mkcert -CAROOT`). "
+        "Required when connecting to a local dev server using mkcert TLS."
     ),
 )
 @click.option(

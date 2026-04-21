@@ -12,9 +12,12 @@ set -o nounset
 wait-for-it --service "${REDIS_HOST:-redis}:${REDIS_PORT:-6379}" -- echo "Redis available"
 
 # If SSL certs are mounted, start with TLS; otherwise start without.
+# SSL_CERT_FILE / SSL_KEY_FILE come from .env (filenames within deployment/ssl/).
+# Fall back to the unprefixed names for single-host setups or prod.
 #
-_CERT="/mnt/ssl/ssl_crt.pem"
-_KEY="/mnt/ssl/ssl_key.pem"
+_SSL_DIR="/mnt/ssl"
+_CERT="${_SSL_DIR}/${SSL_CERT_FILE:-ssl_crt.pem}"
+_KEY="${_SSL_DIR}/${SSL_KEY_FILE:-ssl_key.pem}"
 
 if [ -f "${_CERT}" ] && [ -f "${_KEY}" ]; then
     echo "Starting runserver_plus with TLS.."

@@ -1319,32 +1319,44 @@ def _verify_final_balance(
 ########################################################################
 ########################################################################
 #
-# Project-relative path to the mkcert-issued server cert used by the
-# local dev stack. Opt-in via --trust-local-certs / MIBUDGE_TRUST_LOCAL_CERTS
-# because trusting arbitrary local files is not a safe default.
-_LOCAL_CA_BUNDLE = Path("deployment") / "ssl" / "ssl_crt.pem"
-
-
 def _resolve_local_ca_bundle() -> str:
     """
-    Return the path to the project-local dev CA bundle.
+    Return the path to the mkcert root CA that signed the local dev cert.
 
-    Only used when the caller explicitly opts in (via CLI flag or
-    env var) because we do not want to silently trust files based on
-    the current working directory.
+    Only used when the caller explicitly opts in (via CLI flag or env var)
+    because trusting arbitrary local CAs is not a safe default.
+
+    Python's ssl module does not use the macOS Keychain, so we must pass
+    the mkcert root CA explicitly rather than relying on system trust.
 
     Returns:
-        Absolute path to ``deployment/ssl/ssl_crt.pem``.
+        Absolute path to the mkcert rootCA.pem.
 
     Raises:
-        click.ClickException: If the expected file does not exist
-            (e.g. the importer is being run outside the project root).
+        click.ClickException: If mkcert is not installed or its CA root
+            cannot be found.
     """
-    path = Path.cwd() / _LOCAL_CA_BUNDLE
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["mkcert", "-CAROOT"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(
+            "mkcert not found. Install it or pass --ca-bundle explicitly."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise click.ClickException(
+            f"mkcert -CAROOT failed: {exc.stderr.strip()}"
+        ) from exc
+    path = Path(result.stdout.strip()) / "rootCA.pem"
     if not path.is_file():
         raise click.ClickException(
-            f"Local CA bundle not found at {path}. Run the importer "
-            f"from the project root, or pass --ca-bundle explicitly."
+            f"mkcert root CA not found at {path}. Run `mkcert -install` first."
         )
     return str(path)
 
@@ -1614,8 +1626,8 @@ def _print_summary(
     "--trust-local-certs",
     is_flag=True,
     help=(
-        "Trust the project-local mkcert cert at "
-        "deployment/ssl/ssl_crt.pem (relative to the current directory)."
+        "Trust the mkcert root CA (located via `mkcert -CAROOT`). "
+        "Required when connecting to a local dev server using mkcert TLS."
     ),
 )
 @click.option(

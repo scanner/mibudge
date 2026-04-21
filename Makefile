@@ -1,5 +1,6 @@
 # -*- Mode: Makefile -*-
 ROOT_DIR := $(shell git rev-parse --show-toplevel)
+HOSTNAME := $(shell hostname)
 include $(ROOT_DIR)/Make.rules
 
 DOCKER_BUILDKIT := 1
@@ -29,12 +30,12 @@ dbs:
 ssl:
 	@mkdir -p $(ROOT_DIR)/deployment/ssl
 
-deployment/ssl/ssl_key.pem deployment/ssl/ssl_crt.pem: | ssl
-	@mkcert -key-file $(ROOT_DIR)/deployment/ssl/ssl_key.pem \
-                -cert-file $(ROOT_DIR)/deployment/ssl/ssl_crt.pem \
-                `hostname` localhost 127.0.0.1 ::1
+deployment/ssl/$(HOSTNAME)-ssl_key.pem deployment/ssl/$(HOSTNAME)-ssl_crt.pem: | ssl
+	@mkcert -key-file $(ROOT_DIR)/deployment/ssl/$(HOSTNAME)-ssl_key.pem \
+                -cert-file $(ROOT_DIR)/deployment/ssl/$(HOSTNAME)-ssl_crt.pem \
+                $(HOSTNAME) localhost 127.0.0.1 ::1
 
-certs: ssl deployment/ssl/ssl_key.pem deployment/ssl/ssl_crt.pem	## uses `mkcert` to create certificates for local development.
+certs: ssl deployment/ssl/$(HOSTNAME)-ssl_key.pem deployment/ssl/$(HOSTNAME)-ssl_crt.pem	## uses `mkcert` to create certificates for local development.
 
 up: build dirs certs	## Build backend stack, bring it up, then run Vite in the foreground
 	@docker compose up --remove-orphans --detach
