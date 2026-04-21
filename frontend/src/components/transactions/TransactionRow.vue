@@ -77,11 +77,6 @@ const allocInfo = computed<{
     return { text: "", isUnallocated: false, isSplit: false, budgets: [] };
   }
 
-  // Credits go to unallocated by design — don't prompt for assignment.
-  if (Number.parseFloat(props.transaction.amount) > 0) {
-    return { text: "", isUnallocated: false, isSplit: false, budgets: [] };
-  }
-
   const unallocId = props.unallocatedBudgetId;
   const names = props.budgetNames;
 
