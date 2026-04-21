@@ -2,6 +2,7 @@
 
 # system imports
 from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
 
 # 3rd party imports
@@ -19,7 +20,6 @@ from moneypools.models import (
     InternalTransaction,
     Transaction,
     TransactionAllocation,
-    TransactionCategory,
 )
 from tests.moneypools.factories import (
     BankAccountFactory,
@@ -753,250 +753,120 @@ class TestTransactionAPI:
 ########################################################################
 #
 class TestTransactionAllocationAPI:
-    """Tests for the /api/v1/allocations/ endpoint."""
+    """Tests for the /api/v1/allocations/ endpoint.
+
+    The endpoint is read-only.  All allocation mutations (create,
+    update, delete) must go through POST /api/v1/transactions/<id>/splits/.
+    """
 
     ####################################################################
     #
-    def test_create_allocation(
-        self,
-        auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        budget_factory: Callable[..., Budget],
-    ) -> None:
+    def test_list_requires_auth(self, api_client: APIClient) -> None:
         """
-        GIVEN: a transaction with room for more allocations
-        WHEN:  POST /api/v1/allocations/ with transaction, budget, and amount
-        THEN:  the allocation is created
+        GIVEN: an unauthenticated client
+        WHEN:  GET /api/v1/allocations/
+        THEN:  401 Unauthorized
         """
-        account = bank_account_factory(owners=[user])
-        tx = transaction_factory(bank_account=account, amount=Money(100, "USD"))
-        budget = budget_factory(bank_account=account)
-        response = auth_client.post(
-            reverse("api_v1:transactionallocation-list"),
-            {
-                "transaction": str(tx.id),
-                "budget": str(budget.id),
-                "amount": "50.00",
-                "category": TransactionCategory.GROCERIES.value,
-            },
-        )
-        assert response.status_code == status.HTTP_201_CREATED
+        response = api_client.get(reverse("api_v1:transactionallocation-list"))
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     ####################################################################
     #
-    def test_allocation_exceeds_transaction_amount(
-        self,
-        auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-    ) -> None:
-        """
-        GIVEN: a transaction of $100
-        WHEN:  creating an allocation for $150
-        THEN:  400 Bad Request with a validation error
-        """
-        account = bank_account_factory(owners=[user])
-        tx = transaction_factory(bank_account=account, amount=Money(100, "USD"))
-        response = auth_client.post(
-            reverse("api_v1:transactionallocation-list"),
-            {
-                "transaction": str(tx.id),
-                "amount": "150.00",
-            },
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-    ####################################################################
-    #
-    def test_update_allocation_budget(
+    def test_list_returns_own_allocations(
         self,
         auth_client: APIClient,
         user: User,
         bank_account_factory: Callable[..., BankAccount],
         transaction_factory: Callable[..., Transaction],
         transaction_allocation_factory: Callable[..., TransactionAllocation],
-        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: two allocations owned by the authenticated user
+        WHEN:  GET /api/v1/allocations/
+        THEN:  both allocations are returned
+        """
+        account = bank_account_factory(owners=[user])
+        tx = transaction_factory(bank_account=account)
+        transaction_allocation_factory(
+            transaction=tx, budget=account.unallocated_budget
+        )
+        transaction_allocation_factory(
+            transaction=tx, budget=account.unallocated_budget
+        )
+        response = auth_client.get(reverse("api_v1:transactionallocation-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) >= 2
+
+    ####################################################################
+    #
+    def test_retrieve_allocation(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
     ) -> None:
         """
         GIVEN: an existing allocation
-        WHEN:  PATCH with a different budget
-        THEN:  the budget is reassigned
+        WHEN:  GET /api/v1/allocations/<id>/
+        THEN:  200 OK with the allocation's data
         """
         account = bank_account_factory(owners=[user])
         tx = transaction_factory(bank_account=account)
         alloc = transaction_allocation_factory(
-            transaction=tx,
-            budget=account.unallocated_budget,
+            transaction=tx, budget=account.unallocated_budget
         )
-        new_budget = budget_factory(bank_account=account)
-        response = auth_client.patch(
+        response = auth_client.get(
             reverse(
                 "api_v1:transactionallocation-detail",
                 kwargs={"id": alloc.id},
-            ),
-            {"budget": str(new_budget.id)},
+            )
         )
         assert response.status_code == status.HTTP_200_OK
-        alloc.refresh_from_db()
-        assert alloc.budget == new_budget
-
-    ####################################################################
-    #
-    def test_update_allocation_amount(
-        self,
-        auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        transaction_allocation_factory: Callable[..., TransactionAllocation],
-        budget_factory: Callable[..., Budget],
-    ) -> None:
-        """
-        GIVEN: a -100 transaction with a -100 allocation
-        WHEN:  PATCH the allocation amount to -60
-        THEN:  the amount is updated and the budget balance reflects
-               the delta
-        """
-        account = bank_account_factory(owners=[user])
-        budget = budget_factory(bank_account=account, balance=Money(500, "USD"))
-        tx = transaction_factory(
-            bank_account=account, amount=Money(-100, "USD")
-        )
-        alloc = transaction_allocation_factory(
-            transaction=tx, budget=budget, amount=Money(-100, "USD")
-        )
-        budget.refresh_from_db()
-        assert budget.balance == Money(400, "USD")
-
-        response = auth_client.patch(
-            reverse(
-                "api_v1:transactionallocation-detail",
-                kwargs={"id": alloc.id},
-            ),
-            {"amount": "-60.00"},
-        )
-        assert response.status_code == status.HTTP_200_OK
-
-        alloc.refresh_from_db()
-        assert alloc.amount == Money(-60, "USD")
-
-        budget.refresh_from_db()
-        assert budget.balance == Money(440, "USD")
-
-    ####################################################################
-    #
-    def test_update_allocation_amount_exceeds_transaction(
-        self,
-        auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        transaction_allocation_factory: Callable[..., TransactionAllocation],
-        budget_factory: Callable[..., Budget],
-    ) -> None:
-        """
-        GIVEN: a -100 transaction with a -100 allocation
-        WHEN:  PATCH the allocation amount to -150
-        THEN:  400 Bad Request — total would exceed the transaction
-        """
-        account = bank_account_factory(owners=[user])
-        budget = budget_factory(bank_account=account)
-        tx = transaction_factory(
-            bank_account=account, amount=Money(-100, "USD")
-        )
-        alloc = transaction_allocation_factory(
-            transaction=tx, budget=budget, amount=Money(-100, "USD")
-        )
-        response = auth_client.patch(
-            reverse(
-                "api_v1:transactionallocation-detail",
-                kwargs={"id": alloc.id},
-            ),
-            {"amount": "-150.00"},
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-    ####################################################################
-    #
-    def test_update_allocation_rejects_sign_flip(
-        self,
-        auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        transaction_allocation_factory: Callable[..., TransactionAllocation],
-        budget_factory: Callable[..., Budget],
-    ) -> None:
-        """
-        GIVEN: a -50 allocation (debit)
-        WHEN:  PATCH the amount to +50 (credit)
-        THEN:  400 Bad Request — sign change is rejected
-        """
-        account = bank_account_factory(owners=[user])
-        budget = budget_factory(bank_account=account)
-        tx = transaction_factory(
-            bank_account=account, amount=Money(-100, "USD")
-        )
-        alloc = transaction_allocation_factory(
-            transaction=tx, budget=budget, amount=Money(-50, "USD")
-        )
-        response = auth_client.patch(
-            reverse(
-                "api_v1:transactionallocation-detail",
-                kwargs={"id": alloc.id},
-            ),
-            {"amount": "50.00"},
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["id"] == str(alloc.id)
 
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "same_owner",
-        [True, False],
-        ids=["same-owner-different-account", "different-owner"],
+        "method,use_detail",
+        [
+            ("post", False),
+            ("put", True),
+            ("patch", True),
+            ("delete", True),
+        ],
+        ids=["post", "put", "patch", "delete"],
     )
-    def test_cross_account_budget_rejected(
+    def test_mutation_methods_not_allowed(
         self,
         auth_client: APIClient,
         user: User,
-        user_factory: Callable[..., User],
         bank_account_factory: Callable[..., BankAccount],
         transaction_factory: Callable[..., Transaction],
         transaction_allocation_factory: Callable[..., TransactionAllocation],
-        budget_factory: Callable[..., Budget],
-        same_owner: bool,
+        method: str,
+        use_detail: bool,
     ) -> None:
         """
-        GIVEN: a transaction on account A and a budget on account B
-               (B owned by the same user or a different user)
-        WHEN:  PATCH the allocation to point at the cross-account budget
-        THEN:  400 Bad Request — budget must be in the same account
+        GIVEN: an existing allocation
+        WHEN:  POST, PUT, PATCH, or DELETE is sent to the allocations endpoint
+        THEN:  405 Method Not Allowed -- mutations go through /splits/
         """
-        account_a = bank_account_factory(owners=[user])
-        other_owner = [user] if same_owner else [user_factory()]
-        account_b = bank_account_factory(owners=other_owner)
-        budget_b = budget_factory(bank_account=account_b)
-        tx = transaction_factory(
-            bank_account=account_a, amount=Money(-100, "USD")
-        )
+        account = bank_account_factory(owners=[user])
+        tx = transaction_factory(bank_account=account)
         alloc = transaction_allocation_factory(
-            transaction=tx,
-            budget=account_a.unallocated_budget,
-            amount=Money(-100, "USD"),
+            transaction=tx, budget=account.unallocated_budget
         )
-
-        response = auth_client.patch(
-            reverse(
+        if use_detail:
+            url = reverse(
                 "api_v1:transactionallocation-detail",
                 kwargs={"id": alloc.id},
-            ),
-            {"budget": str(budget_b.id)},
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+            )
+        else:
+            url = reverse("api_v1:transactionallocation-list")
+        response = getattr(auth_client, method)(url, {})
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 
 ########################################################################
@@ -1116,6 +986,19 @@ class TestTransactionSplitsAPI:
         assert unalloc_after == unalloc_before + Money(
             expected_unalloc_gain, "USD"
         )
+
+        # Verify budget_balance snapshots: each returned allocation is the
+        # only allocation for its budget in this test, so its budget_balance
+        # must equal the budget's current balance.
+        for alloc_data in response.data:
+            budget_in_db = Budget.objects.get(id=alloc_data["budget"])
+            assert (
+                Decimal(alloc_data["budget_balance"])
+                == budget_in_db.balance.amount
+            ), (
+                f"budget_balance snapshot mismatch for budget {alloc_data['budget']}: "
+                f"response={alloc_data['budget_balance']} db={budget_in_db.balance.amount}"
+            )
 
     ####################################################################
     #
@@ -1294,6 +1177,73 @@ class TestTransactionSplitsAPI:
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    ####################################################################
+    #
+    def test_splits_on_past_transaction_propagates_running_balances(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: budget X with two allocations -- T1 (Jan 1, +$50) then
+               T2 (Jan 15, +$30) -- so running balances are $50 and $80
+        WHEN:  POST splits on T1 changes X's share from $50 to $20
+        THEN:  T1's budget_balance snapshot becomes $20 and T2's
+               downstream snapshot is propagated forward to $50
+               (not left as a stale $80)
+        """
+        account = bank_account_factory(owners=[user])
+        budget_x = budget_factory(bank_account=account, balance=Money(0, "USD"))
+
+        t1 = transaction_factory(
+            bank_account=account,
+            amount=Money(50, "USD"),
+            transaction_date=datetime(2024, 1, 1, tzinfo=UTC),
+        )
+        a1 = transaction_allocation_factory(
+            transaction=t1, budget=budget_x, amount=Money(50, "USD")
+        )
+
+        t2 = transaction_factory(
+            bank_account=account,
+            amount=Money(30, "USD"),
+            transaction_date=datetime(2024, 1, 15, tzinfo=UTC),
+        )
+        a2 = transaction_allocation_factory(
+            transaction=t2, budget=budget_x, amount=Money(30, "USD")
+        )
+
+        # Sanity-check initial snapshots before the splits call.
+        a1.refresh_from_db()
+        a2.refresh_from_db()
+        assert a1.budget_balance == Money(50, "USD")
+        assert a2.budget_balance == Money(80, "USD")
+
+        # Re-split T1: $20 to X, remainder to unallocated.
+        response = auth_client.post(
+            reverse("api_v1:transaction-splits", kwargs={"id": t1.id}),
+            {"splits": {str(budget_x.id): "20.00"}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        # T1's allocation for X is updated; its snapshot reflects the new balance.
+        a1.refresh_from_db()
+        assert a1.amount == Money(20, "USD")
+        assert a1.budget_balance == Money(20, "USD")
+
+        # T2's snapshot must be propagated forward: 20 + 30 = 50.
+        a2.refresh_from_db()
+        assert a2.budget_balance == Money(50, "USD")
+
+        # X's stored balance matches the final running total.
+        budget_x.refresh_from_db()
+        assert budget_x.balance == Money(50, "USD")
 
 
 ########################################################################

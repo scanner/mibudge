@@ -523,56 +523,24 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             "category. Orderable by created_at."
         ),
     ),
-    create=extend_schema(
-        summary="Create a transaction allocation",
-        description=(
-            "Allocate a portion of a transaction's amount to a "
-            "budget. Required: transaction (UUID) and amount. "
-            "Optional: budget (UUID, defaults to unallocated) and "
-            "category. The budget must belong to the same bank "
-            "account as the transaction. The total allocated across "
-            "all allocations for a transaction must not exceed the "
-            "transaction amount."
-        ),
-    ),
     retrieve=extend_schema(
         summary="Get allocation details",
         description="Return a single transaction allocation by UUID.",
     ),
-    update=extend_schema(
-        summary="Update an allocation",
-        description=(
-            "Full update of an allocation. After creation, budget, "
-            "amount, category, and memo are updatable. The budget "
-            "must belong to the same bank account as the transaction. "
-            "Amount changes must preserve the original sign (cannot "
-            "flip a debit to a credit) and the total across all "
-            "allocations must not exceed the transaction amount. "
-            "Transaction is immutable."
-        ),
-    ),
-    partial_update=extend_schema(
-        summary="Partially update an allocation",
-        description=(
-            "Partial update of an allocation. After creation, budget, "
-            "amount, category, and memo are updatable. The budget "
-            "must belong to the same bank account as the transaction. "
-            "Amount changes must preserve the original sign and must "
-            "not cause the total to exceed the transaction amount."
-        ),
-    ),
-    destroy=extend_schema(
-        summary="Delete an allocation",
-        description=(
-            "Delete a transaction allocation. Budget balance changes "
-            "are reversed by the pre_delete signal."
-        ),
-    ),
 )
 class TransactionAllocationViewSet(
-    AccountOwnerQuerySetMixin, viewsets.ModelViewSet
+    AccountOwnerQuerySetMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
 ):
-    """Budget allocations for transactions (supports split transactions)."""
+    """Read-only view of budget allocations for transactions.
+
+    All allocation mutations (create, update, delete) must go through the
+    transaction ``splits`` action (``POST /api/v1/transactions/<id>/splits/``).
+    This ensures ``budget_balance`` snapshots are always recorded correctly
+    and that running-balance recalculation on affected budgets is atomic.
+    """
 
     serializer_class = TransactionAllocationSerializer
     queryset = TransactionAllocation.objects.select_related(
