@@ -34,10 +34,11 @@ from .models import (
 # When a Transaction is imported, the import service creates a default
 # TransactionAllocation pointing at the unallocated budget.
 #
-# XXX Maybe the unallocated budget should be an object assigned to the bank
-#     account? (and then we do not care what its name is..)
+# NOTE: Proposing a logic change: When you create a transaction, it
+#       automatically gets a TransactionAllocation pointing at the unallocated
+#       budget.
 #
-UNALLOCATED_BUDGET_NAME = "Unallocated"  # XXX I18N this..
+UNALLOCATED_BUDGET_NAME = "Unallocated"
 
 
 ####################################################################
@@ -188,7 +189,9 @@ def budget_post_save(
     instance: Budget,
     **kwargs: Any,
 ) -> None:
-    """Create an associated fill-up goal budget when a recurring budget enables one.
+    """
+    Create an associated fill-up goal budget when a recurring budget
+    enables one.
 
     When a Recurring budget is saved with with_fillup_goal=True and no
     fill-up budget yet exists (fillup_goal_id is None), a type-A
@@ -231,7 +234,8 @@ def budget_pre_delete(
     instance: Budget,
     **kwargs: Any,
 ) -> None:
-    """Cascade-delete the associated fill-up goal when its parent is deleted.
+    """
+    Cascade-delete the associated fill-up goal when its parent is deleted.
 
     The fillup_goal FK uses SET_NULL so that directly deleting a fill-up
     budget doesn't cascade-delete the parent.  Here we handle the reverse:
