@@ -835,29 +835,33 @@ class TestTransactionAllocation:
         transaction_allocation_factory: Callable[..., TransactionAllocation],
     ) -> None:
         """
-        GIVEN: 20 transactions with allocations spread across 3 days
-        WHEN:  a new allocation is inserted in the middle (day 2)
-        THEN:  allocations before the insertion are untouched,
-               allocations at and after the insertion have correct
-               running balances
+        GIVEN: 21 transactions spread across 3 days, with the middle one
+               initially unallocated
+        WHEN:  1) 20 transactions are allocated (skipping the middle),
+                  and running balances are verified;
+               2) the middle transaction is then allocated, and running
+                  balances are verified;
+               3) the transaction immediately after the middle has its
+                  allocation moved to the unallocated budget, and running
+                  balances are verified
+        THEN:  budget_balance snapshots are correct at each stage
         """
         bank_account = bank_account_factory(available_balance=50000)
         budget = budget_factory(
             bank_account=bank_account,
             balance=Money(10000, USD),
         )
+        unallocated = bank_account.unallocated_budget
 
-        # 20 transactions: 7 on day 1, 6 on day 2, 7 on day 3.
-        # Each is a -100 debit.
+        # 21 transactions: 7 on each of 3 days.  Each is a -100 debit.
         days = [
             datetime(2026, 4, 6, tzinfo=UTC),
             datetime(2026, 4, 7, tzinfo=UTC),
             datetime(2026, 4, 8, tzinfo=UTC),
         ]
-        counts = [7, 6, 7]
         txns: list[Transaction] = []
-        for day, count in zip(days, counts):
-            for i in range(count):
+        for day in days:
+            for i in range(7):
                 txns.append(
                     transaction_factory(
                         bank_account=bank_account,
@@ -866,70 +870,69 @@ class TestTransactionAllocation:
                         raw_description=f"Tx {day.day}-{i}",
                     )
                 )
+        assert len(txns) == 21
 
-        # Allocate all 20 in chronological order.
-        for tx in txns:
+        # txns[10] is the middle transaction (0-based index 10 of 21).
+        mid_idx = 10
+        after_mid_idx = mid_idx + 1
+
+        def assert_running_balances() -> None:
+            """Re-fetch all budget allocations and verify running balances."""
+            budget.refresh_from_db()
+            allocs = list(
+                TransactionAllocation.objects.filter(budget=budget)
+                .order_by(
+                    "transaction__transaction_date",
+                    "transaction__created_at",
+                    "created_at",
+                )
+                .select_related("transaction")
+            )
+            total = sum(a.amount.amount for a in allocs)
+            running = budget.balance.amount - total
+            for a in allocs:
+                running += a.amount.amount
+                assert a.budget_balance.amount == running, (
+                    f"Allocation {a.pk} (tx date "
+                    f"{a.transaction.transaction_date}): "
+                    f"expected {running}, got {a.budget_balance.amount}"
+                )
+
+        # --- Phase 1: allocate all 20 transactions except the middle ---
+        for i, tx in enumerate(txns):
+            if i == mid_idx:
+                continue
             transaction_allocation_factory(
                 transaction=tx,
                 budget=budget,
                 amount=Money(-100, USD),
             )
 
-        # Snapshot budget_balance values before the insert.
-        allocs_before = {
-            a.pk: a.budget_balance.amount
-            for a in TransactionAllocation.objects.filter(
-                budget=budget
-            ).select_related("transaction")
-        }
+        assert TransactionAllocation.objects.filter(budget=budget).count() == 20
+        assert_running_balances()
 
-        # Insert a new -250 transaction in the middle of day 2.
-        mid_tx = transaction_factory(
-            bank_account=bank_account,
-            amount=Money(-250, USD),
-            transaction_date=days[1],
-            raw_description="Mid-insert",
-        )
+        # --- Phase 2: allocate the middle transaction ---
         transaction_allocation_factory(
-            transaction=mid_tx,
+            transaction=txns[mid_idx],
             budget=budget,
-            amount=Money(-250, USD),
+            amount=Money(-100, USD),
         )
 
-        # Re-fetch all allocations ordered chronologically.
-        all_allocs = list(
-            TransactionAllocation.objects.filter(budget=budget)
-            .order_by(
-                "transaction__transaction_date",
-                "transaction__created_at",
-                "created_at",
-            )
-            .select_related("transaction")
+        assert TransactionAllocation.objects.filter(budget=budget).count() == 21
+        assert_running_balances()
+
+        # --- Phase 3: move the allocation after the middle to the
+        #              unallocated budget (simulates removing a
+        #              transaction from a budget) ---
+        alloc_to_move = TransactionAllocation.objects.get(
+            transaction=txns[after_mid_idx],
+            budget=budget,
         )
-        assert len(all_allocs) == 21
+        alloc_to_move.budget = unallocated
+        alloc_to_move.save()
 
-        # Find the position of the inserted allocation.
-        insert_idx = next(
-            i for i, a in enumerate(all_allocs) if a.transaction_id == mid_tx.id
-        )
-
-        # Allocations before the insert must be untouched.
-        for a in all_allocs[:insert_idx]:
-            assert a.budget_balance.amount == allocs_before[a.pk]
-
-        # Verify the full running balance is correct.
-        # Baseline: budget balance minus sum of all allocation
-        # amounts.
-        total_alloc = sum(a.amount.amount for a in all_allocs)
-        running = budget.balance.amount - total_alloc
-        for a in all_allocs:
-            running += a.amount.amount
-            assert a.budget_balance.amount == running, (
-                f"Allocation {a.pk} (tx date "
-                f"{a.transaction.transaction_date}): "
-                f"expected {running}, got "
-                f"{a.budget_balance.amount}"
-            )
+        assert TransactionAllocation.objects.filter(budget=budget).count() == 20
+        assert_running_balances()
 
     ####################################################################
     #
