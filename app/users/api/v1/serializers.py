@@ -13,5 +13,6 @@ class UserSerializer(serializers.ModelSerializer):
             "url": {
                 "view_name": "api_v1:user-detail",
                 "lookup_field": "username",
-            }
+            },
+            "username": {"read_only": True},
         }

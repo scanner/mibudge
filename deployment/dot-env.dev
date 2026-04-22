@@ -10,6 +10,7 @@
 DEBUG=True
 DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
 DJANGO_ADMIN_URL=admin/
+ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
 
 # Database (SQLite default is baked into settings.py; uncomment for Postgres)
 # DATABASE_URL=postgres://mibudge:mibudge@localhost:5432/mibudge

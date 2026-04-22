@@ -68,18 +68,29 @@ class UserViewSet(
     ####################################################################
     #
     @extend_schema(
-        summary="Get current user profile",
+        summary="Get or update current user profile",
         description=(
-            "Return the authenticated user's own profile. Available "
-            "to any authenticated user (not restricted to staff)."
+            "GET returns the authenticated user's own profile. "
+            "PATCH allows updating the name field. "
+            "Available to any authenticated user (not restricted to staff)."
         ),
     )
     @action(
         detail=False,
-        methods=["GET"],
+        methods=["GET", "PATCH"],
         permission_classes=[IsAuthenticated],
     )
     def me(self, request):
-        """Return the authenticated user's own profile."""
+        """Return or partially update the authenticated user's own profile."""
+        if request.method == "PATCH":
+            serializer = UserSerializer(
+                request.user,
+                data=request.data,
+                partial=True,
+                context={"request": request},
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(status=status.HTTP_200_OK, data=serializer.data)
         serializer = UserSerializer(request.user, context={"request": request})
         return Response(status=status.HTTP_200_OK, data=serializer.data)

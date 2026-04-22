@@ -1,6 +1,6 @@
 //
-// Bank accounts — full CRUD.  After creation, only `name` is mutable;
-// all balance and currency fields are frozen (backend enforces this).
+// Bank accounts — full CRUD.  After creation, `name` and `account_number`
+// are mutable; balances, currency, bank, and account_type are frozen.
 //
 
 import { useAuthStore } from "@/stores/auth";

@@ -27,7 +27,8 @@ export type BudgetType = "G" | "R" | "A" | "C";
 export interface BankAccount {
   id: string;
   name: string;
-  bank: string;
+  bank: string; // UUID
+  owners: string[]; // list of user PKs — read-only, set server-side on create
   account_type: AccountType;
   account_number: string | null;
   currency: string;

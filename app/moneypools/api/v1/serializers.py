@@ -129,13 +129,14 @@ class BankAccountSerializer(serializers.ModelSerializer):
     """Serializer for bank accounts.
 
     On create the caller supplies name, bank (UUID), account_type,
-    and optionally currency, account_number, and initial balances.
+    account_number, and optionally currency and initial balances.
     The view adds the requesting user to owners.  The unallocated
     budget is auto-created by the post_save signal and returned in
     the response.
 
-    After creation only name is updatable.  Currency, account_number,
-    and balances are immutable once the account exists.
+    After creation, name and account_number are updatable.  Currency,
+    account_type, bank, and balances are immutable once the account
+    exists.
 
     Group assignment is not yet supported via the API.
     """
@@ -146,6 +147,15 @@ class BankAccountSerializer(serializers.ModelSerializer):
     bank = serializers.SlugRelatedField(
         slug_field="id",
         queryset=Bank.objects.all(),
+    )
+
+    # Return usernames instead of raw PKs so the frontend can display
+    # owner identities without a separate user lookup.
+    #
+    owners = serializers.SlugRelatedField(
+        slug_field="username",
+        many=True,
+        read_only=True,
     )
 
     # Balances are editable=False on the model.  Override with
@@ -195,6 +205,27 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
         ]
+        extra_kwargs = {
+            "account_number": {"required": False},
+        }
+
+    ####################################################################
+    #
+    def validate_account_number(self, value: str | None) -> str | None:
+        """Require account_number on create; allow updates.
+
+        Args:
+            value: The account number string, or None.
+
+        Returns:
+            The validated value.
+
+        Raises:
+            ValidationError: If creating and no account number supplied.
+        """
+        if self.instance is None and not value:
+            raise serializers.ValidationError("Account number is required.")
+        return value
 
     ####################################################################
     #

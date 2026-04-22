@@ -35,12 +35,13 @@ async function bootstrap() {
   // and the user lands directly on their intended route.  A failure
   // here is expected (cold boot with no session) and leaves the store
   // unauthenticated; the router guard will bounce the user to /login/.
-  const authenticated = await useAuthStore().refresh();
+  const auth = useAuthStore();
+  const authenticated = await auth.refresh();
   if (authenticated) {
-    // Load account context so TopBar and account-scoped views have
-    // data on cold boot (page refresh).  On a fresh login this is also
-    // called by LoginView, but that's safe -- init() is idempotent.
-    await useAccountContextStore().init();
+    // Load user profile and account context in parallel on cold boot.
+    // On a fresh login these are also called by LoginView, but that's
+    // safe -- both are idempotent.
+    await Promise.all([auth.loadUser(), useAccountContextStore().init()]);
   }
 
   app.use(router);

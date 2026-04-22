@@ -64,11 +64,13 @@ SITE_ID = 1
 REPOSITORY_URL = env(
     "REPOSITORY_URL", default="https://github.com/scanner/mibudge"
 )
+ADMINISTRATIVE_EMAIL_ADDRESS = env("ADMINISTRATIVE_EMAIL_ADDRESS", default="")
 
 # Settings exported to the Django template context via django-settings-export.
 # Access in templates as {{ settings.VARIABLE_NAME }}.
 #
 SETTINGS_EXPORT = [
+    "ADMINISTRATIVE_EMAIL_ADDRESS",
     "REPOSITORY_URL",
 ]
 USE_I18N = False

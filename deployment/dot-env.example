@@ -1,6 +1,7 @@
 # General
 # ------------------------------------------------------------------------------
 DJANGO_SETTINGS_MODULE=config.settings
+ADMINISTRATIVE_EMAIL_ADDRESS=admin@example.net
 DJANGO_SECRET_KEY=changeme-generate-a-real-secret-key
 DJANGO_ADMIN_URL=changeme-random-admin-path/
 DJANGO_ALLOWED_HOSTS=.example.com
