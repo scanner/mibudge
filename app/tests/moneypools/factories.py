@@ -112,6 +112,8 @@ class BudgetFactory(DjangoModelFactory):
     class Meta:
         model = Budget
         exclude = ("has_target_date", "target_balance_offset")
+        # _create calls BudgetService.create so fill-up goal creation
+        # and other service-layer invariants are exercised by tests.
 
     name = factory.Faker("name")
     bank_account = factory.SubFactory(BankAccountFactory)
