@@ -21,7 +21,12 @@ from moneypools.models import (
 
 # app imports
 #
+from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import (
+    transaction_allocation as transaction_allocation_svc,
+)
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 
@@ -123,18 +128,22 @@ class TestBudget:
     def test_fillup_budget_deleted_when_parent_deleted(
         self,
         budget_factory: Callable[..., Budget],
+        user_factory: Callable[..., User],
     ) -> None:
         """
         GIVEN: a Recurring budget with an associated fill-up goal
-        WHEN:  the parent budget is deleted
+        WHEN:  the parent budget is deleted via BudgetService.delete
         THEN:  the fill-up goal budget is also deleted
         """
-        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget = budget_factory(
+            budget_type="R", with_fillup_goal=True, balance=0
+        )
         budget.refresh_from_db()
         fillup_id = budget.fillup_goal_id
         assert fillup_id is not None
 
-        budget.delete()
+        actor = user_factory()
+        budget_svc.delete(budget, actor=actor)
 
         assert not Budget.objects.filter(id=fillup_id).exists()
 
@@ -537,9 +546,13 @@ class TestTransactionAllocation:
         )
         assert alloc.budget == bank_account.unallocated_budget
 
-        # Reassign the allocation to the destination budget
-        alloc.budget = dst_budget
-        alloc.save()
+        # Reassign the allocation to the destination budget via the service
+        transaction_allocation_svc.delete(alloc)
+        transaction_allocation_svc.create(
+            transaction=txn,
+            budget=dst_budget,
+            amount=Money(TRANSACTION_AMT, USD),
+        )
 
         assert bank_account.unallocated_budget is not None
         unalloc = Budget.objects.get(id=bank_account.unallocated_budget.id)
@@ -577,7 +590,7 @@ class TestTransactionAllocation:
         )
         assert budget.balance == Money(BUDGET_BAL + ALLOC_AMT, USD)
 
-        alloc.delete()
+        transaction_allocation_svc.delete(alloc)
 
         budget = Budget.objects.get(id=budget.id)
         assert budget.balance == Money(BUDGET_BAL, USD)
@@ -612,8 +625,7 @@ class TestTransactionAllocation:
         )
         assert budget.balance == Money(BUDGET_BAL + OLD_AMT, USD)
 
-        alloc.amount = Money(NEW_AMT, USD)
-        alloc.save()
+        transaction_allocation_svc.update_amount(alloc, Money(NEW_AMT, USD))
 
         budget = Budget.objects.get(id=budget.id)
         assert budget.balance == Money(BUDGET_BAL + NEW_AMT, USD)
@@ -852,8 +864,12 @@ class TestTransactionAllocation:
             transaction=txns[after_mid_idx],
             budget=budget,
         )
-        alloc_to_move.budget = unallocated
-        alloc_to_move.save()
+        transaction_allocation_svc.delete(alloc_to_move)
+        transaction_allocation_svc.create(
+            transaction=txns[after_mid_idx],
+            budget=unallocated,
+            amount=Money(-100, USD),
+        )
 
         assert TransactionAllocation.objects.filter(budget=budget).count() == 20
         assert_running_balances()

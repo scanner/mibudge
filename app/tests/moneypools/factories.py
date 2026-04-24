@@ -7,6 +7,7 @@ from typing import Any
 import factory
 import factory.fuzzy
 from django.contrib.auth import get_user_model
+from djmoney.money import Money
 from factory.django import DjangoModelFactory
 
 from moneypools.models import (
@@ -17,6 +18,12 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
     TransactionCategory,
+    get_default_currency,
+)
+from moneypools.service import budget as budget_svc
+from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import (
+    transaction_allocation as transaction_allocation_svc,
 )
 
 # XXX If we want to separate 'moneypools' into its own app we will
@@ -135,6 +142,23 @@ class BudgetFactory(DjangoModelFactory):
         no_declaration=None,
     )
 
+    @classmethod
+    def _create(cls, model_class: type, *args: object, **kwargs: Any) -> Budget:
+        bank_account = kwargs.pop("bank_account")
+        name = kwargs.pop("name")
+        budget_type = kwargs.pop("budget_type")
+        funding_type = kwargs.pop("funding_type")
+        target_balance = kwargs.pop("target_balance")
+
+        return budget_svc.create(
+            bank_account=bank_account,
+            name=name,
+            budget_type=budget_type,
+            funding_type=funding_type,
+            target_balance=target_balance,
+            **kwargs,
+        )
+
 
 ########################################################################
 ########################################################################
@@ -167,6 +191,22 @@ class TransactionAllocationFactory(DjangoModelFactory):
     amount = factory.LazyAttribute(lambda o: o.transaction.amount)
     category = factory.fuzzy.FuzzyChoice(TransactionCategory.values)
 
+    @classmethod
+    def _create(
+        cls, model_class: type, *args: object, **kwargs: Any
+    ) -> TransactionAllocation:
+        transaction = kwargs.pop("transaction")
+        budget = kwargs.pop("budget")
+        amount = kwargs.pop("amount")
+        if not hasattr(amount, "amount"):
+            amount = Money(amount, get_default_currency())
+        return transaction_allocation_svc.create(
+            transaction=transaction,
+            budget=budget,
+            amount=amount,
+            **kwargs,
+        )
+
 
 ########################################################################
 ########################################################################
@@ -185,16 +225,11 @@ class InternalTransactionFactory(DjangoModelFactory):
     def _create(
         cls, model_class: type, *args: object, **kwargs: Any
     ) -> InternalTransaction:
-        from djmoney.money import Money
-
-        from moneypools.models import get_default_currency
-        from moneypools.service import internal_transaction as svc
-
         amount = kwargs["amount"]
         if not hasattr(amount, "amount"):
             amount = Money(amount, get_default_currency())
 
-        return svc.create(
+        return internal_transaction_svc.create(
             bank_account=kwargs["bank_account"],
             src_budget=kwargs["src_budget"],
             dst_budget=kwargs["dst_budget"],

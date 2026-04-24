@@ -16,8 +16,8 @@ from decimal import Decimal
 
 # 3rd party imports
 import moneyed
-from django.db import transaction as db_transaction
 from django_filters.rest_framework import DjangoFilterBackend
+from djmoney.money import Money
 from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
@@ -41,7 +41,11 @@ from moneypools.models import (
     TransactionAllocation,
 )
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
+from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import (
+    transaction_allocation as transaction_allocation_svc,
+)
 
 from .filters import (
     BudgetFilter,
@@ -226,21 +230,20 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     ####################################################################
     #
     def perform_destroy(self, instance: Budget) -> None:
-        """Delete a budget, subject to two guards.
+        """Delete a budget via BudgetService.
 
         Raises:
             PermissionDenied: If the budget is the account's unallocated budget.
             ValidationError: If the budget has existing transaction allocations;
                 the caller should archive the budget instead.
         """
-        if instance.bank_account.unallocated_budget_id == instance.id:
-            raise PermissionDenied("Cannot delete the unallocated budget.")
-        if instance.transaction_allocations.exists():
-            raise ValidationError(
-                "Cannot delete a budget that has transaction allocations. "
-                "Archive it instead."
-            )
-        instance.delete()
+        try:
+            budget_svc.delete(instance, actor=self.request.user)
+        except ValueError as exc:
+            msg = str(exc)
+            if "unallocated" in msg:
+                raise PermissionDenied(msg) from exc
+            raise ValidationError(msg) from exc
 
     ####################################################################
     #
@@ -258,49 +261,13 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     def archive(self, request: Request, id: str | None = None) -> Response:
         """Archive a budget and move its funds to unallocated."""
         budget = self.get_object()
-
-        if budget.bank_account.unallocated_budget_id == budget.id:
-            raise PermissionDenied("Cannot archive the unallocated budget.")
-        if budget.archived:
-            raise ValidationError("Budget is already archived.")
-
-        unallocated = budget.bank_account.unallocated_budget
-        if unallocated is None:
-            raise ValidationError(
-                "No unallocated budget found for this account."
-            )
-
-        with db_transaction.atomic():
-            # Archive and drain the fill-up goal first, if present.
-            if budget.fillup_goal_id:
-                fillup = Budget.objects.get(id=budget.fillup_goal_id)
-                if fillup.balance.amount > 0:
-                    internal_transaction_svc.create(
-                        bank_account=budget.bank_account,
-                        src_budget=fillup,
-                        dst_budget=unallocated,
-                        amount=fillup.balance,
-                        actor=request.user,
-                    )
-                fillup.archived = True
-                fillup.save()
-
-            # Drain this budget's balance (re-fetch after potential fill-up transfer).
-            budget.refresh_from_db()
-            if budget.balance.amount > 0:
-                internal_transaction_svc.create(
-                    bank_account=budget.bank_account,
-                    src_budget=budget,
-                    dst_budget=unallocated,
-                    amount=budget.balance,
-                    actor=request.user,
-                )
-
-            budget.refresh_from_db()
-            budget.archived = True
-            budget.save()
-
-        budget.refresh_from_db()
+        try:
+            budget = budget_svc.archive(budget, actor=request.user)
+        except ValueError as exc:
+            msg = str(exc)
+            if "unallocated" in msg:
+                raise PermissionDenied(msg) from exc
+            raise ValidationError(msg) from exc
         return Response(
             self.get_serializer(budget).data, status=status.HTTP_200_OK
         )
@@ -380,7 +347,7 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         the bank account's unallocated budget.
         """
         transaction = serializer.save()
-        TransactionAllocation.objects.create(
+        transaction_allocation_svc.create(
             transaction=transaction,
             budget=transaction.bank_account.unallocated_budget,
             amount=transaction.amount,
@@ -440,69 +407,71 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         is_debit: bool = serializer._is_debit
         budgets_by_id: dict[str, Budget] = serializer._budgets_by_id
         unallocated = transaction.bank_account.unallocated_budget
+        currency = transaction.amount.currency
 
-        with db_transaction.atomic():
-            existing = list(
-                TransactionAllocation.objects.filter(
-                    transaction=transaction
-                ).select_related("budget")
+        existing = list(
+            TransactionAllocation.objects.filter(
+                transaction=transaction
+            ).select_related("budget")
+        )
+
+        # Index existing allocations by budget UUID.
+        existing_by_budget: dict[str, TransactionAllocation] = {}
+        for alloc in existing:
+            if alloc.budget is not None:
+                key = str(alloc.budget.id)
+                existing_by_budget[key] = alloc
+
+        touched_ids: set[str] = set()
+
+        # Create or update allocations for each declared split.
+        for budget_id, abs_amount in splits.items():
+            signed = Money(-abs_amount if is_debit else abs_amount, currency)
+            budget = budgets_by_id[budget_id]
+
+            if budget_id in existing_by_budget:
+                alloc = existing_by_budget[budget_id]
+                if alloc.amount.amount != signed.amount:
+                    transaction_allocation_svc.update_amount(alloc, signed)
+            else:
+                transaction_allocation_svc.create(
+                    transaction=transaction,
+                    budget=budget,
+                    amount=signed,
+                )
+            touched_ids.add(budget_id)
+
+        # Compute unallocated remainder.
+        tx_abs = abs(transaction.amount.amount)
+        split_total = sum(splits.values(), Decimal("0"))
+        remainder = tx_abs - split_total
+
+        unalloc_key = str(unallocated.id) if unallocated else None
+
+        if remainder > 0 and unallocated:
+            signed_remainder = Money(
+                -remainder if is_debit else remainder, currency
             )
-
-            # Index existing allocations by budget UUID.
-            existing_by_budget: dict[str, TransactionAllocation] = {}
-            for alloc in existing:
-                if alloc.budget is not None:
-                    key = str(alloc.budget.id)
-                    existing_by_budget[key] = alloc
-
-            touched_ids: set[str] = set()
-
-            # Create or update allocations for each declared split.
-            for budget_id, abs_amount in splits.items():
-                signed = -abs_amount if is_debit else abs_amount
-                budget = budgets_by_id[budget_id]
-
-                if budget_id in existing_by_budget:
-                    alloc = existing_by_budget[budget_id]
-                    if alloc.amount.amount != signed:
-                        alloc.amount = signed
-                        alloc.save()
-                else:
-                    TransactionAllocation.objects.create(
-                        transaction=transaction,
-                        budget=budget,
-                        amount=signed,
+            if unalloc_key and unalloc_key in existing_by_budget:
+                alloc = existing_by_budget[unalloc_key]
+                if alloc.amount.amount != signed_remainder.amount:
+                    transaction_allocation_svc.update_amount(
+                        alloc, signed_remainder
                     )
-                touched_ids.add(budget_id)
+            else:
+                transaction_allocation_svc.create(
+                    transaction=transaction,
+                    budget=unallocated,
+                    amount=signed_remainder,
+                )
+            if unalloc_key:
+                touched_ids.add(unalloc_key)
 
-            # Compute unallocated remainder.
-            tx_abs = abs(transaction.amount.amount)
-            split_total = sum(splits.values(), Decimal("0"))
-            remainder = tx_abs - split_total
-
-            unalloc_key = str(unallocated.id) if unallocated else None
-
-            if remainder > 0 and unallocated:
-                signed_remainder = -remainder if is_debit else remainder
-                if unalloc_key and unalloc_key in existing_by_budget:
-                    alloc = existing_by_budget[unalloc_key]
-                    if alloc.amount.amount != signed_remainder:
-                        alloc.amount = signed_remainder
-                        alloc.save()
-                else:
-                    TransactionAllocation.objects.create(
-                        transaction=transaction,
-                        budget=unallocated,
-                        amount=signed_remainder,
-                    )
-                if unalloc_key:
-                    touched_ids.add(unalloc_key)
-
-            # Delete allocations no longer needed.
-            for alloc in existing:
-                budget_key = str(alloc.budget.id) if alloc.budget else None
-                if budget_key not in touched_ids:
-                    alloc.delete()
+        # Delete allocations no longer needed.
+        for alloc in existing:
+            budget_key = str(alloc.budget.id) if alloc.budget else None
+            if budget_key not in touched_ids:
+                transaction_allocation_svc.delete(alloc)
 
         # Return all allocations for this transaction.
         final = TransactionAllocation.objects.filter(
