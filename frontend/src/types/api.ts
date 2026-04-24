@@ -36,7 +36,6 @@ export interface BankAccount {
   posted_balance_currency: string;
   available_balance: string;
   available_balance_currency: string;
-  // GAP-2: verify this is returned by BankAccountSerializer.
   unallocated_budget: string;
   created_at: string;
   modified_at: string;
@@ -206,8 +205,7 @@ export interface User {
   username: string;
   name: string;
   url: string;
-  // GAP-1: backend needs to add `default_bank_account` FK to User.
-  default_bank_account?: string | null;
+  default_bank_account: string | null;
 }
 
 ////////////////////////////////////////////////////////////////////////

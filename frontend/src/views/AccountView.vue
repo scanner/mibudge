@@ -6,13 +6,13 @@
 // Three sections:
 //   1. Profile card — avatar initials, name, username → /account/profile/
 //   2. Bank accounts — one row per account with balance + unallocated
-//   3. Settings — sign out (default account is GAP-1, placeholder only)
+//   3. Settings — default account picker + sign out
 //
 
 // 3rd party imports
 //
 import { IconBuildingBank, IconChevronRight, IconPlus, IconUser } from "@tabler/icons-vue";
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
@@ -20,6 +20,7 @@ import { useRouter } from "vue-router";
 import EmptyState from "@/components/shared/EmptyState.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import AppShell from "@/components/layout/AppShell.vue";
+import { updateCurrentUser } from "@/api/users";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -81,6 +82,22 @@ onMounted(() => {
     }
   }
 });
+
+////////////////////////////////////////////////////////////////////////
+//
+// Default account selector.
+//
+const settingDefault = ref(false);
+
+async function setDefaultAccount(accountId: string) {
+  settingDefault.value = true;
+  try {
+    const updated = await updateCurrentUser({ default_bank_account: accountId || null });
+    auth.user = updated;
+  } finally {
+    settingDefault.value = false;
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -202,14 +219,23 @@ async function signOut() {
           Settings
         </h2>
         <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
-          <!-- Default account — GAP-1: placeholder until User.default_bank_account exists -->
-          <div class="flex items-center justify-between px-4 py-3.5 text-neutral-400">
-            <div class="flex items-center gap-3">
+          <!-- Default account -->
+          <div class="flex items-center justify-between px-4 py-3.5">
+            <div class="flex items-center gap-3 text-neutral-700">
               <IconBuildingBank class="h-4 w-4" />
               <span class="text-sm">Default account</span>
             </div>
-            <!-- TODO: GAP-1 — not implemented until User.default_bank_account field is added -->
-            <span class="text-xs text-neutral-400">Coming soon</span>
+            <select
+              :value="auth.user?.default_bank_account ?? ''"
+              :disabled="settingDefault || ctx.accounts.length === 0"
+              class="rounded-md border border-neutral-200 bg-white py-1 pl-2 pr-6 text-xs text-neutral-700 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400 disabled:opacity-50"
+              @change="setDefaultAccount(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">None</option>
+              <option v-for="a in ctx.accounts" :key="a.id" :value="a.id">
+                {{ a.name }}
+              </option>
+            </select>
           </div>
 
           <!-- Sign out -->

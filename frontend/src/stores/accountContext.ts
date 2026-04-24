@@ -6,10 +6,9 @@
 //
 // Initialisation order (UI_SPEC §6):
 //   1. Read the cached UUID from localStorage (may be stale).
-//   2. Fetch the user's bank accounts.
-//   3. Choose the active account: user.default_bank_account (GAP-1
-//      fallback: first account returned) → cached UUID if still valid
-//      → first account.
+//   2. Fetch the user's bank accounts + current user in parallel.
+//   3. Choose the active account: user.default_bank_account → cached
+//      UUID if still valid → first account.
 //   4. Persist the chosen UUID back to localStorage.
 //
 // Downstream: the unallocated-budget UUID is derived from the active
@@ -78,8 +77,6 @@ export const useAccountContextStore = defineStore("accountContext", () => {
     loading.value = true;
     error.value = null;
     try {
-      // Fetch accounts first; the user fetch is advisory (only needed
-      // for `default_bank_account` once GAP-1 is closed).
       const [accountsPage, user] = await Promise.all([
         listBankAccounts(),
         getCurrentUser().catch(() => null),
