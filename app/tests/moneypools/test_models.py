@@ -1,4 +1,4 @@
-"""Tests for moneypools models and their signal-driven balance logic."""
+"""Tests for moneypools models and their balance logic."""
 
 # system imports
 #
@@ -11,8 +11,6 @@ import pytest
 from django.core.exceptions import ValidationError
 from moneyed import USD, Money
 
-# app imports
-#
 from moneypools.models import (
     BankAccount,
     Budget,
@@ -20,6 +18,10 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
 )
+
+# app imports
+#
+from moneypools.service import internal_transaction as internal_transaction_svc
 
 pytestmark = pytest.mark.django_db
 
@@ -239,84 +241,6 @@ class TestInternalTransaction:
 
     ####################################################################
     #
-    def test_amount_update_adjusts_balances(
-        self,
-        budget_factory: Callable[..., Budget],
-        internal_transaction_factory: Callable[..., InternalTransaction],
-    ) -> None:
-        """
-        GIVEN: an internal transaction of 50 between two budgets each starting at 100
-        WHEN:  the transaction amount is updated to 75
-        THEN:  both budget balances and snapshot fields reflect the new amount
-        """
-        START_BAL = 100
-        INITIAL_AMT = 50
-        UPDATED_AMT = 75
-
-        src_budget = budget_factory(balance=START_BAL)
-        dst_budget = budget_factory(balance=START_BAL)
-        it = internal_transaction_factory(
-            amount=INITIAL_AMT, src_budget=src_budget, dst_budget=dst_budget
-        )
-
-        it.amount = UPDATED_AMT
-        it.save()
-
-        src_budget = Budget.objects.get(id=src_budget.id)
-        dst_budget = Budget.objects.get(id=dst_budget.id)
-
-        assert src_budget.balance == Money(START_BAL - UPDATED_AMT, USD)
-        assert dst_budget.balance == Money(START_BAL + UPDATED_AMT, USD)
-        assert it.src_budget_balance == Money(START_BAL - UPDATED_AMT, USD)
-        assert it.dst_budget_balance == Money(START_BAL + UPDATED_AMT, USD)
-
-    ####################################################################
-    #
-    def test_budget_reassignment_adjusts_balances(
-        self,
-        budget_factory: Callable[..., Budget],
-        internal_transaction_factory: Callable[..., InternalTransaction],
-    ) -> None:
-        """
-        GIVEN: an internal transaction between budgets A, and a second pair of
-               budgets B
-        WHEN:  the transaction's src and dst are reassigned to budgets B, then
-               src is reassigned back to A
-        THEN:  budgets B reflect the full transfer, and budget A's balance
-               accounts for the partial reassignment
-        """
-        START_BAL_A = 100
-        START_BAL_B = 325
-        TRANSACTION_AMT = 50
-
-        src_a = budget_factory(balance=START_BAL_A)
-        dst_a = budget_factory(balance=START_BAL_A)
-        it = internal_transaction_factory(
-            amount=TRANSACTION_AMT, src_budget=src_a, dst_budget=dst_a
-        )
-
-        src_b = budget_factory(balance=START_BAL_B)
-        dst_b = budget_factory(balance=START_BAL_B)
-
-        it.src_budget = src_b
-        it.dst_budget = dst_b
-        it.save()
-
-        src_b = Budget.objects.get(id=src_b.id)
-        dst_b = Budget.objects.get(id=dst_b.id)
-        assert src_b.balance == Money(START_BAL_B - TRANSACTION_AMT, USD)
-        assert dst_b.balance == Money(START_BAL_B + TRANSACTION_AMT, USD)
-
-        it.src_budget = src_a
-        it.save()
-
-        src_a = Budget.objects.get(id=src_a.id)
-        dst_b = Budget.objects.get(id=dst_b.id)
-        assert src_a.balance == Money(START_BAL_A - TRANSACTION_AMT, USD)
-        assert dst_b.balance == Money(START_BAL_B + TRANSACTION_AMT, USD)
-
-    ####################################################################
-    #
     def test_delete_restores_balances(
         self,
         budget_factory: Callable[..., Budget],
@@ -335,7 +259,7 @@ class TestInternalTransaction:
         assert src_budget.balance == Money(50, USD)
         assert dst_budget.balance == Money(150, USD)
 
-        it.delete()
+        internal_transaction_svc.delete(it)
 
         src_budget = Budget.objects.get(id=src_budget.id)
         dst_budget = Budget.objects.get(id=dst_budget.id)

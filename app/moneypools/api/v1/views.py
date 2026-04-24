@@ -41,6 +41,7 @@ from moneypools.models import (
     TransactionAllocation,
 )
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
+from moneypools.service import internal_transaction as internal_transaction_svc
 
 from .filters import (
     BudgetFilter,
@@ -274,7 +275,7 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             if budget.fillup_goal_id:
                 fillup = Budget.objects.get(id=budget.fillup_goal_id)
                 if fillup.balance.amount > 0:
-                    InternalTransaction.objects.create(
+                    internal_transaction_svc.create(
                         bank_account=budget.bank_account,
                         src_budget=fillup,
                         dst_budget=unallocated,
@@ -287,7 +288,7 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             # Drain this budget's balance (re-fetch after potential fill-up transfer).
             budget.refresh_from_db()
             if budget.balance.amount > 0:
-                InternalTransaction.objects.create(
+                internal_transaction_svc.create(
                     bank_account=budget.bank_account,
                     src_budget=budget,
                     dst_budget=unallocated,
@@ -607,7 +608,14 @@ class InternalTransactionViewSet(
     #
     def perform_create(self, serializer: InternalTransactionSerializer) -> None:
         """Save the internal transaction with the requesting user as actor."""
-        serializer.save(actor=self.request.user)
+        data = serializer.validated_data
+        serializer.instance = internal_transaction_svc.create(
+            bank_account=data["bank_account"],
+            src_budget=data["src_budget"],
+            dst_budget=data["dst_budget"],
+            amount=data["amount"],
+            actor=self.request.user,
+        )
 
 
 ########################################################################

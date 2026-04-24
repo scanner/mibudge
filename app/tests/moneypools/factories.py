@@ -2,6 +2,7 @@ import random
 import string
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import factory
 import factory.fuzzy
@@ -26,46 +27,7 @@ from tests.users.factories import UserFactory
 
 User = get_user_model()
 
-# Because I want bank names, not random strings, or people names, but
-# not real bank names, but things that sound like bank names:
-# https://www.fantasynamegenerators.com/bank-names.php
-#
-# XXX This is cute and all but maybe we should just use the 'business
-#     name' generator in `faker` and add one of 'Bank', `Credit
-#     Union`, or `Trust` to the end of the generated names.
-#
-BANK_NAMES = [
-    "United Credit Union",
-    "Gold Credit Bank System",
-    "Solace Bank Group",
-    "Ascension Bank Inc.",
-    "New Alliance Banks Inc.",
-    "New Heights Bank System",
-    "Marshall Trust Corp.",
-    "Epitome Banks Inc.",
-    "Spotlight Trust Corp.",
-    "New Connection Trust",
-    "Ocean Trust",
-    "Vigor Trust Corp.",
-    "Connection Banks",
-    "First Choice Corporation",
-    "Fountain Bancshares",
-    "Ascension Trust Corp.",
-    "Soul Financial Corp.",
-    "Spotlight Financial Holdings",
-    "Associated Bank Group",
-    "Citizen Service Banks Inc.",
-    "Edge Corporation",
-    "Goldleaf Holdings Inc.",
-    "Credit Holdings Inc.",
-    "Genesis Credit Union",
-    "Syndicate Holdings",
-    "Marshall Corporation",
-    "Federal Corporation",
-    "New Generation Financial Corp.",
-    "First Credit Union",
-    "Community Bancorp",
-]
+_BANK_SUFFIXES = [" Bank", " Credit Union", " Trust"]
 
 
 ####################################################################
@@ -84,9 +46,13 @@ def random_string(length: int, character_set: str) -> str:
 class BankFactory(DjangoModelFactory):
     class Meta:
         model = Bank
-        django_get_or_create = ["name"]  # XXX Maybe should be routing_number?
+        django_get_or_create = ["name"]
+        exclude = ["company_base"]
 
-    name = factory.LazyAttribute(lambda x: random.choice(BANK_NAMES))
+    company_base = factory.Faker("company")
+    name = factory.LazyAttribute(
+        lambda o: o.company_base + random.choice(_BANK_SUFFIXES)
+    )
     routing_number = factory.LazyAttribute(
         lambda x: random_string(9, string.digits)
     )
@@ -214,3 +180,24 @@ class InternalTransactionFactory(DjangoModelFactory):
     src_budget = factory.SubFactory(BudgetFactory)
     dst_budget = factory.SubFactory(BudgetFactory)
     actor = factory.SubFactory(UserFactory)
+
+    @classmethod
+    def _create(
+        cls, model_class: type, *args: object, **kwargs: Any
+    ) -> InternalTransaction:
+        from djmoney.money import Money
+
+        from moneypools.models import get_default_currency
+        from moneypools.service import internal_transaction as svc
+
+        amount = kwargs["amount"]
+        if not hasattr(amount, "amount"):
+            amount = Money(amount, get_default_currency())
+
+        return svc.create(
+            bank_account=kwargs["bank_account"],
+            src_budget=kwargs["src_budget"],
+            dst_budget=kwargs["dst_budget"],
+            amount=amount,
+            actor=kwargs["actor"],
+        )
