@@ -18,10 +18,12 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
 )
+from moneypools.service import budget as budget_svc
 
 # app imports
 #
 from moneypools.service import internal_transaction as internal_transaction_svc
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 
@@ -123,18 +125,22 @@ class TestBudget:
     def test_fillup_budget_deleted_when_parent_deleted(
         self,
         budget_factory: Callable[..., Budget],
+        user_factory: Callable[..., User],
     ) -> None:
         """
         GIVEN: a Recurring budget with an associated fill-up goal
-        WHEN:  the parent budget is deleted
+        WHEN:  the parent budget is deleted via BudgetService.delete
         THEN:  the fill-up goal budget is also deleted
         """
-        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget = budget_factory(
+            budget_type="R", with_fillup_goal=True, balance=0
+        )
         budget.refresh_from_db()
         fillup_id = budget.fillup_goal_id
         assert fillup_id is not None
 
-        budget.delete()
+        actor = user_factory()
+        budget_svc.delete(budget, actor=actor)
 
         assert not Budget.objects.filter(id=fillup_id).exists()
 

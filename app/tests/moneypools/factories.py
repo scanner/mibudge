@@ -7,6 +7,7 @@ from typing import Any
 import factory
 import factory.fuzzy
 from django.contrib.auth import get_user_model
+from djmoney.money import Money
 from factory.django import DjangoModelFactory
 
 from moneypools.models import (
@@ -17,7 +18,10 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
     TransactionCategory,
+    get_default_currency,
 )
+from moneypools.service import budget as budget_svc
+from moneypools.service import internal_transaction as internal_transaction_svc
 
 # XXX If we want to separate 'moneypools' into its own app we will
 #     need to sever this link (and I guess add a UserFactory to our
@@ -105,6 +109,8 @@ class BudgetFactory(DjangoModelFactory):
     class Meta:
         model = Budget
         exclude = ("has_target_date", "target_balance_offset")
+        # _create calls BudgetService.create so fill-up goal creation
+        # and other service-layer invariants are exercised by tests.
 
     name = factory.Faker("name")
     bank_account = factory.SubFactory(BankAccountFactory)
@@ -134,6 +140,23 @@ class BudgetFactory(DjangoModelFactory):
         ),
         no_declaration=None,
     )
+
+    @classmethod
+    def _create(cls, model_class: type, *args: object, **kwargs: Any) -> Budget:
+        bank_account = kwargs.pop("bank_account")
+        name = kwargs.pop("name")
+        budget_type = kwargs.pop("budget_type")
+        funding_type = kwargs.pop("funding_type")
+        target_balance = kwargs.pop("target_balance")
+
+        return budget_svc.create(
+            bank_account=bank_account,
+            name=name,
+            budget_type=budget_type,
+            funding_type=funding_type,
+            target_balance=target_balance,
+            **kwargs,
+        )
 
 
 ########################################################################
@@ -185,16 +208,11 @@ class InternalTransactionFactory(DjangoModelFactory):
     def _create(
         cls, model_class: type, *args: object, **kwargs: Any
     ) -> InternalTransaction:
-        from djmoney.money import Money
-
-        from moneypools.models import get_default_currency
-        from moneypools.service import internal_transaction as svc
-
         amount = kwargs["amount"]
         if not hasattr(amount, "amount"):
             amount = Money(amount, get_default_currency())
 
-        return svc.create(
+        return internal_transaction_svc.create(
             bank_account=kwargs["bank_account"],
             src_budget=kwargs["src_budget"],
             dst_budget=kwargs["dst_budget"],
