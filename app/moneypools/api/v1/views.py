@@ -41,6 +41,7 @@ from moneypools.models import (
     TransactionAllocation,
 )
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
+from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 
 from .filters import (
@@ -226,21 +227,14 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     ####################################################################
     #
     def perform_destroy(self, instance: Budget) -> None:
-        """Delete a budget, subject to two guards.
-
-        Raises:
-            PermissionDenied: If the budget is the account's unallocated budget.
-            ValidationError: If the budget has existing transaction allocations;
-                the caller should archive the budget instead.
-        """
-        if instance.bank_account.unallocated_budget_id == instance.id:
-            raise PermissionDenied("Cannot delete the unallocated budget.")
-        if instance.transaction_allocations.exists():
-            raise ValidationError(
-                "Cannot delete a budget that has transaction allocations. "
-                "Archive it instead."
-            )
-        instance.delete()
+        """Delete a budget via BudgetService."""
+        try:
+            budget_svc.delete(instance, actor=self.request.user)
+        except ValueError as exc:
+            msg = str(exc)
+            if "unallocated" in msg:
+                raise PermissionDenied(msg) from exc
+            raise ValidationError(msg) from exc
 
     ####################################################################
     #
@@ -258,49 +252,13 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     def archive(self, request: Request, id: str | None = None) -> Response:
         """Archive a budget and move its funds to unallocated."""
         budget = self.get_object()
-
-        if budget.bank_account.unallocated_budget_id == budget.id:
-            raise PermissionDenied("Cannot archive the unallocated budget.")
-        if budget.archived:
-            raise ValidationError("Budget is already archived.")
-
-        unallocated = budget.bank_account.unallocated_budget
-        if unallocated is None:
-            raise ValidationError(
-                "No unallocated budget found for this account."
-            )
-
-        with db_transaction.atomic():
-            # Archive and drain the fill-up goal first, if present.
-            if budget.fillup_goal_id:
-                fillup = Budget.objects.get(id=budget.fillup_goal_id)
-                if fillup.balance.amount > 0:
-                    internal_transaction_svc.create(
-                        bank_account=budget.bank_account,
-                        src_budget=fillup,
-                        dst_budget=unallocated,
-                        amount=fillup.balance,
-                        actor=request.user,
-                    )
-                fillup.archived = True
-                fillup.save()
-
-            # Drain this budget's balance (re-fetch after potential fill-up transfer).
-            budget.refresh_from_db()
-            if budget.balance.amount > 0:
-                internal_transaction_svc.create(
-                    bank_account=budget.bank_account,
-                    src_budget=budget,
-                    dst_budget=unallocated,
-                    amount=budget.balance,
-                    actor=request.user,
-                )
-
-            budget.refresh_from_db()
-            budget.archived = True
-            budget.save()
-
-        budget.refresh_from_db()
+        try:
+            budget = budget_svc.archive(budget, actor=request.user)
+        except ValueError as exc:
+            msg = str(exc)
+            if "unallocated" in msg:
+                raise PermissionDenied(msg) from exc
+            raise ValidationError(msg) from exc
         return Response(
             self.get_serializer(budget).data, status=status.HTTP_200_OK
         )
