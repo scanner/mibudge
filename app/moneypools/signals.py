@@ -1,30 +1,17 @@
 # system imports
 #
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Any
 
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
-from django.db.models import Q, Sum
-from django.db.models.signals import (
-    post_delete,
-    post_save,
-    pre_delete,
-    pre_save,
-)
+from django.db.models.signals import post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
 # Project imports
 #
-from .models import (
-    BankAccount,
-    Budget,
-    InternalTransaction,
-    Transaction,
-    TransactionAllocation,
-)
+from .models import BankAccount, Budget, Transaction
 
 # To make our logic simpler every bank account will always have an unallocated
 # budget. This budget is created when the bank account is first saved. We do
@@ -189,7 +176,7 @@ def transaction_pre_save(sender, instance, **kwargs):
     Handle bank account balance updates when a transaction is saved.
 
     This signal handles ONLY bank account balances (available and posted).
-    Budget balances are handled by TransactionAllocation signals.
+    Budget balances are handled by TransactionAllocationService.
 
     NOTE: Transactions can not change bank accounts.
 
@@ -318,7 +305,7 @@ def transaction_pre_delete(sender, instance, **kwargs):
     Reverse bank account balance changes when a transaction is deleted.
 
     Budget balance reversal is handled by the cascade delete of associated
-    TransactionAllocation objects (via their own pre_delete signal).
+    TransactionAllocation objects (via TransactionAllocationService).
 
     NOTE: bulk deleting transactions will NOT trigger this signal. Delete
     them one by one to keep balances correct.
@@ -336,273 +323,3 @@ def transaction_pre_delete(sender, instance, **kwargs):
         if not transaction.pending:
             transaction.bank_account.posted_balance -= transaction.amount
         transaction.bank_account.save()
-
-
-####################################################################
-#
-def _money_amount(value: Any) -> Decimal:
-    """Extract a plain Decimal from a Money or Decimal value."""
-    return value.amount if hasattr(value, "amount") else value
-
-
-####################################################################
-#
-def _internal_transaction_delta(
-    budget: Budget,
-    after: datetime,
-    before: datetime,
-) -> Decimal:
-    """Sum the net effect of InternalTransactions on *budget* whose
-    ``created_at`` falls in the half-open interval ``(after, before]``.
-
-    Credits (budget is ``dst_budget``) are positive, debits (budget is
-    ``src_budget``) are negative.
-
-    Args:
-        budget: The budget to check.
-        after:  Exclusive lower bound on ``created_at``.
-        before: Inclusive upper bound on ``created_at``.
-
-    Returns:
-        Net balance change from InternalTransactions in the window.
-    """
-    window = Q(created_at__gt=after, created_at__lte=before)
-    credits = InternalTransaction.objects.filter(dst_budget=budget).filter(
-        window
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    debits = InternalTransaction.objects.filter(src_budget=budget).filter(
-        window
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    return Decimal(credits) - Decimal(debits)
-
-
-####################################################################
-#
-def _recalculate_running_balances(
-    budget: Budget,
-    from_transaction: Transaction,
-) -> None:
-    """Recalculate budget_balance snapshots from a chronological point
-    forward.
-
-    Only updates the allocation at the given transaction's position
-    and any that follow it.  In the common case (allocation added at
-    the end) this touches one row.
-
-    Between consecutive allocations the walk also accounts for any
-    InternalTransactions that changed the budget's balance (e.g.
-    monthly top-ups from Unallocated).  These are detected by
-    ``created_at`` falling between the two allocations' creation
-    timestamps.
-
-    Ordering: transaction_date, then transaction.created_at for ties.
-
-    Args:
-        budget: The budget whose allocations need recalculation.
-        from_transaction: The transaction at which to start.
-    """
-    tx_date = from_transaction.transaction_date
-    tx_created = from_transaction.created_at
-
-    chronological = (
-        "transaction__transaction_date",
-        "transaction__created_at",
-        "created_at",
-    )
-
-    # The allocation immediately before the starting point gives us
-    # the running balance to start from.
-    #
-    prior = (
-        TransactionAllocation.objects.filter(budget=budget)
-        .filter(
-            Q(transaction__transaction_date__lt=tx_date)
-            | Q(
-                transaction__transaction_date=tx_date,
-                transaction__created_at__lt=tx_created,
-            )
-        )
-        .order_by(
-            "-transaction__transaction_date",
-            "-transaction__created_at",
-            "-created_at",
-        )
-        .select_related("transaction")
-        .first()
-    )
-
-    if prior is not None:
-        running = _money_amount(prior.budget_balance)
-        prev_created = prior.created_at
-    else:
-        # This is the chronologically first allocation.  Baseline is
-        # the budget's current balance minus the sum of ALL its
-        # allocation amounts AND all InternalTransaction effects.
-        #
-        total_allocs = TransactionAllocation.objects.filter(
-            budget=budget
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        total_credits = InternalTransaction.objects.filter(
-            dst_budget=budget
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        total_debits = InternalTransaction.objects.filter(
-            src_budget=budget
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        running = (
-            budget.balance.amount
-            - Decimal(total_allocs)
-            - Decimal(total_credits)
-            + Decimal(total_debits)
-        )
-        prev_created = datetime.min.replace(tzinfo=UTC)
-
-    # Walk forward, updating only rows whose snapshot is stale.
-    # Between each pair of allocations, account for any
-    # InternalTransactions that changed the budget balance.
-    #
-    forward = (
-        TransactionAllocation.objects.filter(budget=budget)
-        .filter(
-            Q(transaction__transaction_date__gt=tx_date)
-            | Q(
-                transaction__transaction_date=tx_date,
-                transaction__created_at__gte=tx_created,
-            )
-        )
-        .order_by(*chronological)
-        .select_related("transaction")
-    )
-
-    for alloc in forward:
-        # Add the net effect of any InternalTransactions created
-        # between the previous allocation and this one.
-        running += _internal_transaction_delta(
-            budget, after=prev_created, before=alloc.created_at
-        )
-
-        running += _money_amount(alloc.amount)
-        current = _money_amount(alloc.budget_balance)
-        if current != running:
-            TransactionAllocation.objects.filter(pk=alloc.pk).update(
-                budget_balance=running
-            )
-        prev_created = alloc.created_at
-
-
-####################################################################
-#
-@receiver(pre_save, sender=TransactionAllocation)
-def allocation_pre_save(sender, instance, **kwargs):
-    """
-    Handle budget balance updates when an allocation is saved.
-
-    On creation: credits the allocated amount to the budget.
-    On update: if the budget changed, moves the amount between budgets.
-              If the amount changed, adjusts the budget balance by the delta.
-
-    Keyword Arguments:
-    sender    -- What sent the signal. Always TransactionAllocation
-    instance  -- instance of TransactionAllocation object before save
-    **kwargs  -- dict
-    """
-    allocation = instance  # To make the code easier to read
-
-    # If no budget is set, default to the transaction's bank account's
-    # unallocated budget.
-    #
-    if allocation.budget is None:
-        allocation.budget = (
-            allocation.transaction.bank_account.unallocated_budget
-        )
-
-    # Stash for post_save so running balances can be recalculated
-    # on both old and new budgets when a reassignment happens.
-    #
-    allocation._prev_budget = None
-
-    if allocation.pkid is None:
-        # New allocation: credit the budget by the allocation amount.
-        #
-        allocation.budget.balance += allocation.amount
-        allocation.budget.save()
-    else:
-        # Existing allocation being updated.
-        #
-        previous = TransactionAllocation.objects.get(id=allocation.id)
-
-        # If the budget changed, move the previous amount from old budget
-        # to new budget.
-        #
-        if (
-            previous.budget is not None
-            and allocation.budget is not None
-            and previous.budget != allocation.budget
-        ):
-            previous.budget.balance -= previous.amount
-            previous.budget.save()
-            allocation.budget.balance += previous.amount
-            allocation.budget.save()
-            allocation._prev_budget = previous.budget
-
-        # If the amount changed, adjust the budget balance by the delta.
-        #
-        if previous.amount != allocation.amount:
-            allocation.budget.balance -= previous.amount
-            allocation.budget.balance += allocation.amount
-            allocation.budget.save()
-
-
-####################################################################
-#
-@receiver(post_save, sender=TransactionAllocation)
-def allocation_post_save(sender, instance, **kwargs):
-    """Recalculate running budget_balance snapshots after an
-    allocation is created or updated.
-
-    Only touches allocations at or after this transaction's
-    chronological position.  If the budget was changed, both the
-    old and new budget's running balances are recalculated.
-    """
-    allocation = instance
-    tx = allocation.transaction
-
-    if allocation.budget is not None:
-        _recalculate_running_balances(allocation.budget, tx)
-
-    prev = getattr(allocation, "_prev_budget", None)
-    if prev is not None:
-        _recalculate_running_balances(prev, tx)
-
-
-####################################################################
-#
-@receiver(pre_delete, sender=TransactionAllocation)
-def allocation_pre_delete(sender, instance, **kwargs):
-    """
-    Reverse budget balance changes when an allocation is deleted.
-
-    NOTE: bulk deleting allocations will NOT trigger this signal. Delete
-    them one by one to keep balances correct.
-    """
-    allocation = instance  # To make the code easier to read
-
-    if allocation.budget is not None:
-        allocation.budget.balance -= allocation.amount
-        allocation.budget.save()
-
-    # Stash for post_delete recalculation.
-    allocation._delete_budget = allocation.budget
-    allocation._delete_transaction = allocation.transaction
-
-
-####################################################################
-#
-@receiver(post_delete, sender=TransactionAllocation)
-def allocation_post_delete(sender, instance, **kwargs):
-    """Recalculate running budget_balance snapshots after an
-    allocation is deleted.
-    """
-    budget = getattr(instance, "_delete_budget", None)
-    tx = getattr(instance, "_delete_transaction", None)
-    if budget is not None and tx is not None:
-        _recalculate_running_balances(budget, tx)

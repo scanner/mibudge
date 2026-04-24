@@ -22,6 +22,9 @@ from moneypools.models import (
 )
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import (
+    transaction_allocation as transaction_allocation_svc,
+)
 
 # XXX If we want to separate 'moneypools' into its own app we will
 #     need to sever this link (and I guess add a UserFactory to our
@@ -189,6 +192,22 @@ class TransactionAllocationFactory(DjangoModelFactory):
     budget = factory.SubFactory(BudgetFactory)
     amount = factory.LazyAttribute(lambda o: o.transaction.amount)
     category = factory.fuzzy.FuzzyChoice(TransactionCategory.values)
+
+    @classmethod
+    def _create(
+        cls, model_class: type, *args: object, **kwargs: Any
+    ) -> TransactionAllocation:
+        transaction = kwargs.pop("transaction")
+        budget = kwargs.pop("budget")
+        amount = kwargs.pop("amount")
+        if not hasattr(amount, "amount"):
+            amount = Money(amount, get_default_currency())
+        return transaction_allocation_svc.create(
+            transaction=transaction,
+            budget=budget,
+            amount=amount,
+            **kwargs,
+        )
 
 
 ########################################################################
