@@ -1,1 +1,145 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mibudge</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7f8fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+      max-width: 540px;
+      width: 100%;
+      padding: 3rem 3.5rem;
+      text-align: center;
+    }
+
+    .wordmark {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #2563eb;
+      margin-bottom: 0.5rem;
+    }
+
+    .tagline {
+      font-size: 1.05rem;
+      color: #6b7280;
+      margin-bottom: 2rem;
+    }
+
+    .description {
+      font-size: 0.97rem;
+      line-height: 1.7;
+      color: #374151;
+      margin-bottom: 2.5rem;
+    }
+
+    .description p + p {
+      margin-top: 0.9rem;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .cta {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.75rem 2.25rem;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+
+    .cta:hover { background: #1d4ed8; }
+
+    .cta-secondary {
+      display: inline-block;
+      color: #6b7280;
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.15s;
+    }
+
+    .cta-secondary:hover { color: #374151; }
+
+    footer {
+      margin-top: 2.5rem;
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="wordmark">mibudge</div>
+    <div class="tagline">Your money, your envelopes.</div>
+
+    <div class="description">
+      <p>
+        mibudge is a personal budgeting tool built around the envelope method:
+        every dollar you have is assigned to a named budget -- groceries, rent,
+        vacation, whatever matters to you -- so you always know exactly what
+        you can spend and where.
+      </p>
+      <p>
+        Each set of budgets belongs to a bank account. mibudge supports
+        checking, savings, and credit card accounts, and you can track as many
+        as you need. Accounts can also be shared with other people, so couples
+        or housemates can manage a joint account together while keeping their
+        individual accounts separate.
+      </p>
+      <p>
+        Budgets come in three flavors. A <strong>Goal</strong> budget saves
+        toward a one-time target -- a new laptop or a vacation fund -- and
+        stops accumulating once it's fully funded. A <strong>Recurring</strong>
+        budget refills on a schedule, making it ideal for predictable monthly
+        costs like rent or utilities. A <strong>Capped</strong> budget keeps
+        itself topped up to a set limit at all times: spend from it and it
+        automatically refills, which suits things like a grocery allowance or a
+        fuel reserve where you always want a steady ceiling available.
+      </p>
+      <p>
+        mibudge is a read-only mirror of your real bank accounts. Transactions
+        are imported -- either by uploading a CSV export from your bank or via
+        an external importer service such as Plaid -- and then categorized and
+        split across your budgets. Importers talk to mibudge through its REST
+        API, keeping the mechanics of fetching bank data entirely separate from
+        what mibudge does: help you understand and plan what you already have.
+        mibudge itself never connects to your bank directly, never initiates
+        transfers, and never moves money.
+      </p>
+    </div>
+
+    <div class="actions">
+      <a class="cta" href="/app/">Open mibudge</a>
+      <a class="cta-secondary" href="{{ settings.REPOSITORY_URL }}" target="_blank" rel="noopener">View source &rarr;</a>
+    </div>
+  </div>
+
+  <footer>mibudge &mdash; personal use only</footer>
+</body>
+</html>

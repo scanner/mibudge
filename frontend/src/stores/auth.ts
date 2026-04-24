@@ -6,19 +6,20 @@
 // server; the browser sends it automatically on POST /api/token/refresh/
 // without JS ever touching it.
 //
-// On SPA load, the web server app injects the initial access token as
-// window.__INITIAL_TOKEN__ in the page HTML.  main.ts reads it once,
-// stores it here, and removes it from the DOM.
+// On cold boot, main.ts calls refresh() -- if the refresh cookie is still
+// valid the SPA becomes authenticated before the first router guard runs;
+// otherwise the guard redirects to /app/login/.
 //
 
 // 3rd party imports
 //
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 // app imports
 //
-import { apiFetch, ApiError, AuthError } from "@/api/client";
+import { apiFetch, authFetch, ApiError, AuthError } from "@/api/client";
+import type { User } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -34,25 +35,45 @@ export const useAuthStore = defineStore("auth", () => {
   ////////////////////////////////////////////////////////////////////
   //
   const accessToken = ref<string | null>(null);
+  const user = ref<User | null>(null);
 
-  ////////////////////////////////////////////////////////////////////
-  //
-  // Initialise the token from window.__INITIAL_TOKEN__ if present.
-  // Called once from main.ts immediately after the store is available.
-  //
-  function init() {
-    const w = window as Window & { __INITIAL_TOKEN__?: string };
-    if (w.__INITIAL_TOKEN__) {
-      accessToken.value = w.__INITIAL_TOKEN__;
-      // Remove from the DOM so the token is not readable after page load.
-      delete w.__INITIAL_TOKEN__;
-    }
-  }
+  const isAuthenticated = computed(() => accessToken.value !== null);
 
   ////////////////////////////////////////////////////////////////////
   //
   function clear() {
     accessToken.value = null;
+    user.value = null;
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Exchange username + password for an access token.  The backend
+  // also sets the httpOnly refresh cookie on the response, so nothing
+  // else is needed here.  Throws ApiError(401) on bad credentials.
+  //
+  async function login(username: string, password: string): Promise<void> {
+    const data = await authFetch<TokenResponse>("/token/", null, {
+      method: "POST",
+      body: { username, password } as unknown as BodyInit,
+    });
+    accessToken.value = data.access;
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Fetch the current user and cache it on the store.  Safe to call
+  // more than once; `force` re-fetches if the cache is already warm.
+  //
+  async function loadUser(force = false): Promise<User | null> {
+    if (!force && user.value) return user.value;
+    try {
+      const me = await request<User>("/users/me/");
+      user.value = me;
+      return me;
+    } catch {
+      return null;
+    }
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -62,7 +83,7 @@ export const useAuthStore = defineStore("auth", () => {
   //
   async function refresh(): Promise<boolean> {
     try {
-      const data = await apiFetch<TokenResponse>("/token/refresh/", null, {
+      const data = await authFetch<TokenResponse>("/token/refresh/", null, {
         method: "POST",
       });
       accessToken.value = data.access;
@@ -91,5 +112,14 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  return { accessToken, init, clear, refresh, request };
+  return {
+    accessToken,
+    user,
+    isAuthenticated,
+    clear,
+    refresh,
+    login,
+    loadUser,
+    request,
+  };
 });

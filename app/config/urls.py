@@ -7,12 +7,16 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
-from rest_framework_simplejwt.views import TokenObtainPairView
 
-from config.views import spa_shell_view
-from users.views import cookie_token_refresh_view
+from config.views import home_view, spa_shell_view
+from users.views import (
+    cookie_token_obtain_pair_view,
+    cookie_token_refresh_view,
+)
 
 urlpatterns = [
+    # Landing page
+    path("", home_view, name="home"),
     # Django Admin
     path(settings.ADMIN_URL, admin.site.urls),
     # User management
@@ -26,11 +30,12 @@ urlpatterns = [
     # JWT token endpoints are intentionally *outside* the versioned
     # prefix -- auth is cross-version and changing URL on every API
     # bump would churn every client for no reason.
-    # /api/token/         -- POST username+password, returns access+refresh pair.
-    #                        Used by scripts and native apps (no browser needed).
+    # /api/token/         -- POST username+password. Sets the refresh token
+    #                        as an httpOnly cookie and returns the access
+    #                        token in the JSON body. Browser SPA flow.
     # /api/token/refresh/ -- reads refresh token from httpOnly cookie, returns
     #                        new access token (browser SPA flow).
-    path("api/token/", TokenObtainPairView.as_view(), name="token-obtain"),
+    path("api/token/", cookie_token_obtain_pair_view, name="token-obtain"),
     path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
     # OpenAPI schema + interactive docs for v1. The schema necessarily
     # describes one API version, so it lives under that version's prefix.

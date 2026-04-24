@@ -10,6 +10,7 @@
 DEBUG=True
 DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
 DJANGO_ADMIN_URL=admin/
+ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
 
 # Database (SQLite default is baked into settings.py; uncomment for Postgres)
 # DATABASE_URL=postgres://mibudge:mibudge@localhost:5432/mibudge
@@ -23,6 +24,17 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/2
 # Email (Mailpit default)
 # ------------------------------------------------------------------------------
 EMAIL_HOST=localhost
+
+# SSL Certificates (local dev TLS)
+# ------------------------------------------------------------------------------
+# `make certs` generates hostname-prefixed cert files in deployment/ssl/ so
+# that multiple machines sharing the same filesystem each have their own cert.
+# Set these to the filenames (not full paths) within deployment/ssl/.
+# If unset, the dev server falls back to ssl_crt.pem / ssl_key.pem.
+#
+# Example — replace with the output of `hostname`:
+# SSL_CERT_FILE=mylaptop.local-ssl_crt.pem
+# SSL_KEY_FILE=mylaptop.local-ssl_key.pem
 
 # django-fernet-encrypted-fields
 # ------------------------------------------------------------------------------

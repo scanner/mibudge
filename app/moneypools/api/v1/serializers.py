@@ -129,13 +129,14 @@ class BankAccountSerializer(serializers.ModelSerializer):
     """Serializer for bank accounts.
 
     On create the caller supplies name, bank (UUID), account_type,
-    and optionally currency, account_number, and initial balances.
+    account_number, and optionally currency and initial balances.
     The view adds the requesting user to owners.  The unallocated
     budget is auto-created by the post_save signal and returned in
     the response.
 
-    After creation only name is updatable.  Currency, account_number,
-    and balances are immutable once the account exists.
+    After creation, name and account_number are updatable.  Currency,
+    account_type, bank, and balances are immutable once the account
+    exists.
 
     Group assignment is not yet supported via the API.
     """
@@ -146,6 +147,15 @@ class BankAccountSerializer(serializers.ModelSerializer):
     bank = serializers.SlugRelatedField(
         slug_field="id",
         queryset=Bank.objects.all(),
+    )
+
+    # Return usernames instead of raw PKs so the frontend can display
+    # owner identities without a separate user lookup.
+    #
+    owners = serializers.SlugRelatedField(
+        slug_field="username",
+        many=True,
+        read_only=True,
     )
 
     # Balances are editable=False on the model.  Override with
@@ -195,6 +205,27 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
         ]
+        extra_kwargs = {
+            "account_number": {"required": False},
+        }
+
+    ####################################################################
+    #
+    def validate_account_number(self, value: str | None) -> str | None:
+        """Require account_number on create; allow updates.
+
+        Args:
+            value: The account number string, or None.
+
+        Returns:
+            The validated value.
+
+        Raises:
+            ValidationError: If creating and no account number supplied.
+        """
+        if self.instance is None and not value:
+            raise serializers.ValidationError("Account number is required.")
+        return value
 
     ####################################################################
     #
@@ -329,6 +360,13 @@ class BudgetSerializer(serializers.ModelSerializer):
         decimal_places=DECIMAL_PLACES,
         default_currency=get_default_currency(),
     )
+    funding_amount = DRFMoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default_currency=get_default_currency(),
+        required=False,
+        allow_null=True,
+    )
 
     funding_schedule = RecurrenceSerializerField(
         required=False, allow_blank=True
@@ -349,6 +387,8 @@ class BudgetSerializer(serializers.ModelSerializer):
             "balance_currency",
             "target_balance",
             "target_balance_currency",
+            "funding_amount",
+            "funding_amount_currency",
             "budget_type",
             "funding_type",
             "target_date",
@@ -356,6 +396,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "fillup_goal",
             "archived",
             "archived_at",
+            "complete",
             "paused",
             "funding_schedule",
             "recurrance_schedule",
@@ -369,6 +410,8 @@ class BudgetSerializer(serializers.ModelSerializer):
             "balance",
             "balance_currency",
             "target_balance_currency",
+            "funding_amount_currency",
+            "complete",
             "archived",
             "archived_at",
             "created_at",
@@ -643,8 +686,14 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     budget (defaults to unallocated) and category.  After creation,
     budget, category, and memo are updatable.
 
-    The serializer validates that the total allocated amount across all
-    allocations for a transaction does not exceed the transaction amount.
+    The serializer enforces two key constraints:
+
+    1. **Same-account restriction** -- the budget must belong to the
+       same bank account as the transaction.  Cross-account allocations
+       are rejected with a 400 error.
+    2. **Sum constraint** -- the total allocated amount across all
+       allocations for a transaction must not exceed the transaction
+       amount.
 
     The ``amount_currency`` is read from raw request data by
     djmoney's ``MoneyField.get_value()`` -- no explicit currency
@@ -717,7 +766,10 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     ####################################################################
     #
     def validate_amount(self, value: Decimal) -> Decimal:
-        """Prevent changing the amount after creation.
+        """Validate the allocation amount.
+
+        Ensures the sign of the amount does not change on update
+        (prevents flipping a debit to a credit or vice-versa).
 
         Args:
             value: The allocation amount (Decimal or Money).
@@ -726,12 +778,20 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
             The validated amount.
 
         Raises:
-            ValidationError: If this is an update.
+            ValidationError: If the sign would change.
         """
         if self.instance is not None:
-            raise serializers.ValidationError(
-                "Cannot change the allocation amount after creation."
+            old_amount = self.instance.amount
+            old_val = (
+                old_amount.amount
+                if hasattr(old_amount, "amount")
+                else old_amount
             )
+            new_val = value.amount if hasattr(value, "amount") else value
+            if (old_val > 0) != (new_val > 0) and new_val != 0:
+                raise serializers.ValidationError(
+                    "Cannot change the sign of an allocation amount."
+                )
         return value
 
     ####################################################################
@@ -758,11 +818,12 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     ####################################################################
     #
     def validate(self, attrs: dict) -> dict:
-        """Validate that total allocations do not exceed the transaction amount.
+        """Validate cross-field constraints for allocations.
 
-        On create, sums the existing allocations for the transaction and
-        adds the new amount.  The total must not exceed the absolute
-        value of the transaction amount.
+        Checks:
+        1. The budget belongs to the same bank account as the
+           transaction.
+        2. Total allocations do not exceed the transaction amount.
 
         Args:
             attrs: The validated field data.
@@ -771,20 +832,41 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
             The validated attrs dict.
 
         Raises:
-            ValidationError: If the allocation total would exceed the
-                transaction amount.
+            ValidationError: If the budget is from a different account
+                or the allocation total would exceed the transaction
+                amount.
         """
-        # Only validate allocation totals on create.
-        #
         if self.instance is not None:
-            return attrs
+            transaction = self.instance.transaction
+            new_amount = attrs.get("amount", self.instance.amount)
+        else:
+            transaction = attrs["transaction"]
+            new_amount = attrs["amount"]
 
-        transaction = attrs["transaction"]
-        new_amount = attrs["amount"]
+        budget = attrs.get(
+            "budget",
+            self.instance.budget if self.instance else None,
+        )
+        if budget is not None:
+            if budget.bank_account_id != transaction.bank_account_id:
+                raise serializers.ValidationError(
+                    {
+                        "budget": (
+                            "Budget does not belong to the same "
+                            "bank account as the transaction."
+                        )
+                    }
+                )
 
-        existing_total = TransactionAllocation.objects.filter(
+        existing_qs = TransactionAllocation.objects.filter(
             transaction=transaction
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        )
+        if self.instance is not None:
+            existing_qs = existing_qs.exclude(id=self.instance.id)
+
+        existing_total = existing_qs.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
 
         # Transaction amounts can be negative (debits) so compare
         # absolute values.  new_amount may be a Money instance from
@@ -804,6 +886,79 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
                 f"the transaction amount ({tx_abs})."
             )
         return attrs
+
+
+########################################################################
+########################################################################
+#
+class TransactionSplitsSerializer(serializers.Serializer):
+    """Serializer for the declarative splits endpoint.
+
+    Accepts a dict mapping budget UUIDs to amounts.  The backend
+    reconciles existing allocations to match the declared state.
+    Any remainder goes to the unallocated budget.
+
+    All budgets must belong to the same bank account as the
+    transaction.  Cross-account budget references are rejected
+    with a 400 error.
+    """
+
+    splits = serializers.DictField(
+        child=serializers.DecimalField(
+            max_digits=MAX_DIGITS,
+            decimal_places=DECIMAL_PLACES,
+        ),
+        allow_empty=True,
+        help_text=(
+            "Map of budget UUID → amount.  Amounts must not exceed "
+            "the transaction total.  Omitted remainder is assigned "
+            "to the unallocated budget."
+        ),
+    )
+
+    def validate_splits(self, value: dict[str, Decimal]) -> dict[str, Decimal]:
+        """Validate budget UUIDs exist and amounts are sensible."""
+        transaction: Transaction = self.context["transaction"]
+        account = transaction.bank_account
+        tx_abs = abs(transaction.amount.amount)
+        is_debit = transaction.amount.amount < 0
+
+        budget_ids = list(value.keys())
+        budgets = Budget.objects.filter(id__in=budget_ids)
+        found_ids = {str(b.id) for b in budgets}
+        missing = set(budget_ids) - found_ids
+        if missing:
+            raise serializers.ValidationError(
+                f"Unknown budget IDs: {', '.join(sorted(missing))}"
+            )
+
+        wrong_account = [
+            str(b.id) for b in budgets if b.bank_account_id != account.id
+        ]
+        if wrong_account:
+            raise serializers.ValidationError(
+                "Budgets do not belong to the same bank account "
+                "as the transaction: "
+                f"{', '.join(sorted(wrong_account))}"
+            )
+
+        total = Decimal("0")
+        for budget_id, amount in value.items():
+            if amount <= 0:
+                raise serializers.ValidationError(
+                    f"Amount for budget {budget_id} must be positive."
+                )
+            total += amount
+
+        if total > tx_abs:
+            raise serializers.ValidationError(
+                f"Split total ({total}) exceeds transaction amount ({tx_abs})."
+            )
+
+        # Store the sign convention and resolved budgets for the view.
+        self._is_debit = is_debit
+        self._budgets_by_id = {str(b.id): b for b in budgets}
+        return value
 
 
 ########################################################################

@@ -658,6 +658,15 @@ wheels = [
 ]
 
 [[package]]
+name = "django-settings-export"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/72/9848a2d631dad70d7ea582540f0619e1a7ecf31b3a117de9d9f2b6b28029/django-settings-export-1.2.1.tar.gz", hash = "sha256:fceeae49fc597f654c1217415d8e049fc81c930b7154f5d8f28c432db738ff79", size = 4951, upload-time = "2016-11-06T11:18:58Z" }
+
+[[package]]
 name = "django-stubs"
 version = "5.2.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1327,6 +1336,7 @@ dependencies = [
     { name = "django-money" },
     { name = "django-recurrence" },
     { name = "django-redis" },
+    { name = "django-settings-export" },
     { name = "django-vite" },
     { name = "djangorestframework" },
     { name = "djangorestframework-simplejwt" },
@@ -1390,6 +1400,7 @@ requires-dist = [
     { name = "django-money" },
     { name = "django-recurrence" },
     { name = "django-redis" },
+    { name = "django-settings-export", specifier = ">=1.2.1" },
     { name = "django-vite" },
     { name = "djangorestframework" },
     { name = "djangorestframework-simplejwt" },

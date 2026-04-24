@@ -61,6 +61,18 @@ ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 TIME_ZONE = env("TIME_ZONE", default="America/Los_Angeles")
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1
+REPOSITORY_URL = env(
+    "REPOSITORY_URL", default="https://github.com/scanner/mibudge"
+)
+ADMINISTRATIVE_EMAIL_ADDRESS = env("ADMINISTRATIVE_EMAIL_ADDRESS", default="")
+
+# Settings exported to the Django template context via django-settings-export.
+# Access in templates as {{ settings.VARIABLE_NAME }}.
+#
+SETTINGS_EXPORT = [
+    "ADMINISTRATIVE_EMAIL_ADDRESS",
+    "REPOSITORY_URL",
+]
 USE_I18N = False
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -124,7 +136,9 @@ AUTHENTICATION_BACKENDS = [
     "guardian.backends.ObjectPermissionBackend",
 ]
 AUTH_USER_MODEL = "users.User"
-LOGIN_REDIRECT_URL = "users:spa-login"
+# The SPA owns its own auth flow (silent refresh + /app/login/), so there
+# is no allauth-to-SPA handoff URL.  allauth remains mounted for password
+# reset flows only.
 LOGIN_URL = "account_login"
 
 # PASSWORDS
@@ -182,6 +196,7 @@ STATICFILES_FINDERS = [
 DJANGO_VITE = {
     "default": {
         "dev_mode": env.bool("DJANGO_VITE_DEV_MODE", default=DEBUG),
+        "dev_server_protocol": "https",
         "dev_server_port": 5173,
         "manifest_path": REPO_DIR
         / "frontend"
@@ -232,6 +247,7 @@ TEMPLATES = [
                 "django.template.context_processors.static",
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
+                "django_settings_export.settings_export",
             ],
         },
     }

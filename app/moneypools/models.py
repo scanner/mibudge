@@ -4,6 +4,7 @@ from typing import Any
 import recurrence.fields
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import models
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
@@ -186,14 +187,17 @@ class BankAccount(MoneyPoolBaseClass):
         null=True,
     )
 
-    # Free-form strings a counterpart transaction's description may
-    # contain to identify this account. Used by the cross-account
-    # transaction linker (moneypools.linking) to resolve merchant-
-    # visible names like "CHASE CREDIT CRD" or "APPLECARD GSBANK"
-    # back to the BankAccount they represent. Matched case-insensitive
+    # `link_aliases` are strings that may show up in Transactions in other
+    # BankAccounts that indicate some transfer to/from this bank account to
+    # that other bank account. This way we can look at the "description" on a
+    # Transaction, and see that it is a transfer between bank accounts and this
+    # lets us figure what bank account on the other side of the transaction
+    # is. Used by the cross-account transaction linker (moneypools.linking) to
+    # resolve merchant- visible names like "CHASE CREDIT CRD" or "APPLECARD
+    # GSBANK" back to the BankAccount they represent. Matched case-insensitive
     # as substrings, so short, distinctive fragments work best. This
-    # supplements the automatic matches against ``name`` and the
-    # last-4 of ``account_number``.
+    # supplements the automatic matches against ``name`` and the last-4 of
+    # ``account_number``.
     #
     link_aliases = models.JSONField(
         default=list,
@@ -430,6 +434,7 @@ class Budget(MoneyPoolBaseClass):
         GOAL = "G", "Goal"
         RECURRING = "R", "Recurring"
         ASSOCIATED_FILLUP_GOAL = "A", "Associated Fill-up Goal"
+        CAPPED = "C", "Capped"
 
     #
     #####################################################################
@@ -484,9 +489,25 @@ class Budget(MoneyPoolBaseClass):
         default=FundingType.TARGET_DATE,
     )
 
-    # Only relevant if the FundingType is 'target_date'
+    # Only relevant for Goal budgets with FundingType 'target_date'.
+    # The date by which the budget should be fully funded.  Recurring
+    # budgets encode their "next due" date as the DTSTART of the
+    # recurrance_schedule recurrence instead.
     #
     target_date = models.DateField(null=True, blank=True)
+
+    # Only relevant if the FundingType is 'fixed_amount'.  Specifies
+    # how much is credited to the budget on each funding event.
+    #
+    funding_amount = MoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        null=True,
+        blank=True,
+        default=None,
+        default_currency=get_default_currency,
+        help_text="Amount credited per funding event (Fixed Amount funding type only).",
+    )
 
     # Only relevant if the BudgetType is 'recurring'
     #
@@ -508,7 +529,7 @@ class Budget(MoneyPoolBaseClass):
     # recurring budget.
     #
     fillup_goal = models.ForeignKey(
-        "self", to_field="id", null=True, on_delete=models.CASCADE
+        "self", to_field="id", null=True, blank=True, on_delete=models.SET_NULL
     )
 
     archived = models.BooleanField(default=False, editable=False)
@@ -516,6 +537,34 @@ class Budget(MoneyPoolBaseClass):
     paused = models.BooleanField(
         default=False,
         help_text="A paused budget does not get automatically funded on its schedule.",
+    )
+
+    # Whether this budget has reached its funding target and should not
+    # receive further automatic funding.
+    #
+    # The funding task checks this flag before crediting a budget.
+    # Clearing semantics differ by type:
+    #   Goal (G)    -- set True when balance >= target; never cleared.
+    #                  Once a goal is funded, it stays funded even if
+    #                  money is later spent from it.
+    #   Recurring (R) -- set True when balance >= target; cleared when
+    #                  the recurrence_schedule fires (cycle reset).
+    #   Capped (C)  -- set True when balance >= target; cleared
+    #                  automatically when balance drops below target
+    #                  (via pre_save signal).  This produces the
+    #                  "perpetual top-up to a cap" behavior.
+    #
+    # The unallocated budget always has complete=False (it is never
+    # funded automatically, so the flag is irrelevant, but False is
+    # the safe default).
+    #
+    complete = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when this budget has reached its target and should not "
+            "be funded further.  Managed by signals and funding tasks; "
+            "do not set manually."
+        ),
     )
     funding_schedule = recurrence.fields.RecurrenceField()
 
@@ -769,6 +818,33 @@ class InternalTransaction(TransactionBaseClass):
         default_currency=get_default_currency,
         editable=False,
     )
+
+    ####################################################################
+    #
+    def clean(self) -> None:
+        """Validate that src_budget and dst_budget are different.
+
+        Raises:
+            ValidationError: If the source and destination budget are
+                the same object.
+        """
+        super().clean()
+        if (
+            self.src_budget_id
+            and self.dst_budget_id
+            and (self.src_budget_id == self.dst_budget_id)
+        ):
+            raise ValidationError(
+                "Source and destination budgets must be different."
+            )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(src_budget_id=models.F("dst_budget_id")),
+                name="internal_transaction_src_dst_different",
+            ),
+        ]
 
 
 ########################################################################

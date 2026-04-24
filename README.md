@@ -6,11 +6,11 @@ Personal budgeting service inspired by [Simple Bank](https://en.wikipedia.org/wi
 
 ## What is this?
 
-Simple Bank had a budgeting model that let you divide your checking account balance into virtual sub-accounts called "goals" and "expenses." When Simple shut down, nothing else replicated that experience well. mibudge is an attempt to rebuild and improve on that model for personal and family use.
+Simple Bank had a budgeting model that let you divide your checking account balance into virtual sub-accounts called "goals" and "expenses." When Simple shut down, nothing else replicated that experience well. mibudge is an attempt to rebuild and improve on that model.
 
 ### The core idea
 
-You have one or more bank accounts. Each account's balance is divided into **budgets** -- virtual sub-accounts that live entirely inside mibudge. Every dollar in the account is allocated to a budget, with an "Unallocated" budget catching anything not yet assigned. Budgets come in two types: **Goal** and **Recurring** (with an optional **Associated Fill-up Goal** sub-type tied to a recurring budget).
+You have one or more bank accounts. Each account's balance is divided into **budgets** -- virtual sub-accounts that live entirely inside mibudge. Every dollar in the account is allocated to a budget, with an "Unallocated" budget catching anything not yet assigned. Budgets come in three types: **Goal**, **Recurring** (with an optional **Associated Fill-up Goal** sub-type), and **Capped**.
 
 **Transactions** from the bank (purchases, deposits, transfers) are associated with a budget. Transactions may arrive as *pending* -- recorded but not yet settled, with the final amount potentially differing from the pending amount (e.g. a gas station pre-authorization vs. the actual charge). A transaction represents one concrete bank event regardless of whether it is pending or posted. Most map to a single budget, but a transaction can be split -- say, a store receipt that's part groceries and part home improvement supplies.
 
@@ -30,7 +30,7 @@ Each budget has a **funding schedule** (e.g. weekly, bi-weekly, monthly) and eit
 
 All virtual sub-accounts are **budgets**. They differ by `budget_type`:
 
-A **Goal** budget has a target amount and a target date. Money accumulates on a funding schedule until the goal is reached. Once funded, it's complete -- the money sits there until you spend it or roll it into something else.
+A **Goal** budget has a target amount and accumulates money on a funding schedule until the goal is reached. Once funded, it's marked complete -- the money sits there until you spend it or roll it into something else. Funding can be calculated automatically from a target date (mibudge works out how much each funding event must contribute given the time remaining and the current balance) or set as a fixed amount per funding event.
 
 A **Recurring** budget is never truly complete. It has a recurrence schedule -- monthly, quarterly, yearly, etc. Money builds up until the target is reached, then resets on the next cycle. Think rent, groceries, subscriptions.
 
@@ -41,7 +41,14 @@ A recurring budget can optionally have an **Associated Fill-up Goal** budget. Th
 
 For example: you have a monthly grocery budget with a $500 target. Throughout the month, automatic funding deposits accumulate in the fill-up goal. At the start of the cycle, the fill-up goal transfers $500 into the recurring budget. You spend $400 that month. When the cycle refreshes, the $100 left in the budget doesn't need to move -- the fill-up goal only needs to top the budget up to $500, so it contributes $400 instead of $500. That means the fill-up goal starts its next accumulation cycle with a $100 head start, needing only $400 in new funding to be ready for the following refresh. This also means you can have a fully funded recurring budget that is ready to spend *while simultaneously* accumulating funds in the fill-up goal for the next cycle.
 
-All budget types can be funded automatically (calculated from schedule + target) or with a fixed amount per funding event.
+A **Capped** budget tops itself up to a fixed cap amount on a funding schedule. Each funding event deposits a fixed amount (up to the cap) into the budget; when the balance is already at or above the cap, no funding occurs. As soon as spending brings the balance below the cap, the next scheduled funding event resumes automatically. Unlike a Goal (which is complete once funded) or a Recurring budget (which resets on a cycle), a Capped budget is perpetual -- it is marked complete only while its balance equals or exceeds the cap, and reverts to active the moment any spending draws it down. Think of it as a reservoir that stays full as long as you keep it topped up: an emergency buffer, a standing household expense fund, or any amount you always want available.
+
+### Budget lifecycle
+
+Budgets are never hard-deleted once they have transaction history. The rule is:
+
+- **Delete**: only allowed if the budget has no transaction allocations at all (i.e., it was created by mistake and never used). The API returns 400 if you attempt to delete a budget that has allocations.
+- **Archive**: the correct way to retire a budget. Archiving moves any remaining balance to the Unallocated budget via an internal transaction, marks the budget hidden, and records `archived_at`. If the budget has an associated fill-up goal, that is archived and drained first. Archived budgets retain their full transaction history and can be retrieved via the API with `archived=true`.
 
 ### Accounts
 
@@ -93,13 +100,21 @@ The machine-readable OpenAPI spec and generated API reference docs live in [`doc
 - **Access token** (60 min): held in JS memory only, sent as `Authorization: Bearer` header
 - **Refresh token** (14 days, sliding): `httpOnly; Secure; SameSite=Strict` cookie, never readable by JS
 - **Rotation**: `ROTATE_REFRESH_TOKENS = True`, `BLACKLIST_AFTER_ROTATION = True` -- each refresh call resets the 14-day clock
-- **Login flow**:
-  1. django-allauth handles credentials at `/accounts/login/`
-  2. `LOGIN_REDIRECT_URL` sends the authenticated user to `SpaLoginView`
-  3. `SpaLoginView` issues a JWT pair, sets the refresh token as an httpOnly cookie, and renders a minimal handoff page
-  4. The handoff page sets `window.__INITIAL_TOKEN__` and immediately redirects to `/app/`
-  5. The Vue SPA reads the token once into the Pinia auth store and removes it from `window`
-- **Silent refresh**: when the access token expires the auth store calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie automatically, returning a new access token and rotating the refresh cookie
+- **Login flow**: the SPA owns its own auth UI at `/app/login/`. It posts
+  username+password to `POST /api/token/` (`CookieTokenObtainPairView`), which
+  returns the access token in the JSON body and sets the refresh token as the
+  `httpOnly; Secure; SameSite=Strict` cookie.
+- **Cold-boot silent refresh**: on first load, `main.ts` calls
+  `authStore.refresh()` before installing the router. If the refresh cookie is
+  still valid, the SPA becomes authenticated before the first route guard runs
+  and returning users skip the login screen entirely.
+- **Silent refresh on 401**: when the access token expires, the auth store
+  calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie
+  automatically, returning a new access token and rotating the refresh cookie.
+- **django-allauth**: remains mounted at `/accounts/` for password reset flows
+  only; it is not part of the SPA login path. See
+  `task-mibudge-crispy-allauth` for the follow-up work required before the
+  allauth templates can render.
 
 ## Project structure
 
@@ -115,7 +130,7 @@ mibudge/
       moneypools/         # Moneypools tests and model factories
     scripts/              # Container startup scripts (one per service: app, celery worker,
                           #   celery beat, flower). Selected via docker-compose `command:`
-    templates/            # Django templates: SPA shell, JWT handoff page, allauth overrides
+    templates/            # Django templates: SPA shell, allauth overrides
     static/               # Static files served by Django
   frontend/               # Vue 3 SPA
     src/                  # TypeScript source: components, Pinia stores, Vue Router, API client

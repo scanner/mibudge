@@ -1,7 +1,7 @@
 import uuid
 
 from django.contrib.auth.models import AbstractUser
-from django.db.models import CharField, UUIDField
+from django.db.models import SET_NULL, CharField, ForeignKey, UUIDField
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -23,6 +23,17 @@ class User(AbstractUser):
     last_name = None  # type: ignore[assignment]
 
     uuid = UUIDField(unique=True, default=uuid.uuid4, editable=False)
+
+    # The account shown first on the Overview and pre-selected in the
+    # account switcher.  Cleared automatically if the account is deleted.
+    #
+    default_bank_account = ForeignKey(
+        "moneypools.BankAccount",
+        null=True,
+        blank=True,
+        on_delete=SET_NULL,
+        related_name="default_for_users",
+    )
 
     def get_absolute_url(self):
         """Get url for user's detail view.

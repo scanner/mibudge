@@ -85,7 +85,7 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 | Path | Handler |
 |------|---------|
 | `/admin/` | Django admin (URL configurable via `DJANGO_ADMIN_URL` env var) |
-| `/accounts/` | django-allauth (login, password reset; registration disabled by default) |
+| `/accounts/` | django-allauth (password reset only; SPA owns login at `/app/login/`; registration disabled by default) |
 | `/api/v1/` | DRF REST API v1 (JWT-authenticated) |
 | `/api/token/` | `TokenObtainPairView` — JWT access+refresh pair (cross-version) |
 | `/api/token/refresh/` | `CookieTokenRefreshView` — silent JWT refresh from httpOnly cookie (cross-version) |

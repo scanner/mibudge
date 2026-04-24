@@ -23,8 +23,13 @@ paths:
     post:
       operationId: api_token_create
       description: |-
-        Takes a set of user credentials and returns an access and refresh JSON web
-        token pair to prove the authentication of those credentials.
+        JWT obtain endpoint that stores the refresh token in an httpOnly
+        cookie and returns only the access token in the response body.
+
+        This is the browser-SPA login flow: JS receives the short-lived
+        access token (kept in memory); the refresh token is a
+        Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
+        and that the browser sends automatically to /api/token/refresh/.
       tags:
       - api
       requestBody:
@@ -85,6 +90,11 @@ paths:
       summary: List transaction allocations
       parameters:
       - in: query
+        name: bank_account
+        schema:
+          type: string
+          format: uuid
+      - in: query
         name: budget
         schema:
           type: string
@@ -127,36 +137,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTransactionAllocationList'
           description: ''
-    post:
-      operationId: allocations_create
-      description: 'Allocate a portion of a transaction''s amount to a budget. Required:
-        transaction (UUID) and amount. Optional: budget (UUID, defaults to unallocated)
-        and category. The total allocated across all allocations for a transaction
-        must not exceed the transaction amount.'
-      summary: Create a transaction allocation
-      tags:
-      - allocations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransactionAllocationRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TransactionAllocationRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TransactionAllocationRequest'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionAllocation'
-          description: ''
   /api/v1/allocations/{id}/:
     get:
       operationId: allocations_retrieve
@@ -180,94 +160,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionAllocation'
           description: ''
-    put:
-      operationId: allocations_update
-      description: Full update of an allocation. After creation, budget, category,
-        and memo are updatable. Amount and transaction are immutable.
-      summary: Update an allocation
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - allocations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransactionAllocationRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TransactionAllocationRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TransactionAllocationRequest'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionAllocation'
-          description: ''
-    patch:
-      operationId: allocations_partial_update
-      description: Partial update of an allocation. After creation, budget, category,
-        and memo are updatable.
-      summary: Partially update an allocation
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - allocations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedTransactionAllocationRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedTransactionAllocationRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedTransactionAllocationRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionAllocation'
-          description: ''
-    delete:
-      operationId: allocations_destroy
-      description: Delete a transaction allocation. Budget balance changes are reversed
-        by the pre_delete signal.
-      summary: Delete an allocation
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - allocations
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/v1/bank-accounts/:
     get:
       operationId: bank_accounts_list
@@ -540,12 +432,14 @@ paths:
           type: string
           enum:
           - A
+          - C
           - G
           - R
         description: |-
           * `G` - Goal
           * `R` - Recurring
           * `A` - Associated Fill-up Goal
+          * `C` - Capped
       - name: ordering
         required: false
         in: query
@@ -709,8 +603,9 @@ paths:
           description: ''
     delete:
       operationId: budgets_destroy
-      description: Delete a budget. The unallocated budget cannot be deleted -- returns
-        403.
+      description: Delete a budget. The unallocated budget cannot be deleted (403).
+        A budget with existing transaction allocations cannot be deleted (400) --
+        archive it instead.
       summary: Delete a budget
       parameters:
       - in: path
@@ -726,6 +621,44 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/budgets/{id}/archive/:
+    post:
+      operationId: budgets_archive_create
+      description: Archive a budget. Any remaining balance is transferred to the account's
+        unallocated budget. If the budget has an associated fill-up goal, that budget
+        is also archived and its balance moved to unallocated. The unallocated budget
+        cannot be archived.
+      summary: Archive a budget
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - budgets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BudgetRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BudgetRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Budget'
+          description: ''
   /api/v1/currencies/:
     get:
       operationId: currencies_retrieve
@@ -1113,6 +1046,143 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/transactions/{id}/splits/:
+    post:
+      operationId: transactions_splits_create
+      description: 'Declaratively set how a transaction''s amount is split across
+        budgets. All referenced budgets must belong to the same bank account as the
+        transaction. The backend reconciles existing allocations to match: creating,
+        updating, or deleting as needed. Any unallocated remainder gets an allocation
+        to the account''s unallocated budget. Returns all allocations for this transaction
+        after reconciliation.'
+      summary: Declare transaction splits
+      parameters:
+      - in: query
+        name: bank_account
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date-time
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: pending
+        schema:
+          type: boolean
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: transaction_type
+        schema:
+          type: string
+          enum:
+          - ''
+          - ach
+          - ach_reversal
+          - adjustment
+          - atm_withdrawal
+          - balance_sweep
+          - bank_generated_credit
+          - bill_payment
+          - c2c
+          - check
+          - check_deposit
+          - courtesy_credit
+          - fee
+          - fx_order
+          - interest_credit
+          - migration_interbank_transfer
+          - pin_purchase
+          - protected_goal_account_transfer
+          - round-up_transfer
+          - shared_transfer
+          - signature_credit
+          - signature_purchase
+          - signature_return
+          - wire_transfer
+        description: |-
+          * `signature_purchase` - Signature Purchase
+          * `ach` - ACH
+          * `round-up_transfer` - Round-up Transfer
+          * `protected_goal_account_transfer` - Protected Goal Account Transfer
+          * `fee` - Fee
+          * `pin_purchase` - Pin Purchase
+          * `signature_credit` - Signature Credit
+          * `interest_credit` - Interest Credit
+          * `shared_transfer` - Shared Transfer
+          * `courtesy_credit` - Courtesy Credit
+          * `atm_withdrawal` - ATM Withdrawal
+          * `bill_payment` - Bill Payment
+          * `bank_generated_credit` - Bank Generated Credit
+          * `wire_transfer` - Wire Transfer
+          * `check_deposit` - Check Deposit
+          * `check` - Check
+          * `c2c` - c2c
+          * `migration_interbank_transfer` - Migration Interbank Transfer
+          * `balance_sweep` - Balance Sweep
+          * `ach_reversal` - ACH Reversal
+          * `adjustment` - Adjustment
+          * `signature_return` - Signature return
+          * `fx_order` - FX Order
+          * `` - --------
+      tags:
+      - transactions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionSplitsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionSplitsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionSplitsRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransactionAllocationList'
+          description: ''
   /api/v1/users/:
     get:
       operationId: users_list
@@ -1471,6 +1541,15 @@ components:
         target_balance_currency:
           type: string
           readOnly: true
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        funding_amount_currency:
+          type: string
+          readOnly: true
+          nullable: true
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -1493,6 +1572,11 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        complete:
+          type: boolean
+          readOnly: true
+          description: True when this budget has reached its target and should not
+            be funded further.  Managed by signals and funding tasks; do not set manually.
         paused:
           type: boolean
           description: A paused budget does not get automatically funded on its schedule.
@@ -1520,7 +1604,9 @@ components:
       - balance
       - balance_currency
       - bank_account
+      - complete
       - created_at
+      - funding_amount_currency
       - id
       - modified_at
       - name
@@ -1550,6 +1636,11 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -1586,11 +1677,13 @@ components:
       - G
       - R
       - A
+      - C
       type: string
       description: |-
         * `G` - Goal
         * `R` - Recurring
         * `A` - Associated Fill-up Goal
+        * `C` - Capped
     CategoryEnum:
       enum:
       - Business:Business Clothing
@@ -2243,6 +2336,11 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -2270,40 +2368,6 @@ components:
           nullable: true
           maxLength: 512
         auto_spend: {}
-    PatchedTransactionAllocationRequest:
-      type: object
-      description: |-
-        Serializer for transaction allocations.
-
-        An allocation maps a portion of a transaction's amount to a budget.
-        On create the caller supplies transaction, amount, and optionally
-        budget (defaults to unallocated) and category.  After creation,
-        budget, category, and memo are updatable.
-
-        The serializer validates that the total allocated amount across all
-        allocations for a transaction does not exceed the transaction amount.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
-      properties:
-        transaction:
-          type: string
-          format: uuid
-        budget:
-          type: string
-          format: uuid
-          nullable: true
-        amount:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
-        category:
-          $ref: '#/components/schemas/CategoryEnum'
-        memo:
-          type: string
-          nullable: true
-          maxLength: 512
     PatchedTransactionRequest:
       type: object
       description: |-
@@ -2471,6 +2535,10 @@ components:
         description:
           type: string
           maxLength: 512
+        linked_transaction:
+          type: string
+          format: uuid
+          readOnly: true
         bank_account_posted_balance:
           type: string
           format: decimal
@@ -2515,6 +2583,7 @@ components:
       - bank_account_posted_balance_currency
       - created_at
       - id
+      - linked_transaction
       - modified_at
       - party
       - raw_description
@@ -2530,8 +2599,14 @@ components:
         budget (defaults to unallocated) and category.  After creation,
         budget, category, and memo are updatable.
 
-        The serializer validates that the total allocated amount across all
-        allocations for a transaction does not exceed the transaction amount.
+        The serializer enforces two key constraints:
+
+        1. **Same-account restriction** -- the budget must belong to the
+           same bank account as the transaction.  Cross-account allocations
+           are rejected with a 400 error.
+        2. **Sum constraint** -- the total allocated amount across all
+           allocations for a transaction must not exceed the transaction
+           amount.
 
         The ``amount_currency`` is read from raw request data by
         djmoney's ``MoneyField.get_value()`` -- no explicit currency
@@ -2585,43 +2660,6 @@ components:
       - created_at
       - id
       - modified_at
-      - transaction
-    TransactionAllocationRequest:
-      type: object
-      description: |-
-        Serializer for transaction allocations.
-
-        An allocation maps a portion of a transaction's amount to a budget.
-        On create the caller supplies transaction, amount, and optionally
-        budget (defaults to unallocated) and category.  After creation,
-        budget, category, and memo are updatable.
-
-        The serializer validates that the total allocated amount across all
-        allocations for a transaction does not exceed the transaction amount.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
-      properties:
-        transaction:
-          type: string
-          format: uuid
-        budget:
-          type: string
-          format: uuid
-          nullable: true
-        amount:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
-        category:
-          $ref: '#/components/schemas/CategoryEnum'
-        memo:
-          type: string
-          nullable: true
-          maxLength: 512
-      required:
-      - amount
       - transaction
     TransactionRequest:
       type: object
@@ -2682,6 +2720,29 @@ components:
       - raw_description
       - transaction_date
       - transaction_type
+    TransactionSplitsRequest:
+      type: object
+      description: |-
+        Serializer for the declarative splits endpoint.
+
+        Accepts a dict mapping budget UUIDs to amounts.  The backend
+        reconciles existing allocations to match the declared state.
+        Any remainder goes to the unallocated budget.
+
+        All budgets must belong to the same bank account as the
+        transaction.  Cross-account budget references are rejected
+        with a 400 error.
+      properties:
+        splits:
+          type: object
+          additionalProperties:
+            type: string
+            format: decimal
+            pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Map of budget UUID → amount.  Amounts must not exceed the transaction
+            total.  Omitted remainder is assigned to the unallocated budget.
+      required:
+      - splits
     TransactionTypeEnum:
       enum:
       - signature_purchase

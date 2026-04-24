@@ -3,10 +3,12 @@
 # system imports
 #
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 # 3rd party imports
 #
 import pytest
+from django.core.exceptions import ValidationError
 from moneyed import USD, Money
 
 # app imports
@@ -62,6 +64,115 @@ class TestBankAccount:
 ########################################################################
 ########################################################################
 #
+class TestBudget:
+    """Tests for Budget signal-driven complete flag logic."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "budget_type,balance,expected_complete",
+        [
+            ("G", 200, True),
+            ("G", 100, False),
+            ("R", 200, True),
+            ("R", 100, False),
+            ("C", 200, True),
+            ("C", 100, False),
+        ],
+    )
+    def test_complete_flag_on_save(
+        self,
+        budget_type: str,
+        balance: int,
+        expected_complete: bool,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget of the given type with the given balance vs. a 200 target
+        WHEN:  the budget is saved
+        THEN:  complete matches expected_complete
+        """
+        budget = budget_factory(
+            balance=balance, target_balance=200, budget_type=budget_type
+        )
+        assert budget.complete is expected_complete
+
+    ####################################################################
+    #
+    def test_fillup_budget_created_for_recurring_with_fillup_goal(
+        self,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Recurring budget created with with_fillup_goal=True
+        WHEN:  the budget is saved
+        THEN:  an associated type-A fill-up budget is created and linked
+        """
+        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget.refresh_from_db()
+        assert budget.fillup_goal is not None
+        fillup = budget.fillup_goal
+        assert fillup.budget_type == "A"
+        assert fillup.name == f"{budget.name} Fill-up"
+        assert fillup.bank_account == budget.bank_account
+
+    ####################################################################
+    #
+    def test_fillup_budget_deleted_when_parent_deleted(
+        self,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Recurring budget with an associated fill-up goal
+        WHEN:  the parent budget is deleted
+        THEN:  the fill-up goal budget is also deleted
+        """
+        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget.refresh_from_db()
+        fillup_id = budget.fillup_goal_id
+        assert fillup_id is not None
+
+        budget.delete()
+
+        assert not Budget.objects.filter(id=fillup_id).exists()
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "budget_type,expected_complete_after_spend",
+        [
+            # Goal: stays complete once funded regardless of spending.
+            ("G", True),
+            # Capped: recomputed on every save, so spending clears it.
+            ("C", False),
+        ],
+    )
+    def test_complete_after_spending(
+        self,
+        budget_type: str,
+        expected_complete_after_spend: bool,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget at its target (complete=True)
+        WHEN:  the balance drops below the target
+        THEN:  complete reflects the type's clearing semantics
+               (Goal stays True; Capped reverts to False)
+        """
+        budget = budget_factory(
+            balance=200, target_balance=200, budget_type=budget_type
+        )
+        assert budget.complete is True
+
+        budget.balance = Money(100, USD)
+        budget.save()
+        budget.refresh_from_db()
+        assert budget.complete is expected_complete_after_spend
+
+
+########################################################################
+########################################################################
+#
 class TestInternalTransaction:
     """Tests for InternalTransaction creation, updates, and deletion."""
 
@@ -89,6 +200,22 @@ class TestInternalTransaction:
         assert dst_budget.balance == Money(150, USD)
         assert it.src_budget_balance == Money(50, USD)
         assert it.dst_budget_balance == Money(150, USD)
+
+    ####################################################################
+    #
+    def test_same_src_dst_budget_raises_validation_error(
+        self,
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: an InternalTransaction with the same budget as both src and dst
+        WHEN:  clean() is called
+        THEN:  a ValidationError is raised
+        """
+        budget = budget_factory(balance=100)
+        it = InternalTransaction(src_budget=budget, dst_budget=budget)
+        with pytest.raises(ValidationError):
+            it.clean()
 
     ####################################################################
     #
@@ -414,6 +541,7 @@ class TestTransactionAllocation:
         )
 
         assert budget.balance == Money(BUDGET_BAL + ALLOC_AMT, USD)
+        alloc.refresh_from_db()
         assert alloc.budget_balance == budget.balance
 
     ####################################################################
@@ -532,6 +660,42 @@ class TestTransactionAllocation:
 
     ####################################################################
     #
+    def test_amount_change_adjusts_budget_balance(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+    ) -> None:
+        """
+        GIVEN: a -100 allocation against a budget with $500 balance
+        WHEN:  the allocation amount is changed to -60
+        THEN:  the budget balance reflects the delta (+40)
+        """
+        BUDGET_BAL = 500
+        OLD_AMT = -100
+        NEW_AMT = -60
+
+        budget = budget_factory(balance=BUDGET_BAL)
+        bank_account = bank_account_factory(available_balance=1000)
+        txn = transaction_factory(
+            amount=OLD_AMT,
+            raw_description="Test purchase",
+            bank_account=bank_account,
+        )
+        alloc = transaction_allocation_factory(
+            transaction=txn, budget=budget, amount=OLD_AMT
+        )
+        assert budget.balance == Money(BUDGET_BAL + OLD_AMT, USD)
+
+        alloc.amount = Money(NEW_AMT, USD)
+        alloc.save()
+
+        budget = Budget.objects.get(id=budget.id)
+        assert budget.balance == Money(BUDGET_BAL + NEW_AMT, USD)
+
+    ####################################################################
+    #
     def test_split_transaction_multiple_allocations(
         self,
         bank_account_factory: Callable[..., BankAccount],
@@ -578,3 +742,302 @@ class TestTransactionAllocation:
         )
         assert home_budget.balance == Money(HOME_BAL + HOME_AMT, USD)
         assert txn.allocations.count() == 2
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        ("early_date", "late_date"),
+        [
+            (
+                datetime(2026, 4, 8, tzinfo=UTC),
+                datetime(2026, 4, 10, tzinfo=UTC),
+            ),
+            (
+                datetime(2026, 4, 8, tzinfo=UTC),
+                datetime(2026, 4, 8, tzinfo=UTC),
+            ),
+        ],
+        ids=["different-dates", "same-date"],
+    )
+    def test_out_of_order_allocation_corrects_running_balances(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        early_date: datetime,
+        late_date: datetime,
+    ) -> None:
+        """
+        GIVEN: a budget with $500 and two transactions
+        WHEN:  the chronologically later allocation is created first
+        THEN:  budget_balance snapshots reflect chronological order,
+               not creation order — first shows $340, second shows
+               $180
+
+        When both transactions share a date, chronological order is
+        determined by transaction.created_at (creation order).
+        """
+        bank_account = bank_account_factory(available_balance=2000)
+        budget = budget_factory(
+            bank_account=bank_account,
+            balance=Money(500, USD),
+        )
+
+        # Create earlier_tx first so it gets the earlier created_at.
+        # For same-date ties, created_at determines chronological
+        # order.
+        earlier_tx = transaction_factory(
+            bank_account=bank_account,
+            amount=Money(-160, USD),
+            transaction_date=early_date,
+            raw_description="Check 322",
+        )
+        later_tx = transaction_factory(
+            bank_account=bank_account,
+            amount=Money(-160, USD),
+            transaction_date=late_date,
+            raw_description="Check 323",
+        )
+
+        # Allocate the later transaction first (out of order).
+        transaction_allocation_factory(
+            transaction=later_tx,
+            budget=budget,
+            amount=Money(-160, USD),
+        )
+        # Then allocate the earlier one.
+        transaction_allocation_factory(
+            transaction=earlier_tx,
+            budget=budget,
+            amount=Money(-160, USD),
+        )
+
+        alloc_early = TransactionAllocation.objects.get(
+            transaction=earlier_tx, budget=budget
+        )
+        alloc_late = TransactionAllocation.objects.get(
+            transaction=later_tx, budget=budget
+        )
+
+        # Chronologically first: 500 - 160 = 340
+        assert alloc_early.budget_balance == Money(340, USD)
+        # Chronologically second: 340 - 160 = 180
+        assert alloc_late.budget_balance == Money(180, USD)
+
+    ####################################################################
+    #
+    def test_mid_insert_only_updates_subsequent_balances(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+    ) -> None:
+        """
+        GIVEN: 21 transactions spread across 3 days, with the middle one
+               initially unallocated
+        WHEN:  1) 20 transactions are allocated (skipping the middle),
+                  and running balances are verified;
+               2) the middle transaction is then allocated, and running
+                  balances are verified;
+               3) the transaction immediately after the middle has its
+                  allocation moved to the unallocated budget, and running
+                  balances are verified
+        THEN:  budget_balance snapshots are correct at each stage
+        """
+        bank_account = bank_account_factory(available_balance=50000)
+        budget = budget_factory(
+            bank_account=bank_account,
+            balance=Money(10000, USD),
+        )
+        unallocated = bank_account.unallocated_budget
+
+        # 21 transactions: 7 on each of 3 days.  Each is a -100 debit.
+        days = [
+            datetime(2026, 4, 6, tzinfo=UTC),
+            datetime(2026, 4, 7, tzinfo=UTC),
+            datetime(2026, 4, 8, tzinfo=UTC),
+        ]
+        txns: list[Transaction] = []
+        for day in days:
+            for i in range(7):
+                txns.append(
+                    transaction_factory(
+                        bank_account=bank_account,
+                        amount=Money(-100, USD),
+                        transaction_date=day,
+                        raw_description=f"Tx {day.day}-{i}",
+                    )
+                )
+        assert len(txns) == 21
+
+        # txns[10] is the middle transaction (0-based index 10 of 21).
+        mid_idx = 10
+        after_mid_idx = mid_idx + 1
+
+        def assert_running_balances() -> None:
+            """Re-fetch all budget allocations and verify running balances."""
+            budget.refresh_from_db()
+            allocs = list(
+                TransactionAllocation.objects.filter(budget=budget)
+                .order_by(
+                    "transaction__transaction_date",
+                    "transaction__created_at",
+                    "created_at",
+                )
+                .select_related("transaction")
+            )
+            total = sum(a.amount.amount for a in allocs)
+            running = budget.balance.amount - total
+            for a in allocs:
+                running += a.amount.amount
+                assert a.budget_balance.amount == running, (
+                    f"Allocation {a.pk} (tx date "
+                    f"{a.transaction.transaction_date}): "
+                    f"expected {running}, got {a.budget_balance.amount}"
+                )
+
+        # --- Phase 1: allocate all 20 transactions except the middle ---
+        for i, tx in enumerate(txns):
+            if i == mid_idx:
+                continue
+            transaction_allocation_factory(
+                transaction=tx,
+                budget=budget,
+                amount=Money(-100, USD),
+            )
+
+        assert TransactionAllocation.objects.filter(budget=budget).count() == 20
+        assert_running_balances()
+
+        # --- Phase 2: allocate the middle transaction ---
+        transaction_allocation_factory(
+            transaction=txns[mid_idx],
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        assert TransactionAllocation.objects.filter(budget=budget).count() == 21
+        assert_running_balances()
+
+        # --- Phase 3: move the allocation after the middle to the
+        #              unallocated budget (simulates removing a
+        #              transaction from a budget) ---
+        alloc_to_move = TransactionAllocation.objects.get(
+            transaction=txns[after_mid_idx],
+            budget=budget,
+        )
+        alloc_to_move.budget = unallocated
+        alloc_to_move.save()
+
+        assert TransactionAllocation.objects.filter(budget=budget).count() == 20
+        assert_running_balances()
+
+    ####################################################################
+    #
+    def test_internal_transaction_between_allocations(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        transaction_factory: Callable[..., Transaction],
+        transaction_allocation_factory: Callable[..., TransactionAllocation],
+        internal_transaction_factory: Callable[..., InternalTransaction],
+    ) -> None:
+        """
+        GIVEN: a budget at $0, funded to $500 via InternalTransaction,
+               then two -$100 allocations
+        WHEN:  a second InternalTransaction adds $200 and a third
+               allocation of -$100 is created
+        THEN:  the third allocation's budget_balance reflects the
+               top-up: (500 - 100 - 100) + 200 - 100 = 400,
+               not (500 - 100 - 100 - 100) = 200
+        """
+        account = bank_account_factory(
+            available_balance=Money(5000, USD),
+            posted_balance=Money(5000, USD),
+        )
+        unalloc = account.unallocated_budget
+        assert unalloc is not None
+        budget = budget_factory(bank_account=account, balance=Money(0, USD))
+
+        # Fund the budget: +$500.
+        internal_transaction_factory(
+            bank_account=account,
+            src_budget=unalloc,
+            dst_budget=budget,
+            amount=Money(500, USD),
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(500, USD)
+
+        # Two allocations before the top-up.
+        tx1 = transaction_factory(
+            bank_account=account,
+            amount=Money(-100, USD),
+            transaction_date=datetime(2024, 1, 1, tzinfo=UTC),
+        )
+        a1 = transaction_allocation_factory(
+            transaction=tx1,
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        tx2 = transaction_factory(
+            bank_account=account,
+            amount=Money(-100, USD),
+            transaction_date=datetime(2024, 1, 2, tzinfo=UTC),
+        )
+        a2 = transaction_allocation_factory(
+            transaction=tx2,
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        a1.refresh_from_db()
+        a2.refresh_from_db()
+        assert a1.budget_balance == Money(400, USD)
+        assert a2.budget_balance == Money(300, USD)
+
+        # Mid-stream top-up: +$200 -> budget now $500.
+        budget.refresh_from_db()
+        assert budget.balance == Money(300, USD)
+        unalloc.refresh_from_db()
+
+        internal_transaction_factory(
+            bank_account=account,
+            src_budget=unalloc,
+            dst_budget=budget,
+            amount=Money(200, USD),
+        )
+        budget.refresh_from_db()
+        assert budget.balance == Money(500, USD)
+
+        # Third allocation after the top-up.
+        tx3 = transaction_factory(
+            bank_account=account,
+            amount=Money(-100, USD),
+            transaction_date=datetime(2024, 1, 3, tzinfo=UTC),
+        )
+        a3 = transaction_allocation_factory(
+            transaction=tx3,
+            budget=budget,
+            amount=Money(-100, USD),
+        )
+
+        budget.refresh_from_db()
+        assert budget.balance == Money(400, USD)
+
+        # The prior two should be unchanged.
+        a1.refresh_from_db()
+        a2.refresh_from_db()
+        assert a1.budget_balance == Money(400, USD)
+        assert a2.budget_balance == Money(300, USD)
+
+        # The third must reflect the +$200 top-up:
+        # 300 + 200 - 100 = 400, not 300 - 100 = 200.
+        a3.refresh_from_db()
+        assert a3.budget_balance == Money(400, USD), (
+            f"Expected budget_balance=$400 (reflecting +$200 "
+            f"top-up), got {a3.budget_balance}"
+        )

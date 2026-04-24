@@ -77,6 +77,7 @@ class TestUserViewSet:
             "username": user.username,
             "name": user.name,
             "url": f"http://testserver/api/v1/users/{user.username}/",
+            "default_bank_account": None,
         }
 
 

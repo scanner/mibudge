@@ -30,8 +30,13 @@ Monetary values are represented as a decimal amount paired with an ISO 4217 curr
 
 **Operation:** `api_token_create`
 
-Takes a set of user credentials and returns an access and refresh JSON web
-token pair to prove the authentication of those credentials.
+JWT obtain endpoint that stores the refresh token in an httpOnly
+cookie and returns only the access token in the response body.
+
+This is the browser-SPA login flow: JS receives the short-lived
+access token (kept in memory); the refresh token is a
+Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
+and that the browser sends automatically to /api/token/refresh/.
 
 **Request Body** (`application/json`):
 
@@ -91,6 +96,7 @@ Return allocations belonging to the authenticated user's transactions. Filterabl
 
 **Parameters:**
 
+- `bank_account` (query, optional)
 - `budget` (query, optional)
 - `category` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
@@ -104,650 +110,6 @@ Return allocations belonging to the authenticated user's transactions. Filterabl
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
-
-#### `POST /api/v1/allocations/`
-
-**Operation:** `allocations_create`
-
-Allocate a portion of a transaction's amount to a budget. Required: transaction (UUID) and amount. Optional: budget (UUID, defaults to unallocated) and category. The total allocated across all allocations for a transaction must not exceed the transaction amount.
-
-**Request Body** (`application/json`):
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Response 201:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`budget_balance`** (`string`) *(required, read-only)*
-- **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
 
 #### `GET /api/v1/allocations/{id}/`
 
@@ -922,1314 +284,6 @@ Return a single transaction allocation by UUID.
 - **`memo`** (`string`)
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
-
-#### `PUT /api/v1/allocations/{id}/`
-
-**Operation:** `allocations_update`
-
-Full update of an allocation. After creation, budget, category, and memo are updatable. Amount and transaction are immutable.
-
-**Parameters:**
-
-- `id` (path, required)
-
-**Request Body** (`application/json`):
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`budget_balance`** (`string`) *(required, read-only)*
-- **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-#### `PATCH /api/v1/allocations/{id}/`
-
-**Operation:** `allocations_partial_update`
-
-Partial update of an allocation. After creation, budget, category, and memo are updatable.
-
-**Parameters:**
-
-- `id` (path, required)
-
-**Request Body** (`application/json`):
-
-- **`transaction`** (`string`)
-- **`budget`** (`string`)
-- **`amount`** (`string`)
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`transaction`** (`string`)
-- **`budget`** (`string`)
-- **`amount`** (`string`)
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`transaction`** (`string`)
-- **`budget`** (`string`)
-- **`amount`** (`string`)
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`budget_balance`** (`string`) *(required, read-only)*
-- **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-#### `DELETE /api/v1/allocations/{id}/`
-
-**Operation:** `allocations_destroy`
-
-Delete a transaction allocation. Budget balance changes are reversed by the pre_delete signal.
-
-**Parameters:**
-
-- `id` (path, required)
-
-**Response 204:** No response body
 
 ### bank-accounts
 
@@ -2542,6 +596,7 @@ Return budgets belonging to the authenticated user's accounts. Filterable by ban
 - `budget_type` (query, optional) — * `G` - Goal
 * `R` - Recurring
 * `A` - Associated Fill-up Goal
+* `C` - Capped
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
 - `page_size` (query, optional) — Number of results to return per page.
@@ -2566,9 +621,11 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2585,9 +642,11 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2604,9 +663,11 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2627,9 +688,12 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`balance_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
+- **`funding_amount`** (`string`)
+- **`funding_amount_currency`** (`string`) *(required, read-only)*
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2637,6 +701,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
+- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrance_schedule`** (`string`)
@@ -2664,9 +729,12 @@ Return a single budget by UUID.
 - **`balance_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
+- **`funding_amount`** (`string`)
+- **`funding_amount_currency`** (`string`) *(required, read-only)*
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2674,6 +742,7 @@ Return a single budget by UUID.
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
+- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrance_schedule`** (`string`)
@@ -2697,9 +766,11 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2716,9 +787,11 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2735,9 +808,11 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2758,9 +833,12 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`balance_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
+- **`funding_amount`** (`string`)
+- **`funding_amount_currency`** (`string`) *(required, read-only)*
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2768,6 +846,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
+- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrance_schedule`** (`string`)
@@ -2791,9 +870,11 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`name`** (`string`)
 - **`bank_account`** (`string`)
 - **`target_balance`** (`string`)
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2810,9 +891,11 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`name`** (`string`)
 - **`bank_account`** (`string`)
 - **`target_balance`** (`string`)
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2829,9 +912,11 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`name`** (`string`)
 - **`bank_account`** (`string`)
 - **`target_balance`** (`string`)
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2852,9 +937,12 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`balance_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
+- **`funding_amount`** (`string`)
+- **`funding_amount_currency`** (`string`) *(required, read-only)*
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -2862,6 +950,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
+- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrance_schedule`** (`string`)
@@ -2874,13 +963,117 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 
 **Operation:** `budgets_destroy`
 
-Delete a budget. The unallocated budget cannot be deleted -- returns 403.
+Delete a budget. The unallocated budget cannot be deleted (403). A budget with existing transaction allocations cannot be deleted (400) -- archive it instead.
 
 **Parameters:**
 
 - `id` (path, required)
 
 **Response 204:** No response body
+
+#### `POST /api/v1/budgets/{id}/archive/`
+
+**Operation:** `budgets_archive_create`
+
+Archive a budget. Any remaining balance is transferred to the account's unallocated budget. If the budget has an associated fill-up goal, that budget is also archived and its balance moved to unallocated. The unallocated budget cannot be archived.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`bank_account`** (`string`) *(required)*
+- **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
+- **`budget_type`** (`string`) — * `G` - Goal
+* `R` - Recurring
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
+- **`funding_type`** (`string`) — * `D` - Target Date
+* `F` - Fixed Amount Enum: ['D', 'F']
+- **`target_date`** (`string`)
+- **`with_fillup_goal`** (`boolean`)
+- **`fillup_goal`** (`string`)
+- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
+- **`funding_schedule`** (`string`)
+- **`recurrance_schedule`** (`string`)
+- **`memo`** (`string`)
+- **`auto_spend`** (``)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`bank_account`** (`string`) *(required)*
+- **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
+- **`budget_type`** (`string`) — * `G` - Goal
+* `R` - Recurring
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
+- **`funding_type`** (`string`) — * `D` - Target Date
+* `F` - Fixed Amount Enum: ['D', 'F']
+- **`target_date`** (`string`)
+- **`with_fillup_goal`** (`boolean`)
+- **`fillup_goal`** (`string`)
+- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
+- **`funding_schedule`** (`string`)
+- **`recurrance_schedule`** (`string`)
+- **`memo`** (`string`)
+- **`auto_spend`** (``)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`bank_account`** (`string`) *(required)*
+- **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
+- **`budget_type`** (`string`) — * `G` - Goal
+* `R` - Recurring
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
+- **`funding_type`** (`string`) — * `D` - Target Date
+* `F` - Fixed Amount Enum: ['D', 'F']
+- **`target_date`** (`string`)
+- **`with_fillup_goal`** (`boolean`)
+- **`fillup_goal`** (`string`)
+- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
+- **`funding_schedule`** (`string`)
+- **`recurrance_schedule`** (`string`)
+- **`memo`** (`string`)
+- **`auto_spend`** (``)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required)*
+- **`bank_account`** (`string`) *(required)*
+- **`balance`** (`string`) *(required, read-only)*
+- **`balance_currency`** (`string`) *(required, read-only)*
+- **`target_balance`** (`string`) *(required)*
+- **`target_balance_currency`** (`string`) *(required, read-only)*
+- **`funding_amount`** (`string`)
+- **`funding_amount_currency`** (`string`) *(required, read-only)*
+- **`budget_type`** (`string`) — * `G` - Goal
+* `R` - Recurring
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
+- **`funding_type`** (`string`) — * `D` - Target Date
+* `F` - Fixed Amount Enum: ['D', 'F']
+- **`target_date`** (`string`)
+- **`with_fillup_goal`** (`boolean`)
+- **`fillup_goal`** (`string`)
+- **`archived`** (`boolean`) *(required, read-only)*
+- **`archived_at`** (`string`) *(required, read-only)*
+- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
+- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
+- **`funding_schedule`** (`string`)
+- **`recurrance_schedule`** (`string`)
+- **`memo`** (`string`)
+- **`auto_spend`** (``)
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
 
 ### currencies
 
@@ -3095,6 +1288,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
 - **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
@@ -3127,6 +1321,7 @@ Return a single transaction by UUID.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
 - **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
@@ -3198,6 +1393,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
 - **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
@@ -3269,6 +1465,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
 - **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
@@ -3289,6 +1486,67 @@ Delete a transaction. Balance changes are reversed by the pre_delete signal. Ass
 - `id` (path, required)
 
 **Response 204:** No response body
+
+#### `POST /api/v1/transactions/{id}/splits/`
+
+**Operation:** `transactions_splits_create`
+
+Declaratively set how a transaction's amount is split across budgets. All referenced budgets must belong to the same bank account as the transaction. The backend reconciles existing allocations to match: creating, updating, or deleting as needed. Any unallocated remainder gets an allocation to the account's unallocated budget. Returns all allocations for this transaction after reconciliation.
+
+**Parameters:**
+
+- `bank_account` (query, optional)
+- `date_from` (query, optional)
+- `date_to` (query, optional)
+- `id` (path, required)
+- `ordering` (query, optional) — Which field to use when ordering the results.
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+- `pending` (query, optional)
+- `search` (query, optional) — A search term.
+- `transaction_type` (query, optional) — * `signature_purchase` - Signature Purchase
+* `ach` - ACH
+* `round-up_transfer` - Round-up Transfer
+* `protected_goal_account_transfer` - Protected Goal Account Transfer
+* `fee` - Fee
+* `pin_purchase` - Pin Purchase
+* `signature_credit` - Signature Credit
+* `interest_credit` - Interest Credit
+* `shared_transfer` - Shared Transfer
+* `courtesy_credit` - Courtesy Credit
+* `atm_withdrawal` - ATM Withdrawal
+* `bill_payment` - Bill Payment
+* `bank_generated_credit` - Bank Generated Credit
+* `wire_transfer` - Wire Transfer
+* `check_deposit` - Check Deposit
+* `check` - Check
+* `c2c` - c2c
+* `migration_interbank_transfer` - Migration Interbank Transfer
+* `balance_sweep` - Balance Sweep
+* `ach_reversal` - ACH Reversal
+* `adjustment` - Adjustment
+* `signature_return` - Signature return
+* `fx_order` - FX Order
+* `` - --------
+
+**Request Body** (`application/json`):
+
+- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
+
+**Request Body** (`multipart/form-data`):
+
+- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
 
 ### users
 
@@ -3502,9 +1760,12 @@ signal and is not accepted from the client.
 - **`balance_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
+- **`funding_amount`** (`string`)
+- **`funding_amount_currency`** (`string`) *(required, read-only)*
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -3512,6 +1773,7 @@ signal and is not accepted from the client.
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
+- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrance_schedule`** (`string`)
@@ -3535,9 +1797,11 @@ signal and is not accepted from the client.
 - **`name`** (`string`) *(required)*
 - **`bank_account`** (`string`) *(required)*
 - **`target_balance`** (`string`) *(required)*
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -3554,6 +1818,7 @@ signal and is not accepted from the client.
 * `G` - Goal
 * `R` - Recurring
 * `A` - Associated Fill-up Goal
+* `C` - Capped
 
 
 ### CategoryEnum
@@ -3855,9 +2120,11 @@ signal and is not accepted from the client.
 - **`name`** (`string`)
 - **`bank_account`** (`string`)
 - **`target_balance`** (`string`)
+- **`funding_amount`** (`string`)
 - **`budget_type`** (`string`) — * `G` - Goal
 * `R` - Recurring
-* `A` - Associated Fill-up Goal Enum: ['G', 'R', 'A']
+* `A` - Associated Fill-up Goal
+* `C` - Capped Enum: ['G', 'R', 'A', 'C']
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
@@ -3868,178 +2135,6 @@ signal and is not accepted from the client.
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
-
-### PatchedTransactionAllocationRequest
-
-Serializer for transaction allocations.
-
-An allocation maps a portion of a transaction's amount to a budget.
-On create the caller supplies transaction, amount, and optionally
-budget (defaults to unallocated) and category.  After creation,
-budget, category, and memo are updatable.
-
-The serializer validates that the total allocated amount across all
-allocations for a transaction does not exceed the transaction amount.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`transaction`** (`string`)
-- **`budget`** (`string`)
-- **`amount`** (`string`)
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
 
 ### PatchedTransactionRequest
 
@@ -4119,6 +2214,7 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
 - **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
@@ -4137,8 +2233,14 @@ On create the caller supplies transaction, amount, and optionally
 budget (defaults to unallocated) and category.  After creation,
 budget, category, and memo are updatable.
 
-The serializer validates that the total allocated amount across all
-allocations for a transaction does not exceed the transaction amount.
+The serializer enforces two key constraints:
+
+1. **Same-account restriction** -- the budget must belong to the
+   same bank account as the transaction.  Cross-account allocations
+   are rejected with a 400 error.
+2. **Sum constraint** -- the total allocated amount across all
+   allocations for a transaction must not exceed the transaction
+   amount.
 
 The ``amount_currency`` is read from raw request data by
 djmoney's ``MoneyField.get_value()`` -- no explicit currency
@@ -4306,178 +2408,6 @@ field declaration is needed.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-### TransactionAllocationRequest
-
-Serializer for transaction allocations.
-
-An allocation maps a portion of a transaction's amount to a budget.
-On create the caller supplies transaction, amount, and optionally
-budget (defaults to unallocated) and category.  After creation,
-budget, category, and memo are updatable.
-
-The serializer validates that the total allocated amount across all
-allocations for a transaction does not exceed the transaction amount.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
-- **`memo`** (`string`)
-
 ### TransactionRequest
 
 Serializer for bank transactions.
@@ -4504,6 +2434,20 @@ field declaration is needed.
 - **`description`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
+
+### TransactionSplitsRequest
+
+Serializer for the declarative splits endpoint.
+
+Accepts a dict mapping budget UUIDs to amounts.  The backend
+reconciles existing allocations to match the declared state.
+Any remainder goes to the unallocated budget.
+
+All budgets must belong to the same bank account as the
+transaction.  Cross-account budget references are rejected
+with a 400 error.
+
+- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
 
 ### TransactionTypeEnum
 

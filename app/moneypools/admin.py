@@ -72,6 +72,7 @@ class BankAccountForm(forms.ModelForm):
             "account_number",
             "owners",
             "group",
+            "link_aliases",
         )
 
     # editable=False model fields declared explicitly so the creation
@@ -220,6 +221,7 @@ class BankAccountAdmin(admin.ModelAdmin):
             "account_number",
             "owners",
             "group",
+            "link_aliases",
         )
         return super().get_form(request, obj, change=change, **kwargs)
 

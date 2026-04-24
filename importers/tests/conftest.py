@@ -20,6 +20,7 @@ generation.
 import csv
 import io
 import json
+import os
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -372,8 +373,15 @@ def ofx_file_factory(
 ########################################################################
 #
 @pytest.fixture
-def client() -> MibudgeClient:
-    """Return a MibudgeClient pre-configured to talk to the test server."""
+def client(mocker: MockerFixture) -> MibudgeClient:
+    """Return a MibudgeClient pre-configured to talk to the test server.
+
+    SSL_CERT_FILE is removed so that a developer's local .env pointing at a
+    machine-specific cert file does not cause httpx to fail when creating its
+    SSL context for the plain-HTTP test server URL.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+    mocker.patch.dict(os.environ, env, clear=True)
     return MibudgeClient("http://testserver", "user", "pass")
 
 

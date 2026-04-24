@@ -9,6 +9,7 @@
   {% vite_asset 'src/main.ts' %}
 </head>
 <body>
+  <script>window.__mibudge = { adminEmail: "{{ settings.ADMINISTRATIVE_EMAIL_ADDRESS }}" };</script>
   <div id="app"></div>
 </body>
 </html>

@@ -41,19 +41,23 @@ JS memory only.
 
 ### Login flow
 
-Login happens outside the SPA entirely — Django's allauth handles credentials
-at `/accounts/login/`. After a successful login:
+The SPA owns its own login UI at `/app/login/`. The backend `/app/` shell is
+deliberately *not* protected by `LoginRequiredMixin` so the same flow will
+work for future native iOS/iPadOS/macOS/visionOS clients that can only speak
+the JSON API.
 
-1. Django's `SpaLoginView` issues a JWT pair and sets the **refresh token** as
-   an `httpOnly; Secure; SameSite=Strict` cookie (never readable by JS).
-2. It renders a minimal handoff page (`spa/token_handoff.html`) that sets
-   `window.__INITIAL_TOKEN__` to the access token and immediately redirects
-   to `/app/`.
-3. `main.ts` calls `useAuthStore().init()` before mounting. `init()` reads
-   `window.__INITIAL_TOKEN__` into the Pinia store and deletes it from
-   `window` so it is not readable after that single read.
-4. The app mounts with the token already in state; the first render is
-   authenticated.
+1. The `LoginView` posts `username` + `password` to `POST /api/token/`
+   (`CookieTokenObtainPairView`). The response body contains the access
+   token; the refresh token is attached as an
+   `httpOnly; Secure; SameSite=Strict` cookie, never visible to JS.
+2. The auth store stashes the access token in memory and the router sends
+   the user to the `?next=` param (or `/app/`).
+
+On **cold boot** (page reload, direct link), `main.ts` calls
+`useAuthStore().refresh()` *before* installing the router. If the refresh
+cookie is still valid, the store becomes authenticated before the first
+route guard runs and the user lands directly on their intended route. If
+not, the router guard redirects to `/app/login/?next=…`.
 
 ### Access token
 
@@ -93,11 +97,17 @@ the unauthenticated refresh call) and in tests.
 
 ## API client (`src/api/client.ts`)
 
-`apiFetch<T>(url, token, options)` is a thin wrapper around the browser's
-native `fetch`:
+The client is split in two so URL version bumps do not churn auth URLs:
 
-- Prefixes all URLs with `/api` — call `apiFetch('/budgets/', ...)`, not the
-  full path.
+- `apiFetch<T>(url, token, options)` — prefixes `/api/v1`, used for all
+  versioned resource endpoints.
+- `authFetch<T>(url, token, options)` — prefixes `/api`, used only for the
+  cross-version JWT endpoints (`/token/`, `/token/refresh/`).
+
+`apiFetch` is a thin wrapper around the browser's native `fetch`:
+
+- Prefixes all URLs with `/api/v1` — call `apiFetch('/budgets/', ...)`, not
+  the full path.
 - Sets `Content-Type: application/json` on every request.
 - Adds `Authorization: Bearer <token>` only when a token is provided — the
   refresh endpoint must not receive a stale token.
@@ -110,9 +120,15 @@ native `fetch`:
 
 `vite.config.ts` has a few mibudge-specific settings worth knowing:
 
-- **`base`**: `'/static/'` in production so asset URLs match Django's
-  `STATIC_URL`. In dev mode the base is unused — `django-vite` points
-  `<script>` tags directly at the Vite dev server.
+- **`base`**: `'/static/'` in both dev and production. django-vite always
+  prepends `STATIC_URL` (which is `/static/`) to dev-server asset URLs, so
+  the Vite dev server has to serve under that path too or the browser gets
+  404s for `@vite/client` and `src/main.ts`.
+- **`server.https`**: Vite's dev server loads the repo's mkcert certs from
+  `deployment/ssl/`. The Django dev server is served over HTTPS, and
+  browsers block mixed content, so the Vite dev server must also be HTTPS.
+  Reusing the same mkcert files means the browser's existing trust carries
+  over with no extra click-through.
 - **`build.manifest: true`**: required by `django-vite` to resolve
   content-hashed filenames at render time.
 - **`build.rollupOptions.input`**: explicitly set to `/src/main.ts` so the

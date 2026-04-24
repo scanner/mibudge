@@ -12,14 +12,6 @@ explicit ``--parser`` override later -- OFX is a real spec and one
 parser handles everything, while CSVs are per-bank and their file
 extension alone cannot discriminate.
 
-This is a click.group with two subcommands:
-
-* ``import`` -- parse one or more statement files and POST their
-  transactions to the mibudge REST API, optionally creating the target
-  bank account on the fly.
-* ``banks`` -- list the banks visible to the authenticated user along
-  with their UUIDs (the values accepted by ``--bank``).
-
 Typical usage::
 
     # Import a pile of OFX files for an already-created account. The
@@ -29,15 +21,16 @@ Typical usage::
 
     # First-time import from OFX -- the account type and account
     # number come from the OFX file itself, only --name and --bank
-    # are still required:
-    uv run python -m importers banks
+    # are still required.  --bank accepts a name, routing number, or
+    # UUID; if the string matches exactly one bank it is used,
+    # otherwise all matches (or all banks) are printed:
     uv run python -m importers import --create-account \\
-        --name "Personal Card" --bank <bank-uuid> \\
+        --name "Personal Card" --bank Chase \\
         statements/*.ofx
 
-    # BofA CSV (no ACCTID in the file) -- explicit --account or
-    # --create-account with the full set of flags:
-    uv run python -m importers import -f stmt.csv --account <uuid>
+    # BofA CSV (no ACCTID in the file) -- --account accepts a name,
+    # account number, or UUID:
+    uv run python -m importers import -f stmt.csv --account "Personal Checking"
 
 Configuration is resolved in this order (first wins):
 
@@ -78,6 +71,7 @@ from rich.table import Table
 from importers.client import APIError, AuthenticationError, MibudgeClient
 from importers.parsers import bofa_csv, ofx
 from importers.parsers.common import ParsedStatement, ParsedTransaction
+from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
 
@@ -97,17 +91,255 @@ _ACCOUNT_TYPE_CHOICES: dict[str, str] = {
 ########################################################################
 ########################################################################
 #
+def _fuzzy_match_bank(
+    banks: list[dict[str, Any]], query: str
+) -> list[dict[str, Any]]:
+    """
+    Return banks whose name, routing_number, or UUID id contain ``query``.
+
+    Matching is case-insensitive on name, exact substring on the other
+    fields.
+
+    Args:
+        banks: List of bank dicts from the API.
+        query: The user-supplied search string.
+
+    Returns:
+        List of matching bank dicts.
+    """
+    q = query.lower()
+    matches: list[dict[str, Any]] = []
+    for bank in banks:
+        if (
+            q in (bank.get("name") or "").lower()
+            or q in (bank.get("routing_number") or "")
+            or q in (bank.get("id") or "")
+        ):
+            matches.append(bank)
+    return matches
+
+
+####################################################################
+#
+def _resolve_bank_by_query(
+    client: MibudgeClient,
+    query: str,
+    *,
+    console: Console,
+    interactive: bool,
+) -> str:
+    """
+    Fuzzy-match ``query`` against banks and return the UUID.
+
+    If exactly one bank matches, return its ``id``. Otherwise print a
+    table of matches (or all banks if none matched) and raise a
+    :class:`click.ClickException`.
+
+    Args:
+        client:      Authenticated MibudgeClient.
+        query:       User-supplied search string.
+        console:     Rich console for output.
+        interactive: Whether to use rich formatting.
+
+    Returns:
+        The matched bank's UUID.
+
+    Raises:
+        click.ClickException: On zero or multiple matches.
+    """
+    all_banks = list(client.get_all("/api/v1/banks/", {}))
+    matches = _fuzzy_match_bank(all_banks, query)
+
+    if len(matches) == 1:
+        bank = matches[0]
+        if interactive:
+            console.print(
+                f"[dim]Matched bank '{bank.get('name')}' "
+                f"({bank.get('id')}).[/dim]"
+            )
+        else:
+            logger.info(
+                "Matched bank %s (%s)", bank.get("name"), bank.get("id")
+            )
+        return bank["id"]
+
+    if not matches:
+        show = all_banks
+        msg = f"No banks match {query!r}."
+    else:
+        show = matches
+        msg = f"Multiple banks match {query!r}; be more specific."
+
+    _print_bank_table(show, console, interactive)
+    raise click.ClickException(msg)
+
+
+####################################################################
+#
+def _print_bank_table(
+    banks: list[dict[str, Any]],
+    console: Console,
+    interactive: bool,
+) -> None:
+    """Print a table of banks for disambiguation."""
+    if interactive:
+        table = Table(title="Banks")
+        table.add_column("Name", style="bold")
+        table.add_column("Routing #")
+        table.add_column("Currency")
+        table.add_column("UUID", style="dim")
+        for b in banks:
+            table.add_row(
+                b.get("name", ""),
+                b.get("routing_number") or "",
+                b.get("default_currency") or "",
+                b.get("id", ""),
+            )
+        console.print(table)
+    else:
+        for b in banks:
+            print(
+                f"{b.get('id', '')}\t{b.get('name', '')}\t"
+                f"{b.get('routing_number') or ''}\t"
+                f"{b.get('default_currency') or ''}"
+            )
+
+
+####################################################################
+#
+def _fuzzy_match_account(
+    accounts: list[dict[str, Any]], query: str
+) -> list[dict[str, Any]]:
+    """
+    Return accounts whose name, account_number, or UUID id contain ``query``.
+
+    Matching is case-insensitive on name, exact substring on the other
+    fields.
+
+    Args:
+        accounts: List of bank account dicts from the API.
+        query: The user-supplied search string.
+
+    Returns:
+        List of matching account dicts.
+    """
+    q = query.lower()
+    matches: list[dict[str, Any]] = []
+    for acct in accounts:
+        if (
+            q in (acct.get("name") or "").lower()
+            or q in (acct.get("account_number") or "")
+            or q in (acct.get("id") or "")
+        ):
+            matches.append(acct)
+    return matches
+
+
+####################################################################
+#
+def _resolve_account_by_query(
+    client: MibudgeClient,
+    query: str,
+    *,
+    console: Console,
+    interactive: bool,
+) -> str:
+    """
+    Fuzzy-match ``query`` against bank accounts and return the UUID.
+
+    If exactly one account matches, return its ``id``. Otherwise print
+    a table of matches (or all accounts if none matched) and raise a
+    :class:`click.ClickException`.
+
+    Args:
+        client:      Authenticated MibudgeClient.
+        query:       User-supplied search string.
+        console:     Rich console for output.
+        interactive: Whether to use rich formatting.
+
+    Returns:
+        The matched bank account's UUID.
+
+    Raises:
+        click.ClickException: On zero or multiple matches.
+    """
+    all_accounts = list(client.get_all("/api/v1/bank-accounts/", {}))
+    matches = _fuzzy_match_account(all_accounts, query)
+
+    if len(matches) == 1:
+        acct = matches[0]
+        if interactive:
+            console.print(
+                f"[dim]Matched account '{acct.get('name')}' "
+                f"({acct.get('id')}).[/dim]"
+            )
+        else:
+            logger.info(
+                "Matched account %s (%s)",
+                acct.get("name"),
+                acct.get("id"),
+            )
+        return acct["id"]
+
+    if not matches:
+        show = all_accounts
+        msg = f"No bank accounts match {query!r}."
+    else:
+        show = matches
+        msg = f"Multiple bank accounts match {query!r}; be more specific."
+
+    _print_account_table(show, console, interactive)
+    raise click.ClickException(msg)
+
+
+####################################################################
+#
+def _print_account_table(
+    accounts: list[dict[str, Any]],
+    console: Console,
+    interactive: bool,
+) -> None:
+    """Print a table of bank accounts for disambiguation."""
+    if interactive:
+        table = Table(title="Bank Accounts")
+        table.add_column("Name", style="bold")
+        table.add_column("Type")
+        table.add_column("Acct #")
+        table.add_column("UUID", style="dim")
+        for a in accounts:
+            table.add_row(
+                a.get("name", ""),
+                a.get("account_type") or "",
+                a.get("account_number") or "",
+                a.get("id", ""),
+            )
+        console.print(table)
+    else:
+        for a in accounts:
+            print(
+                f"{a.get('id', '')}\t{a.get('name', '')}\t"
+                f"{a.get('account_type') or ''}\t"
+                f"{a.get('account_number') or ''}"
+            )
+
+
+########################################################################
+########################################################################
+#
 def _dedup_key(
     tx_date: date | str,
     amount: Decimal | str,
     raw_description: str,
 ) -> tuple[str, str, str]:
     """
-    Build a hashable dedup key from transaction fields.
+    Build a hashable 3-tuple dedup key from transaction fields.
 
-    Normalizes date to YYYY-MM-DD and amount to a two-decimal string so
-    that values from the parser and from the API response can be compared
-    directly.
+    Used for **server-side dedup** (CSV vs already-imported
+    transactions).  The key is (date, amount, raw_description).
+    Count-based matching handles same-day, same-amount,
+    same-merchant transactions correctly without needing the running
+    balance (which diverges between BofA's CSV and the server's
+    computed ``bank_account_posted_balance``).
 
     Args:
         tx_date: A date object or ISO datetime string from the API.
@@ -115,7 +347,7 @@ def _dedup_key(
         raw_description: The raw description string.
 
     Returns:
-        A (date_str, amount_str, description) tuple.
+        A 3-tuple suitable as a dict/set key.
     """
     if isinstance(tx_date, str):
         # API returns ISO datetime like "2025-01-15T00:00:00Z".
@@ -127,14 +359,55 @@ def _dedup_key(
 
 ####################################################################
 #
+def _intra_run_dedup_key(
+    tx_date: date,
+    amount: Decimal | str,
+    raw_description: str,
+    running_balance: Decimal,
+) -> tuple[str, str, str, str]:
+    """
+    Build a hashable 4-tuple dedup key for intra-run dedup.
+
+    Used when merging multiple CSV files within a single import run.
+    The running balance is included because within a bank's CSV
+    export it is consistent and distinguishes genuinely separate
+    same-day, same-amount, same-merchant transactions (e.g. two
+    $4.99 Apple charges each with a different running balance).
+
+    Args:
+        tx_date: Transaction date.
+        amount: Transaction amount.
+        raw_description: The raw description string.
+        running_balance: BofA "Running Bal." column value.
+
+    Returns:
+        A 4-tuple suitable as a dict/set key.
+    """
+    date_str = tx_date.isoformat()
+    amount_str = str(Decimal(str(amount)).quantize(Decimal("0.01")))
+    bal_str = str(Decimal(str(running_balance)).quantize(Decimal("0.01")))
+    return (date_str, amount_str, raw_description, bal_str)
+
+
+####################################################################
+#
 def _fetch_existing(
     client: MibudgeClient,
     bank_account_id: str,
     start_date: date,
     end_date: date,
-) -> dict[tuple[str, str, str], tuple[str, str]]:
+) -> dict[tuple[str, str, str], list[tuple[str, str]]]:
     """
     Query the API for transactions in the date range and index them.
+
+    Returns a mapping from the 3-tuple dedup key (date, amount,
+    raw_description) to a **list** of ``(transaction_id,
+    transaction_type)`` pairs.  Multiple entries under the same key
+    represent genuinely distinct same-day, same-amount,
+    same-description transactions (e.g. two coffee purchases).
+
+    During import, the list is consumed (popped) so that each server
+    transaction is matched to at most one CSV row.
 
     Args:
         client: Authenticated MibudgeClient.
@@ -143,11 +416,10 @@ def _fetch_existing(
         end_date: Latest date in the import file.
 
     Returns:
-        A mapping from dedup key -> (transaction_id, transaction_type)
-        so the caller can both dedup and, where appropriate, PATCH an
-        existing transaction whose type is empty.
+        A mapping from 3-tuple dedup key to a list of
+        ``(transaction_id, transaction_type)`` entries.
     """
-    existing: dict[tuple[str, str, str], tuple[str, str]] = {}
+    existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
     for tx in client.get_all(
         "/api/v1/transactions/",
         {
@@ -162,7 +434,8 @@ def _fetch_existing(
             tx["amount"],
             tx["raw_description"],
         )
-        existing[key] = (tx["id"], tx.get("transaction_type") or "")
+        entry = (tx["id"], tx.get("transaction_type") or "")
+        existing.setdefault(key, []).append(entry)
     return existing
 
 
@@ -266,7 +539,9 @@ def import_statement(
     bank_account_id: str,
     client: MibudgeClient,
     progress_callback: Callable[[int, int], None] | None = None,
-    existing: dict[tuple[str, str, str], tuple[str, str]] | None = None,
+    existing: (dict[tuple[str, str, str], list[tuple[str, str]]] | None) = None,
+    *,
+    dry_run: bool = False,
 ) -> ImportResult:
     """
     Import transactions from an already-parsed BofA statement.
@@ -287,6 +562,8 @@ def import_statement(
             pre-fetches so it can wrap the fetch in a rich status
             spinner (rich does not allow nested Live renderers, and
             the POST progress bar is already a Live renderer).
+        dry_run: When True, classify each transaction (import / skip /
+            update) but do not POST or PATCH anything.
 
     Returns:
         An ImportResult with counts and unrecognized descriptions.
@@ -324,40 +601,44 @@ def import_statement(
 
     total = len(transactions)
     for i, tx in enumerate(transactions):
-        key = _dedup_key(tx.transaction_date, tx.amount, tx.raw_description)
-        match = existing.get(key)
-        if match is not None:
-            tx_id, existing_type = match
+        key = _dedup_key(
+            tx.transaction_date,
+            tx.amount,
+            tx.raw_description,
+        )
+        matches = existing.get(key)
+        if matches:
+            # Pop one match so each server-side transaction is
+            # consumed at most once.  This handles the "two coffees"
+            # case: if the CSV has 2 entries and the server has 2,
+            # both are skipped; if the server has 1, the second CSV
+            # row is imported.
+            tx_id, existing_type = matches.pop(0)
             # Backfill the transaction_type on duplicates when the
             # server has it empty but the parser has since learned to
             # classify this description. This lets "add a pattern and
             # re-run the import" work as the update path with no
             # separate backfill step.
             if existing_type == "" and tx.transaction_type != "":
-                if _patch_transaction_type(client, tx_id, tx.transaction_type):
+                if dry_run:
                     result.updated += 1
-                    existing[key] = (tx_id, tx.transaction_type)
+                elif _patch_transaction_type(
+                    client, tx_id, tx.transaction_type
+                ):
+                    result.updated += 1
                 else:
                     result.failed += 1
             else:
                 result.skipped += 1
         else:
-            resp = _post_transaction(client, bank_account_id, tx)
-            if resp is not None:
+            if dry_run:
                 result.imported += 1
-                # Intentionally NOT adding this key to `existing`. Our
-                # dedup key (date, amount, raw_description) is too
-                # coarse to tell a genuine repeat transaction (two
-                # same-amount coffees at the same merchant on the same
-                # day, duplicate small recurring charges, etc.) from a
-                # byte-identical CSV row. Treating in-file repeats as
-                # duplicates silently drops real transactions, which
-                # is worse than the unlikely case of a malformed CSV
-                # producing two identical rows. Re-runs of the import
-                # still dedup correctly against the server snapshot
-                # taken at the start of this call.
             else:
-                result.failed += 1
+                resp = _post_transaction(client, bank_account_id, tx)
+                if resp is not None:
+                    result.imported += 1
+                else:
+                    result.failed += 1
 
         if progress_callback:
             progress_callback(i + 1, total)
@@ -537,7 +818,7 @@ def _parse_all(
                 f"cleanly."
             )
             if interactive:
-                console.print(f"[yellow]Warning:[/yellow] {msg}")
+                console.print(f"[warning]Warning:[/warning] {msg}")
             else:
                 logger.warning(msg)
 
@@ -599,7 +880,7 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
                 statements[-1].ending_balance_as_of,
             )
     else:
-        last = statements[-1]
+        last = max(statements, key=lambda s: s.ending_date)
 
     # Intra-run dedup. Two common patterns produce duplicate
     # transactions across the combined file set:
@@ -610,20 +891,31 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
     #      overlap -- downloading "Jan 1 -> Jun 30" and "Apr 1 ->
     #      today" is easier than being precise about seams, and
     #      the importer should tolerate that.
-    # Server-side dedup does not catch either case when the account
-    # is brand new (nothing on the server to match against). Use the
-    # same (date, amount, raw_description) key that
-    # ``_fetch_existing`` uses so the in-file and cross-file dedup
-    # behaviours line up. The theoretical false-positive -- two
-    # genuinely-distinct txns on the same day for the same amount
-    # to the same merchant -- is rare in practice and far less
-    # painful than phantom duplicates.
+    # The intra-run key is (date, amount, raw_description,
+    # running_balance). Including the running balance eliminates
+    # false positives on same-day, same-amount, same-merchant
+    # transactions (e.g. two $4.99 Apple charges): each has a
+    # different running balance in the source file.  Two files
+    # covering the same date range will carry the same running
+    # balance for the same transaction, so true duplicates are
+    # still caught.
+    #
+    # NOTE: this 4-tuple key is intentionally different from the
+    # 3-tuple used for server-side dedup.  Within BofA's CSV
+    # exports the running balance is consistent across downloads,
+    # but the server's ``bank_account_posted_balance`` diverges
+    # because it is computed at import time.
     transactions: list[ParsedTransaction] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str, str, str]] = set()
     duplicates = 0
     for s in statements:
         for tx in s.transactions:
-            key = _dedup_key(tx.transaction_date, tx.amount, tx.raw_description)
+            key = _intra_run_dedup_key(
+                tx.transaction_date,
+                tx.amount,
+                tx.raw_description,
+                tx.running_balance,
+            )
             if key in seen:
                 duplicates += 1
                 continue
@@ -833,9 +1125,9 @@ def _resolve_bank_account(
 
     Resolution order (first match wins):
 
-    1. Explicit ``--account <uuid>`` -- use it as-is (oldest and
-       simplest mode; still required for formats like BofA CSV that
-       don't carry an account identifier).
+    1. Explicit ``--account <query>`` -- fuzzy-matched against name,
+       account number, and UUID. Required for formats like BofA CSV
+       that don't carry an account identifier.
     2. Statement-carried ``acct_id`` (OFX) -> look up a BankAccount
        whose ``account_number`` equals that value. If found and the
        user did NOT pass ``--create-account``, use it. If found and
@@ -855,7 +1147,7 @@ def _resolve_bank_account(
         client:         Authenticated MibudgeClient.
         statement:      The combined parsed statement (carries
             beginning_balance, acct_id, account_type).
-        account:        UUID of an existing account from --account.
+        account:        Search string from --account (fuzzy-matched).
         create_account: Whether --create-account was passed.
         name, bank_id:  Required for --create-account.
         account_type:   CLI-supplied type; auto-filled from OFX when
@@ -872,9 +1164,11 @@ def _resolve_bank_account(
         click.ClickException: On ambiguous or impossible input, or
             API failure.
     """
-    # 1. Explicit UUID.
+    # 1. Explicit --account: fuzzy-match against name/account_number/UUID.
     if account is not None:
-        return account
+        return _resolve_account_by_query(
+            client, account, console=console, interactive=interactive
+        )
 
     # 2. ACCTID lookup (OFX).
     matched: dict | None = None
@@ -888,7 +1182,7 @@ def _resolve_bank_account(
                 f"exists for ACCTID {statement.acct_id!r} "
                 f"(name={matched.get('name')!r}, id={matched.get('id')}). "
                 "Drop --create-account to import into the existing "
-                "account, or pass --account <uuid> to target a "
+                "account, or pass --account <query> to target a "
                 "different one explicitly."
             )
         if interactive:
@@ -911,7 +1205,7 @@ def _resolve_bank_account(
             raise click.ClickException(
                 f"No BankAccount found with account_number={statement.acct_id!r}. "
                 "Re-run with --create-account (plus --name and --bank) to "
-                "set it up, or --account <uuid> to target an existing "
+                "set it up, or --account <query> to target an existing "
                 "account explicitly."
             )
         raise click.ClickException(
@@ -921,6 +1215,10 @@ def _resolve_bank_account(
         )
 
     assert name is not None and bank_id is not None
+    # Resolve the bank query string to a UUID.
+    resolved_bank_id = _resolve_bank_by_query(
+        client, bank_id, console=console, interactive=interactive
+    )
     # account_type and account_number: prefer the statement's values
     # (OFX) over the CLI flags, which on the OFX path are not even
     # accepted by the CLI validation.
@@ -941,7 +1239,7 @@ def _resolve_bank_account(
         created = _create_bank_account(
             client,
             name=name,
-            bank_id=bank_id,
+            bank_id=resolved_bank_id,
             account_type=effective_type,
             account_number=effective_number,
             beginning_balance=statement.beginning_balance,
@@ -951,7 +1249,7 @@ def _resolve_bank_account(
 
     account_id: str = created["id"]
     if interactive:
-        console.print(f"[green]Created account {account_id}[/green]")
+        console.print(f"[success]Created account {account_id}[/success]")
     else:
         logger.info("Created bank account %s", account_id)
     return account_id
@@ -1021,32 +1319,44 @@ def _verify_final_balance(
 ########################################################################
 ########################################################################
 #
-# Project-relative path to the mkcert-issued server cert used by the
-# local dev stack. Opt-in via --trust-local-certs / MIBUDGE_TRUST_LOCAL_CERTS
-# because trusting arbitrary local files is not a safe default.
-_LOCAL_CA_BUNDLE = Path("deployment") / "ssl" / "ssl_crt.pem"
-
-
 def _resolve_local_ca_bundle() -> str:
     """
-    Return the path to the project-local dev CA bundle.
+    Return the path to the mkcert root CA that signed the local dev cert.
 
-    Only used when the caller explicitly opts in (via CLI flag or
-    env var) because we do not want to silently trust files based on
-    the current working directory.
+    Only used when the caller explicitly opts in (via CLI flag or env var)
+    because trusting arbitrary local CAs is not a safe default.
+
+    Python's ssl module does not use the macOS Keychain, so we must pass
+    the mkcert root CA explicitly rather than relying on system trust.
 
     Returns:
-        Absolute path to ``deployment/ssl/ssl_crt.pem``.
+        Absolute path to the mkcert rootCA.pem.
 
     Raises:
-        click.ClickException: If the expected file does not exist
-            (e.g. the importer is being run outside the project root).
+        click.ClickException: If mkcert is not installed or its CA root
+            cannot be found.
     """
-    path = Path.cwd() / _LOCAL_CA_BUNDLE
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["mkcert", "-CAROOT"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(
+            "mkcert not found. Install it or pass --ca-bundle explicitly."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise click.ClickException(
+            f"mkcert -CAROOT failed: {exc.stderr.strip()}"
+        ) from exc
+    path = Path(result.stdout.strip()) / "rootCA.pem"
     if not path.is_file():
         raise click.ClickException(
-            f"Local CA bundle not found at {path}. Run the importer "
-            f"from the project root, or pass --ca-bundle explicitly."
+            f"mkcert root CA not found at {path}. Run `mkcert -install` first."
         )
     return str(path)
 
@@ -1224,19 +1534,25 @@ def _print_summary(
     console: Console,
     result: ImportResult,
     interactive: bool,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """Print the import summary to the console."""
     if interactive:
-        table = Table(title="Import Summary", show_header=False)
+        title = "Dry Run Summary" if dry_run else "Import Summary"
+        verb = "Would import" if dry_run else "Imported"
+        update_verb = "Would update" if dry_run else "Updated"
+        table = Table(title=title, show_header=False)
         table.add_column("Metric", style="bold")
         table.add_column("Count", justify="right")
-        table.add_row("Imported", f"[green]{result.imported}[/green]")
+        table.add_row(verb, f"[success]{result.imported}[/success]")
         table.add_row("Skipped (duplicates)", f"[dim]{result.skipped}[/dim]")
         table.add_row(
-            "Updated (type backfill)", f"[cyan]{result.updated}[/cyan]"
+            f"{update_verb} (type backfill)",
+            f"[accent]{result.updated}[/accent]",
         )
         if result.failed:
-            table.add_row("Failed", f"[red]{result.failed}[/red]")
+            table.add_row("Failed", f"[error]{result.failed}[/error]")
         else:
             table.add_row("Failed", "0")
         console.print()
@@ -1245,8 +1561,8 @@ def _print_summary(
         if result.unrecognized:
             console.print()
             console.print(
-                f"[yellow]{len(result.unrecognized)} transaction(s) "
-                f"with unrecognized type:[/yellow]"
+                f"[warning]{len(result.unrecognized)} transaction(s) "
+                f"with unrecognized type:[/warning]"
             )
             seen: set[str] = set()
             for desc in result.unrecognized:
@@ -1254,10 +1570,13 @@ def _print_summary(
                     seen.add(desc)
                     console.print(f"  [dim]{desc}[/dim]")
     else:
+        prefix = "DRY RUN. " if dry_run else "Done. "
+        verb = "Would import" if dry_run else "Imported"
+        update_verb = "Would update" if dry_run else "Updated"
         print(
-            f"Done. Imported: {result.imported}, "
+            f"{prefix}{verb}: {result.imported}, "
             f"Skipped (duplicates): {result.skipped}, "
-            f"Updated: {result.updated}, "
+            f"{update_verb}: {result.updated}, "
             f"Failed: {result.failed}."
         )
         if result.unrecognized:
@@ -1271,13 +1590,14 @@ def _print_summary(
 ########################################################################
 ########################################################################
 #
-# Common options shared between the ``import`` and ``banks`` subcommands.
-# Click doesn't have first-class option groups, so we hang them off the
-# parent ``cli`` group and stash the resolved config in ``ctx.obj``.
-#
-@click.group(
+@click.command(
     context_settings={"auto_envvar_prefix": "MIBUDGE"},
-    help="Mibudge bank statement importer.",
+    help=(
+        "Import one or more bank statement files (CSV or OFX/QFX) into "
+        "mibudge via its REST API. Files can be passed via -f "
+        "(repeatable) or as positional arguments, so shell globs like "
+        "*.ofx work."
+    ),
 )
 @click.option(
     "--url",
@@ -1306,8 +1626,18 @@ def _print_summary(
     "--trust-local-certs",
     is_flag=True,
     help=(
-        "Trust the project-local mkcert cert at "
-        "deployment/ssl/ssl_crt.pem (relative to the current directory)."
+        "Trust the mkcert root CA (located via `mkcert -CAROOT`). "
+        "Required when connecting to a local dev server using mkcert TLS."
+    ),
+)
+@click.option(
+    "--dry-run",
+    "-n",
+    is_flag=True,
+    help=(
+        "Show what would be imported without making any changes. "
+        "Parses files, authenticates, and checks for duplicates, "
+        "but does not POST or PATCH any transactions."
     ),
 )
 @click.option(
@@ -1321,50 +1651,7 @@ def _print_summary(
     is_flag=True,
     help="Disable rich output (auto-disabled when not a TTY).",
 )
-@click.pass_context
-def cli_group(
-    ctx: click.Context,
-    url: str | None,
-    username: str | None,
-    password: str | None,
-    vault_path: str | None,
-    ca_bundle: Path | None,
-    trust_local_certs: bool,
-    verbose: bool,
-    plain: bool,
-) -> None:
-    """Parent group: resolves shared connection/TLS/logging options."""
-    console = Console(stderr=True)
-    interactive = console.is_terminal and not plain
-    _setup_logging(verbose, interactive, console=console)
-
-    ctx.ensure_object(dict)
-    ctx.obj.update(
-        {
-            "url": url,
-            "username": username,
-            "password": password,
-            "vault_path": vault_path,
-            "ca_bundle": ca_bundle,
-            "trust_local_certs": trust_local_certs,
-            "verbose": verbose,
-            "console": console,
-            "interactive": interactive,
-        }
-    )
-
-
-########################################################################
-########################################################################
-#
-@cli_group.command(
-    "import",
-    help=(
-        "Import one or more statement files (CSV or OFX/QFX) into "
-        "mibudge. Files can be passed via -f (repeatable) or as "
-        "positional arguments, so shell globs like *.ofx work."
-    ),
-)
+@theme_option
 @click.option(
     "--file",
     "-f",
@@ -1386,9 +1673,11 @@ def cli_group(
     "-a",
     default=None,
     help=(
-        "Bank account UUID to import into. Overrides any ACCTID "
-        "auto-match. Omit with --create-account, or when importing "
-        "OFX whose ACCTID already matches an existing account."
+        "Bank account — a UUID, name, or account number. If the "
+        "string matches exactly one account it is used; otherwise "
+        "all matches (or all accounts) are shown. Overrides any "
+        "ACCTID auto-match. Omit with --create-account, or when "
+        "importing OFX whose ACCTID already matches."
     ),
 )
 @click.option(
@@ -1409,11 +1698,11 @@ def cli_group(
 )
 @click.option(
     "--bank",
-    type=click.UUID,
     default=None,
     help=(
-        "UUID of the parent Bank (with --create-account). "
-        "Use the 'banks' subcommand to list available banks."
+        "Parent bank — a UUID, name, or routing number. If the "
+        "string matches exactly one bank it is used; otherwise "
+        "all matches (or all banks) are shown for disambiguation."
     ),
 )
 @click.option(
@@ -1433,30 +1722,43 @@ def cli_group(
         "OFX -- the statement's ACCTID is used."
     ),
 )
-@click.pass_context
-def import_cmd(
-    ctx: click.Context,
+def cli_cmd(
+    url: str | None,
+    username: str | None,
+    password: str | None,
+    vault_path: str | None,
+    ca_bundle: Path | None,
+    trust_local_certs: bool,
+    dry_run: bool,
+    verbose: bool,
+    plain: bool,
+    theme_name: str,
     flag_files: tuple[Path, ...],
     positional_files: tuple[Path, ...],
     account: str | None,
     create_account: bool,
     name: str | None,
-    bank: Any,  # click.UUID yields uuid.UUID
+    bank: str | None,
     account_type: str | None,
     account_number: str | None,
 ) -> None:
     """CLI entry point for the statement importer."""
-    console: Console = ctx.obj["console"]
-    interactive: bool = ctx.obj["interactive"]
+    console = Console(theme=get_theme(theme_name).rich, stderr=True)
+    interactive = console.is_terminal and not plain
+    _setup_logging(verbose, interactive, console=console)
 
     # --- Collect and validate inputs ---
     file_paths: list[Path] = list(flag_files) + list(positional_files)
     if not file_paths:
         raise click.UsageError(
             "At least one statement file is required. Pass paths "
-            "positionally (e.g. 'import *.ofx') or with -f."
+            "positionally (e.g. '*.ofx') or with -f."
         )
 
+    if dry_run and create_account:
+        raise click.UsageError(
+            "--dry-run and --create-account are mutually exclusive."
+        )
     if create_account and account:
         raise click.UsageError(
             "--create-account and --account are mutually exclusive."
@@ -1498,8 +1800,12 @@ def import_cmd(
             f"from {len(per_file_statements)} file(s) "
             f"({statement.beginning_date} -> {statement.ending_date}).[/dim]"
         )
+    if dry_run and interactive:
+        console.print(
+            "[bold warning]DRY RUN[/bold warning] — no changes will be made."
+        )
 
-    bank_id_str: str | None = str(bank) if bank is not None else None
+    bank_id_str: str | None = bank
     account_type_code: str | None = (
         _ACCOUNT_TYPE_CHOICES[account_type] if account_type else None
     )
@@ -1507,19 +1813,19 @@ def import_cmd(
     # --- Run the import ---
     try:
         with _build_client(
-            url=ctx.obj["url"],
-            username=ctx.obj["username"],
-            password=ctx.obj["password"],
-            vault_path=ctx.obj["vault_path"],
-            ca_bundle=ctx.obj["ca_bundle"],
-            trust_local_certs=ctx.obj["trust_local_certs"],
+            url=url,
+            username=username,
+            password=password,
+            vault_path=vault_path,
+            ca_bundle=ca_bundle,
+            trust_local_certs=trust_local_certs,
             console=console,
             interactive=interactive,
         ) as client:
             if interactive:
                 with console.status("[bold]Authenticating..."):
                     client.authenticate()
-                console.print("[green]Authenticated.[/green]")
+                console.print("[success]Authenticated.[/success]")
             else:
                 client.authenticate()
                 logger.info("Authenticated.")
@@ -1545,7 +1851,7 @@ def import_cmd(
                 min(tx.transaction_date for tx in txs) if txs else None
             )
             dedup_end = max(tx.transaction_date for tx in txs) if txs else None
-            existing: dict[tuple[str, str, str], tuple[str, str]] = {}
+            existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
             if txs and dedup_start is not None and dedup_end is not None:
                 if interactive:
                     with console.status(
@@ -1567,9 +1873,9 @@ def import_cmd(
                     BarColumn(),
                     MofNCompleteColumn(),
                     TextColumn(
-                        "[green]+{task.fields[imported]}[/green] "
+                        "[success]+{task.fields[imported]}[/success] "
                         "[dim]~{task.fields[skipped]}[/dim] "
-                        "[red]-{task.fields[failed]}[/red]"
+                        "[error]-{task.fields[failed]}[/error]"
                     ),
                     TimeElapsedColumn(),
                     console=console,
@@ -1592,6 +1898,7 @@ def import_cmd(
                         client,
                         _progress_cb,
                         existing=existing,
+                        dry_run=dry_run,
                     )
                     progress.update(
                         task_id,
@@ -1601,18 +1908,25 @@ def import_cmd(
                     )
             else:
                 result = import_statement(
-                    statement, account_id, client, existing=existing
+                    statement,
+                    account_id,
+                    client,
+                    existing=existing,
+                    dry_run=dry_run,
                 )
 
-            # Post-import cross-check -- error-level, non-fatal.
-            _verify_final_balance(client, account_id, statement.ending_balance)
+            if not dry_run:
+                # Post-import cross-check -- error-level, non-fatal.
+                _verify_final_balance(
+                    client, account_id, statement.ending_balance
+                )
 
     except AuthenticationError as e:
         raise click.ClickException(str(e)) from e
     except KeyboardInterrupt as e:
         raise click.Abort() from e
 
-    _print_summary(console, result, interactive)
+    _print_summary(console, result, interactive, dry_run=dry_run)
 
     if result.failed > 0:
         raise SystemExit(1)
@@ -1621,73 +1935,10 @@ def import_cmd(
 ########################################################################
 ########################################################################
 #
-@cli_group.command(
-    "banks", help="List banks visible to the authenticated user."
-)
-@click.pass_context
-def banks_cmd(ctx: click.Context) -> None:
-    """Print a table of banks with their UUIDs, for use with --bank."""
-    console: Console = ctx.obj["console"]
-    interactive: bool = ctx.obj["interactive"]
-
-    try:
-        with _build_client(
-            url=ctx.obj["url"],
-            username=ctx.obj["username"],
-            password=ctx.obj["password"],
-            vault_path=ctx.obj["vault_path"],
-            ca_bundle=ctx.obj["ca_bundle"],
-            trust_local_certs=ctx.obj["trust_local_certs"],
-            console=console,
-            interactive=interactive,
-        ) as client:
-            if interactive:
-                with console.status("[bold]Authenticating..."):
-                    client.authenticate()
-            else:
-                client.authenticate()
-
-            banks = list(client.get_all("/api/v1/banks/", {}))
-    except AuthenticationError as e:
-        raise click.ClickException(str(e)) from e
-
-    if not banks:
-        if interactive:
-            console.print("[yellow]No banks found.[/yellow]")
-        else:
-            print("No banks found.")
-        return
-
-    if interactive:
-        table = Table(title="Banks")
-        table.add_column("Name", style="bold")
-        table.add_column("Routing #")
-        table.add_column("Currency")
-        table.add_column("UUID", style="dim")
-        for b in banks:
-            table.add_row(
-                b.get("name", ""),
-                b.get("routing_number") or "",
-                b.get("default_currency") or "",
-                b.get("id", ""),
-            )
-        console.print(table)
-    else:
-        for b in banks:
-            print(
-                f"{b.get('id', '')}\t{b.get('name', '')}\t"
-                f"{b.get('routing_number') or ''}\t"
-                f"{b.get('default_currency') or ''}"
-            )
-
-
-########################################################################
-########################################################################
-#
 def cli() -> None:
-    """Load .env and invoke the click group."""
+    """Load .env and invoke the CLI."""
     load_dotenv()
-    cli_group()
+    cli_cmd()
 
 
 if __name__ == "__main__":

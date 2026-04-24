@@ -14,6 +14,8 @@ factory. This keeps credential/TLS plumbing out of the test path.
 
 # system imports
 from collections.abc import Callable, Iterator
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -190,9 +192,8 @@ def _invoke(*args: str) -> Any:
     """
     Invoke the CLI with MIBUDGE_* env vars stubbed in.
 
-    ``--plain`` is a parent-group option so it must precede the
-    subcommand in argv -- we prepend it here so every test gets
-    deterministic non-rich output.
+    ``--plain`` is prepended so every test gets deterministic
+    non-rich output.
     """
     runner = CliRunner()
     env = {
@@ -201,7 +202,7 @@ def _invoke(*args: str) -> Any:
         "MIBUDGE_PASSWORD": "p",
     }
     return runner.invoke(
-        it.cli_group,
+        it.cli_cmd,
         ["--plain", *args],
         env=env,
         catch_exceptions=False,
@@ -230,7 +231,7 @@ class TestImportCmd:
         acct = _seed_account(fake_client)
         csv_path, rows = bofa_csv_factory(num_transactions=5)
 
-        result = _invoke("import", "-f", str(csv_path), "--account", acct["id"])
+        result = _invoke("-f", str(csv_path), "--account", acct["id"])
 
         assert result.exit_code == 0, result.output
         posts = [
@@ -264,9 +265,14 @@ class TestImportCmd:
             num_transactions=3, acct_id="9999888877", ending_balance="800.00"
         )
         bank_uuid = "11111111-1111-1111-1111-111111111111"
+        fake_client.banks[bank_uuid] = {
+            "id": bank_uuid,
+            "name": "Test Bank",
+            "routing_number": "021000021",
+            "default_currency": "USD",
+        }
 
         result = _invoke(
-            "import",
             "-f",
             str(ofx_path),
             "--create-account",
@@ -303,7 +309,7 @@ class TestImportCmd:
             num_transactions=2, acct_id="5555444433"
         )
 
-        result = _invoke("import", "-f", str(ofx_path))
+        result = _invoke("-f", str(ofx_path))
 
         assert result.exit_code == 0, result.output
         assert len(fake_client.accounts) == 1  # no new one created
@@ -333,8 +339,6 @@ class TestImportCmd:
         csv_path, rows = bofa_csv_factory(num_transactions=4)
 
         # Seed the fake with identical rows so the dedup key matches.
-        from datetime import datetime
-
         for row in rows:
             tx_id = fake_client._mint_id("tx")
             fake_client.transactions[tx_id] = {
@@ -346,10 +350,11 @@ class TestImportCmd:
                 "amount": str(row.amount),
                 "raw_description": row.description,
                 "transaction_type": "PUR",
+                "bank_account_posted_balance": str(row.running_balance),
             }
         pre_tx_count = len(fake_client.transactions)
 
-        result = _invoke("import", "-f", str(csv_path), "--account", acct["id"])
+        result = _invoke("-f", str(csv_path), "--account", acct["id"])
 
         assert result.exit_code == 0, result.output
         # No new transactions posted.
@@ -379,8 +384,6 @@ class TestImportCmd:
         csv_path, rows = bofa_csv_factory(num_transactions=1)
         row = rows[0]
 
-        from datetime import datetime
-
         tx_id = fake_client._mint_id("tx")
         fake_client.transactions[tx_id] = {
             "id": tx_id,
@@ -391,9 +394,10 @@ class TestImportCmd:
             "amount": str(row.amount),
             "raw_description": row.description,
             "transaction_type": "",  # empty -- will be backfilled
+            "bank_account_posted_balance": str(row.running_balance),
         }
 
-        result = _invoke("import", "-f", str(csv_path), "--account", acct["id"])
+        result = _invoke("-f", str(csv_path), "--account", acct["id"])
 
         assert result.exit_code == 0, result.output
         patches = [c for c in fake_client.calls if c[0] == "PATCH"]
@@ -413,6 +417,145 @@ class TestImportCmd:
 
     ####################################################################
     #
+    def test_overlapping_files_dedup_by_running_balance(
+        self,
+        fake_client: FakeClient,
+        bofa_csv_row_factory: Callable[..., Any],
+        tmp_path: Path,
+    ) -> None:
+        """
+        GIVEN: two CSV files with overlapping date ranges (shared
+               transactions have identical running balances)
+        WHEN:  both files are imported in a single run
+        THEN:  duplicate transactions from the overlap are dropped and
+               each unique transaction is imported exactly once
+        """
+        from importers.tests.conftest import _write_bofa_csv
+
+        acct = _seed_account(fake_client)
+        beginning = Decimal("1000.00")
+
+        r1 = bofa_csv_row_factory(
+            transaction_date=date(2026, 1, 10),
+            description="COFFEE SHOP 01/10",
+            amount=Decimal("-5.00"),
+        )
+        r1.running_balance = Decimal("995.00")
+
+        r2 = bofa_csv_row_factory(
+            transaction_date=date(2026, 1, 15),
+            description="GROCERY STORE 01/15",
+            amount=Decimal("-50.00"),
+        )
+        r2.running_balance = Decimal("945.00")
+
+        r3 = bofa_csv_row_factory(
+            transaction_date=date(2026, 1, 20),
+            description="PAYROLL DIRECT DEP",
+            amount=Decimal("500.00"),
+        )
+        r3.running_balance = Decimal("1445.00")
+
+        # File 1: all three transactions
+        f1 = tmp_path / "file1.csv"
+        _write_bofa_csv(
+            f1,
+            [r1, r2, r3],
+            beginning_balance=beginning,
+            beginning_date=date(2026, 1, 1),
+            ending_date=date(2026, 1, 20),
+        )
+
+        # File 2: overlaps on r2 and r3, adds r4
+        r4 = bofa_csv_row_factory(
+            transaction_date=date(2026, 1, 25),
+            description="ELECTRIC BILL",
+            amount=Decimal("-100.00"),
+        )
+        r4.running_balance = Decimal("1345.00")
+
+        f2 = tmp_path / "file2.csv"
+        _write_bofa_csv(
+            f2,
+            [r2, r3, r4],
+            beginning_balance=Decimal("995.00"),
+            beginning_date=date(2026, 1, 15),
+            ending_date=date(2026, 1, 25),
+        )
+
+        result = _invoke(
+            "-f",
+            str(f1),
+            "-f",
+            str(f2),
+            "--account",
+            acct["id"],
+        )
+
+        assert result.exit_code == 0, result.output
+
+        posts = [
+            c
+            for c in fake_client.calls
+            if c[0] == "POST" and c[1] == "/api/v1/transactions/"
+        ]
+        assert len(posts) == 4
+
+    ####################################################################
+    #
+    def test_dedup_ignores_server_running_balance(
+        self,
+        fake_client: FakeClient,
+        bofa_csv_factory: Callable[..., tuple[Path, list[Any]]],
+    ) -> None:
+        """
+        GIVEN: a CSV whose rows already exist server-side but whose
+               ``bank_account_posted_balance`` differs from the CSV's
+               ``Running Bal.`` (as happens after re-importing
+               overlapping CSV files)
+        WHEN:  ``import`` runs
+        THEN:  existing transactions are still matched by (date,
+               amount, raw_description) and skipped — the balance
+               mismatch does not cause duplicates
+        """
+        acct = _seed_account(fake_client)
+        csv_path, rows = bofa_csv_factory(num_transactions=4)
+
+        # Seed server with the same transactions but a different
+        # posted balance (simulates a prior overlapping import).
+        for row in rows:
+            tx_id = fake_client._mint_id("tx")
+            fake_client.transactions[tx_id] = {
+                "id": tx_id,
+                "bank_account": acct["id"],
+                "transaction_date": datetime.combine(
+                    row.transaction_date, datetime.min.time()
+                ).isoformat(),
+                "amount": str(row.amount),
+                "raw_description": row.description,
+                "transaction_type": "PUR",
+                # Server balance intentionally different from CSV
+                # running balance -- simulates prior import that
+                # shifted the account's running total.
+                "bank_account_posted_balance": str(
+                    row.running_balance + Decimal("906.44")
+                ),
+            }
+        pre_tx_count = len(fake_client.transactions)
+
+        result = _invoke("-f", str(csv_path), "--account", acct["id"])
+
+        assert result.exit_code == 0, result.output
+        assert len(fake_client.transactions) == pre_tx_count
+        posts = [
+            c
+            for c in fake_client.calls
+            if c[0] == "POST" and c[1] == "/api/v1/transactions/"
+        ]
+        assert posts == []
+
+    ####################################################################
+    #
     def test_mutually_exclusive_account_flags_rejected(
         self,
         fake_client: FakeClient,
@@ -426,7 +569,6 @@ class TestImportCmd:
         csv_path, _ = bofa_csv_factory(num_transactions=1)
 
         result = _invoke(
-            "import",
             "-f",
             str(csv_path),
             "--account",
@@ -442,3 +584,182 @@ class TestImportCmd:
         assert "mutually exclusive" in result.output.lower()
         # No API calls made.
         assert fake_client.calls == []
+
+
+_SAMPLE_BANKS: list[dict[str, Any]] = [
+    {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "name": "Chase",
+        "routing_number": "021000021",
+        "default_currency": "USD",
+    },
+    {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "name": "Bank of America",
+        "routing_number": "026009593",
+        "default_currency": "USD",
+    },
+    {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "name": "First Bank",
+        "routing_number": "101000695",
+        "default_currency": "USD",
+    },
+]
+
+_SAMPLE_ACCOUNTS: list[dict[str, Any]] = [
+    {
+        "id": "aaaa-1111",
+        "name": "Personal Checking",
+        "account_number": "123456789",
+        "account_type": "C",
+    },
+    {
+        "id": "bbbb-2222",
+        "name": "Business Checking",
+        "account_number": "987654321",
+        "account_type": "C",
+    },
+    {
+        "id": "cccc-3333",
+        "name": "Savings",
+        "account_number": "555000111",
+        "account_type": "S",
+    },
+]
+
+
+########################################################################
+########################################################################
+#
+class TestFuzzyBankMatch:
+    """Tests for _fuzzy_match_bank against name/routing_number/UUID."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "query,expected_ids",
+        [
+            pytest.param(
+                "Chase",
+                ["11111111-1111-1111-1111-111111111111"],
+                id="exact-name",
+            ),
+            pytest.param(
+                "america",
+                ["22222222-2222-2222-2222-222222222222"],
+                id="case-insensitive-name",
+            ),
+            pytest.param(
+                "021000021",
+                ["11111111-1111-1111-1111-111111111111"],
+                id="routing-number",
+            ),
+            pytest.param(
+                "11111111-1111-1111-1111-111111111111",
+                ["11111111-1111-1111-1111-111111111111"],
+                id="uuid",
+            ),
+            pytest.param(
+                "Bank",
+                [
+                    "22222222-2222-2222-2222-222222222222",
+                    "33333333-3333-3333-3333-333333333333",
+                ],
+                id="multiple-matches",
+            ),
+            pytest.param("Nonexistent", [], id="no-match"),
+        ],
+    )
+    def test_fuzzy_match_bank(
+        self, query: str, expected_ids: list[str]
+    ) -> None:
+        """
+        GIVEN: a fixed set of sample banks
+        WHEN:  _fuzzy_match_bank is called with a query
+        THEN:  the correct bank(s) are returned
+        """
+        matches = it._fuzzy_match_bank(_SAMPLE_BANKS, query)
+        assert sorted(m["id"] for m in matches) == sorted(expected_ids)
+
+
+########################################################################
+########################################################################
+#
+class TestFuzzyAccountMatch:
+    """Tests for _fuzzy_match_account against name/account_number/UUID."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "query,expected_ids",
+        [
+            pytest.param("Personal", ["aaaa-1111"], id="name-substring"),
+            pytest.param("savings", ["cccc-3333"], id="case-insensitive-name"),
+            pytest.param("9876", ["bbbb-2222"], id="account-number-substring"),
+            pytest.param("aaaa-1111", ["aaaa-1111"], id="uuid"),
+            pytest.param(
+                "Checking", ["aaaa-1111", "bbbb-2222"], id="multiple-matches"
+            ),
+            pytest.param("Nonexistent", [], id="no-match"),
+        ],
+    )
+    def test_fuzzy_match_account(
+        self, query: str, expected_ids: list[str]
+    ) -> None:
+        """
+        GIVEN: a fixed set of sample accounts
+        WHEN:  _fuzzy_match_account is called with a query
+        THEN:  the correct account(s) are returned
+        """
+        matches = it._fuzzy_match_account(_SAMPLE_ACCOUNTS, query)
+        assert sorted(m["id"] for m in matches) == sorted(expected_ids)
+
+    ####################################################################
+    #
+    def test_csv_account_by_name(
+        self,
+        fake_client: FakeClient,
+        bofa_csv_factory: Callable[..., tuple[Path, list[Any]]],
+    ) -> None:
+        """
+        GIVEN: a BofA CSV and an existing account matched by name
+        WHEN:  ``import --account "Personal"`` runs
+        THEN:  the account is resolved and transactions are imported
+        """
+        acct = _seed_account(fake_client, name="Personal Checking")
+        csv_path, rows = bofa_csv_factory(num_transactions=2)
+
+        result = _invoke("-f", str(csv_path), "--account", "Personal")
+
+        assert result.exit_code == 0, result.output
+        posts = [
+            c
+            for c in fake_client.calls
+            if c[0] == "POST" and c[1] == "/api/v1/transactions/"
+        ]
+        assert len(posts) == len(rows)
+        assert all(p[2]["bank_account"] == acct["id"] for p in posts)
+
+    ####################################################################
+    #
+    def test_ambiguous_account_fails_with_table(
+        self,
+        fake_client: FakeClient,
+        bofa_csv_factory: Callable[..., tuple[Path, list[Any]]],
+    ) -> None:
+        """
+        GIVEN: two accounts whose names both contain "Checking"
+        WHEN:  ``import --account "Checking"`` runs
+        THEN:  the CLI fails and lists the matching accounts
+        """
+        _seed_account(fake_client, name="Personal Checking")
+        _seed_account(fake_client, name="Business Checking")
+        csv_path, _ = bofa_csv_factory(num_transactions=1)
+
+        result = _invoke("-f", str(csv_path), "--account", "Checking")
+
+        assert result.exit_code != 0
+        assert "Multiple bank accounts" in result.output
+        assert "Personal Checking" in result.output
+        assert "Business Checking" in result.output

@@ -8,14 +8,16 @@ import pytest
 import redis
 
 # project imports
-import utils
-from django.conf import LazySettings, settings
+from django.conf import LazySettings
 from django.db import connections
 from fakeredis import FakeConnection, FakeServer
 from pytest_factoryboy import register
+from pytest_mock import MockerFixture
 
 from tests.users.factories import UserFactory
 from users.models import User
+
+register(UserFactory)  # UserFactory -> user_factory fixture
 
 
 ####################################################################
@@ -34,6 +36,8 @@ def django_db_modify_db_settings() -> None:
     Returns:
         None
     """
+    from django.conf import settings
+
     db = settings.DATABASES["default"]
     db["ENGINE"] = "django.db.backends.sqlite3"
     db["NAME"] = ":memory:"
@@ -51,7 +55,8 @@ def django_db_modify_db_settings() -> None:
 #
 @pytest.fixture(autouse=True)
 def use_fakeredis(
-    settings: LazySettings, monkeypatch: pytest.MonkeyPatch
+    settings: LazySettings,
+    mocker: MockerFixture,
 ) -> Generator[redis.StrictRedis]:
     """
     Set up a FakeServer and redirect all Redis access to it for the
@@ -61,8 +66,8 @@ def use_fakeredis(
     Args:
         settings: The pytest-django ``settings`` fixture for overriding
             Django settings within the test.
-        monkeypatch: The pytest ``monkeypatch`` fixture used to replace
-            ``utils.REDIS_CONNECTION_POOL`` with a fake pool.
+        mocker: The pytest-mock ``mocker`` fixture used to replace
+            ``common.redis.REDIS_CONNECTION_POOL`` with a fake pool.
 
     Yields:
         A ``redis.StrictRedis`` client connected to the FakeServer, for
@@ -72,7 +77,7 @@ def use_fakeredis(
     fake_pool = redis.ConnectionPool(
         server=server, connection_class=FakeConnection
     )
-    monkeypatch.setattr(utils, "REDIS_CONNECTION_POOL", fake_pool)
+    mocker.patch("common.redis.REDIS_CONNECTION_POOL", fake_pool)
 
     # django-redis is the cache backend in non-DEBUG mode; replace it with
     # an in-memory cache so tests never need a real Redis server.
@@ -138,6 +143,3 @@ def user() -> User:
     # factory-boy stubs don't express that UserFactory() returns a User
     # instance -- revisit if factory-boy stubs improve
     return UserFactory()  # type: ignore[return-value]
-
-
-register(UserFactory)

@@ -39,9 +39,6 @@ class TestUserURLs:
         [
             pytest.param("users:update", "/users/~update/", id="update"),
             pytest.param("users:redirect", "/users/~redirect/", id="redirect"),
-            pytest.param(
-                "users:spa-login", "/users/~spa-login/", id="spa-login"
-            ),
         ],
     )
     def test_static_url_resolution(
