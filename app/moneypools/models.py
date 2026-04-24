@@ -211,6 +211,13 @@ class BankAccount(MoneyPoolBaseClass):
 
     #####################################################################
     #
+    @property
+    def lock_key(self) -> str:
+        """Return the Redis lock key for this bank account."""
+        return f"bank_account:{self.id}"
+
+    ####################################################################
+    #
     def __str__(self) -> str:
         return f"{self.name} ({self.bank.name}) [{str(self.id)[:8]}]"
 
@@ -594,6 +601,13 @@ class Budget(MoneyPoolBaseClass):
     #       account has the given fields selected.
     #
     auto_spend = models.JSONField(default=list, blank=True)
+
+    ####################################################################
+    #
+    @property
+    def lock_key(self) -> str:
+        """Return the Redis lock key for this budget."""
+        return f"budget:{self.id}"
 
 
 ########################################################################
