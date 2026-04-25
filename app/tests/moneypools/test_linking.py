@@ -10,10 +10,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from django.contrib.auth import get_user_model
 
+from moneypools.models import BankAccount, Transaction
+
 # Project imports
 #
-from moneypools.linking import attempt_link
-from moneypools.models import BankAccount, Transaction
+from moneypools.service.linking import attempt_link
 
 # Direct factory imports needed here because @pytest.mark.parametrize
 # arguments are evaluated before pytest fixtures are resolved.

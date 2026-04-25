@@ -11,8 +11,8 @@ import logging
 
 # Project imports
 from config import celery_app
-from moneypools.linking import attempt_link
 from moneypools.models import Transaction
+from moneypools.service.linking import attempt_link
 
 logger = logging.getLogger(__name__)
 

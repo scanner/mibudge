@@ -613,6 +613,38 @@ class Budget(MoneyPoolBaseClass):
 ########################################################################
 ########################################################################
 #
+class ServiceOnlyQuerySet(models.QuerySet):
+    """QuerySet that blocks bulk writes bypassing the service layer.
+
+    Transaction, TransactionAllocation, and InternalTransaction maintain
+    strict balance invariants via Redis-locked service functions.
+    bulk_create and bulk_update skip those code paths entirely, so they
+    are disabled here. Use the corresponding service module instead.
+    """
+
+    def bulk_create(self, objs: Any, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError(
+            f"{self.model.__name__}.objects.bulk_create() is disabled. "
+            "Use the service layer (moneypools.service) to create objects "
+            "so that balance invariants and Redis locks are enforced."
+        )
+
+    def bulk_update(
+        self, objs: Any, fields: Any, *args: Any, **kwargs: Any
+    ) -> Any:
+        raise NotImplementedError(
+            f"{self.model.__name__}.objects.bulk_update() is disabled. "
+            "Use the service layer (moneypools.service) to update objects "
+            "so that balance invariants and Redis locks are enforced."
+        )
+
+
+ServiceOnlyManager = models.Manager.from_queryset(ServiceOnlyQuerySet)
+
+
+########################################################################
+########################################################################
+#
 class TransactionBaseClass(MoneyPoolBaseClass):
     amount = MoneyField(
         max_digits=MAX_DIGITS,
@@ -638,6 +670,8 @@ class Transaction(TransactionBaseClass):
     NOTE: if this is associated with a budget, deleting the budget
     moves it back to the 'unallocated' budget.
     """
+
+    objects = ServiceOnlyManager()
 
     #####################################################################
     #
@@ -801,6 +835,8 @@ class InternalTransaction(TransactionBaseClass):
     delete them one by one.)
     """
 
+    objects = ServiceOnlyManager()
+
     # The src and dst budgets are not editable. The internal
     # transaction is created and the balances on the related budgets
     # are immediately modified in the pre_save hook. If the actor
@@ -884,6 +920,8 @@ class TransactionAllocation(MoneyPoolBaseClass):
     Transaction model directly. This gives a single code path for both
     split and non-split transactions.
     """
+
+    objects = ServiceOnlyManager()
 
     transaction = models.ForeignKey(
         Transaction,
