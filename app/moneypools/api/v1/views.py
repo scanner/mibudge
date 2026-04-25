@@ -17,7 +17,6 @@ from decimal import Decimal
 # 3rd party imports
 import moneyed
 from django_filters.rest_framework import DjangoFilterBackend
-from djmoney.money import Money
 from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
@@ -43,9 +42,7 @@ from moneypools.models import (
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
-from moneypools.service import (
-    transaction_allocation as transaction_allocation_svc,
-)
+from moneypools.service import transaction as transaction_svc
 
 from .filters import (
     BudgetFilter,
@@ -341,17 +338,32 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     ####################################################################
     #
     def perform_create(self, serializer: TransactionSerializer) -> None:
-        """Save the transaction and create a default allocation.
+        """Create a transaction via TransactionService.
 
-        The default allocation assigns the full transaction amount to
-        the bank account's unallocated budget.
+        Applies bank-balance math, seeds the default Unallocated
+        allocation, and enqueues the cross-account linker.
         """
-        transaction = serializer.save()
-        transaction_allocation_svc.create(
-            transaction=transaction,
-            budget=transaction.bank_account.unallocated_budget,
-            amount=transaction.amount,
+        data = serializer.validated_data
+        tx = transaction_svc.create(
+            bank_account=data["bank_account"],
+            amount=data["amount"],
+            transaction_date=data["transaction_date"],
+            raw_description=data["raw_description"],
+            pending=data.get("pending", False),
+            transaction_type=data.get("transaction_type", ""),
+            memo=data.get("memo"),
+            description=data.get("description", ""),
         )
+        serializer.instance = tx
+
+    ####################################################################
+    #
+    def perform_destroy(self, instance: Transaction) -> None:
+        """Delete a transaction via TransactionService.
+
+        Reverses bank and budget balances before deletion.
+        """
+        transaction_svc.delete(instance)
 
     ####################################################################
     #
@@ -404,80 +416,15 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         splits: dict[str, Decimal] = serializer.validated_data["splits"]
-        is_debit: bool = serializer._is_debit
-        budgets_by_id: dict[str, Budget] = serializer._budgets_by_id
-        unallocated = transaction.bank_account.unallocated_budget
-        currency = transaction.amount.currency
 
-        existing = list(
-            TransactionAllocation.objects.filter(
-                transaction=transaction
-            ).select_related("budget")
+        try:
+            allocations = transaction_svc.split(transaction, splits)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+        response_serializer = TransactionAllocationSerializer(
+            allocations, many=True
         )
-
-        # Index existing allocations by budget UUID.
-        existing_by_budget: dict[str, TransactionAllocation] = {}
-        for alloc in existing:
-            if alloc.budget is not None:
-                key = str(alloc.budget.id)
-                existing_by_budget[key] = alloc
-
-        touched_ids: set[str] = set()
-
-        # Create or update allocations for each declared split.
-        for budget_id, abs_amount in splits.items():
-            signed = Money(-abs_amount if is_debit else abs_amount, currency)
-            budget = budgets_by_id[budget_id]
-
-            if budget_id in existing_by_budget:
-                alloc = existing_by_budget[budget_id]
-                if alloc.amount.amount != signed.amount:
-                    transaction_allocation_svc.update_amount(alloc, signed)
-            else:
-                transaction_allocation_svc.create(
-                    transaction=transaction,
-                    budget=budget,
-                    amount=signed,
-                )
-            touched_ids.add(budget_id)
-
-        # Compute unallocated remainder.
-        tx_abs = abs(transaction.amount.amount)
-        split_total = sum(splits.values(), Decimal("0"))
-        remainder = tx_abs - split_total
-
-        unalloc_key = str(unallocated.id) if unallocated else None
-
-        if remainder > 0 and unallocated:
-            signed_remainder = Money(
-                -remainder if is_debit else remainder, currency
-            )
-            if unalloc_key and unalloc_key in existing_by_budget:
-                alloc = existing_by_budget[unalloc_key]
-                if alloc.amount.amount != signed_remainder.amount:
-                    transaction_allocation_svc.update_amount(
-                        alloc, signed_remainder
-                    )
-            else:
-                transaction_allocation_svc.create(
-                    transaction=transaction,
-                    budget=unallocated,
-                    amount=signed_remainder,
-                )
-            if unalloc_key:
-                touched_ids.add(unalloc_key)
-
-        # Delete allocations no longer needed.
-        for alloc in existing:
-            budget_key = str(alloc.budget.id) if alloc.budget else None
-            if budget_key not in touched_ids:
-                transaction_allocation_svc.delete(alloc)
-
-        # Return all allocations for this transaction.
-        final = TransactionAllocation.objects.filter(
-            transaction=transaction
-        ).select_related("budget")
-        response_serializer = TransactionAllocationSerializer(final, many=True)
         return Response(response_serializer.data)
 
 

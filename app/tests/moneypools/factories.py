@@ -22,6 +22,7 @@ from moneypools.models import (
 )
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import transaction as transaction_svc
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
 )
@@ -179,6 +180,24 @@ class TransactionFactory(DjangoModelFactory):
         Transaction.TransactionType.values
     )
     raw_description = factory.fuzzy.FuzzyText(length=100)
+
+    @classmethod
+    def _create(
+        cls, model_class: type, *args: object, **kwargs: Any
+    ) -> Transaction:
+        bank_account = kwargs.pop("bank_account")
+        amount = kwargs.pop("amount")
+        transaction_date = kwargs.pop("transaction_date")
+        raw_description = kwargs.pop("raw_description")
+        if not hasattr(amount, "amount"):
+            amount = Money(amount, get_default_currency())
+        return transaction_svc.create(
+            bank_account=bank_account,
+            amount=amount,
+            transaction_date=transaction_date,
+            raw_description=raw_description,
+            **kwargs,
+        )
 
 
 ########################################################################
