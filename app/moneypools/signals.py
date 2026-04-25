@@ -5,26 +5,12 @@ from typing import Any
 
 # 3rd party imports
 #
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
 # Project imports
 #
 from .models import BankAccount, Budget, Transaction
-
-# To make our logic simpler every bank account will always have an unallocated
-# budget. This budget is created when the bank account is first saved. We do
-# not allow the creation of any other budget associated with a bank account to
-# have the same name. The user may not delete/archive this budget.
-#
-# When a Transaction is imported, the import service creates a default
-# TransactionAllocation pointing at the unallocated budget.
-#
-# NOTE: Proposing a logic change: When you create a transaction, it
-#       automatically gets a TransactionAllocation pointing at the unallocated
-#       budget.
-#
-UNALLOCATED_BUDGET_NAME = "Unallocated"
 
 
 ####################################################################
@@ -57,51 +43,6 @@ def bank_account_pre_save(
         #
         bank_account.posted_balance_currency = bank_account.currency
         bank_account.available_balance_currency = bank_account.currency
-
-
-####################################################################
-#
-@receiver(post_save, sender=BankAccount)
-def bank_account_post_save(
-    sender: type[BankAccount],
-    instance: BankAccount,
-    created: bool,
-    **kwargs: Any,
-) -> None:
-    """Create the unallocated budget when a new bank account is saved.
-
-    The unallocated budget is created in post_save (not pre_save)
-    because it needs a saved BankAccount to reference via FK.  Its
-    initial balance matches the account's available_balance.
-
-    Args:
-        sender: The BankAccount model class.
-        instance: The BankAccount instance that was just saved.
-        created: True if this is a new record.
-        **kwargs: Additional signal keyword arguments.
-    """
-    bank_account = instance  # To make the code easier to read
-
-    # Create and setup the unallocated budget if this bank account is being
-    # created. We have to do this in the post_save signal because the budget
-    # needs to be able to reference bank via a foreign key.
-    #
-    # NOTE: This is the first budget in the bank account and it gets set to the
-    # bank account's available balance (ie: all the funds are put into this
-    # first created budget)
-    #
-    if created:
-        unallocated_budget = Budget(
-            name="Unallocated",
-            bank_account=bank_account,
-            target_date=datetime.now(UTC).date(),
-            balance=bank_account.available_balance,
-        )
-        unallocated_budget.save()
-        bank_account.unallocated_budget = unallocated_budget
-        BankAccount.objects.filter(id=bank_account.id).update(
-            unallocated_budget_id=unallocated_budget.id
-        )
 
 
 ####################################################################

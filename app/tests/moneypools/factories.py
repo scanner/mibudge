@@ -20,6 +20,7 @@ from moneypools.models import (
     TransactionCategory,
     get_default_currency,
 )
+from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import transaction as transaction_svc
@@ -72,7 +73,8 @@ class BankFactory(DjangoModelFactory):
 class BankAccountFactory(DjangoModelFactory):
     class Meta:
         model = BankAccount
-        django_get_or_create = ["account_number"]
+        # _create calls BankAccountService.create so Unallocated budget
+        # creation and other service-layer invariants are exercised by tests.
         # owners post-generation only calls .add() on an M2M -- no model
         # field mutation, so the auto-save after hooks is extraneous.
         skip_postgeneration_save = True
@@ -91,6 +93,22 @@ class BankAccountFactory(DjangoModelFactory):
     )
 
     bank = factory.SubFactory(BankFactory)
+
+    @classmethod
+    def _create(
+        cls, model_class: type, *args: object, **kwargs: Any
+    ) -> BankAccount:
+        bank = kwargs.pop("bank")
+        name = kwargs.pop("name")
+        account_type = kwargs.pop("account_type")
+        # owners is handled by the post_generation hook below
+        kwargs.pop("owners", None)
+        return bank_account_svc.create(
+            bank=bank,
+            name=name,
+            account_type=account_type,
+            **kwargs,
+        )
 
     @factory.post_generation
     # get_user_model() returns a type expression, not a concrete class, so
