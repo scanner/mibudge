@@ -19,10 +19,8 @@ from moneypools.models import (
     TransactionAllocation,
 )
 from moneypools.service import budget as budget_svc
-
-# app imports
-#
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import transaction as transaction_svc
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
 )
@@ -352,8 +350,7 @@ class TestTransaction:
         )
 
         upd_trans = Transaction.objects.get(id=transaction.id)
-        upd_trans.pending = False
-        upd_trans.save()
+        transaction_svc.update(upd_trans, pending=False)
 
         ba = BankAccount.objects.get(id=bank_account.id)
         assert ba.posted_balance == Money(
@@ -391,12 +388,11 @@ class TestTransaction:
             raw_description="This is a transaction",
             bank_account=bank_account,
         )
-        transaction.save()
 
         upd_trans = Transaction.objects.get(id=transaction.id)
-        upd_trans.amount = Money(FINAL_AMT, USD)
-        upd_trans.pending = False
-        upd_trans.save()
+        transaction_svc.update(
+            upd_trans, amount=Money(FINAL_AMT, USD), pending=False
+        )
 
         ba = BankAccount.objects.get(id=bank_account.id)
         assert ba.available_balance == Money(BANK_AVAIL_BAL + FINAL_AMT, USD)
@@ -431,7 +427,7 @@ class TestTransaction:
             raw_description="This is a transaction",
             bank_account=bank_account,
         )
-        transaction.delete()
+        transaction_svc.delete(transaction)
 
         ba = BankAccount.objects.get(id=bank_account.id)
         assert ba.posted_balance == Money(BANK_POSTED_BAL, USD)
@@ -541,9 +537,8 @@ class TestTransactionAllocation:
             raw_description="Test purchase",
             bank_account=bank_account,
         )
-        alloc = transaction_allocation_factory(
-            transaction=txn, budget=None, amount=TRANSACTION_AMT
-        )
+        # transaction_factory seeds a default allocation to unallocated.
+        alloc = TransactionAllocation.objects.get(transaction=txn)
         assert alloc.budget == bank_account.unallocated_budget
 
         # Reassign the allocation to the destination budget via the service
@@ -677,7 +672,9 @@ class TestTransactionAllocation:
             GROCERIES_BAL + GROCERIES_AMT, USD
         )
         assert home_budget.balance == Money(HOME_BAL + HOME_AMT, USD)
-        assert txn.allocations.count() == 2
+        # 3 total: 1 default to unallocated (seeded by transaction_svc.create)
+        # + 2 explicit allocations added by this test.
+        assert txn.allocations.count() == 3
 
     ####################################################################
     #

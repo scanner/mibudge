@@ -771,6 +771,13 @@ class Transaction(TransactionBaseClass):
         upload_to="transaction_documents/%Y-%m-%d/", null=True, blank=True
     )
 
+    ####################################################################
+    #
+    @property
+    def lock_key(self) -> str:
+        """Return the Redis lock key for this transaction."""
+        return f"transaction:{self.id}"
+
 
 ########################################################################
 ########################################################################

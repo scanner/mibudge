@@ -917,47 +917,12 @@ class TransactionSplitsSerializer(serializers.Serializer):
     )
 
     def validate_splits(self, value: dict[str, Decimal]) -> dict[str, Decimal]:
-        """Validate budget UUIDs exist and amounts are sensible."""
-        transaction: Transaction = self.context["transaction"]
-        account = transaction.bank_account
-        tx_abs = abs(transaction.amount.amount)
-        is_debit = transaction.amount.amount < 0
-
-        budget_ids = list(value.keys())
-        budgets = Budget.objects.filter(id__in=budget_ids)
-        found_ids = {str(b.id) for b in budgets}
-        missing = set(budget_ids) - found_ids
-        if missing:
-            raise serializers.ValidationError(
-                f"Unknown budget IDs: {', '.join(sorted(missing))}"
-            )
-
-        wrong_account = [
-            str(b.id) for b in budgets if b.bank_account_id != account.id
-        ]
-        if wrong_account:
-            raise serializers.ValidationError(
-                "Budgets do not belong to the same bank account "
-                "as the transaction: "
-                f"{', '.join(sorted(wrong_account))}"
-            )
-
-        total = Decimal("0")
+        """Validate that all declared amounts are positive numbers."""
         for budget_id, amount in value.items():
             if amount <= 0:
                 raise serializers.ValidationError(
                     f"Amount for budget {budget_id} must be positive."
                 )
-            total += amount
-
-        if total > tx_abs:
-            raise serializers.ValidationError(
-                f"Split total ({total}) exceeds transaction amount ({tx_abs})."
-            )
-
-        # Store the sign convention and resolved budgets for the view.
-        self._is_debit = is_debit
-        self._budgets_by_id = {str(b.id): b for b in budgets}
         return value
 
 

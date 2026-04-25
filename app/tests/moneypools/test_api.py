@@ -938,12 +938,7 @@ class TestTransactionSplitsAPI:
         unalloc = account.unallocated_budget
         assert unalloc is not None
 
-        transaction_allocation_factory(
-            transaction=tx,
-            budget=unalloc,
-            amount=Money(-100, "USD"),
-        )
-
+        # transaction_factory seeds a default allocation to unallocated.
         unalloc_before = Budget.objects.get(id=unalloc.id).balance
 
         # Map symbolic keys ("A", "B") to real budget UUIDs.

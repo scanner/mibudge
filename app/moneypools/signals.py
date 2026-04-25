@@ -5,8 +5,7 @@ from typing import Any
 
 # 3rd party imports
 #
-from django.db import transaction as db_transaction
-from django.db.models.signals import post_save, pre_delete, pre_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 # Project imports
@@ -171,155 +170,17 @@ def budget_pre_save(
 ####################################################################
 #
 @receiver(pre_save, sender=Transaction)
-def transaction_pre_save(sender, instance, **kwargs):
-    """
-    Handle bank account balance updates when a transaction is saved.
-
-    This signal handles ONLY bank account balances (available and posted).
-    Budget balances are handled by TransactionAllocationService.
-
-    NOTE: Transactions can not change bank accounts.
-
-    Keyword Arguments:
-    sender    -- What sent the signal. In our case always Transaction
-    instance  -- instance of Transaction object before save
-    **kwargs  -- dict
-    """
-    transaction = instance  # To make the code easier to read
-
-    # If the -editable- description is not set, then set it to a stripped
-    # version of the raw description.
-    #
-    if not transaction.description:
-        transaction.description = transaction.raw_description.strip()
-
-    # If the pkid is None then this is a newly created Transaction that has not
-    # yet been saved to the db. This part of the `if` clause deals with newly
-    # created transactions.
-    #
-    if transaction.pkid is None:
-        # Update the bank account's available & posted balance.
-        #
-        transaction.bank_account.available_balance += transaction.amount
-        transaction.bank_account_available_balance = (
-            transaction.bank_account.available_balance
-        )
-        # If this transaction is not pending, then also update the posted
-        # amount for the bank account.
-        #
-        if not transaction.pending:
-            transaction.bank_account.posted_balance += transaction.amount
-        transaction.bank_account.save()
-
-        # Whether we update the posted balance or not, save the current posted
-        # balance in this transaction.
-        #
-        transaction.bank_account_posted_balance = (
-            transaction.bank_account.posted_balance
-        )
-    else:
-        # We only reach here if this transaction already exists and it is being
-        # updated. So we need to compare in-memory transaction object with what
-        # is already saved in the db to determine how to update related objects
-        # and fields.
-        #
-        previous = Transaction.objects.get(id=transaction.id)
-
-        # If the amount of the transaction has changed then we need to
-        # change the bank account's available amount.
-        #
-        save_bank_account = False
-        if previous.amount != transaction.amount:
-            transaction.bank_account.available_balance -= previous.amount
-            transaction.bank_account.available_balance += transaction.amount
-
-            # If this transaction was previously posted then we need to change
-            # the posted amount on the bank account as well.
-            #
-            # XXX This assumes that once a transaction is posted it never
-            #     changes back to pending.
-            #
-            if not previous.pending:
-                transaction.bank_account.posted_balance -= previous.amount
-            if not transaction.pending:
-                transaction.bank_account.posted_balance += transaction.amount
-
-            save_bank_account = True
-
-        elif not transaction.pending and previous.pending:
-            # The transaction has changed from pending to posted so we need to
-            # update the posted bank account balance.
-            #
-            transaction.bank_account.posted_balance += transaction.amount
-            save_bank_account = True
-
-        if save_bank_account:
-            transaction.bank_account.save()
-
-
-####################################################################
-#
-@receiver(post_save, sender=Transaction)
-def transaction_post_save_link(
-    sender: type[Transaction],
-    instance: Transaction,
-    created: bool,
-    **kwargs: Any,
+def transaction_pre_save(
+    sender: type[Transaction], instance: Transaction, **kwargs: Any
 ) -> None:
-    """
-    Enqueue the cross-account link attempt after a Transaction save.
+    """Default the editable description from raw_description on first save.
 
-    Only fires for newly created Transactions that are not already
-    linked. The work runs in ``moneypools.tasks.attempt_link_transaction``
-    so the request does not block on cross-account DB queries. The
-    ``on_commit`` wrapper holds the dispatch until the surrounding
-    transaction commits, which guarantees the Celery worker can read
-    the row (and, importantly, that we do not enqueue work that gets
-    rolled back on a later failure in the same request).
+    Bank-balance math is handled by TransactionService (Phase 4).
 
     Args:
-        sender:   The Transaction model class.
-        instance: The Transaction that was just saved.
-        created:  True iff this is a new row.
+        sender: The Transaction model class.
+        instance: The Transaction instance about to be saved.
         **kwargs: Additional signal keyword arguments.
     """
-    if not created or instance.linked_transaction_id is not None:
-        return
-
-    # Import here rather than at module top to avoid the signals ->
-    # tasks -> linking -> models import chain firing during app ready().
-    #
-    from moneypools.tasks import attempt_link_transaction
-
-    transaction_id = str(instance.id)
-    db_transaction.on_commit(
-        lambda: attempt_link_transaction.delay(transaction_id)
-    )
-
-
-####################################################################
-#
-@receiver(pre_delete, sender=Transaction)
-def transaction_pre_delete(sender, instance, **kwargs):
-    """
-    Reverse bank account balance changes when a transaction is deleted.
-
-    Budget balance reversal is handled by the cascade delete of associated
-    TransactionAllocation objects (via TransactionAllocationService).
-
-    NOTE: bulk deleting transactions will NOT trigger this signal. Delete
-    them one by one to keep balances correct.
-    """
-    transaction = instance  # To make the code easier to read
-
-    # Update the bank account's available & posted balance.
-    #
-    if transaction.bank_account:
-        transaction.bank_account.available_balance -= transaction.amount
-
-        # If this transaction is not pending, then also update the posted
-        # amount for the bank account.
-        #
-        if not transaction.pending:
-            transaction.bank_account.posted_balance -= transaction.amount
-        transaction.bank_account.save()
+    if not instance.description:
+        instance.description = instance.raw_description.strip()
