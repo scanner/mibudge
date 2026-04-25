@@ -40,6 +40,7 @@ from moneypools.models import (
     TransactionAllocation,
 )
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
+from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import transaction as transaction_svc
@@ -156,9 +157,26 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     ####################################################################
     #
     def perform_create(self, serializer: BankAccountSerializer) -> None:
-        """Save the new bank account and add the requesting user as owner."""
-        bank_account = serializer.save()
-        bank_account.owners.add(self.request.user)
+        """Create a bank account via BankAccountService."""
+        data = serializer.validated_data
+        optional = {
+            k: data[k]
+            for k in (
+                "account_number",
+                "currency",
+                "posted_balance",
+                "available_balance",
+            )
+            if k in data
+        }
+        account = bank_account_svc.create(
+            bank=data["bank"],
+            name=data["name"],
+            account_type=data["account_type"],
+            owners=[self.request.user],
+            **optional,
+        )
+        serializer.instance = account
 
 
 ########################################################################

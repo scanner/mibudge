@@ -130,9 +130,8 @@ class BankAccountSerializer(serializers.ModelSerializer):
 
     On create the caller supplies name, bank (UUID), account_type,
     account_number, and optionally currency and initial balances.
-    The view adds the requesting user to owners.  The unallocated
-    budget is auto-created by the post_save signal and returned in
-    the response.
+    The view routes creation through BankAccountService which adds
+    the requesting user as owner and seeds the Unallocated budget.
 
     After creation, name and account_number are updatable.  Currency,
     account_type, bank, and balances are immutable once the account
