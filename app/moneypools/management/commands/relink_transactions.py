@@ -30,9 +30,10 @@ from typing import Any
 # 3rd party imports
 from django.core.management.base import BaseCommand
 
-# Project imports
-from moneypools.linking import attempt_link
 from moneypools.models import Transaction
+
+# Project imports
+from moneypools.service.linking import attempt_link
 
 
 ########################################################################

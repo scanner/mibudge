@@ -187,6 +187,9 @@ class BudgetFactory(DjangoModelFactory):
 class TransactionFactory(DjangoModelFactory):
     class Meta:
         model = Transaction
+        # _create calls TransactionService.create so bank-balance math,
+        # the default Unallocated allocation, and the on_commit linker
+        # enqueue are all exercised by tests.
 
     bank_account = factory.SubFactory(BankAccountFactory)
     amount = factory.fuzzy.FuzzyInteger(100, 200)
@@ -224,6 +227,8 @@ class TransactionFactory(DjangoModelFactory):
 class TransactionAllocationFactory(DjangoModelFactory):
     class Meta:
         model = TransactionAllocation
+        # _create calls TransactionAllocationService.create so budget-balance
+        # and running-balance updates are exercised by tests.
 
     transaction = factory.SubFactory(TransactionFactory)
     budget = factory.SubFactory(BudgetFactory)
@@ -253,6 +258,8 @@ class TransactionAllocationFactory(DjangoModelFactory):
 class InternalTransactionFactory(DjangoModelFactory):
     class Meta:
         model = InternalTransaction
+        # _create calls InternalTransactionService.create so budget-balance
+        # mutations and snapshot fields are exercised by tests.
 
     bank_account = factory.SubFactory(BankAccountFactory)
     amount = factory.fuzzy.FuzzyInteger(100, 200)
