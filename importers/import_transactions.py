@@ -397,6 +397,7 @@ def _fetch_existing(
     bank_account_id: str,
     start_date: date,
     end_date: date,
+    user_timezone: str = "UTC",
 ) -> dict[tuple[str, str, str], list[tuple[str, str]]]:
     """
     Query the API for transactions in the date range and index them.
@@ -410,31 +411,41 @@ def _fetch_existing(
     During import, the list is consumed (popped) so that each server
     transaction is matched to at most one CSV row.
 
+    Filters on ``posted_date`` (not ``transaction_date``) so that
+    transactions whose description-derived purchase date falls before
+    the CSV window are still found and deduplicated correctly.
+
     Args:
         client: Authenticated MibudgeClient.
         bank_account_id: UUID of the bank account.
-        start_date: Earliest date in the import file.
-        end_date: Latest date in the import file.
+        start_date: Earliest posted date in the import file.
+        end_date: Latest posted date in the import file.
+        user_timezone: IANA timezone for the account owner.  Used to
+            convert server UTC datetimes back to the local calendar
+            date when building dedup keys.
 
     Returns:
         A mapping from 3-tuple dedup key to a list of
         ``(transaction_id, transaction_type)`` entries.
     """
+    tz = ZoneInfo(user_timezone)
     existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
     for tx in client.get_all(
         "/api/v1/transactions/",
         {
             "bank_account": bank_account_id,
-            "date_from": start_date.isoformat(),
-            "date_to": end_date.isoformat() + "T23:59:59",
+            "posted_date_from": start_date.isoformat(),
+            "posted_date_to": end_date.isoformat() + "T23:59:59",
         },
         page_size=_DEDUP_PAGE_SIZE,
     ):
-        key = _dedup_key(
-            tx["posted_date"],
-            tx["amount"],
-            tx["raw_description"],
+        # Convert stored UTC datetime to the user's local calendar date
+        # so the key matches the date-only value from the CSV.
+        posted_utc = datetime.fromisoformat(
+            tx["posted_date"].replace("Z", "+00:00")
         )
+        local_date = posted_utc.astimezone(tz).date()
+        key = _dedup_key(local_date, tx["amount"], tx["raw_description"])
         entry = (tx["id"], tx.get("transaction_type") or "")
         existing.setdefault(key, []).append(entry)
     return existing
@@ -605,7 +616,7 @@ def import_statement(
     # pre-fetched so it could render a status spinner).
     if existing is None:
         existing = _fetch_existing(
-            client, bank_account_id, start_date, end_date
+            client, bank_account_id, start_date, end_date, user_timezone
         )
     logger.info(
         "Found %d existing transactions in date range %s to %s",
@@ -1881,11 +1892,19 @@ def cli_cmd(
                         f"({dedup_start} -> {dedup_end})..."
                     ):
                         existing = _fetch_existing(
-                            client, account_id, dedup_start, dedup_end
+                            client,
+                            account_id,
+                            dedup_start,
+                            dedup_end,
+                            user_timezone,
                         )
                 else:
                     existing = _fetch_existing(
-                        client, account_id, dedup_start, dedup_end
+                        client,
+                        account_id,
+                        dedup_start,
+                        dedup_end,
+                        user_timezone,
                     )
 
             if interactive:

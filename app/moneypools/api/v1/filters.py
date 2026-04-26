@@ -61,6 +61,14 @@ class TransactionFilter(filters.FilterSet):
         field_name="transaction_date",
         lookup_expr="lte",
     )
+    posted_date_from = filters.DateTimeFilter(
+        field_name="posted_date",
+        lookup_expr="gte",
+    )
+    posted_date_to = filters.DateTimeFilter(
+        field_name="posted_date",
+        lookup_expr="lte",
+    )
 
     class Meta:
         model = Transaction
@@ -70,6 +78,8 @@ class TransactionFilter(filters.FilterSet):
             "transaction_type",
             "date_from",
             "date_to",
+            "posted_date_from",
+            "posted_date_to",
         ]
 
 
