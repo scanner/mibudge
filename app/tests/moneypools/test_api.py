@@ -620,7 +620,7 @@ class TestTransactionAPI:
             {
                 "bank_account": str(account.id),
                 "amount": "-45.99",
-                "transaction_date": "2026-04-01T12:00:00Z",
+                "posted_date": "2026-04-01T12:00:00Z",
                 "transaction_type": "signature_purchase",
                 "raw_description": "GROCERY STORE #123",
             },
@@ -702,11 +702,11 @@ class TestTransactionAPI:
         account = bank_account_factory(owners=[user])
         transaction_factory(
             bank_account=account,
-            transaction_date="2026-01-15T12:00:00Z",
+            posted_date="2026-01-15T12:00:00Z",
         )
         transaction_factory(
             bank_account=account,
-            transaction_date="2026-03-15T12:00:00Z",
+            posted_date="2026-03-15T12:00:00Z",
         )
         response = auth_client.get(
             reverse("api_v1:transaction-list"),
@@ -1198,7 +1198,7 @@ class TestTransactionSplitsAPI:
         t1 = transaction_factory(
             bank_account=account,
             amount=Money(50, "USD"),
-            transaction_date=datetime(2024, 1, 1, tzinfo=UTC),
+            posted_date=datetime(2024, 1, 1, tzinfo=UTC),
         )
         a1 = transaction_allocation_factory(
             transaction=t1, budget=budget_x, amount=Money(50, "USD")
@@ -1207,7 +1207,7 @@ class TestTransactionSplitsAPI:
         t2 = transaction_factory(
             bank_account=account,
             amount=Money(30, "USD"),
-            transaction_date=datetime(2024, 1, 15, tzinfo=UTC),
+            posted_date=datetime(2024, 1, 15, tzinfo=UTC),
         )
         a2 = transaction_allocation_factory(
             transaction=t2, budget=budget_x, amount=Money(30, "USD")
@@ -1332,7 +1332,7 @@ class TestRunningBalanceWithInternalTransactions:
             tx = transaction_factory(
                 bank_account=account,
                 amount=Money(-40, "USD"),
-                transaction_date=datetime(2024, 1, i + 1, tzinfo=UTC),
+                posted_date=datetime(2024, 1, i + 1, tzinfo=UTC),
             )
             transaction_allocation_factory(
                 transaction=tx,

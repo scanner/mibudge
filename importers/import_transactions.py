@@ -430,7 +430,7 @@ def _fetch_existing(
         page_size=_DEDUP_PAGE_SIZE,
     ):
         key = _dedup_key(
-            tx["transaction_date"],
+            tx["posted_date"],
             tx["amount"],
             tx["raw_description"],
         )
@@ -460,7 +460,7 @@ def _post_transaction(
     payload = {
         "bank_account": bank_account_id,
         "amount": str(tx.amount),
-        "transaction_date": datetime.combine(
+        "posted_date": datetime.combine(
             tx.transaction_date, datetime.min.time()
         ).isoformat(),
         "transaction_type": tx.transaction_type,
@@ -602,7 +602,7 @@ def import_statement(
     total = len(transactions)
     for i, tx in enumerate(transactions):
         key = _dedup_key(
-            tx.transaction_date,
+            tx.transaction_date,  # ParsedTransaction.transaction_date is the bank/posted date
             tx.amount,
             tx.raw_description,
         )

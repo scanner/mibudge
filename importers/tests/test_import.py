@@ -344,7 +344,7 @@ class TestImportCmd:
             fake_client.transactions[tx_id] = {
                 "id": tx_id,
                 "bank_account": acct["id"],
-                "transaction_date": datetime.combine(
+                "posted_date": datetime.combine(
                     row.transaction_date, datetime.min.time()
                 ).isoformat(),
                 "amount": str(row.amount),
@@ -388,7 +388,7 @@ class TestImportCmd:
         fake_client.transactions[tx_id] = {
             "id": tx_id,
             "bank_account": acct["id"],
-            "transaction_date": datetime.combine(
+            "posted_date": datetime.combine(
                 row.transaction_date, datetime.min.time()
             ).isoformat(),
             "amount": str(row.amount),
@@ -528,7 +528,7 @@ class TestImportCmd:
             fake_client.transactions[tx_id] = {
                 "id": tx_id,
                 "bank_account": acct["id"],
-                "transaction_date": datetime.combine(
+                "posted_date": datetime.combine(
                     row.transaction_date, datetime.min.time()
                 ).isoformat(),
                 "amount": str(row.amount),

@@ -723,13 +723,13 @@ class TestTransactionAllocation:
         earlier_tx = transaction_factory(
             bank_account=bank_account,
             amount=Money(-160, USD),
-            transaction_date=early_date,
+            posted_date=early_date,
             raw_description="Check 322",
         )
         later_tx = transaction_factory(
             bank_account=bank_account,
             amount=Money(-160, USD),
-            transaction_date=late_date,
+            posted_date=late_date,
             raw_description="Check 323",
         )
 
@@ -799,7 +799,7 @@ class TestTransactionAllocation:
                     transaction_factory(
                         bank_account=bank_account,
                         amount=Money(-100, USD),
-                        transaction_date=day,
+                        posted_date=day,
                         raw_description=f"Tx {day.day}-{i}",
                     )
                 )
@@ -912,7 +912,7 @@ class TestTransactionAllocation:
         tx1 = transaction_factory(
             bank_account=account,
             amount=Money(-100, USD),
-            transaction_date=datetime(2024, 1, 1, tzinfo=UTC),
+            posted_date=datetime(2024, 1, 1, tzinfo=UTC),
         )
         a1 = transaction_allocation_factory(
             transaction=tx1,
@@ -923,7 +923,7 @@ class TestTransactionAllocation:
         tx2 = transaction_factory(
             bank_account=account,
             amount=Money(-100, USD),
-            transaction_date=datetime(2024, 1, 2, tzinfo=UTC),
+            posted_date=datetime(2024, 1, 2, tzinfo=UTC),
         )
         a2 = transaction_allocation_factory(
             transaction=tx2,
@@ -954,7 +954,7 @@ class TestTransactionAllocation:
         tx3 = transaction_factory(
             bank_account=account,
             amount=Money(-100, USD),
-            transaction_date=datetime(2024, 1, 3, tzinfo=UTC),
+            posted_date=datetime(2024, 1, 3, tzinfo=UTC),
         )
         a3 = transaction_allocation_factory(
             transaction=tx3,

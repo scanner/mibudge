@@ -145,13 +145,13 @@ class TestAttemptLink:
         counterpart = transaction_factory(
             bank_account=dst,
             amount=100,
-            transaction_date=when + timedelta(days=1),
+            posted_date=when + timedelta(days=1),
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=-100,
-            transaction_date=when,
+            posted_date=when,
             raw_description=description,
         )
 
@@ -183,13 +183,13 @@ class TestAttemptLink:
         transaction_factory(
             bank_account=dst,
             amount=100,
-            transaction_date=when + timedelta(days=4),
+            posted_date=when + timedelta(days=4),
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=-100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="Payment to Credit Card",
         )
 
@@ -218,13 +218,13 @@ class TestAttemptLink:
         transaction_factory(
             bank_account=dst,
             amount=Money("100.01", "USD"),
-            transaction_date=when,
+            posted_date=when,
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=Money("-100.00", "USD"),
-            transaction_date=when,
+            posted_date=when,
             raw_description="Payment to Credit Card",
         )
 
@@ -251,19 +251,19 @@ class TestAttemptLink:
         transaction_factory(
             bank_account=dst,
             amount=100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="first",
         )
         transaction_factory(
             bank_account=dst,
             amount=100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="second",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=-100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="Payment to Credit Card",
         )
 
@@ -292,7 +292,7 @@ class TestAttemptLink:
         first = transaction_factory(
             bank_account=src,
             amount=-100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="Payment to Credit Card",
         )
         first.refresh_from_db()
@@ -306,7 +306,7 @@ class TestAttemptLink:
         second = transaction_factory(
             bank_account=dst,
             amount=100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="Payment from Checking",
         )
         attempt_link(second)
@@ -335,13 +335,13 @@ class TestAttemptLink:
         counterpart = transaction_factory(
             bank_account=dst,
             amount=100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=-100,
-            transaction_date=when,
+            posted_date=when,
             raw_description="Payment to Credit Card",
         )
 

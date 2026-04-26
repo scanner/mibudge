@@ -193,7 +193,7 @@ class TransactionFactory(DjangoModelFactory):
 
     bank_account = factory.SubFactory(BankAccountFactory)
     amount = factory.fuzzy.FuzzyInteger(100, 200)
-    transaction_date = factory.fuzzy.FuzzyDateTime(
+    posted_date = factory.fuzzy.FuzzyDateTime(
         start_dt=datetime.now(UTC) - timedelta(days=365),
         end_dt=datetime.now(UTC),
     )
@@ -208,14 +208,14 @@ class TransactionFactory(DjangoModelFactory):
     ) -> Transaction:
         bank_account = kwargs.pop("bank_account")
         amount = kwargs.pop("amount")
-        transaction_date = kwargs.pop("transaction_date")
+        posted_date = kwargs.pop("posted_date")
         raw_description = kwargs.pop("raw_description")
         if not hasattr(amount, "amount"):
             amount = Money(amount, get_default_currency())
         return transaction_svc.create(
             bank_account=bank_account,
             amount=amount,
-            transaction_date=transaction_date,
+            posted_date=posted_date,
             raw_description=raw_description,
             **kwargs,
         )

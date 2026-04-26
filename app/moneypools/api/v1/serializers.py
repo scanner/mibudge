@@ -515,7 +515,14 @@ class TransactionSerializer(serializers.ModelSerializer):
         decimal_places=DECIMAL_PLACES,
         default_currency=get_default_currency(),
     )
-    transaction_date = serializers.DateTimeField()
+    # Bank-supplied settlement date -- always required on create.
+    posted_date = serializers.DateTimeField()
+    # Purchase date derived from the description.  Optional on create:
+    # when omitted the service derives it via parse_transaction_date.
+    # Read-only on update (immutable after creation like posted_date).
+    transaction_date = serializers.DateTimeField(
+        required=False, allow_null=True, default=None, read_only=False
+    )
     pending = serializers.BooleanField(default=False)
     raw_description = serializers.CharField(max_length=512)
 
@@ -544,6 +551,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "amount",
             "amount_currency",
             "party",
+            "posted_date",
             "transaction_date",
             "transaction_type",
             "pending",
@@ -615,11 +623,11 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     ####################################################################
     #
-    def validate_transaction_date(self, value: datetime) -> datetime:
-        """Prevent changing the transaction date after creation.
+    def validate_posted_date(self, value: datetime) -> datetime:
+        """Prevent changing the posted date after creation.
 
         Args:
-            value: The transaction datetime.
+            value: The posted datetime.
 
         Returns:
             The validated datetime.
@@ -628,6 +636,28 @@ class TransactionSerializer(serializers.ModelSerializer):
             ValidationError: If this is an update.
         """
         if self.instance is not None:
+            raise serializers.ValidationError(
+                "Cannot change the posted date after creation."
+            )
+        return value
+
+    ####################################################################
+    #
+    def validate_transaction_date(
+        self, value: datetime | None
+    ) -> datetime | None:
+        """Prevent changing the transaction date after creation.
+
+        Args:
+            value: The transaction datetime, or None.
+
+        Returns:
+            The validated datetime, or None.
+
+        Raises:
+            ValidationError: If this is an update.
+        """
+        if self.instance is not None and value is not None:
             raise serializers.ValidationError(
                 "Cannot change the transaction date after creation."
             )
