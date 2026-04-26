@@ -1197,6 +1197,8 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 - `page` (query, optional) — A page number within the paginated result set.
 - `page_size` (query, optional) — Number of results to return per page.
 - `pending` (query, optional)
+- `posted_date_from` (query, optional)
+- `posted_date_to` (query, optional)
 - `search` (query, optional) — A search term.
 - `transaction_type` (query, optional) — * `signature_purchase` - Signature Purchase
 * `ach` - ACH
@@ -1240,7 +1242,8 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1253,7 +1256,8 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1266,7 +1270,8 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1282,7 +1287,8 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`amount`** (`string`) *(required)*
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`party`** (`string`) *(required, read-only)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1315,7 +1321,8 @@ Return a single transaction by UUID.
 - **`amount`** (`string`) *(required)*
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`party`** (`string`) *(required, read-only)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1345,7 +1352,8 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1358,7 +1366,8 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1371,7 +1380,8 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1387,7 +1397,8 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`amount`** (`string`) *(required)*
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`party`** (`string`) *(required, read-only)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1417,6 +1428,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 
 - **`bank_account`** (`string`)
 - **`amount`** (`string`)
+- **`posted_date`** (`string`)
 - **`transaction_date`** (`string`)
 - **`transaction_type`** (``)
 - **`pending`** (`boolean`)
@@ -1430,6 +1442,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 
 - **`bank_account`** (`string`)
 - **`amount`** (`string`)
+- **`posted_date`** (`string`)
 - **`transaction_date`** (`string`)
 - **`transaction_type`** (``)
 - **`pending`** (`boolean`)
@@ -1443,6 +1456,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 
 - **`bank_account`** (`string`)
 - **`amount`** (`string`)
+- **`posted_date`** (`string`)
 - **`transaction_date`** (`string`)
 - **`transaction_type`** (``)
 - **`pending`** (`boolean`)
@@ -1459,7 +1473,8 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`amount`** (`string`) *(required)*
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`party`** (`string`) *(required, read-only)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -1503,6 +1518,8 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 - `page` (query, optional) — A page number within the paginated result set.
 - `page_size` (query, optional) — Number of results to return per page.
 - `pending` (query, optional)
+- `posted_date_from` (query, optional)
+- `posted_date_to` (query, optional)
 - `search` (query, optional) — A search term.
 - `transaction_type` (query, optional) — * `signature_purchase` - Signature Purchase
 * `ach` - ACH
@@ -1581,9 +1598,11 @@ Return a single user by username. Restricted to staff/admin users.
 
 **Response 200:** 
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 #### `PUT /api/v1/users/{username}/`
 
@@ -1597,24 +1616,29 @@ Full update of a user profile. Restricted to staff/admin users.
 
 **Request Body** (`application/json`):
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 **Request Body** (`multipart/form-data`):
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 **Response 200:** 
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 #### `PATCH /api/v1/users/{username}/`
 
@@ -1628,36 +1652,75 @@ Partial update of a user profile. Restricted to staff/admin users.
 
 **Request Body** (`application/json`):
 
-- **`username`** (`string`) — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
-- **`username`** (`string`) — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 **Request Body** (`multipart/form-data`):
 
-- **`username`** (`string`) — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 **Response 200:** 
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 #### `GET /api/v1/users/me/`
 
 **Operation:** `users_me_retrieve`
 
-Return the authenticated user's own profile. Available to any authenticated user (not restricted to staff).
+GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff).
 
 **Response 200:** 
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+#### `PATCH /api/v1/users/me/`
+
+**Operation:** `users_me_partial_update`
+
+GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff).
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Response 200:** 
+
+- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`name`** (`string`)
+- **`url`** (`string`) *(required, read-only)*
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 ## Schemas
 
@@ -1686,13 +1749,13 @@ Banks are shared reference data managed only through the admin.
 Serializer for bank accounts.
 
 On create the caller supplies name, bank (UUID), account_type,
-and optionally currency, account_number, and initial balances.
-The view adds the requesting user to owners.  The unallocated
-budget is auto-created by the post_save signal and returned in
-the response.
+account_number, and optionally currency and initial balances.
+The view routes creation through BankAccountService which adds
+the requesting user as owner and seeds the Unallocated budget.
 
-After creation only name is updatable.  Currency, account_number,
-and balances are immutable once the account exists.
+After creation, name and account_number are updatable.  Currency,
+account_type, bank, and balances are immutable once the account
+exists.
 
 Group assignment is not yet supported via the API.
 
@@ -1718,13 +1781,13 @@ Group assignment is not yet supported via the API.
 Serializer for bank accounts.
 
 On create the caller supplies name, bank (UUID), account_type,
-and optionally currency, account_number, and initial balances.
-The view adds the requesting user to owners.  The unallocated
-budget is auto-created by the post_save signal and returned in
-the response.
+account_number, and optionally currency and initial balances.
+The view routes creation through BankAccountService which adds
+the requesting user as owner and seeds the Unallocated budget.
 
-After creation only name is updatable.  Currency, account_number,
-and balances are immutable once the account exists.
+After creation, name and account_number are updatable.  Currency,
+account_type, bank, and balances are immutable once the account
+exists.
 
 Group assignment is not yet supported via the API.
 
@@ -2085,13 +2148,13 @@ field declaration is needed.
 Serializer for bank accounts.
 
 On create the caller supplies name, bank (UUID), account_type,
-and optionally currency, account_number, and initial balances.
-The view adds the requesting user to owners.  The unallocated
-budget is auto-created by the post_save signal and returned in
-the response.
+account_number, and optionally currency and initial balances.
+The view routes creation through BankAccountService which adds
+the requesting user as owner and seeds the Unallocated budget.
 
-After creation only name is updatable.  Currency, account_number,
-and balances are immutable once the account exists.
+After creation, name and account_number are updatable.  Currency,
+account_type, bank, and balances are immutable once the account
+exists.
 
 Group assignment is not yet supported via the API.
 
@@ -2154,6 +2217,7 @@ field declaration is needed.
 
 - **`bank_account`** (`string`)
 - **`amount`** (`string`)
+- **`posted_date`** (`string`)
 - **`transaction_date`** (`string`)
 - **`transaction_type`** (``)
 - **`pending`** (`boolean`)
@@ -2165,8 +2229,15 @@ field declaration is needed.
 
 ### PatchedUserRequest
 
-- **`username`** (`string`) — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+Serializer for user profiles.
+
+The ``default_bank_account`` field is writable but constrained:
+the bank account must be owned by the user being updated.  On
+output it returns the UUID string (or null).
+
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 ### TokenObtainPair
 
@@ -2208,7 +2279,8 @@ field declaration is needed.
 - **`amount`** (`string`) *(required)*
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`party`** (`string`) *(required, read-only)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -2426,7 +2498,8 @@ field declaration is needed.
 
 - **`bank_account`** (`string`) *(required)*
 - **`amount`** (`string`) *(required)*
-- **`transaction_date`** (`string`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
 - **`transaction_type`** (``) *(required)*
 - **`pending`** (`boolean`)
 - **`memo`** (`string`)
@@ -2479,12 +2552,27 @@ with a 400 error.
 
 ### User
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+Serializer for user profiles.
+
+The ``default_bank_account`` field is writable but constrained:
+the bank account must be owned by the user being updated.  On
+output it returns the UUID string (or null).
+
+- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 
 ### UserRequest
 
-- **`username`** (`string`) *(required)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+Serializer for user profiles.
+
+The ``default_bank_account`` field is writable but constrained:
+the bank account must be owned by the user being updated.  On
+output it returns the UUID string (or null).
+
 - **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
 

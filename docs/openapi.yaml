@@ -834,6 +834,16 @@ paths:
         name: pending
         schema:
           type: boolean
+      - in: query
+        name: posted_date_from
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: posted_date_to
+        schema:
+          type: string
+          format: date-time
       - name: search
         required: false
         in: query
@@ -1100,6 +1110,16 @@ paths:
         name: pending
         schema:
           type: boolean
+      - in: query
+        name: posted_date_from
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: posted_date_to
+        schema:
+          type: string
+          format: date-time
       - name: search
         required: false
         in: query
@@ -1267,7 +1287,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/UserRequest'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -1314,11 +1333,40 @@ paths:
   /api/v1/users/me/:
     get:
       operationId: users_me_retrieve
-      description: Return the authenticated user's own profile. Available to any authenticated
-        user (not restricted to staff).
-      summary: Get current user profile
+      description: GET returns the authenticated user's own profile. PATCH allows
+        updating the name field. Available to any authenticated user (not restricted
+        to staff).
+      summary: Get or update current user profile
       tags:
       - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_me_partial_update
+      description: GET returns the authenticated user's own profile. PATCH allows
+        updating the name field. Available to any authenticated user (not restricted
+        to staff).
+      summary: Get or update current user profile
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
       security:
       - jwtAuth: []
       responses:
@@ -1383,13 +1431,13 @@ components:
         Serializer for bank accounts.
 
         On create the caller supplies name, bank (UUID), account_type,
-        and optionally currency, account_number, and initial balances.
-        The view adds the requesting user to owners.  The unallocated
-        budget is auto-created by the post_save signal and returned in
-        the response.
+        account_number, and optionally currency and initial balances.
+        The view routes creation through BankAccountService which adds
+        the requesting user as owner and seeds the Unallocated budget.
 
-        After creation only name is updatable.  Currency, account_number,
-        and balances are immutable once the account exists.
+        After creation, name and account_number are updatable.  Currency,
+        account_type, bank, and balances are immutable once the account
+        exists.
 
         Group assignment is not yet supported via the API.
       properties:
@@ -1406,7 +1454,9 @@ components:
         owners:
           type: array
           items:
-            type: integer
+            type: string
+            description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+              only.
           readOnly: true
         account_type:
           $ref: '#/components/schemas/AccountTypeEnum'
@@ -1461,13 +1511,13 @@ components:
         Serializer for bank accounts.
 
         On create the caller supplies name, bank (UUID), account_type,
-        and optionally currency, account_number, and initial balances.
-        The view adds the requesting user to owners.  The unallocated
-        budget is auto-created by the post_save signal and returned in
-        the response.
+        account_number, and optionally currency and initial balances.
+        The view routes creation through BankAccountService which adds
+        the requesting user as owner and seeds the Unallocated budget.
 
-        After creation only name is updatable.  Currency, account_number,
-        and balances are immutable once the account exists.
+        After creation, name and account_number are updatable.  Currency,
+        account_type, bank, and balances are immutable once the account
+        exists.
 
         Group assignment is not yet supported via the API.
       properties:
@@ -2276,13 +2326,13 @@ components:
         Serializer for bank accounts.
 
         On create the caller supplies name, bank (UUID), account_type,
-        and optionally currency, account_number, and initial balances.
-        The view adds the requesting user to owners.  The unallocated
-        budget is auto-created by the post_save signal and returned in
-        the response.
+        account_number, and optionally currency and initial balances.
+        The view routes creation through BankAccountService which adds
+        the requesting user as owner and seeds the Unallocated budget.
 
-        After creation only name is updatable.  Currency, account_number,
-        and balances are immutable once the account exists.
+        After creation, name and account_number are updatable.  Currency,
+        account_type, bank, and balances are immutable once the account
+        exists.
 
         Group assignment is not yet supported via the API.
       properties:
@@ -2392,9 +2442,13 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        posted_date:
+          type: string
+          format: date-time
         transaction_date:
           type: string
           format: date-time
+          nullable: true
         transaction_type:
           oneOf:
           - $ref: '#/components/schemas/TransactionTypeEnum'
@@ -2423,18 +2477,25 @@ components:
           nullable: true
     PatchedUserRequest:
       type: object
+      description: |-
+        Serializer for user profiles.
+
+        The ``default_bank_account`` field is writable but constrained:
+        the bank account must be owned by the user being updated.  On
+        output it returns the UUID string (or null).
       properties:
-        username:
-          type: string
-          minLength: 1
-          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
-            only.
-          pattern: ^[\w.@+-]+$
-          maxLength: 150
         name:
           type: string
           title: Name of User
           maxLength: 255
+        default_bank_account:
+          type: string
+          format: uuid
+          nullable: true
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 100
     TokenObtainPair:
       type: object
       properties:
@@ -2515,9 +2576,13 @@ components:
           type: string
           readOnly: true
           nullable: true
+        posted_date:
+          type: string
+          format: date-time
         transaction_date:
           type: string
           format: date-time
+          nullable: true
         transaction_type:
           oneOf:
           - $ref: '#/components/schemas/TransactionTypeEnum'
@@ -2586,8 +2651,8 @@ components:
       - linked_transaction
       - modified_at
       - party
+      - posted_date
       - raw_description
-      - transaction_date
       - transaction_type
     TransactionAllocation:
       type: object
@@ -2685,9 +2750,13 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        posted_date:
+          type: string
+          format: date-time
         transaction_date:
           type: string
           format: date-time
+          nullable: true
         transaction_type:
           oneOf:
           - $ref: '#/components/schemas/TransactionTypeEnum'
@@ -2717,8 +2786,8 @@ components:
       required:
       - amount
       - bank_account
+      - posted_date
       - raw_description
-      - transaction_date
       - transaction_type
     TransactionSplitsRequest:
       type: object
@@ -2796,13 +2865,18 @@ components:
         * `` - --------
     User:
       type: object
+      description: |-
+        Serializer for user profiles.
+
+        The ``default_bank_account`` field is writable but constrained:
+        the bank account must be owned by the user being updated.  On
+        output it returns the UUID string (or null).
       properties:
         username:
           type: string
+          readOnly: true
           description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
             only.
-          pattern: ^[\w.@+-]+$
-          maxLength: 150
         name:
           type: string
           title: Name of User
@@ -2811,25 +2885,37 @@ components:
           type: string
           format: uri
           readOnly: true
+        default_bank_account:
+          type: string
+          format: uuid
+          nullable: true
+        timezone:
+          type: string
+          maxLength: 100
       required:
       - url
       - username
     UserRequest:
       type: object
+      description: |-
+        Serializer for user profiles.
+
+        The ``default_bank_account`` field is writable but constrained:
+        the bank account must be owned by the user being updated.  On
+        output it returns the UUID string (or null).
       properties:
-        username:
-          type: string
-          minLength: 1
-          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
-            only.
-          pattern: ^[\w.@+-]+$
-          maxLength: 150
         name:
           type: string
           title: Name of User
           maxLength: 255
-      required:
-      - username
+        default_bank_account:
+          type: string
+          format: uuid
+          nullable: true
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 100
   securitySchemes:
     jwtAuth:
       type: http
