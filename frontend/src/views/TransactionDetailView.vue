@@ -29,9 +29,11 @@ import {
   uploadTransactionAttachment,
 } from "@/api/transactions";
 import { useAccountContextStore } from "@/stores/accountContext";
+import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import { TRANSACTION_TYPE_LABELS } from "@/types/api";
+import { formatTxDateLong } from "@/utils/dates";
 import type { Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -39,6 +41,7 @@ import type { Transaction, TransactionAllocation } from "@/types/api";
 const route = useRoute();
 const router = useRouter();
 const ctx = useAccountContextStore();
+const auth = useAuthStore();
 const budgets = useBudgetsStore();
 const txNav = useTransactionNavStore();
 
@@ -114,20 +117,7 @@ const typeLabel = computed(() => {
 const formattedDate = computed(() => {
   const tx = transaction.value;
   if (!tx) return "";
-  const d = new Date(tx.transaction_date);
-  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0 || d.getSeconds() !== 0;
-  const datePart = d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-  if (!hasTime) return datePart;
-  const timePart = d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${datePart} at ${timePart}`;
+  return formatTxDateLong(tx.transaction_date, auth.timezone);
 });
 
 const accountName = computed(() => {

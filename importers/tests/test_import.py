@@ -72,6 +72,8 @@ class FakeClient:
     #
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         self.calls.append(("GET", path, params))
+        if path == "/api/v1/users/me/":
+            return {"timezone": "UTC"}
         # Single-object fetches: /api/v1/bank-accounts/<id>/
         if path.startswith("/api/v1/bank-accounts/") and path.endswith("/"):
             acct_id = path.rstrip("/").rsplit("/", 1)[-1]

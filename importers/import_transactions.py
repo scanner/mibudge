@@ -51,6 +51,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 # 3rd party imports
 import click
@@ -445,6 +446,7 @@ def _post_transaction(
     client: MibudgeClient,
     bank_account_id: str,
     tx: ParsedTransaction,
+    user_timezone: str,
 ) -> dict | None:
     """
     POST a single transaction to the API.
@@ -453,16 +455,25 @@ def _post_transaction(
         client: Authenticated MibudgeClient.
         bank_account_id: UUID of the bank account.
         tx: Parsed transaction from the CSV.
+        user_timezone: IANA timezone name for the account owner (e.g.
+            'America/Los_Angeles').  Used to anchor the date-only CSV
+            value to midnight in the user's local timezone so the
+            server stores the correct UTC value.
 
     Returns:
         The API response dict on success, or None on failure.
     """
+    tz = ZoneInfo(user_timezone)
+    posted_date = datetime(
+        tx.transaction_date.year,
+        tx.transaction_date.month,
+        tx.transaction_date.day,
+        tzinfo=tz,
+    )
     payload = {
         "bank_account": bank_account_id,
         "amount": str(tx.amount),
-        "posted_date": datetime.combine(
-            tx.transaction_date, datetime.min.time()
-        ).isoformat(),
+        "posted_date": posted_date.isoformat(),
         "transaction_type": tx.transaction_type,
         "raw_description": tx.raw_description,
         "pending": tx.pending,
@@ -538,6 +549,7 @@ def import_statement(
     statement: ParsedStatement,
     bank_account_id: str,
     client: MibudgeClient,
+    user_timezone: str,
     progress_callback: Callable[[int, int], None] | None = None,
     existing: (dict[tuple[str, str, str], list[tuple[str, str]]] | None) = None,
     *,
@@ -555,6 +567,9 @@ def import_statement(
         statement: A ``ParsedStatement`` from ``parse()``.
         bank_account_id: UUID of the target bank account.
         client: Authenticated MibudgeClient instance.
+        user_timezone: IANA timezone name for the account owner.
+            Passed to ``_post_transaction`` so date-only CSV values
+            are anchored to midnight in the user's local timezone.
         progress_callback: Optional callback(current, total) invoked
             after processing each transaction.
         existing: Optional pre-fetched dedup map. When None, this
@@ -634,7 +649,9 @@ def import_statement(
             if dry_run:
                 result.imported += 1
             else:
-                resp = _post_transaction(client, bank_account_id, tx)
+                resp = _post_transaction(
+                    client, bank_account_id, tx, user_timezone
+                )
                 if resp is not None:
                     result.imported += 1
                 else:
@@ -1830,6 +1847,11 @@ def cli_cmd(
                 client.authenticate()
                 logger.info("Authenticated.")
 
+            user_timezone: str = client.get("/api/v1/users/me/").get(
+                "timezone", "UTC"
+            )
+            logger.info("User timezone: %s", user_timezone)
+
             account_id = _resolve_bank_account(
                 client,
                 statement=statement,
@@ -1896,6 +1918,7 @@ def cli_cmd(
                         statement,
                         account_id,
                         client,
+                        user_timezone,
                         _progress_cb,
                         existing=existing,
                         dry_run=dry_run,
@@ -1911,6 +1934,7 @@ def cli_cmd(
                     statement,
                     account_id,
                     client,
+                    user_timezone,
                     existing=existing,
                     dry_run=dry_run,
                 )

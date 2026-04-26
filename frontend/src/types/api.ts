@@ -207,6 +207,7 @@ export interface User {
   name: string;
   url: string;
   default_bank_account: string | null;
+  timezone: string;
 }
 
 ////////////////////////////////////////////////////////////////////////

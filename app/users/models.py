@@ -1,9 +1,21 @@
 import uuid
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db.models import SET_NULL, CharField, ForeignKey, UUIDField
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+
+
+def validate_timezone(value: str) -> None:
+    """Raise ValidationError if value is not a valid IANA timezone name."""
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, KeyError) as exc:
+        raise ValidationError(
+            f"'{value}' is not a valid IANA timezone."
+        ) from exc
 
 
 class User(AbstractUser):
@@ -23,6 +35,12 @@ class User(AbstractUser):
     last_name = None  # type: ignore[assignment]
 
     uuid = UUIDField(unique=True, default=uuid.uuid4, editable=False)
+
+    timezone = CharField(
+        max_length=100,
+        default="America/Los_Angeles",
+        validators=[validate_timezone],
+    )
 
     # The account shown first on the Overview and pre-selected in the
     # account switcher.  Cleared automatically if the account is deleted.

@@ -41,8 +41,10 @@ import { createInternalTransaction } from "@/api/internalTransactions";
 import { getTransaction, splitTransaction } from "@/api/transactions";
 import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
+import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
 import { parseLocalDate } from "@/utils/budget";
+import { formatDateHeader, todayDateStr, txDateStr } from "@/utils/dates";
 import { rruleHuman } from "@/utils/rrule";
 import type { Budget, Transaction, TransactionAllocation } from "@/types/api";
 
@@ -51,6 +53,7 @@ import type { Budget, Transaction, TransactionAllocation } from "@/types/api";
 const props = defineProps<{ id: string }>();
 const router = useRouter();
 const ctx = useAccountContextStore();
+const auth = useAuthStore();
 const store = useBudgetsStore();
 
 const budget = ref<Budget | null>(null);
@@ -109,30 +112,15 @@ interface DateGroup {
   transactions: Transaction[];
 }
 
-function formatDateHeader(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (d.getTime() === today.getTime()) return "Today";
-  if (d.getTime() === yesterday.getTime()) return "Yesterday";
-
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 const displayTransactions = computed(() => {
+  const tz = auth.timezone;
+  const today = todayDateStr(tz);
   const map = new Map<string, DateGroup>();
   for (const tx of budgetTransactions.value) {
-    const date = tx.transaction_date.slice(0, 10);
+    const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
-      group = { date, label: formatDateHeader(date), transactions: [] };
+      group = { date, label: formatDateHeader(date, today, tz), transactions: [] };
       map.set(date, group);
     }
     group.transactions.push(tx);

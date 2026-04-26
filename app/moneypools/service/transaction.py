@@ -89,15 +89,28 @@ def create(
         posted_date = datetime.fromisoformat(posted_date.replace("Z", "+00:00"))
 
     if transaction_date is None:
-        parsed = parse_transaction_date(
-            raw_description, posted_date.astimezone(UTC).date()
-        )
-        transaction_date = datetime(
-            parsed.year,
-            parsed.month,
-            parsed.day,
-            tzinfo=UTC,
-        )
+        # Extract the local date BEFORE normalising to UTC so we preserve
+        # the calendar date as the bank/importer intended.  For a midnight
+        # PDT datetime ("2024-10-15T00:00:00-07:00") this gives 2024-10-15;
+        # .astimezone(UTC).date() would also give 2024-10-15 for midnight
+        # values, but would give the wrong date for non-midnight timestamps
+        # in negative-offset timezones.
+        local_date = posted_date.date()
+        parsed = parse_transaction_date(raw_description, local_date)
+        transaction_date = posted_date.replace(
+            year=parsed.year,
+            month=parsed.month,
+            day=parsed.day,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        ).astimezone(UTC)
+
+    # Normalise to UTC so all datetimes in the service layer are UTC.
+    # Django does this on save anyway; being explicit here avoids any
+    # ambiguity if the service is called with a non-UTC timezone-aware datetime.
+    posted_date = posted_date.astimezone(UTC)
 
     with acquire_lock(bank_account.lock_key):
         with db_transaction.atomic():

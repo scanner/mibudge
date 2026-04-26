@@ -28,13 +28,16 @@ import { listAllocations } from "@/api/allocations";
 import { listTransactions, listTransactionsNext } from "@/api/transactions";
 import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
+import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import type { Transaction, TransactionAllocation } from "@/types/api";
+import { formatDateHeader, todayDateStr, txDateStr } from "@/utils/dates";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const ctx = useAccountContextStore();
+const auth = useAuthStore();
 const txNav = useTransactionNavStore();
 const budgets = useBudgetsStore();
 
@@ -96,31 +99,16 @@ interface DateGroup {
   transactions: Transaction[];
 }
 
-function formatDateHeader(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (d.getTime() === today.getTime()) return "Today";
-  if (d.getTime() === yesterday.getTime()) return "Yesterday";
-
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 const displayTransactions = computed(() => {
+  const tz = auth.timezone;
+  const today = todayDateStr(tz);
   const source = searchResults.value ?? filteredTransactions.value;
   const map = new Map<string, DateGroup>();
   for (const tx of source) {
-    const date = tx.transaction_date.slice(0, 10);
+    const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
-      group = { date, label: formatDateHeader(date), transactions: [] };
+      group = { date, label: formatDateHeader(date, today, tz), transactions: [] };
       map.set(date, group);
     }
     group.transactions.push(tx);
@@ -147,10 +135,11 @@ const filteredTransactions = computed(() => {
     case "income":
       return list.filter((tx) => Number.parseFloat(tx.amount) > 0);
     case "last30": {
-      const cutoff = new Date();
+      const tz = auth.timezone;
+      const cutoff = new Date(todayDateStr(tz) + "T00:00:00");
       cutoff.setDate(cutoff.getDate() - 30);
-      const cutoffStr = cutoff.toISOString().slice(0, 10);
-      return list.filter((tx) => tx.transaction_date.slice(0, 10) >= cutoffStr);
+      const cutoffStr = cutoff.toLocaleDateString("sv-SE");
+      return list.filter((tx) => txDateStr(tx.transaction_date, tz) >= cutoffStr);
     }
     default:
       return list;

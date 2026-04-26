@@ -38,6 +38,7 @@ export const useAuthStore = defineStore("auth", () => {
   const user = ref<User | null>(null);
 
   const isAuthenticated = computed(() => accessToken.value !== null);
+  const timezone = computed(() => user.value?.timezone ?? "UTC");
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -116,6 +117,7 @@ export const useAuthStore = defineStore("auth", () => {
     accessToken,
     user,
     isAuthenticated,
+    timezone,
     clear,
     refresh,
     login,
