@@ -193,7 +193,8 @@ def fund_account(
 ########################################################################
 #
 def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
-    """Enumerate all due funding and recurrence events for a set of budgets.
+    """
+    Enumerate all due funding and recurrence events for a set of budgets.
 
     Args:
         budgets: Budgets to inspect (already filtered to non-archived).
@@ -205,12 +206,15 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
     events: list[FundingEvent] = []
 
     for budget in budgets:
-        # Fill-up goal children are funded indirectly via their parent's
-        # fund events; they do not generate their own events.
+        # Fill-up goal children are funded indirectly via their parent's fund
+        # events; they do not generate their own events so they are skipped
+        # here.
+        #
         if budget.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL:
             continue
 
-        # Complete Goals are sticky -- never re-funded.
+        # Once a budget of type GOAL is completed, it is never funded again.
+        #
         if budget.budget_type == Budget.BudgetType.GOAL and budget.complete:
             continue
 
@@ -296,7 +300,8 @@ def _process_fund_event(
     report: FundingReport,
     today: date,
 ) -> None:
-    """Transfer funds from unallocated into the target budget.
+    """
+    Transfer funds from unallocated into the target budget.
 
     For Recurring + with_fillup_goal, the target is the fillup_goal.
     Otherwise the target is the budget itself.  Caps at unallocated

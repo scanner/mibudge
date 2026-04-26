@@ -24,6 +24,7 @@ Usage:
 # system imports
 #
 import json
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -358,6 +359,15 @@ def _restore_account(d: dict[str, Any], bank: Bank) -> BankAccount:
     if available is not None:
         account.available_balance = available
 
+    raw_imported_at = d.get("last_imported_at")
+    account.last_imported_at = (
+        datetime.fromisoformat(raw_imported_at) if raw_imported_at else None
+    )
+    raw_posted_through = d.get("last_posted_through")
+    account.last_posted_through = (
+        date.fromisoformat(raw_posted_through) if raw_posted_through else None
+    )
+
     account.save()
     return account
 
@@ -424,21 +434,30 @@ def _restore_budget_pass1(
     if funding_amount is not None:
         budget.funding_amount = funding_amount
 
-    if d.get("target_date"):
-        from datetime import date
-
-        budget.target_date = date.fromisoformat(d["target_date"])
-    else:
-        budget.target_date = None
+    budget.target_date = (
+        date.fromisoformat(d["target_date"]) if d.get("target_date") else None
+    )
 
     budget.archived = d.get("archived", False)
-    if d.get("archived_at"):
-        from datetime import datetime
-
-        budget.archived_at = datetime.fromisoformat(d["archived_at"])
+    budget.archived_at = (
+        datetime.fromisoformat(d["archived_at"])
+        if d.get("archived_at")
+        else None
+    )
 
     budget.paused = d.get("paused", False)
     budget.complete = d.get("complete", False)
+
+    budget.last_funded_on = (
+        date.fromisoformat(d["last_funded_on"])
+        if d.get("last_funded_on")
+        else None
+    )
+    budget.last_recurrence_on = (
+        date.fromisoformat(d["last_recurrence_on"])
+        if d.get("last_recurrence_on")
+        else None
+    )
     budget.memo = d.get("memo")
     budget.auto_spend = d.get("auto_spend", [])
 

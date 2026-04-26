@@ -248,6 +248,16 @@ def _serialize_account(account: BankAccount) -> dict[str, Any]:
         "owners": owners,
         "group": group_name,
         "unallocated_budget_id": unalloc_id,
+        "last_imported_at": (
+            account.last_imported_at.isoformat()
+            if account.last_imported_at
+            else None
+        ),
+        "last_posted_through": (
+            account.last_posted_through.isoformat()
+            if account.last_posted_through
+            else None
+        ),
     }
 
 
@@ -274,6 +284,12 @@ def _serialize_budget(b: Budget) -> dict[str, Any]:
         "recurrance_schedule": _recurrence(b.recurrance_schedule),
         "memo": b.memo,
         "auto_spend": b.auto_spend,
+        "last_funded_on": b.last_funded_on.isoformat()
+        if b.last_funded_on
+        else None,
+        "last_recurrence_on": (
+            b.last_recurrence_on.isoformat() if b.last_recurrence_on else None
+        ),
     }
 
 
