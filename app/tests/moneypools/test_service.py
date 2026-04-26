@@ -280,7 +280,7 @@ class TestTransactionService:
         tx = transaction_svc.create(
             bank_account=account,
             amount=Money(200, "USD"),
-            transaction_date=datetime.now(UTC),
+            posted_date=datetime.now(UTC),
             raw_description="DIRECT DEPOSIT",
         )
 
@@ -329,13 +329,13 @@ class TestLinkingService:
         counterpart = transaction_factory(
             bank_account=dst,
             amount=Money(100, "USD"),
-            transaction_date=when,
+            posted_date=when,
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=Money(-100, "USD"),
-            transaction_date=when,
+            posted_date=when,
             raw_description="ACH Transfer to APPLECARD",
         )
 

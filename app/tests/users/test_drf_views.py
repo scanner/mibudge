@@ -78,6 +78,7 @@ class TestUserViewSet:
             "name": user.name,
             "url": f"http://testserver/api/v1/users/{user.username}/",
             "default_bank_account": None,
+            "timezone": "America/Los_Angeles",
         }
 
 

@@ -2,10 +2,15 @@
 Transaction service -- Phase 4.
 
 Operations:
-    create(bank_account, amount, transaction_date, raw_description, **kwargs)
+    create(bank_account, amount, posted_date, raw_description, **kwargs)
         Locks the bank account, applies bank-balance math, saves the
         transaction, creates a default allocation to Unallocated, and
         enqueues the cross-account linker via on_commit.
+
+        ``posted_date`` is always the bank-supplied settlement datetime.
+        ``transaction_date`` (optional kwarg) is the purchase datetime;
+        if omitted the service derives it via
+        ``description_utils.parse_transaction_date``.
 
     update(transaction, **changes)
         Applies mutable field changes (transaction_type, memo,
@@ -25,6 +30,7 @@ Operations:
 
 # system imports
 #
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -37,6 +43,7 @@ import moneyed
 from common.locks import acquire_lock
 from django.db import transaction as db_transaction
 
+from moneypools.description_utils import parse_transaction_date
 from moneypools.models import (
     BankAccount,
     Budget,
@@ -54,8 +61,9 @@ from moneypools.service import (
 def create(
     bank_account: BankAccount,
     amount: moneyed.Money,
-    transaction_date: Any,
+    posted_date: datetime,
     raw_description: str,
+    transaction_date: datetime | None = None,
     **kwargs: Any,
 ) -> Transaction:
     """Create a transaction, apply bank-balance math, and seed the default allocation.
@@ -63,8 +71,12 @@ def create(
     Args:
         bank_account: The bank account this transaction belongs to.
         amount: Signed transaction amount (negative for debits).
-        transaction_date: Datetime of the transaction.
+        posted_date: Bank-supplied settlement datetime (always required).
         raw_description: Unedited description from the bank feed.
+        transaction_date: Purchase datetime.  When omitted (the common
+            importer case), derived from the MM/DD pattern embedded in
+            ``raw_description`` via ``parse_transaction_date``; falls
+            back to ``posted_date`` when no parseable date is found.
         **kwargs: Additional Transaction field values (transaction_type,
             pending, memo, description, etc.).
 
@@ -72,6 +84,33 @@ def create(
         The saved Transaction instance.
     """
     pending: bool = kwargs.pop("pending", False)
+
+    if isinstance(posted_date, str):
+        posted_date = datetime.fromisoformat(posted_date.replace("Z", "+00:00"))
+
+    if transaction_date is None:
+        # Extract the local date BEFORE normalising to UTC so we preserve
+        # the calendar date as the bank/importer intended.  For a midnight
+        # PDT datetime ("2024-10-15T00:00:00-07:00") this gives 2024-10-15;
+        # .astimezone(UTC).date() would also give 2024-10-15 for midnight
+        # values, but would give the wrong date for non-midnight timestamps
+        # in negative-offset timezones.
+        local_date = posted_date.date()
+        parsed = parse_transaction_date(raw_description, local_date)
+        transaction_date = posted_date.replace(
+            year=parsed.year,
+            month=parsed.month,
+            day=parsed.day,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        ).astimezone(UTC)
+
+    # Normalise to UTC so all datetimes in the service layer are UTC.
+    # Django does this on save anyway; being explicit here avoids any
+    # ambiguity if the service is called with a non-UTC timezone-aware datetime.
+    posted_date = posted_date.astimezone(UTC)
 
     with acquire_lock(bank_account.lock_key):
         with db_transaction.atomic():
@@ -84,6 +123,7 @@ def create(
             tx = Transaction(
                 bank_account=bank_account,
                 amount=amount,  # type: ignore[misc]
+                posted_date=posted_date,
                 transaction_date=transaction_date,
                 raw_description=raw_description,
                 pending=pending,

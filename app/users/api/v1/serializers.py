@@ -23,7 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["username", "name", "url", "default_bank_account"]
+        fields = ["username", "name", "url", "default_bank_account", "timezone"]
 
         extra_kwargs = {
             "url": {

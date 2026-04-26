@@ -365,8 +365,9 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         tx = transaction_svc.create(
             bank_account=data["bank_account"],
             amount=data["amount"],
-            transaction_date=data["transaction_date"],
+            posted_date=data["posted_date"],
             raw_description=data["raw_description"],
+            transaction_date=data.get("transaction_date"),
             pending=data.get("pending", False),
             transaction_type=data.get("transaction_type", ""),
             memo=data.get("memo"),

@@ -575,14 +575,15 @@ class Budget(MoneyPoolBaseClass):
     )
     funding_schedule = recurrence.fields.RecurrenceField()
 
-    # Only relevant for 'recurring' budgets with FundingType target_date.
-    # This is the interval at which we need this budget to be completed. So,
-    # if you have a bill you need to pay once a month, by the first of the
-    # month you would set your recurrence schedule to be "by the last day of
-    # each month." Things like rent, regular payments, etc. Another example is
-    # if you have a service you subscribe to that is renewed every year.. you
-    # would set the recurrence schedule to be shortly before that subscription
-    # is due.
+    # Only relevant for 'recurring' budgets with FundingType target_date.  This
+    # is the interval at which we need this budget to be completed. So, if you
+    # have a bill you need to pay once a month, by the first of the month you
+    # would set your recurrence schedule to be "the first of each month."
+    # Things like rent, regular payments, etc. Another example is if you have a
+    # service you subscribe to that is renewed every year.. you would set the
+    # recurrence schedule to be shortly before that subscription is due.  The
+    # idea is that the budget is refreshed just after midnight on its
+    # recurrence schedule.
     #
     recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
 
@@ -727,6 +728,17 @@ class Transaction(TransactionBaseClass):
     party = models.CharField(
         max_length=300, null=True, blank=True, editable=False
     )
+    # The bank-supplied settlement / posting date.  Always set from the
+    # bank feed; never derived.
+    #
+    posted_date = models.DateTimeField(editable=False)
+
+    # The actual purchase / transaction date.  Derived from the embedded
+    # MM/DD pattern in raw_description when possible (see
+    # description_utils.parse_transaction_date); falls back to posted_date
+    # when no parseable date is found or the parsed date is outside the
+    # sanity window.
+    #
     transaction_date = models.DateTimeField(null=False, editable=False)
     transaction_type = models.CharField(
         max_length=32, choices=TransactionType.choices

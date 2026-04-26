@@ -72,6 +72,8 @@ class FakeClient:
     #
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         self.calls.append(("GET", path, params))
+        if path == "/api/v1/users/me/":
+            return {"timezone": "UTC"}
         # Single-object fetches: /api/v1/bank-accounts/<id>/
         if path.startswith("/api/v1/bank-accounts/") and path.endswith("/"):
             acct_id = path.rstrip("/").rsplit("/", 1)[-1]
@@ -344,7 +346,7 @@ class TestImportCmd:
             fake_client.transactions[tx_id] = {
                 "id": tx_id,
                 "bank_account": acct["id"],
-                "transaction_date": datetime.combine(
+                "posted_date": datetime.combine(
                     row.transaction_date, datetime.min.time()
                 ).isoformat(),
                 "amount": str(row.amount),
@@ -388,7 +390,7 @@ class TestImportCmd:
         fake_client.transactions[tx_id] = {
             "id": tx_id,
             "bank_account": acct["id"],
-            "transaction_date": datetime.combine(
+            "posted_date": datetime.combine(
                 row.transaction_date, datetime.min.time()
             ).isoformat(),
             "amount": str(row.amount),
@@ -528,7 +530,7 @@ class TestImportCmd:
             fake_client.transactions[tx_id] = {
                 "id": tx_id,
                 "bank_account": acct["id"],
-                "transaction_date": datetime.combine(
+                "posted_date": datetime.combine(
                     row.transaction_date, datetime.min.time()
                 ).isoformat(),
                 "amount": str(row.amount),
