@@ -29,13 +29,14 @@ ensuring the engine never runs ahead of confirmed transaction data.
 #
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
 # 3rd party imports
 #
 import recurrence as recurrence_lib
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
 from djmoney.money import Money
@@ -109,7 +110,7 @@ def funding_system_user() -> User:  # type: ignore[valid-type]
     Raises:
         User.DoesNotExist: If the data migration has not been run.
     """
-    return User.objects.get(username="funding-system")
+    return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
 
 
 ####################################################################
@@ -254,14 +255,24 @@ def _enumerate_schedule(
     if not sched:
         return []
 
-    after_dt = datetime(after.year, after.month, after.day, tzinfo=UTC)
-    before_dt = datetime(
-        before.year, before.month, before.day, 23, 59, 59, tzinfo=UTC
-    )
+    # The recurrence library uses naive datetimes internally; passing
+    # timezone-aware datetimes causes a TypeError on the internal comparison.
+    after_dt = datetime(after.year, after.month, after.day)
+    before_dt = datetime(before.year, before.month, before.day, 23, 59, 59)
+
+    # Use the schedule's stored dtstart if present; fall back to after_dt so
+    # the rule fires on the same day-of-month as the last-processed date rather
+    # than defaulting to datetime.now() (which is non-deterministic).
+    # Strip timezone: the stored dtstart comes back as UTC-aware after DB
+    # round-trip, but the recurrence library uses naive datetimes internally.
+    raw = sched.dtstart
+    dtstart = raw.replace(tzinfo=None) if raw is not None else after_dt
 
     try:
-        occurrences = list(sched.between(after_dt, before_dt, inc=False))
-    except recurrence_lib.RecurrenceError as exc:
+        occurrences = list(
+            sched.between(after_dt, before_dt, inc=False, dtstart=dtstart)
+        )
+    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
         logger.warning("_enumerate_schedule: recurrence error: %r", exc)
         return []
 
@@ -397,7 +408,9 @@ def _calculate_fund_amount(
         return zero
 
     remaining = _count_remaining_occurrences(
-        budget.funding_schedule, event_date, today
+        budget.funding_schedule,
+        event_date,
+        budget.target_date or today,
     )
     per_event = (gap / max(remaining, 1)).quantize(Decimal("0.01"))
     return Money(per_event, currency)
@@ -408,32 +421,38 @@ def _calculate_fund_amount(
 def _count_remaining_occurrences(
     sched: recurrence_lib.Recurrence | None,
     from_date: date,
-    today: date,
+    end_date: date,
 ) -> int:
-    """Count occurrences of a schedule from from_date (inclusive) onward.
+    """Count occurrences of a schedule from from_date (inclusive) to end_date.
 
     Used for TARGET_DATE gap-spreading: divide remaining gap by this count.
 
     Args:
         sched: The funding schedule.
         from_date: Start date (inclusive).
-        today: The reference 'today' date (unused here but documents intent).
+        end_date: Upper bound (inclusive); pass budget.target_date for Goals.
 
     Returns:
-        Number of upcoming occurrences >= from_date (minimum 1).
+        Number of occurrences in [from_date, end_date] (minimum 1).
     """
     if not sched:
         return 1
 
     # between() is exclusive on the lower bound; subtract one day so
-    # from_date itself is included.
+    # from_date itself is included.  Use naive datetimes (library requirement).
     start_dt = datetime(
-        from_date.year, from_date.month, from_date.day, tzinfo=UTC
+        from_date.year, from_date.month, from_date.day
     ) - timedelta(days=1)
+    end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
+
+    raw = sched.dtstart
+    dtstart = raw.replace(tzinfo=None) if raw is not None else start_dt
 
     try:
-        occurrences = list(sched.after(start_dt, count=50, inc=True))
-    except recurrence_lib.RecurrenceError as exc:
+        occurrences = list(
+            sched.between(start_dt, end_dt, inc=True, dtstart=dtstart)
+        )
+    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
         logger.warning(
             "_count_remaining_occurrences: recurrence error: %r", exc
         )

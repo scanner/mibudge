@@ -16,6 +16,8 @@ Funding tasks:
 import logging
 from datetime import date
 
+from django.conf import settings
+
 # Project imports
 from config import celery_app
 from moneypools.models import BankAccount, Transaction
@@ -111,8 +113,9 @@ def fund_one_account(account_id: str) -> None:
         actor = funding_svc.funding_system_user()
     except Exception:
         logger.error(
-            "fund_one_account: funding-system user missing; "
-            "run migration 0024_seed_funding_system_user."
+            "fund_one_account: user %r missing; "
+            "run migration 0024_seed_funding_system_user.",
+            settings.FUNDING_SYSTEM_USERNAME,
         )
         return
 
