@@ -155,7 +155,7 @@
     "expected_date": "2026-12-31"
   },
   {
-    "description": "IRS DES:USATAXPYMT ID:XXXXXXXXXX18986 INDN:JORDAN L & ERIC J LUC CO ID:XXXXX02000 PPD",
+    "description": "IRS DES:USATAXPYMT ID:XXXXXXXXXX18986 INDN:JORDAN L & JOHN DOE CO ID:XXXXX02000 PPD",
     "posted_date": "2025-07-03",
     "expected_date": "2025-07-03"
   },

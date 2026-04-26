@@ -731,7 +731,7 @@ class Transaction(TransactionBaseClass):
     # The bank-supplied settlement / posting date.  Always set from the
     # bank feed; never derived.
     #
-    posted_date = models.DateTimeField(null=True, editable=False)
+    posted_date = models.DateTimeField(editable=False)
 
     # The actual purchase / transaction date.  Derived from the embedded
     # MM/DD pattern in raw_description when possible (see
