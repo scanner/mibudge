@@ -79,6 +79,13 @@ _RULES_PATH = Path.home() / ".mibudge" / "vendor_rules.json"
 # MM/DD purchase date embedded in many card descriptions
 _DESC_DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")
 
+# RFC 5545 DTSTART line (with optional parameters before the colon)
+_DTSTART_RE = re.compile(
+    r"DTSTART(?:;[^:]*)?:(\d{4})(\d{2})(\d{2})", re.IGNORECASE
+)
+# RRULE FREQ value
+_FREQ_RE = re.compile(r"FREQ=(\w+)", re.IGNORECASE)
+
 # Trailing noise tokens to strip when no date pattern is found
 _NOISE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\s+MOBILE\s+PURCHASE.*$", re.IGNORECASE),
@@ -266,6 +273,72 @@ def _normalize_vendor(vendor: str) -> str:
         Lower-cased, stripped vendor name.
     """
     return vendor.lower().strip()
+
+
+########################################################################
+########################################################################
+#
+def _parse_recurrance_schedule(
+    rec_str: str | None,
+) -> tuple[str | None, date | None]:
+    """
+    Extract FREQ and DTSTART from a recurrence field string.
+
+    Args:
+        rec_str: RFC 5545 recurrence string from the budget API, or None.
+
+    Returns:
+        ``(freq, dtstart)`` where *freq* is the uppercase FREQ value (e.g.
+        ``'MONTHLY'``, ``'YEARLY'``) and *dtstart* is the parsed
+        :class:`~datetime.date`, or ``(None, None)`` if either field is
+        absent or cannot be parsed.
+    """
+    if not rec_str:
+        return None, None
+    freq: str | None = None
+    dtstart: date | None = None
+    m = _DTSTART_RE.search(rec_str)
+    if m:
+        try:
+            dtstart = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+    m = _FREQ_RE.search(rec_str)
+    if m:
+        freq = m.group(1).upper()
+    return freq, dtstart
+
+
+####################################################################
+#
+def _cycle_year_for_date(
+    d: date,
+    reset_month: int,
+    reset_day: int,
+) -> int:
+    """
+    Return the cycle year that *d* belongs to for an annual budget.
+
+    A cycle starts on ``(reset_month, reset_day)`` of each calendar year.
+    If *d* falls on or after that reset date in its year, it belongs to
+    that year's cycle; otherwise it belongs to the previous year's cycle.
+
+    Args:
+        d:            Transaction date.
+        reset_month:  Month of the annual reset (1--12).
+        reset_day:    Day of the annual reset (clamped to the month length
+                      in non-leap years for Feb 29 etc.).
+
+    Returns:
+        The cycle year (the year in which the cycle started).
+    """
+    try:
+        reset_this_year = date(d.year, reset_month, reset_day)
+    except ValueError:
+        # e.g. Feb 29 in a non-leap year -- clamp to last day of month
+        last_day = calendar.monthrange(d.year, reset_month)[1]
+        reset_this_year = date(d.year, reset_month, min(reset_day, last_day))
+    return d.year if d >= reset_this_year else d.year - 1
 
 
 ########################################################################
@@ -634,16 +707,18 @@ def _process_month(
     *,
     console: Console,
     theme: _Theme,
+    period_label: str | None = None,
 ) -> tuple[int, int, int, bool]:
     """
-    Interactively process one month's candidate transactions.
+    Interactively process one period's candidate transactions.
 
     For each candidate transaction the user is prompted to allocate it to the
     target budget. Auto-rules (from previous "always" choices) are applied
     without prompting.
 
     Args:
-        year, month:     Calendar year and month being processed.
+        year, month:     Calendar year and month being processed (used only
+                         when *period_label* is not provided).
         candidates:      List of ``(transaction_dict, allocation_uuid)`` pairs.
                          Only transactions with a single Unallocated allocation
                          are included.
@@ -652,15 +727,17 @@ def _process_month(
         rules:           Mutable vendor auto-rule dict (modified in place).
         skip_vendors:    Mutable set of vendors to skip for the session.
         console:         Rich console.
+        period_label:    Optional display label overriding the default
+                         ``"Month Year"`` format (used for yearly budgets).
 
     Returns:
         ``(allocated, skipped, auto_allocated, quit_requested)`` where
         *quit_requested* is True if the user pressed ``q``.
     """
-    month_name = calendar.month_name[month]
+    label = period_label or f"{calendar.month_name[month]} {year}"
     console.print(
         Rule(
-            f"[bold]{month_name} {year}[/bold]  "
+            f"[bold]{label}[/bold]  "
             f"({len(candidates)} candidate transaction(s))",
             style=theme.rule_style,
         )
@@ -730,18 +807,29 @@ def _run_backfill(
     unallocated_id: str,
     funding_amount: Decimal,
     *,
+    yearly: bool = False,
+    reset_month: int = 1,
+    reset_day: int = 1,
     console: Console,
     theme: _Theme,
 ) -> None:
     """
-    Run the full month-by-month backfill loop for the target budget.
+    Run the full period-by-period backfill loop for the target budget.
+
+    When *yearly* is False (the default) periods are calendar months and
+    the budget is topped up at the end of each month.  When *yearly* is
+    True, periods are annual cycles starting on ``(reset_month, reset_day)``
+    and the budget is topped up once at the end of each cycle year.
 
     Args:
         client:           Authenticated MibudgeClient.
         bank_account_id:  UUID of the bank account.
         target_budget:    Budget dict (recurring budget to backfill into).
         unallocated_id:   UUID of the account's Unallocated budget.
-        funding_amount:   Monthly funding target (from budget.target_balance).
+        funding_amount:   Per-period funding target (from budget.target_balance).
+        yearly:           If True, group transactions by annual cycle.
+        reset_month:      Month the annual cycle resets (ignored when not yearly).
+        reset_day:        Day the annual cycle resets (ignored when not yearly).
         console:          Rich console.
     """
     # ----------------------------------------------------------------
@@ -789,15 +877,21 @@ def _run_backfill(
         allocs_by_tx[tx_id].append(alloc)
 
     # ----------------------------------------------------------------
-    # 3. Group transactions by (year, month) in chronological order.
+    # 3. Group transactions by period (month or annual cycle).
     # ----------------------------------------------------------------
-    months: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
+    periods: dict[tuple[int, ...], list[dict[str, Any]]] = defaultdict(list)
     for tx in all_transactions:
         d = _parse_tx_date(tx["transaction_date"])
-        months[(d.year, d.month)].append(tx)
+        if yearly:
+            key: tuple[int, ...] = (
+                _cycle_year_for_date(d, reset_month, reset_day),
+            )
+        else:
+            key = (d.year, d.month)
+        periods[key].append(tx)
 
-    sorted_months = sorted(months.keys())
-    if not sorted_months:
+    sorted_periods = sorted(periods.keys())
+    if not sorted_periods:
         console.print("[warning]No transactions to process.[/warning]")
         return
 
@@ -828,7 +922,7 @@ def _run_backfill(
     )
 
     # ----------------------------------------------------------------
-    # 6. Month-by-month loop.
+    # 6. Period-by-period loop.
     # ----------------------------------------------------------------
     total_allocated = 0
     total_auto = 0
@@ -837,8 +931,17 @@ def _run_backfill(
     # effect immediately without prompting.
     skip_vendors: set[str] = {k for k, v in rules.items() if v is False}
 
-    for month_idx, (year, month) in enumerate(sorted_months):
-        txs = months[(year, month)]
+    for period_idx, period_key in enumerate(sorted_periods):
+        txs = periods[period_key]
+
+        if yearly:
+            cy = period_key[0]
+            period_label: str = str(cy)
+            topup_label = f"Year-end top-up ({cy}) — "
+        else:
+            year, month = period_key[0], period_key[1]
+            period_label = f"{calendar.month_name[month]} {year}"
+            topup_label = "Month-end top-up — "
 
         # Find candidates: exactly one allocation, and it's to Unallocated.
         candidates: list[tuple[dict[str, Any], str]] = []
@@ -858,15 +961,14 @@ def _run_backfill(
         if not candidates:
             console.print(
                 Rule(
-                    f"[dim]{calendar.month_name[month]} {year} "
-                    f"— no unallocated transactions[/dim]",
+                    f"[dim]{period_label} — no unallocated transactions[/dim]",
                     style="dim",
                 )
             )
         else:
             allocated, skipped, auto_alloc, quit_requested = _process_month(
-                year,
-                month,
+                period_key[0],
+                period_key[1] if not yearly else 1,
                 candidates,
                 client,
                 target_budget,
@@ -874,12 +976,13 @@ def _run_backfill(
                 skip_vendors,
                 console=console,
                 theme=theme,
+                period_label=period_label,
             )
             total_allocated += allocated
             total_auto += auto_alloc
             total_skipped += skipped
 
-            # Save rules after each month so progress isn't lost.
+            # Save rules after each period so progress isn't lost.
             _save_rules(target_budget["id"], rules)
 
             if quit_requested:
@@ -889,9 +992,9 @@ def _run_backfill(
                 _save_rules(target_budget["id"], rules)
                 break
 
-        # End-of-month top-up (skip for the last month).
-        is_last_month = month_idx == len(sorted_months) - 1
-        if not is_last_month:
+        # End-of-period top-up (skip for the last period).
+        is_last_period = period_idx == len(sorted_periods) - 1
+        if not is_last_period:
             _fund_to_target(
                 client,
                 target_budget,
@@ -899,7 +1002,7 @@ def _run_backfill(
                 bank_account_id,
                 funding_amount,
                 console=console,
-                label="Month-end top-up — ",
+                label=topup_label,
             )
         console.print()
 
@@ -1061,10 +1164,17 @@ def cli_cmd(
                     "Only Recurring budgets (type 'R') are supported."
                 )
 
-            # --- Determine the monthly funding target ---
+            # --- Detect yearly vs monthly from recurrance_schedule ---
+            rec_str: str | None = target_budget.get("recurrance_schedule")
+            freq, dtstart = _parse_recurrance_schedule(rec_str)
+            yearly = freq == "YEARLY"
+            reset_month = dtstart.month if dtstart else 1
+            reset_day = dtstart.day if dtstart else 1
+
+            # --- Determine the per-period funding target ---
             # target_balance is the envelope ceiling: we top the budget up to
-            # this amount at the start of each month and after processing each
-            # month's transactions.
+            # this amount at the start of each period and after processing each
+            # period's transactions.
             raw_funding = target_budget.get("target_balance")
             if raw_funding is None:
                 raise click.ClickException(
@@ -1077,11 +1187,22 @@ def cli_cmd(
                     f"{funding_amount}. Must be positive."
                 )
 
+            if yearly:
+                period_desc = "Annual"
+                reset_label = (
+                    f"\n[bold]Annual reset date:[/bold]      "
+                    f"{reset_month:02d}/{reset_day:02d}"
+                )
+            else:
+                period_desc = "Monthly"
+                reset_label = ""
+
             console.print(
                 Panel(
                     f"[bold]Account:[/bold] {bank_account.get('name', bank_account_id)}\n"
                     f"[bold]Budget:[/bold]  {target_budget['name']}\n"
-                    f"[bold]Monthly target (target_balance):[/bold] {funding_amount}\n"
+                    f"[bold]{period_desc} target (target_balance):[/bold] {funding_amount}"
+                    f"{reset_label}\n"
                     f"[bold]Rules file:[/bold] {_RULES_PATH}",
                     title="Backfill Configuration",
                     border_style=theme.border_style,
@@ -1094,6 +1215,9 @@ def cli_cmd(
                 target_budget,
                 unallocated_id,
                 funding_amount,
+                yearly=yearly,
+                reset_month=reset_month,
+                reset_day=reset_day,
                 console=console,
                 theme=theme,
             )

@@ -156,6 +156,15 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
 
     ####################################################################
     #
+    def perform_update(self, serializer: BankAccountSerializer) -> None:
+        """Update a bank account via BankAccountService (acquires lock)."""
+        bank_account_svc.update(
+            serializer.instance, **serializer.validated_data
+        )
+        serializer.instance.refresh_from_db()
+
+    ####################################################################
+    #
     def perform_create(self, serializer: BankAccountSerializer) -> None:
         """Create a bank account via BankAccountService."""
         data = serializer.validated_data
@@ -241,6 +250,41 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     search_fields = ["name"]
     ordering_fields = ["name", "created_at", "balance"]
     ordering = ["name"]
+
+    ####################################################################
+    #
+    def perform_create(self, serializer: BudgetSerializer) -> None:
+        """Create a budget via the service layer so fill-up goal is created.
+
+        Raises:
+            ValidationError: On service-layer errors.
+        """
+        validated = serializer.validated_data
+        bank_account = validated.pop("bank_account")
+        name = validated.pop("name")
+        budget_type = validated.pop("budget_type")
+        funding_type = validated.pop("funding_type")
+        target_balance = validated.pop("target_balance")
+        budget = budget_svc.create(
+            bank_account=bank_account,
+            name=name,
+            budget_type=budget_type,
+            funding_type=funding_type,
+            target_balance=target_balance,
+            **validated,
+        )
+        serializer.instance = budget
+
+    ####################################################################
+    #
+    def perform_update(self, serializer: BudgetSerializer) -> None:
+        """Update a budget via the service layer so fill-up goal is created.
+
+        Raises:
+            ValidationError: On service-layer errors.
+        """
+        budget_svc.update(serializer.instance, **serializer.validated_data)
+        serializer.instance.refresh_from_db()
 
     ####################################################################
     #
@@ -374,6 +418,17 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             description=data.get("description", ""),
         )
         serializer.instance = tx
+
+    ####################################################################
+    #
+    def perform_update(self, serializer: TransactionSerializer) -> None:
+        """Update a transaction via TransactionService.
+
+        Routes through the service so that a pending → posted transition
+        correctly updates the bank account's posted_balance.
+        """
+        transaction_svc.update(serializer.instance, **serializer.validated_data)
+        serializer.instance.refresh_from_db()
 
     ####################################################################
     #
