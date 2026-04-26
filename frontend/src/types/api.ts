@@ -136,6 +136,7 @@ export interface Transaction {
   amount: string;
   amount_currency: string;
   party: string | null;
+  posted_date: string;
   transaction_date: string;
   transaction_type: TransactionType | "";
   pending: boolean;
