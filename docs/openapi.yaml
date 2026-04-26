@@ -349,6 +349,42 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/bank-accounts/{id}/mark-imported/:
+    post:
+      operationId: bank_accounts_mark_imported_create
+      description: 'Record that a transaction import has been completed for this account.  Sets
+        last_imported_at to now and advances last_posted_through to the supplied date
+        (never regresses an existing value).  Body: {"last_posted_through": "YYYY-MM-DD"}.'
+      summary: Mark import complete
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                last_posted_through:
+                  type: string
+                  format: date
+              required:
+              - last_posted_through
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAccount'
+          description: ''
   /api/v1/banks/:
     get:
       operationId: banks_list
@@ -1487,6 +1523,20 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        last_imported_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Wall-clock time of the most recent completed import for this
+            account.
+        last_posted_through:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+          description: Latest posted_date seen in the most recent import batch. The
+            funding engine will not process events dated after this value.
         created_at:
           type: string
           format: date-time
@@ -1500,6 +1550,8 @@ components:
       - bank
       - created_at
       - id
+      - last_imported_at
+      - last_posted_through
       - modified_at
       - name
       - owners

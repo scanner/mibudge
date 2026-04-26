@@ -192,6 +192,8 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "available_balance",
             "available_balance_currency",
             "unallocated_budget",
+            "last_imported_at",
+            "last_posted_through",
             "created_at",
             "modified_at",
         ]
@@ -201,6 +203,8 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "posted_balance_currency",
             "available_balance_currency",
             "unallocated_budget",
+            "last_imported_at",
+            "last_posted_through",
             "created_at",
             "modified_at",
         ]

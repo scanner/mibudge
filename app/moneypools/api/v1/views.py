@@ -12,10 +12,12 @@ standard CRUD operations with restrictions documented per-viewset.
 """
 
 # system imports
+from datetime import date
 from decimal import Decimal
 
 # 3rd party imports
 import moneyed
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiResponse,
@@ -186,6 +188,58 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             **optional,
         )
         serializer.instance = account
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Mark import complete",
+        description=(
+            "Record that a transaction import has been completed for "
+            "this account.  Sets last_imported_at to now and advances "
+            "last_posted_through to the supplied date (never regresses "
+            'an existing value).  Body: {"last_posted_through": "YYYY-MM-DD"}.'
+        ),
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "last_posted_through": {"type": "string", "format": "date"}
+                },
+                "required": ["last_posted_through"],
+            }
+        },
+        responses={200: BankAccountSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="mark-imported")
+    def mark_imported(self, request: Request, id: str = "") -> Response:
+        """Set last_imported_at=now and advance last_posted_through."""
+        account: BankAccount = self.get_object()
+
+        raw = request.data.get("last_posted_through")
+        if not raw:
+            raise ValidationError(
+                {"last_posted_through": "This field is required."}
+            )
+        try:
+            posted_through = date.fromisoformat(str(raw))
+        except ValueError as exc:
+            raise ValidationError(
+                {"last_posted_through": "Expected YYYY-MM-DD format."}
+            ) from exc
+
+        new_posted_through = (
+            max(account.last_posted_through, posted_through)
+            if account.last_posted_through is not None
+            else posted_through
+        )
+
+        BankAccount.objects.filter(pkid=account.pkid).update(
+            last_imported_at=timezone.now(),
+            last_posted_through=new_posted_through,
+        )
+        account.refresh_from_db()
+        serializer = self.get_serializer(account)
+        return Response(serializer.data)
 
 
 ########################################################################

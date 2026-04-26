@@ -209,6 +209,26 @@ class BankAccount(MoneyPoolBaseClass):
         ),
     )
 
+    # Import-freshness tracking.  Set by the mark-imported endpoint after
+    # each successful import run.  The funding engine gates on these values
+    # to ensure it never processes events that lack backing transaction data.
+    #
+    last_imported_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Wall-clock time of the most recent completed import for this account.",
+    )
+    last_posted_through = models.DateField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Latest posted_date seen in the most recent import batch. "
+            "The funding engine will not process events dated after this value."
+        ),
+    )
+
     #####################################################################
     #
     @property
@@ -521,19 +541,16 @@ class Budget(MoneyPoolBaseClass):
     with_fillup_goal = models.BooleanField(default=False)
 
     # Only relevant if the BudgetType is 'recurring' and 'with_fillup_goal' is
-    # True. The fillup_goal is automatically created with a fixed naming
-    # pattern based on the name of this recurring budget.
+    # True.  The fill-up goal is an ASSOCIATED_FILLUP_GOAL child budget created
+    # automatically alongside the recurring budget.
     #
-    # This is tied with the `recurrence_schedule` for the budget. On the
-    # reccurence schedule date money is moved from the recurring goal to the
-    # fillup_goal. Also NOTE: The fillup goal is called this because "it is
-    # filled up" to the target amoung on this budget that points to the fillup
-    # goal. Any remainder is left in this budget. So, for example: If this
-    # recurring budget has a target balance of $100 and the associated
-    # fillup_goal budget has $15 in it then on the recurrence schedule date
-    # $85 will be transferred from the recurring budget to the fillup goal
-    # budget (filling up the fillup_goal budget), leaving $15 in the source
-    # recurring budget.
+    # Funding flow:
+    #   funding_schedule fires  -> unallocated -> fillup_goal  (accumulation)
+    #   recurrance_schedule fires -> fillup_goal -> recurring  (top-up to target)
+    #
+    # On the recurrence date, min(gap, fillup.balance) is transferred from the
+    # fill-up into the recurring budget, where gap = target_balance - balance.
+    # Any surplus stays in the fill-up for the next cycle.
     #
     fillup_goal = models.ForeignKey(
         "self", to_field="id", null=True, blank=True, on_delete=models.SET_NULL
@@ -552,10 +569,12 @@ class Budget(MoneyPoolBaseClass):
     # The funding task checks this flag before crediting a budget.
     # Clearing semantics differ by type:
     #   Goal (G)    -- set True when balance >= target; never cleared.
-    #                  Once a goal is funded, it stays funded even if
+    #                  Once a goal is funded it stays funded even if
     #                  money is later spent from it.
-    #   Recurring (R) -- set True when balance >= target; cleared when
-    #                  the recurrence_schedule fires (cycle reset).
+    #   Recurring (R) -- set True by the recurrence handler when the
+    #                  recurring budget reaches its target after a
+    #                  fillup_goal -> recurring transfer; cleared at
+    #                  the start of each new recurrence cycle (cycle reset).
     #   Capped (C)  -- set True when balance >= target; cleared
     #                  automatically when balance drops below target
     #                  (via pre_save signal).  This produces the
@@ -574,6 +593,26 @@ class Budget(MoneyPoolBaseClass):
         ),
     )
     funding_schedule = recurrence.fields.RecurrenceField()
+
+    # Funding-engine progress pointers.  Updated by the funding service after
+    # each successfully processed event; used as the exclusive lower bound on
+    # the next event-enumeration query so events are never double-processed.
+    #
+    last_funded_on = models.DateField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Date of the most recently processed funding event for this budget.",
+    )
+    last_recurrence_on = models.DateField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Date of the most recently processed recurrence event. "
+            "Only meaningful for Recurring budgets with with_fillup_goal=True."
+        ),
+    )
 
     # Only relevant for 'recurring' budgets with FundingType target_date.  This
     # is the interval at which we need this budget to be completed. So, if you
