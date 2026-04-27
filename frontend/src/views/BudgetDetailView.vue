@@ -236,8 +236,11 @@ async function onRemoveTransaction(transactionId: string) {
     }
     await splitTransaction(transactionId, splits);
 
-    // Remove from local lists.
+    // Remove from local lists (both the source array and any active search results).
     budgetTransactions.value = budgetTransactions.value.filter((tx) => tx.id !== transactionId);
+    if (searchResults.value) {
+      searchResults.value = searchResults.value.filter((tx) => tx.id !== transactionId);
+    }
     budgetAllocsByTx.value.delete(transactionId);
 
     // Refresh budget to update balance.
