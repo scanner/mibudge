@@ -25,10 +25,11 @@ from typing import Any
 # 3rd party imports
 #
 import recurrence
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 # Project imports
 #
+from moneypools.management.commands._budget_admin import resolve_account
 from moneypools.models import (
     BankAccount,
     Budget,
@@ -65,7 +66,7 @@ class Command(BaseCommand):
     ####################################################################
     #
     def handle(self, *args: Any, **options: Any) -> None:
-        account = _resolve_account(options["account"])
+        account = resolve_account(options["account"])
         self.stderr.write(f"Exporting: {account}")
 
         budget_count = Budget.objects.filter(bank_account=account).count()
@@ -89,55 +90,6 @@ class Command(BaseCommand):
                 json.dump(data, fh, indent=2)
                 fh.write("\n")
             self.stderr.write(self.style.SUCCESS(f"Exported to {output}"))
-
-
-########################################################################
-########################################################################
-#
-def _resolve_account(pattern: str) -> BankAccount:
-    """Find the unique BankAccount that matches *pattern*.
-
-    Tries an exact UUID match first, then a name substring match, then
-    a UUID-string substring match as a fallback.
-
-    Args:
-        pattern: Full UUID, UUID prefix/substring, or name fragment.
-
-    Returns:
-        The matching BankAccount.
-
-    Raises:
-        CommandError: When zero or more than one account matches.
-    """
-    from uuid import UUID
-
-    qs = BankAccount.objects.select_related("bank")
-
-    # Exact UUID match.
-    try:
-        uid = UUID(pattern)
-        exact = list(qs.filter(id=uid))
-        if len(exact) == 1:
-            return exact[0]
-    except ValueError:
-        pass
-
-    # Name substring match.
-    matches = list(qs.filter(name__icontains=pattern))
-
-    # UUID string substring match (fallback for short hex prefixes).
-    if not matches:
-        matches = [a for a in qs.all() if pattern.lower() in str(a.id).lower()]
-
-    if not matches:
-        raise CommandError(f"No bank account matches {pattern!r}.")
-    if len(matches) > 1:
-        listing = "\n".join(f"  {a.name}  ({a.id})" for a in matches)
-        raise CommandError(
-            f"Multiple accounts match {pattern!r}:\n{listing}\n"
-            "Provide a more specific pattern."
-        )
-    return matches[0]
 
 
 ########################################################################

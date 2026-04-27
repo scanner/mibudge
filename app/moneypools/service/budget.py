@@ -95,6 +95,11 @@ def update(budget: Budget, **changes: Any) -> Budget:
     Acquires the budget lock, applies *changes*, saves, then creates the
     fill-up goal child if with_fillup_goal has just been enabled.
 
+    If the budget is RECURRING with an existing fill-up goal, any change to
+    target_balance, funding_schedule, or name is mirrored onto the fill-up
+    goal (those fields are copied from the parent at creation time and must
+    stay in sync).  The fill-up goal's lock is also acquired in that case.
+
     Args:
         budget: The Budget instance to update.
         **changes: Field-value pairs to apply.  Only supply the fields
@@ -103,12 +108,27 @@ def update(budget: Budget, **changes: Any) -> Budget:
     Returns:
         The updated Budget instance (refreshed from DB).
     """
-    with acquire_lock(budget.lock_key):
+    fillup: Budget | None = None
+    if (
+        budget.budget_type == Budget.BudgetType.RECURRING
+        and budget.with_fillup_goal
+        and budget.fillup_goal_id is not None
+        and _FILLUP_SYNCED_FIELDS & changes.keys()
+    ):
+        fillup = Budget.objects.get(id=budget.fillup_goal_id)
+
+    with ExitStack() as stack:
+        stack.enter_context(acquire_lock(budget.lock_key))
+        if fillup is not None:
+            stack.enter_context(acquire_lock(fillup.lock_key))
+
         with db_transaction.atomic():
             for field, value in changes.items():
                 setattr(budget, field, value)
             budget.save()
             _maybe_create_fillup(budget)
+            if fillup is not None:
+                _sync_fillup(budget, fillup, changes)
 
     budget.refresh_from_db()
     return budget
@@ -255,6 +275,44 @@ def delete(budget: Budget, actor: User) -> None:
                 Budget.objects.filter(id=fillup_id).delete()
 
             budget.delete()
+
+
+# Fields on a recurring budget that must be mirrored onto its fill-up goal.
+_FILLUP_SYNCED_FIELDS: frozenset[str] = frozenset(
+    {"target_balance", "funding_schedule", "name"}
+)
+
+
+########################################################################
+########################################################################
+#
+def _sync_fillup(
+    budget: Budget,
+    fillup: Budget,
+    changes: dict[str, Any],
+) -> None:
+    """Mirror synced fields from *budget* onto its fill-up goal.
+
+    Called inside update() when any of _FILLUP_SYNCED_FIELDS are changing.
+    The fill-up goal's name is kept as '{budget.name} Fill-up'.
+
+    Args:
+        budget: The parent recurring budget (already saved with new values).
+        fillup: The associated fill-up goal to update.
+        changes: The changes dict passed to update().
+    """
+    dirty = False
+    if "target_balance" in changes:
+        fillup.target_balance = budget.target_balance
+        dirty = True
+    if "funding_schedule" in changes:
+        fillup.funding_schedule = budget.funding_schedule
+        dirty = True
+    if "name" in changes:
+        fillup.name = f"{budget.name} Fill-up"
+        dirty = True
+    if dirty:
+        fillup.save()
 
 
 ########################################################################

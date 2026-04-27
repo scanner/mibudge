@@ -38,9 +38,11 @@ export function formatDateHeader(dateStr: string, todayStr: string, timezone: st
 
   // Parse as local midnight so toLocaleDateString uses the right date.
   const d = new Date(dateStr + "T00:00:00");
+  const differentYear = dateStr.slice(0, 4) !== todayStr.slice(0, 4);
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
+    ...(differentYear ? { year: "numeric" } : {}),
     timeZone: timezone,
   });
 }

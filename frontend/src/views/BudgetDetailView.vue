@@ -21,9 +21,12 @@ import {
   IconPencil,
   IconPlayerPause,
   IconRefresh,
+  IconSearch,
   IconTarget,
+  IconX,
 } from "@tabler/icons-vue";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { Fzf } from "fzf";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
@@ -99,6 +102,11 @@ onMounted(load);
 const budgetTransactions = ref<Transaction[]>([]);
 const budgetAllocsByTx = ref(new Map<string, TransactionAllocation[]>());
 const txLoading = ref(false);
+const searchOpen = ref(false);
+const searchQuery = ref("");
+const searchResults = ref<Transaction[] | null>(null);
+let fzfDebounce: ReturnType<typeof setTimeout> | null = null;
+const searchInput = ref<HTMLInputElement | null>(null);
 
 const budgetNames = computed(() => {
   const map = new Map<string, string>();
@@ -116,7 +124,7 @@ const displayTransactions = computed(() => {
   const tz = auth.timezone;
   const today = todayDateStr(tz);
   const map = new Map<string, DateGroup>();
-  for (const tx of budgetTransactions.value) {
+  for (const tx of searchResults.value ?? budgetTransactions.value) {
     const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
@@ -165,6 +173,50 @@ async function loadBudgetTransactions() {
 }
 
 onMounted(loadBudgetTransactions);
+
+////////////////////////////////////////////////////////////////////////
+//
+// Transaction search — client-side fzf only (all transactions loaded in memory).
+//
+function onSearchInput() {
+  const q = searchQuery.value.trim();
+  if (!q) {
+    searchResults.value = null;
+    return;
+  }
+  if (fzfDebounce) clearTimeout(fzfDebounce);
+  fzfDebounce = setTimeout(() => {
+    const fzf = new Fzf(budgetTransactions.value, {
+      selector: (tx: Transaction) => `${tx.party ?? ""} ${tx.description} ${tx.raw_description}`,
+      casing: "case-insensitive",
+      fuzzy: false,
+    });
+    searchResults.value = fzf.find(q).map((r) => r.item);
+  }, 150);
+}
+
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value;
+  if (!searchOpen.value) {
+    searchQuery.value = "";
+    searchResults.value = null;
+  } else {
+    nextTick(() => searchInput.value?.focus());
+  }
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    if (!searchOpen.value) searchOpen.value = true;
+    nextTick(() => searchInput.value?.focus());
+  } else if (e.key === "Escape" && searchOpen.value) {
+    toggleSearch();
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onSearchKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onSearchKeydown));
 
 async function onRemoveTransaction(transactionId: string) {
   const allocs = budgetAllocsByTx.value.get(transactionId);
@@ -511,9 +563,40 @@ async function submitMove() {
 
         <!-- Transactions section -->
         <section class="mt-2">
-          <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-            Transactions
-          </h2>
+          <div class="mb-2 flex items-center justify-between">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+              Transactions
+            </h2>
+            <button
+              type="button"
+              class="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100"
+              aria-label="Search transactions"
+              @click="toggleSearch"
+            >
+              <IconSearch v-if="!searchOpen" class="h-4 w-4" />
+              <IconX v-else class="h-4 w-4" />
+            </button>
+          </div>
+
+          <Transition
+            enter-active-class="transition-all duration-200 ease-out"
+            enter-from-class="max-h-0 opacity-0"
+            enter-to-class="max-h-12 opacity-100"
+            leave-active-class="transition-all duration-150 ease-in"
+            leave-from-class="max-h-12 opacity-100"
+            leave-to-class="max-h-0 opacity-0"
+          >
+            <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
+              <input
+                ref="searchInput"
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search transactions…"
+                class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
+                @input="onSearchInput"
+              />
+            </div>
+          </Transition>
 
           <div v-if="txLoading" class="space-y-2">
             <div v-for="i in 3" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
@@ -542,7 +625,11 @@ async function submitMove() {
           </div>
 
           <p v-else class="py-4 text-center text-sm text-neutral-500">
-            No transactions assigned to this budget yet.
+            {{
+              searchQuery
+                ? "No matching transactions."
+                : "No transactions assigned to this budget yet."
+            }}
           </p>
         </section>
 
