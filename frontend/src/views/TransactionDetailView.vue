@@ -18,7 +18,7 @@ import { useRoute, useRouter } from "vue-router";
 // app imports
 //
 import AllocationCard from "@/components/transactions/AllocationCard.vue";
-import BudgetPickerSheet from "@/components/transactions/BudgetPickerSheet.vue";
+import SplitEditorDialog from "@/components/transactions/SplitEditorDialog.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import { listAllocations } from "@/api/allocations";
@@ -175,16 +175,18 @@ const allocationStatus = computed<{
   }
 });
 
-const remaining = computed(() => {
-  const tx = transaction.value;
-  if (!tx) return "0.00";
-  const txAmount = new Decimal(tx.amount).abs();
-  const allocated = visibleAllocations.value.reduce(
-    (sum, a) => sum.plus(new Decimal(a.amount).abs()),
-    new Decimal(0),
-  );
-  return txAmount.minus(allocated).toFixed(2);
-});
+////////////////////////////////////////////////////////////////////////
+//
+// Splits to pre-populate the editor dialog from visible allocations.
+//
+const initialSplits = computed(() =>
+  visibleAllocations.value
+    .filter((a) => a.budget)
+    .map((a) => ({
+      budgetId: a.budget!,
+      amount: new Decimal(a.amount).abs().toFixed(2),
+    })),
+);
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -318,16 +320,14 @@ async function onRemoveAllocation(id: string) {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Budget picker — assign or add a split.
+// Split editor dialog — assign or edit allocations.
 //
 function openPicker() {
   pickerOpen.value = true;
 }
 
-async function onBudgetSelected(budget: { id: string }, amount: string) {
+async function onSplitSave(splits: Record<string, string>) {
   pickerOpen.value = false;
-  const splits = currentSplits();
-  splits[budget.id] = new Decimal(amount).abs().toFixed(2);
   await applySplits(splits);
 }
 
@@ -555,13 +555,15 @@ function navigateBudget(budgetId: string) {
       </p>
     </template>
 
-    <!-- Budget picker sheet -->
-    <BudgetPickerSheet
+    <!-- Split editor dialog -->
+    <SplitEditorDialog
       :open="pickerOpen"
       :budgets="budgets.all.filter((b) => b.bank_account === transaction?.bank_account)"
+      :transaction-amount="transaction?.amount ?? '0'"
+      :transaction-currency="transaction?.amount_currency ?? 'USD'"
+      :initial-splits="initialSplits"
       :unallocated-budget-id="ctx.unallocatedBudgetId"
-      :default-amount="remaining"
-      @select="onBudgetSelected"
+      @save="onSplitSave"
       @cancel="pickerOpen = false"
     />
   </AppShell>

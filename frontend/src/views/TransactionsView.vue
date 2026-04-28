@@ -120,8 +120,10 @@ const displayTransactions = computed(() => {
 //
 // Client-side filtering (applied after fetch, before grouping).
 //
-const filteredTransactions = computed(() => {
-  const list = transactions.value;
+// Extracted as a plain function so it can be applied to both the local
+// transaction list and server search results.
+//
+function applyActiveFilter(list: Transaction[]): Transaction[] {
   const unallocId = ctx.unallocatedBudgetId;
   switch (activeFilter.value) {
     case "unallocated":
@@ -144,7 +146,9 @@ const filteredTransactions = computed(() => {
     default:
       return list;
   }
-});
+}
+
+const filteredTransactions = computed(() => applyActiveFilter(transactions.value));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -241,19 +245,19 @@ function onSearchInput() {
     return;
   }
 
-  // Client-side fzf search over loaded transactions.
+  // Client-side fzf search over the already-filtered transaction list so
+  // the active filter chip is respected.
   if (fzfDebounce) clearTimeout(fzfDebounce);
   fzfDebounce = setTimeout(() => {
-    const fzf = new Fzf(transactions.value, {
+    const fzf = new Fzf(filteredTransactions.value, {
       selector: (tx: Transaction) => `${tx.party ?? ""} ${tx.description} ${tx.raw_description}`,
       casing: "case-insensitive",
       fuzzy: false,
     });
-    const results = fzf.find(q);
-    searchResults.value = results.map((r) => r.item);
+    searchResults.value = fzf.find(q).map((r) => r.item);
   }, 150);
 
-  // Server-side search for transactions not yet loaded.
+  // Server-side search for transactions not yet loaded into the local list.
   if (serverDebounce) clearTimeout(serverDebounce);
   serverDebounce = setTimeout(async () => {
     const accountId = ctx.activeBankAccountId;
@@ -264,9 +268,11 @@ function onSearchInput() {
         search: q,
         ordering: "-transaction_date,-created_at",
       });
-      // Merge server results with local fzf results, deduplicating.
+      // Apply the active filter to server results before merging so the
+      // chip constraint is honoured even for deep history.
+      const filtered = applyActiveFilter(page.results);
       const localIds = new Set((searchResults.value ?? []).map((tx) => tx.id));
-      const newFromServer = page.results.filter((tx) => !localIds.has(tx.id));
+      const newFromServer = filtered.filter((tx) => !localIds.has(tx.id));
       if (newFromServer.length > 0 && searchQuery.value.trim() === q) {
         searchResults.value = [...(searchResults.value ?? []), ...newFromServer];
       }
@@ -313,6 +319,8 @@ watch(searchQuery, (q) => {
 });
 watch(activeFilter, (f) => {
   txNav.savedFilter = f;
+  // Re-run search so results reflect the new filter immediately.
+  if (searchQuery.value.trim()) onSearchInput();
 });
 
 ////////////////////////////////////////////////////////////////////////

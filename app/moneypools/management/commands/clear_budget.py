@@ -238,6 +238,20 @@ class Command(BaseCommand):
                 n = reverse_internal_transactions(fillup)
                 self.stderr.write(f"  Done ({n} reversed).")
 
+        # Step 3: reset the complete flag so the budget is no longer marked
+        # funded.  The recurrence handler only clears this on a cycle reset,
+        # so it must be done explicitly here after the balance is zeroed.
+        if fillup is not None:
+            fillup.refresh_from_db()
+            if fillup.complete:
+                fillup.complete = False
+                fillup.save()
+        budget.refresh_from_db()
+        if budget.complete:
+            budget.complete = False
+            budget.save()
+            self.stderr.write("Reset 'complete' flag.")
+
         if also_delete:
             # budget_svc.delete() nulls the fillup_goal FK, deletes the
             # fill-up child, and deletes the budget row.  Balance is already

@@ -1,11 +1,9 @@
 """
-Backfill budget allocations for a recurring budget, month by month.
+Backfill budget allocations for a recurring or capped budget, month by month.
 
 This script walks the full transaction history for a bank account, grouped
 by calendar month, and interactively allocates transactions to a chosen
-recurring budget.  It maintains the budget's monthly funding schedule:
-the budget is initially topped up to its ``funding_amount``, and again at
-the end of each month before moving on to the next.
+budget.  It maintains the budget's funding schedule at period boundaries.
 
 Typical usage::
 
@@ -22,8 +20,12 @@ For each unallocated transaction the script:
   4. On ``y`` or ``a``: calls the split API on the transaction so that the
      full amount is allocated to the target budget with a correct
      ``budget_balance`` snapshot.
-  5. At the start and at the end of each month: tops up the budget from
-     Unallocated to reach its ``funding_amount``.
+  5. At the start and at the end of each period: funds the budget from
+     Unallocated according to its type:
+
+     * Recurring (R): tops up to ``target_balance`` at every period boundary.
+     * Capped (C): fills to ``target_balance`` initially, then adds the
+       fixed ``funding_amount`` per period (never exceeding ``target_balance``).
 
 Vendor auto-rules are stored in ``~/.mibudge/vendor_rules.json`` and
 persist across runs, keyed by budget UUID.
@@ -33,18 +35,20 @@ importer (CLI flags → env vars → .env file → Vault).
 """
 
 # system imports
+import bisect
 import calendar
 import json
 import logging
 import re
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 # 3rd party imports
 import click
+from dateutil.rrule import rrulestr
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -487,6 +491,113 @@ def _resolve_budget(
 ########################################################################
 ########################################################################
 #
+def _enumerate_schedule_dates(
+    sched_str: str,
+    start: date,
+    end: date,
+) -> list[date]:
+    """
+    Return all dates in [*start*, *end*] on which *sched_str* fires.
+
+    Parses the RFC 2445 recurrence string returned by the budget API using
+    dateutil, then collects every generated date in the requested window.
+    Returns an empty list on parse failure so callers fall back gracefully.
+
+    Args:
+        sched_str: RFC 2445 string (e.g. ``'RRULE:FREQ=MONTHLY;BYMONTHDAY=15,-1'``).
+        start:     Inclusive lower bound (first transaction date).
+        end:       Inclusive upper bound (last transaction date).
+
+    Returns:
+        Sorted list of dates on which the schedule fires within [start, end].
+    """
+    start_dt = datetime(start.year, start.month, start.day)
+    end_dt = datetime(end.year, end.month, end.day, 23, 59, 59)
+    try:
+        ruleset = rrulestr(
+            sched_str,
+            dtstart=start_dt,
+            ignoretz=True,
+            forceset=True,
+        )
+        return sorted(
+            {dt.date() for dt in ruleset.between(start_dt, end_dt, inc=True)}
+        )
+    except Exception as e:
+        logger.warning("Could not parse schedule %r: %s", sched_str, e)
+        return []
+
+
+########################################################################
+########################################################################
+#
+def _fund_by_amount(
+    client: MibudgeClient,
+    budget: dict[str, Any],
+    unallocated_id: str,
+    bank_account_id: str,
+    funding_amount: Decimal,
+    cap_balance: Decimal,
+    *,
+    console: Console,
+    label: str = "",
+) -> None:
+    """
+    Credit the budget by a fixed *funding_amount*, never exceeding *cap_balance*.
+
+    Fetches the current balance, computes
+    ``transfer = min(funding_amount, cap_balance - balance)``, and creates
+    an InternalTransaction from Unallocated if the transfer is positive.
+
+    Args:
+        client:           Authenticated MibudgeClient.
+        budget:           Budget dict (must have ``'id'`` and ``'name'``).
+        unallocated_id:   UUID of the account's Unallocated budget.
+        bank_account_id:  UUID of the bank account.
+        funding_amount:   Fixed amount to add per funding event.
+        cap_balance:      Hard ceiling -- the balance will never exceed this.
+        console:          Rich console for user-visible messages.
+        label:            Optional prefix string for the log line.
+    """
+    fresh = client.get(f"/api/v1/budgets/{budget['id']}/")
+    raw_balance = fresh.get("balance") or "0"
+    balance = Decimal(str(raw_balance)).quantize(Decimal("0.01"))
+    cap = cap_balance.quantize(Decimal("0.01"))
+
+    headroom = cap - balance
+    if headroom <= 0:
+        console.print(
+            f"[dim]{label}'{budget['name']}' already at cap "
+            f"(balance={balance}, cap={cap}).[/dim]"
+        )
+        return
+
+    transfer = min(funding_amount, headroom).quantize(Decimal("0.01"))
+    if transfer <= 0:
+        return
+
+    console.print(
+        f"[bold success]{label}Funding[/bold success] '{budget['name']}': "
+        f"+[success]{transfer}[/success]  "
+        f"([dim]{balance} → {balance + transfer}[/dim])"
+    )
+    try:
+        client.post(
+            "/api/v1/internal-transactions/",
+            {
+                "bank_account": bank_account_id,
+                "src_budget": unallocated_id,
+                "dst_budget": budget["id"],
+                "amount": str(transfer),
+            },
+        )
+    except APIError as e:
+        console.print(f"[error]Failed to fund budget: {e}[/error]")
+
+
+########################################################################
+########################################################################
+#
 def _fund_to_target(
     client: MibudgeClient,
     budget: dict[str, Any],
@@ -807,6 +918,9 @@ def _run_backfill(
     unallocated_id: str,
     funding_amount: Decimal,
     *,
+    budget_type: str = "R",
+    cap_balance: Decimal | None = None,
+    sched_str: str | None = None,
     yearly: bool = False,
     reset_month: int = 1,
     reset_day: int = 1,
@@ -821,16 +935,36 @@ def _run_backfill(
     True, periods are annual cycles starting on ``(reset_month, reset_day)``
     and the budget is topped up once at the end of each cycle year.
 
+    Funding behavior at period boundaries differs by type:
+
+    * Recurring (R): ``_fund_to_target`` -- tops up to ``funding_amount``
+      (which equals ``target_balance`` for recurring budgets).
+    * Capped (C): ``_fund_by_amount`` -- adds ``funding_amount`` but never
+      exceeds ``cap_balance`` (``target_balance``).
+
+    The initial top-up uses ``_fund_to_target`` for both types, but targets
+    the cap (``cap_balance``) for Capped budgets so the envelope starts full.
+
     Args:
         client:           Authenticated MibudgeClient.
         bank_account_id:  UUID of the bank account.
-        target_budget:    Budget dict (recurring budget to backfill into).
+        target_budget:    Budget dict to backfill into.
         unallocated_id:   UUID of the account's Unallocated budget.
-        funding_amount:   Per-period funding target (from budget.target_balance).
+        funding_amount:   Per-period credit amount.  For Recurring, this is
+                          ``target_balance`` (fill-to-target); for Capped
+                          this is the fixed ``funding_amount`` field.
+        budget_type:      ``'R'`` (Recurring) or ``'C'`` (Capped).
+        cap_balance:      Hard ceiling for Capped budgets (their
+                          ``target_balance``).  Ignored for Recurring.
+        sched_str:        RFC 2445 recurrence string for the budget's
+                          funding schedule (Capped budgets only).  When
+                          parseable, transactions are grouped by the actual
+                          firing dates rather than calendar months.
         yearly:           If True, group transactions by annual cycle.
         reset_month:      Month the annual cycle resets (ignored when not yearly).
         reset_day:        Day the annual cycle resets (ignored when not yearly).
         console:          Rich console.
+        theme:            Rich theme.
     """
     # ----------------------------------------------------------------
     # 1. Fetch all transactions for the account, sorted chronologically.
@@ -877,18 +1011,58 @@ def _run_backfill(
         allocs_by_tx[tx_id].append(alloc)
 
     # ----------------------------------------------------------------
-    # 3. Group transactions by period (month or annual cycle).
+    # 3. Group transactions by period.
+    #    Capped budgets with a parseable funding_schedule are grouped by
+    #    the actual schedule firing dates so that mid-month (or other
+    #    sub-calendar) funding events are honoured.  All other budgets
+    #    fall back to calendar-month or annual-cycle grouping.
     # ----------------------------------------------------------------
-    periods: dict[tuple[int, ...], list[dict[str, Any]]] = defaultdict(list)
-    for tx in all_transactions:
-        d = _parse_tx_date(tx["transaction_date"])
-        if yearly:
-            key: tuple[int, ...] = (
-                _cycle_year_for_date(d, reset_month, reset_day),
+    use_schedule_dates = False
+    funding_dates: list[date] = []
+    period_label_map: dict[Any, str] = {}
+    topup_label_map: dict[Any, str] = {}
+
+    if budget_type == "C" and sched_str:
+        first_date = _parse_tx_date(all_transactions[0]["transaction_date"])
+        last_date = _parse_tx_date(all_transactions[-1]["transaction_date"])
+        funding_dates = _enumerate_schedule_dates(
+            sched_str, first_date, last_date
+        )
+
+    periods: dict[Any, list[dict[str, Any]]]
+
+    if funding_dates:
+        use_schedule_dates = True
+        # Pre-create every period (including empty ones) so that top-ups
+        # fire at every funding date, not just those with transactions.
+        periods = {i: [] for i in range(len(funding_dates) + 1)}
+        for tx in all_transactions:
+            d = _parse_tx_date(tx["transaction_date"])
+            periods[bisect.bisect_left(funding_dates, d)].append(tx)
+
+        for i, fd in enumerate(funding_dates):
+            prev = funding_dates[i - 1] if i > 0 else None
+            start_str = (
+                "start"
+                if prev is None
+                else (prev + timedelta(days=1)).strftime("%b %-d")
             )
-        else:
-            key = (d.year, d.month)
-        periods[key].append(tx)
+            period_label_map[i] = f"{start_str} – {fd.strftime('%b %-d, %Y')}"
+            topup_label_map[i] = f"{fd.strftime('%b %-d')} top-up — "
+        last_p = len(funding_dates)
+        period_label_map[last_p] = (
+            f"{(funding_dates[-1] + timedelta(days=1)).strftime('%b %-d, %Y')}"
+            " – present"
+        )
+    else:
+        periods = defaultdict(list)
+        for tx in all_transactions:
+            d = _parse_tx_date(tx["transaction_date"])
+            if yearly:
+                key: Any = (_cycle_year_for_date(d, reset_month, reset_day),)
+            else:
+                key = (d.year, d.month)
+            periods[key].append(tx)
 
     sorted_periods = sorted(periods.keys())
     if not sorted_periods:
@@ -909,14 +1083,21 @@ def _run_backfill(
 
     # ----------------------------------------------------------------
     # 5. Initial funding: top up the budget before the first month.
+    #    Recurring: fill to target_balance (== funding_amount for recurring).
+    #    Capped: fill to cap so the backfill starts from a full envelope.
     # ----------------------------------------------------------------
     console.print()
+    initial_target = (
+        cap_balance
+        if (budget_type == "C" and cap_balance is not None)
+        else funding_amount
+    )
     _fund_to_target(
         client,
         target_budget,
         unallocated_id,
         bank_account_id,
-        funding_amount,
+        initial_target,
         console=console,
         label="Initial funding — ",
     )
@@ -934,14 +1115,22 @@ def _run_backfill(
     for period_idx, period_key in enumerate(sorted_periods):
         txs = periods[period_key]
 
-        if yearly:
+        if use_schedule_dates:
+            period_label: str = period_label_map.get(
+                period_key, str(period_key)
+            )
+            topup_label = topup_label_map.get(period_key, "Top-up — ")
+            py, pm = 1, 1
+        elif yearly:
             cy = period_key[0]
-            period_label: str = str(cy)
+            period_label = str(cy)
             topup_label = f"Year-end top-up ({cy}) — "
+            py, pm = cy, 1
         else:
             year, month = period_key[0], period_key[1]
             period_label = f"{calendar.month_name[month]} {year}"
             topup_label = "Month-end top-up — "
+            py, pm = year, month
 
         # Find candidates: exactly one allocation, and it's to Unallocated.
         candidates: list[tuple[dict[str, Any], str]] = []
@@ -967,8 +1156,8 @@ def _run_backfill(
             )
         else:
             allocated, skipped, auto_alloc, quit_requested = _process_month(
-                period_key[0],
-                period_key[1] if not yearly else 1,
+                py,
+                pm,
                 candidates,
                 client,
                 target_budget,
@@ -995,15 +1184,28 @@ def _run_backfill(
         # End-of-period top-up (skip for the last period).
         is_last_period = period_idx == len(sorted_periods) - 1
         if not is_last_period:
-            _fund_to_target(
-                client,
-                target_budget,
-                unallocated_id,
-                bank_account_id,
-                funding_amount,
-                console=console,
-                label=topup_label,
-            )
+            if budget_type == "C":
+                assert cap_balance is not None
+                _fund_by_amount(
+                    client,
+                    target_budget,
+                    unallocated_id,
+                    bank_account_id,
+                    funding_amount,
+                    cap_balance,
+                    console=console,
+                    label=topup_label,
+                )
+            else:
+                _fund_to_target(
+                    client,
+                    target_budget,
+                    unallocated_id,
+                    bank_account_id,
+                    funding_amount,
+                    console=console,
+                    label=topup_label,
+                )
         console.print()
 
     # ----------------------------------------------------------------
@@ -1158,34 +1360,72 @@ def cli_cmd(
 
             # --- Validate budget type ---
             budget_type = target_budget.get("budget_type", "")
-            if budget_type != "R":
+            if budget_type not in ("R", "C"):
                 raise click.ClickException(
                     f"Budget '{target_budget['name']}' has type {budget_type!r}. "
-                    "Only Recurring budgets (type 'R') are supported."
+                    "Only Recurring (R) and Capped (C) budgets are supported."
                 )
 
-            # --- Detect yearly vs monthly from recurrance_schedule ---
-            rec_str: str | None = target_budget.get("recurrance_schedule")
-            freq, dtstart = _parse_recurrance_schedule(rec_str)
+            # --- Detect period frequency ---
+            # Recurring uses recurrance_schedule; Capped uses funding_schedule.
+            if budget_type == "C":
+                sched_str: str | None = target_budget.get("funding_schedule")
+            else:
+                sched_str = target_budget.get("recurrance_schedule")
+            freq, dtstart = _parse_recurrance_schedule(sched_str)
             yearly = freq == "YEARLY"
             reset_month = dtstart.month if dtstart else 1
             reset_day = dtstart.day if dtstart else 1
 
-            # --- Determine the per-period funding target ---
-            # target_balance is the envelope ceiling: we top the budget up to
-            # this amount at the start of each period and after processing each
-            # period's transactions.
-            raw_funding = target_budget.get("target_balance")
-            if raw_funding is None:
-                raise click.ClickException(
-                    f"Budget '{target_budget['name']}' has no target_balance set."
+            # --- Determine funding amounts ---
+            if budget_type == "C":
+                # Per-period credit: funding_amount field.
+                # Hard ceiling:      target_balance field.
+                raw_funding = target_budget.get("funding_amount")
+                if raw_funding is None:
+                    raise click.ClickException(
+                        f"Budget '{target_budget['name']}' has no "
+                        "funding_amount set."
+                    )
+                funding_amount = Decimal(str(raw_funding)).quantize(
+                    Decimal("0.01")
                 )
-            funding_amount = Decimal(str(raw_funding)).quantize(Decimal("0.01"))
-            if funding_amount <= 0:
-                raise click.ClickException(
-                    f"Budget '{target_budget['name']}' target_balance is "
-                    f"{funding_amount}. Must be positive."
+                if funding_amount <= 0:
+                    raise click.ClickException(
+                        f"Budget '{target_budget['name']}' funding_amount is "
+                        f"{funding_amount}. Must be positive."
+                    )
+                raw_cap = target_budget.get("target_balance")
+                if raw_cap is None:
+                    raise click.ClickException(
+                        f"Budget '{target_budget['name']}' has no "
+                        "target_balance set."
+                    )
+                cap_balance: Decimal | None = Decimal(str(raw_cap)).quantize(
+                    Decimal("0.01")
                 )
+                if cap_balance <= 0:
+                    raise click.ClickException(
+                        f"Budget '{target_budget['name']}' target_balance is "
+                        f"{cap_balance}. Must be positive."
+                    )
+            else:
+                # Recurring: fill to target_balance each period.
+                raw_funding = target_budget.get("target_balance")
+                if raw_funding is None:
+                    raise click.ClickException(
+                        f"Budget '{target_budget['name']}' has no "
+                        "target_balance set."
+                    )
+                funding_amount = Decimal(str(raw_funding)).quantize(
+                    Decimal("0.01")
+                )
+                if funding_amount <= 0:
+                    raise click.ClickException(
+                        f"Budget '{target_budget['name']}' target_balance is "
+                        f"{funding_amount}. Must be positive."
+                    )
+                cap_balance = None
 
             if yearly:
                 period_desc = "Annual"
@@ -1197,11 +1437,23 @@ def cli_cmd(
                 period_desc = "Monthly"
                 reset_label = ""
 
+            if budget_type == "C":
+                amounts_label = (
+                    f"[bold]{period_desc} funding amount:[/bold]   "
+                    f"{funding_amount}\n"
+                    f"[bold]Cap (target_balance):[/bold]    {cap_balance}"
+                )
+            else:
+                amounts_label = (
+                    f"[bold]{period_desc} target (target_balance):[/bold] "
+                    f"{funding_amount}"
+                )
+
             console.print(
                 Panel(
                     f"[bold]Account:[/bold] {bank_account.get('name', bank_account_id)}\n"
                     f"[bold]Budget:[/bold]  {target_budget['name']}\n"
-                    f"[bold]{period_desc} target (target_balance):[/bold] {funding_amount}"
+                    f"{amounts_label}"
                     f"{reset_label}\n"
                     f"[bold]Rules file:[/bold] {_RULES_PATH}",
                     title="Backfill Configuration",
@@ -1215,6 +1467,9 @@ def cli_cmd(
                 target_budget,
                 unallocated_id,
                 funding_amount,
+                budget_type=budget_type,
+                cap_balance=cap_balance,
+                sched_str=sched_str,
                 yearly=yearly,
                 reset_month=reset_month,
                 reset_day=reset_day,
