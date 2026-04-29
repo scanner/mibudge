@@ -912,6 +912,12 @@ class InternalTransaction(TransactionBaseClass):
         related_name="budget_credits",
     )
     actor = models.ForeignKey(User, on_delete=models.CASCADE, editable=False)
+    # Economic datetime of the transfer -- when the funding conceptually
+    # happened, not when the row was created.  Defaults to now so live
+    # transfers are slotted correctly without any extra input.  Backfill
+    # sets this to the period-boundary datetime so running-balance snapshots
+    # place the ITx at the right point in the economic timeline.
+    effective_date = models.DateTimeField()
     src_budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,

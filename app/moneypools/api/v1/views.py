@@ -659,6 +659,7 @@ class InternalTransactionViewSet(
             dst_budget=data["dst_budget"],
             amount=data["amount"],
             actor=self.request.user,
+            effective_date=data.get("effective_date"),
         )
 
 

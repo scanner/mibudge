@@ -297,5 +297,6 @@ def _serialize_internal_tx(itx: InternalTransaction) -> dict[str, Any]:
         "actor_username": itx.actor.username,
         "src_budget_balance": _money(itx.src_budget_balance),
         "dst_budget_balance": _money(itx.dst_budget_balance),
+        "effective_date": itx.effective_date.isoformat(),
         "created_at": itx.created_at.isoformat(),
     }

@@ -170,17 +170,20 @@ def _internal_transaction_delta(
     after: datetime,
     before: datetime,
 ) -> Decimal:
-    """Sum the net InternalTransaction effect on budget in the half-open interval (after, before].
+    """Sum the net InternalTransaction effect on budget in (after, before].
+
+    Uses effective_date as the event timestamp so that backfill-supplied
+    economic datetimes take precedence over the physical row-creation time.
 
     Args:
         budget: The budget to check.
-        after: Exclusive lower bound on created_at.
-        before: Inclusive upper bound on created_at.
+        after: Exclusive lower bound (transaction_date of prior allocation).
+        before: Inclusive upper bound (transaction_date of current allocation).
 
     Returns:
         Net balance change from InternalTransactions in the window.
     """
-    window = Q(created_at__gt=after, created_at__lte=before)
+    window = Q(effective_date__gt=after, effective_date__lte=before)
     credits = InternalTransaction.objects.filter(dst_budget=budget).filter(
         window
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -188,6 +191,37 @@ def _internal_transaction_delta(
         window
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
     return Decimal(credits) - Decimal(debits)
+
+
+########################################################################
+########################################################################
+#
+def recalculate_from_dt(budget: Budget, from_dt: datetime) -> None:
+    """Trigger a running-balance recalculation starting from the first
+    allocation at or after from_dt.
+
+    Called by the InternalTransaction service after an ITx is created or
+    deleted, so that the allocation snapshots for both affected budgets
+    stay in sync with the new funding state.
+
+    Args:
+        budget: The budget whose snapshots need updating.
+        from_dt: Recalculate from the first allocation whose
+            transaction_date is >= this datetime.
+    """
+    first = (
+        TransactionAllocation.objects.filter(budget=budget)
+        .filter(transaction__transaction_date__gte=from_dt)
+        .order_by(
+            "transaction__transaction_date",
+            "transaction__created_at",
+            "created_at",
+        )
+        .select_related("transaction")
+        .first()
+    )
+    if first is not None:
+        _recalculate_running_balances(budget, first.transaction)
 
 
 ########################################################################
@@ -204,6 +238,11 @@ def _recalculate_running_balances(
     that changed the budget balance.
 
     Ordering: transaction_date, then transaction.created_at for ties.
+
+    Window boundaries use transaction.transaction_date (a datetime) rather
+    than allocation.created_at.  This prevents the same InternalTransaction
+    from being captured multiple times when allocations are added
+    out-of-chronological-session order.
 
     Args:
         budget: The budget whose allocations need recalculation.
@@ -238,7 +277,7 @@ def _recalculate_running_balances(
 
     if prior is not None:
         running = _money_amount(prior.budget_balance)
-        prev_created = prior.created_at
+        prev_dt = prior.transaction.transaction_date
     else:
         # Baseline: budget's current balance minus all allocation amounts
         # and all InternalTransaction net effects.
@@ -257,7 +296,7 @@ def _recalculate_running_balances(
             - Decimal(total_credits)
             + Decimal(total_debits)
         )
-        prev_created = datetime.min.replace(tzinfo=UTC)
+        prev_dt = datetime.min.replace(tzinfo=UTC)
 
     forward = (
         TransactionAllocation.objects.filter(budget=budget)
@@ -274,7 +313,7 @@ def _recalculate_running_balances(
 
     for alloc in forward:
         running += _internal_transaction_delta(
-            budget, after=prev_created, before=alloc.created_at
+            budget, after=prev_dt, before=alloc.transaction.transaction_date
         )
         running += _money_amount(alloc.amount)
         current = _money_amount(alloc.budget_balance)
@@ -282,4 +321,4 @@ def _recalculate_running_balances(
             TransactionAllocation.objects.filter(pk=alloc.pk).update(
                 budget_balance=running
             )
-        prev_created = alloc.created_at
+        prev_dt = alloc.transaction.transaction_date

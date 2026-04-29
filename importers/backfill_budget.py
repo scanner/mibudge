@@ -41,7 +41,7 @@ import json
 import logging
 import re
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -538,6 +538,7 @@ def _fund_by_amount(
     bank_account_id: str,
     funding_amount: Decimal,
     cap_balance: Decimal,
+    effective_date: datetime,
     *,
     console: Console,
     label: str = "",
@@ -556,6 +557,9 @@ def _fund_by_amount(
         bank_account_id:  UUID of the bank account.
         funding_amount:   Fixed amount to add per funding event.
         cap_balance:      Hard ceiling -- the balance will never exceed this.
+        effective_date:   Economic datetime of the transfer (UTC).  Used to
+                          slot the InternalTransaction correctly in the
+                          running-balance timeline.
         console:          Rich console for user-visible messages.
         label:            Optional prefix string for the log line.
     """
@@ -589,6 +593,7 @@ def _fund_by_amount(
                 "src_budget": unallocated_id,
                 "dst_budget": budget["id"],
                 "amount": str(transfer),
+                "effective_date": effective_date.isoformat(),
             },
         )
     except APIError as e:
@@ -604,6 +609,7 @@ def _fund_to_target(
     unallocated_id: str,
     bank_account_id: str,
     funding_amount: Decimal,
+    effective_date: datetime,
     *,
     console: Console,
     label: str = "",
@@ -620,6 +626,9 @@ def _fund_to_target(
         unallocated_id:   UUID of the account's Unallocated budget.
         bank_account_id:  UUID of the bank account.
         funding_amount:   Target balance to fund up to.
+        effective_date:   Economic datetime of the transfer (UTC).  Used to
+                          slot the InternalTransaction correctly in the
+                          running-balance timeline.
         console:          Rich console for user-visible messages.
         label:            Optional prefix string for the log line.
     """
@@ -649,6 +658,7 @@ def _fund_to_target(
                 "src_budget": unallocated_id,
                 "dst_budget": budget["id"],
                 "amount": str(deficit),
+                "effective_date": effective_date.isoformat(),
             },
         )
     except APIError as e:
@@ -1082,9 +1092,12 @@ def _run_backfill(
         )
 
     # ----------------------------------------------------------------
-    # 5. Initial funding: top up the budget before the first month.
+    # 5. Initial funding: top up the budget before the first period.
     #    Recurring: fill to target_balance (== funding_amount for recurring).
     #    Capped: fill to cap so the backfill starts from a full envelope.
+    #
+    #    effective_date is midnight UTC on the first transaction's date so
+    #    the ITx slots before any transactions on that day.
     # ----------------------------------------------------------------
     console.print()
     initial_target = (
@@ -1092,12 +1105,17 @@ def _run_backfill(
         if (budget_type == "C" and cap_balance is not None)
         else funding_amount
     )
+    first_tx_date = _parse_tx_date(all_transactions[0]["transaction_date"])
+    initial_effective_dt = datetime(
+        first_tx_date.year, first_tx_date.month, first_tx_date.day, tzinfo=UTC
+    )
     _fund_to_target(
         client,
         target_budget,
         unallocated_id,
         bank_account_id,
         initial_target,
+        initial_effective_dt,
         console=console,
         label="Initial funding — ",
     )
@@ -1121,16 +1139,43 @@ def _run_backfill(
             )
             topup_label = topup_label_map.get(period_key, "Top-up — ")
             py, pm = 1, 1
+            # period_key is a 0-based index; funding_dates[period_key] is
+            # the end of this period.  Effective_date = midnight UTC on
+            # the following day so the ITx sorts after all transactions on
+            # the funding date but before any in the next period.
+            period_funding_date: date | None = (
+                funding_dates[int(period_key)]
+                if period_key < len(funding_dates)
+                else None
+            )
+            if period_funding_date is not None:
+                next_day = period_funding_date + timedelta(days=1)
+                topup_effective_dt = datetime(
+                    next_day.year, next_day.month, next_day.day, tzinfo=UTC
+                )
+            else:
+                topup_effective_dt = datetime.now(UTC)
         elif yearly:
             cy = period_key[0]
             period_label = str(cy)
             topup_label = f"Year-end top-up ({cy}) — "
             py, pm = cy, 1
+            # Start of the next annual cycle.
+            topup_effective_dt = datetime(
+                cy + 1, reset_month, reset_day, tzinfo=UTC
+            )
         else:
             year, month = period_key[0], period_key[1]
             period_label = f"{calendar.month_name[month]} {year}"
             topup_label = "Month-end top-up — "
             py, pm = year, month
+            # Midnight UTC on the first day of the next month so the ITx
+            # sorts after all transactions in this month but before any
+            # in the next, regardless of the period length.
+            if month == 12:
+                topup_effective_dt = datetime(year + 1, 1, 1, tzinfo=UTC)
+            else:
+                topup_effective_dt = datetime(year, month + 1, 1, tzinfo=UTC)
 
         # Find candidates: exactly one allocation, and it's to Unallocated.
         candidates: list[tuple[dict[str, Any], str]] = []
@@ -1193,6 +1238,7 @@ def _run_backfill(
                     bank_account_id,
                     funding_amount,
                     cap_balance,
+                    topup_effective_dt,
                     console=console,
                     label=topup_label,
                 )
@@ -1203,6 +1249,7 @@ def _run_backfill(
                     unallocated_id,
                     bank_account_id,
                     funding_amount,
+                    topup_effective_dt,
                     console=console,
                     label=topup_label,
                 )
@@ -1404,6 +1451,7 @@ def cli_cmd(
                 cap_balance: Decimal | None = Decimal(str(raw_cap)).quantize(
                     Decimal("0.01")
                 )
+                assert cap_balance is not None
                 if cap_balance <= 0:
                     raise click.ClickException(
                         f"Budget '{target_budget['name']}' target_balance is "

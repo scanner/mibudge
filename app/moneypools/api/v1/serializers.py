@@ -1007,6 +1007,8 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
         queryset=Budget.objects.all(),
     )
 
+    effective_date = serializers.DateTimeField(required=False, default=None)
+
     class Meta:
         model = InternalTransaction
         fields = [
@@ -1017,6 +1019,7 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
             "src_budget",
             "dst_budget",
             "actor",
+            "effective_date",
             "src_budget_balance",
             "src_budget_balance_currency",
             "dst_budget_balance",

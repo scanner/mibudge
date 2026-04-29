@@ -1442,6 +1442,8 @@ class TestRunningBalanceWithInternalTransactions:
             imported_txs.append(tx)
 
         # -- Step 1: Initial funding -- top budget up to $500. --
+        # effective_date is before the first transaction (Jan 1 midnight)
+        # so the ITx slots before T1 in the running-balance timeline.
         unalloc.refresh_from_db()
         internal_transaction_factory(
             bank_account=account,
@@ -1449,6 +1451,7 @@ class TestRunningBalanceWithInternalTransactions:
             dst_budget=budget,
             amount=Money(500, "USD"),
             actor=user,
+            effective_date=datetime(2024, 1, 1, tzinfo=UTC),
         )
         budget.refresh_from_db()
         assert budget.balance == Money(500, "USD")
@@ -1485,6 +1488,8 @@ class TestRunningBalanceWithInternalTransactions:
         assert budget.balance == Money(300, "USD")
 
         # -- Step 3: Top-up -- fund back to $500. --
+        # effective_date is Jan 6 midnight so the ITx slots after T5
+        # (Jan 5) and is captured in T6's window (Jan 6).
         unalloc.refresh_from_db()
         internal_transaction_factory(
             bank_account=account,
@@ -1492,6 +1497,7 @@ class TestRunningBalanceWithInternalTransactions:
             dst_budget=budget,
             amount=Money(200, "USD"),
             actor=user,
+            effective_date=datetime(2024, 1, 6, tzinfo=UTC),
         )
         budget.refresh_from_db()
         assert budget.balance == Money(500, "USD")

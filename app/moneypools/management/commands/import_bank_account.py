@@ -274,6 +274,20 @@ def _money_required(d: dict[str, str] | None) -> Money:
 
 ####################################################################
 #
+def _parse_dt(s: str | None) -> datetime | None:
+    """Parse an ISO 8601 datetime string, returning None if absent.
+
+    Args:
+        s: ISO format datetime string, or None.
+
+    Returns:
+        A datetime instance, or None.
+    """
+    return datetime.fromisoformat(s) if s is not None else None
+
+
+####################################################################
+#
 def _recurrence(s: str | None) -> Any:
     """Deserialize an RFC 5545 recurrence string.
 
@@ -598,6 +612,7 @@ def _restore_internal_tx(
     amount = _money_required(d.get("amount"))
     src_bal = _money(d.get("src_budget_balance"))
     dst_bal = _money(d.get("dst_budget_balance"))
+    effective_date = _parse_dt(d.get("effective_date"))
 
     itx, _ = InternalTransaction.objects.get_or_create(
         id=UUID(d["id"]),
@@ -607,6 +622,7 @@ def _restore_internal_tx(
             "src_budget": src_budget,
             "dst_budget": dst_budget,
             "actor": actor,
+            "effective_date": effective_date,
         },
     )
 
@@ -614,6 +630,8 @@ def _restore_internal_tx(
     itx.src_budget = src_budget
     itx.dst_budget = dst_budget
     itx.actor = actor
+    if effective_date is not None:
+        itx.effective_date = effective_date
 
     if src_bal is not None:
         itx.src_budget_balance = src_bal
