@@ -719,6 +719,50 @@ class TestGoalCompletion:
         budget.refresh_from_db()
         assert budget.balance == Money(300, "USD")
 
+    ####################################################################
+    #
+    def test_complete_stays_sticky_after_spending_below_target(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: GOAL budget complete=True, balance=$300 (target); user spends
+               $100 so balance drops to $200 (below target)
+        WHEN:  fund_account runs on the next month's event
+        THEN:  no transfers; complete stays True; balance unchanged at $200
+        """
+        today = date(2026, 4, 1)
+        account = make_account(posted_through=today)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New High-tech Overpriced Sneakers",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(300, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        # Simulate: goal completed in March, user spent $100 in April
+        Budget.objects.filter(pkid=budget.pkid).update(
+            balance=Money(200, "USD"),
+            complete=True,
+            last_funded_on=date(2026, 3, 1),
+        )
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        assert report.transfers == 0
+        budget.refresh_from_db()
+        assert budget.complete is True
+        assert budget.balance == Money(200, "USD")
+
 
 ########################################################################
 ########################################################################
