@@ -165,7 +165,8 @@ class TransactionAllocationInline(admin.TabularInline):
 class BankAdmin(admin.ModelAdmin):
     list_display = ("name", "routing_number", "id")
     search_fields = ("name", "routing_number")
-    fields = ("name", "routing_number")
+    readonly_fields = ("id",)
+    fields = ("id", "name", "routing_number")
 
 
 ########################################################################
@@ -190,6 +191,7 @@ class BankAccountAdmin(admin.ModelAdmin):
     # are visible in the detail view and settable on creation.
     #
     fields = (
+        "id",
         "name",
         "bank",
         "account_type",
@@ -237,8 +239,9 @@ class BankAccountAdmin(admin.ModelAdmin):
         account_number remains editable so it can be filled in later.
         """
         if obj is None:
-            return ("unallocated_budget",)
+            return ("id", "unallocated_budget")
         return (
+            "id",
             "bank",
             "posted_balance",
             "available_balance",
@@ -260,6 +263,7 @@ class BudgetAdmin(admin.ModelAdmin):
         "target_balance",
         "paused",
         "archived",
+        "id",
     )
     list_filter = ("budget_type", "funding_type", "archived", "paused")
     search_fields = ("name",)
@@ -270,6 +274,7 @@ class BudgetAdmin(admin.ModelAdmin):
     # Show bank_account which is normally hidden due to editable=False.
     #
     fields = (
+        "id",
         "name",
         "bank_account",
         "budget_type",
@@ -328,8 +333,8 @@ class BudgetAdmin(admin.ModelAdmin):
         bank_account is immutable, archived fields are signal-managed.
         """
         if obj is None:
-            return ("archived", "archived_at")
-        return ("bank_account", "archived", "archived_at")
+            return ("id", "archived", "archived_at")
+        return ("id", "bank_account", "archived", "archived_at")
 
 
 ########################################################################
@@ -344,6 +349,7 @@ class TransactionAdmin(admin.ModelAdmin):
         "bank_account",
         "pending",
         "transaction_type",
+        "id",
     )
     list_filter = (
         "pending",
@@ -358,6 +364,7 @@ class TransactionAdmin(admin.ModelAdmin):
     # editable=False so they are visible in the detail view.
     #
     fields = (
+        "id",
         "bank_account",
         "transaction_date",
         "amount",
@@ -373,6 +380,7 @@ class TransactionAdmin(admin.ModelAdmin):
         "document",
     )
     readonly_fields = (
+        "id",
         "amount",
         "bank_account",
         "party",
@@ -394,10 +402,12 @@ class TransactionAllocationAdmin(admin.ModelAdmin):
         "budget",
         "amount",
         "category",
+        "id",
     )
     list_filter = ("category", "budget")
     search_fields = ("memo",)
     fields = (
+        "id",
         "transaction",
         "budget",
         "amount",
@@ -405,7 +415,7 @@ class TransactionAllocationAdmin(admin.ModelAdmin):
         "budget_balance",
         "memo",
     )
-    readonly_fields = ("transaction", "amount", "budget_balance")
+    readonly_fields = ("id", "transaction", "amount", "budget_balance")
 
 
 ########################################################################
@@ -486,6 +496,7 @@ class InternalTransactionAdmin(admin.ModelAdmin):
         "dst_budget",
         "actor",
         "bank_account",
+        "id",
     )
     list_filter = ("bank_account",)
 
@@ -519,6 +530,7 @@ class InternalTransactionAdmin(admin.ModelAdmin):
         if obj is None:
             return ("amount", "src_budget", "dst_budget")
         return (
+            "id",
             "bank_account",
             "amount",
             "src_budget",
@@ -537,6 +549,7 @@ class InternalTransactionAdmin(admin.ModelAdmin):
         if obj is None:
             return ()
         return (
+            "id",
             "amount",
             "bank_account",
             "src_budget",

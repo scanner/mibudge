@@ -16,22 +16,24 @@
 // 3rd party imports
 //
 import { Fzf } from "fzf";
-import { IconSearch, IconX } from "@tabler/icons-vue";
+import { IconArrowsRightLeft, IconSearch, IconX } from "@tabler/icons-vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
 
 // app imports
 //
 import AppShell from "@/components/layout/AppShell.vue";
 import EmptyState from "@/components/shared/EmptyState.vue";
+import InternalTransactionRow from "@/components/transactions/InternalTransactionRow.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
 import { listAllocations } from "@/api/allocations";
+import { listInternalTransactions } from "@/api/internalTransactions";
 import { listTransactions, listTransactionsNext } from "@/api/transactions";
 import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
-import type { Transaction, TransactionAllocation } from "@/types/api";
+import type { InternalTransaction, Transaction, TransactionAllocation } from "@/types/api";
 import { formatDateHeader, todayDateStr, txDateStr } from "@/utils/dates";
 
 ////////////////////////////////////////////////////////////////////////
@@ -69,6 +71,14 @@ const error = ref<string | null>(null);
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Internal transaction toggle state.
+//
+const showInternalTxs = ref(false);
+const internalTxs = ref<InternalTransaction[]>([]);
+const internalTxsLoading = ref(false);
+
+////////////////////////////////////////////////////////////////////////
+//
 // Search state.
 //
 const searchOpen = ref(!!txNav.savedSearch);
@@ -91,12 +101,15 @@ const budgetNames = computed(() => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Date-grouped transaction list.
+// Date-grouped display — mixes Transaction and InternalTransaction rows,
+// sorted by effective date within each group.
 //
+type DisplayRow = { kind: "tx"; tx: Transaction } | { kind: "itx"; itx: InternalTransaction };
+
 interface DateGroup {
   date: string;
   label: string;
-  transactions: Transaction[];
+  rows: DisplayRow[];
 }
 
 const displayTransactions = computed(() => {
@@ -104,15 +117,37 @@ const displayTransactions = computed(() => {
   const today = todayDateStr(tz);
   const source = searchResults.value ?? filteredTransactions.value;
   const map = new Map<string, DateGroup>();
+
   for (const tx of source) {
     const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
-      group = { date, label: formatDateHeader(date, today, tz), transactions: [] };
+      group = { date, label: formatDateHeader(date, today, tz), rows: [] };
       map.set(date, group);
     }
-    group.transactions.push(tx);
+    group.rows.push({ kind: "tx", tx });
   }
+
+  if (showInternalTxs.value) {
+    for (const itx of internalTxs.value) {
+      const date = txDateStr(itx.effective_date, tz);
+      let group = map.get(date);
+      if (!group) {
+        group = { date, label: formatDateHeader(date, today, tz), rows: [] };
+        map.set(date, group);
+      }
+      group.rows.push({ kind: "itx", itx });
+    }
+    // Sort rows within each group by date desc (transactions and transfers interleaved).
+    for (const group of map.values()) {
+      group.rows.sort((a, b) => {
+        const aDate = a.kind === "tx" ? a.tx.transaction_date : a.itx.effective_date;
+        const bDate = b.kind === "tx" ? b.tx.transaction_date : b.itx.effective_date;
+        return aDate > bDate ? -1 : aDate < bDate ? 1 : 0;
+      });
+    }
+  }
+
   return Array.from(map.values()).sort((a, b) => (a.date > b.date ? -1 : 1));
 });
 
@@ -120,8 +155,10 @@ const displayTransactions = computed(() => {
 //
 // Client-side filtering (applied after fetch, before grouping).
 //
-const filteredTransactions = computed(() => {
-  const list = transactions.value;
+// Extracted as a plain function so it can be applied to both the local
+// transaction list and server search results.
+//
+function applyActiveFilter(list: Transaction[]): Transaction[] {
   const unallocId = ctx.unallocatedBudgetId;
   switch (activeFilter.value) {
     case "unallocated":
@@ -144,7 +181,9 @@ const filteredTransactions = computed(() => {
     default:
       return list;
   }
-});
+}
+
+const filteredTransactions = computed(() => applyActiveFilter(transactions.value));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -202,6 +241,27 @@ async function loadMore() {
   }
 }
 
+async function loadInternalTransactions() {
+  const accountId = ctx.activeBankAccountId;
+  if (!accountId) return;
+  internalTxsLoading.value = true;
+  try {
+    const firstPage = await listInternalTransactions({ bank_account: accountId });
+    internalTxs.value = await fetchAllPages(firstPage);
+  } catch {
+    // Non-fatal — toggle shows nothing if load fails.
+  } finally {
+    internalTxsLoading.value = false;
+  }
+}
+
+async function toggleInternalTxs() {
+  showInternalTxs.value = !showInternalTxs.value;
+  if (showInternalTxs.value && internalTxs.value.length === 0) {
+    await loadInternalTransactions();
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////
 //
 // Infinite scroll via IntersectionObserver on a sentinel element.
@@ -241,19 +301,19 @@ function onSearchInput() {
     return;
   }
 
-  // Client-side fzf search over loaded transactions.
+  // Client-side fzf search over the already-filtered transaction list so
+  // the active filter chip is respected.
   if (fzfDebounce) clearTimeout(fzfDebounce);
   fzfDebounce = setTimeout(() => {
-    const fzf = new Fzf(transactions.value, {
+    const fzf = new Fzf(filteredTransactions.value, {
       selector: (tx: Transaction) => `${tx.party ?? ""} ${tx.description} ${tx.raw_description}`,
       casing: "case-insensitive",
       fuzzy: false,
     });
-    const results = fzf.find(q);
-    searchResults.value = results.map((r) => r.item);
+    searchResults.value = fzf.find(q).map((r) => r.item);
   }, 150);
 
-  // Server-side search for transactions not yet loaded.
+  // Server-side search for transactions not yet loaded into the local list.
   if (serverDebounce) clearTimeout(serverDebounce);
   serverDebounce = setTimeout(async () => {
     const accountId = ctx.activeBankAccountId;
@@ -264,9 +324,11 @@ function onSearchInput() {
         search: q,
         ordering: "-transaction_date,-created_at",
       });
-      // Merge server results with local fzf results, deduplicating.
+      // Apply the active filter to server results before merging so the
+      // chip constraint is honoured even for deep history.
+      const filtered = applyActiveFilter(page.results);
       const localIds = new Set((searchResults.value ?? []).map((tx) => tx.id));
-      const newFromServer = page.results.filter((tx) => !localIds.has(tx.id));
+      const newFromServer = filtered.filter((tx) => !localIds.has(tx.id));
       if (newFromServer.length > 0 && searchQuery.value.trim() === q) {
         searchResults.value = [...(searchResults.value ?? []), ...newFromServer];
       }
@@ -313,13 +375,23 @@ watch(searchQuery, (q) => {
 });
 watch(activeFilter, (f) => {
   txNav.savedFilter = f;
+  // Re-run search so results reflect the new filter immediately.
+  if (searchQuery.value.trim()) onSearchInput();
 });
 
 ////////////////////////////////////////////////////////////////////////
 //
 // Watch account changes and re-setup observer when sentinel remounts.
 //
-watch(() => ctx.activeBankAccountId, loadTransactions, { immediate: true });
+watch(
+  () => ctx.activeBankAccountId,
+  () => {
+    internalTxs.value = [];
+    loadTransactions();
+    if (showInternalTxs.value) loadInternalTransactions();
+  },
+  { immediate: true },
+);
 
 // Re-run search after data loads if there's a restored query.
 watch(transactions, (txs) => {
@@ -337,6 +409,20 @@ watch(sentinel, (el) => {
 <template>
   <AppShell>
     <template #action>
+      <button
+        type="button"
+        class="flex h-10 w-10 items-center justify-center rounded-full transition-colors"
+        :class="
+          showInternalTxs
+            ? 'bg-ocean-400 text-white hover:bg-ocean-600'
+            : 'text-neutral-700 hover:bg-neutral-100'
+        "
+        aria-label="Toggle transfers"
+        :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
+        @click="toggleInternalTxs"
+      >
+        <IconArrowsRightLeft class="h-5 w-5" />
+      </button>
       <button
         type="button"
         class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
@@ -407,14 +493,23 @@ watch(sentinel, (el) => {
             {{ group.label }}
           </h2>
           <div class="space-y-2">
-            <TransactionRow
-              v-for="tx in group.transactions"
-              :key="tx.id"
-              :transaction="tx"
-              :allocations="allocsByTx.get(tx.id)"
-              :budget-names="budgetNames"
-              :unallocated-budget-id="ctx.unallocatedBudgetId"
-            />
+            <template
+              v-for="row in group.rows"
+              :key="row.kind + (row.kind === 'tx' ? row.tx.id : row.itx.id)"
+            >
+              <TransactionRow
+                v-if="row.kind === 'tx'"
+                :transaction="row.tx"
+                :allocations="allocsByTx.get(row.tx.id)"
+                :budget-names="budgetNames"
+                :unallocated-budget-id="ctx.unallocatedBudgetId"
+              />
+              <InternalTransactionRow
+                v-else
+                :internal-transaction="row.itx"
+                :budget-names="budgetNames"
+              />
+            </template>
           </div>
         </section>
       </div>

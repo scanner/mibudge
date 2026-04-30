@@ -7,6 +7,9 @@ Operations:
         and back-links unallocated_budget_id.  Logic moved from the
         bank_account_post_save signal.
 
+    update(account, **changes)
+        Applies arbitrary field changes under a bank account lock.
+
     rename(account, name)
         Updates the name field under a bank account lock.
 
@@ -88,6 +91,32 @@ def create(
 
 ########################################################################
 ########################################################################
+#
+def update(account: BankAccount, **changes: Any) -> BankAccount:
+    """Update mutable fields on an existing bank account.
+
+    Acquires the account lock, applies *changes*, and saves.  Intended
+    for API-level updates where only non-financial fields (name,
+    account_number) are modified.
+
+    Args:
+        account: The BankAccount instance to update.
+        **changes: Field-value pairs to apply.
+
+    Returns:
+        The updated BankAccount instance (refreshed from DB).
+    """
+    with acquire_lock(account.lock_key):
+        with db_transaction.atomic():
+            for field, value in changes.items():
+                setattr(account, field, value)
+            account.save()
+
+    account.refresh_from_db()
+    return account
+
+
+####################################################################
 #
 def rename(account: BankAccount, name: str) -> BankAccount:
     """Rename a bank account.

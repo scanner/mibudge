@@ -20,6 +20,7 @@ from moneypools.models import (
     InternalTransaction,
     Transaction,
     TransactionAllocation,
+    get_default_currency,
 )
 from tests.moneypools.factories import (
     BankAccountFactory,
@@ -593,6 +594,68 @@ class TestBudgetAPI:
         unalloc = Budget.objects.get(id=account.unallocated_budget.id)
         assert unalloc.balance == unalloc_balance_before + Money(300, USD)
 
+    ####################################################################
+    #
+    def test_create_recurring_with_fillup_goal_creates_child(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: an owned bank account
+        WHEN:  POST /api/v1/budgets/ with budget_type=R and with_fillup_goal=True
+        THEN:  the response includes a fillup_goal UUID and an
+               ASSOCIATED_FILLUP_GOAL child budget exists in the DB
+        """
+        account = bank_account_factory(owners=[user])
+        response = auth_client.post(
+            reverse("api_v1:budget-list"),
+            {
+                "name": "Eating Out",
+                "bank_account": str(account.id),
+                "budget_type": "R",
+                "funding_type": "F",
+                "target_balance": "300.00",
+                "with_fillup_goal": True,
+            },
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["fillup_goal"] is not None
+        fillup_id = response.data["fillup_goal"]
+        fillup = Budget.objects.get(id=fillup_id)
+        assert fillup.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL
+        assert fillup.name == "Eating Out Fill-up"
+
+    ####################################################################
+    #
+    def test_patch_enable_fillup_goal_creates_child(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Recurring budget without a fill-up goal
+        WHEN:  PATCH /api/v1/budgets/<uuid>/ with with_fillup_goal=True
+        THEN:  an ASSOCIATED_FILLUP_GOAL child is created and linked
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(
+            bank_account=account, budget_type="R", with_fillup_goal=False
+        )
+        assert budget.fillup_goal_id is None
+
+        response = auth_client.patch(
+            reverse("api_v1:budget-detail", kwargs={"id": budget.id}),
+            {"with_fillup_goal": True},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["fillup_goal"] is not None
+        fillup = Budget.objects.get(id=response.data["fillup_goal"])
+        assert fillup.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL
+
 
 ########################################################################
 ########################################################################
@@ -684,6 +747,43 @@ class TestTransactionAPI:
         assert response.status_code == status.HTTP_200_OK
         tx.refresh_from_db()
         assert tx.description == "Cleaned up description"
+
+    ####################################################################
+    #
+    def test_pending_to_posted_updates_posted_balance(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        transaction_factory: Callable[..., Transaction],
+    ) -> None:
+        """
+        GIVEN: a pending transaction on an account
+        WHEN:  PATCH /api/v1/transactions/<uuid>/ with pending=False
+        THEN:  the transaction is marked posted and the account's
+               posted_balance is updated by the transaction amount
+        """
+        account = bank_account_factory(owners=[user])
+        posted_balance_before = account.posted_balance
+
+        tx = transaction_factory(
+            bank_account=account,
+            amount=Money(-50, get_default_currency()),
+            pending=True,
+        )
+        account.refresh_from_db()
+        # Pending transactions do not affect posted_balance.
+        assert account.posted_balance == posted_balance_before
+
+        response = auth_client.patch(
+            reverse("api_v1:transaction-detail", kwargs={"id": tx.id}),
+            {"pending": False},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        account.refresh_from_db()
+        assert account.posted_balance == posted_balance_before + Money(
+            -50, get_default_currency()
+        )
 
     ####################################################################
     #
@@ -1342,6 +1442,8 @@ class TestRunningBalanceWithInternalTransactions:
             imported_txs.append(tx)
 
         # -- Step 1: Initial funding -- top budget up to $500. --
+        # effective_date is before the first transaction (Jan 1 midnight)
+        # so the ITx slots before T1 in the running-balance timeline.
         unalloc.refresh_from_db()
         internal_transaction_factory(
             bank_account=account,
@@ -1349,6 +1451,7 @@ class TestRunningBalanceWithInternalTransactions:
             dst_budget=budget,
             amount=Money(500, "USD"),
             actor=user,
+            effective_date=datetime(2024, 1, 1, tzinfo=UTC),
         )
         budget.refresh_from_db()
         assert budget.balance == Money(500, "USD")
@@ -1385,6 +1488,8 @@ class TestRunningBalanceWithInternalTransactions:
         assert budget.balance == Money(300, "USD")
 
         # -- Step 3: Top-up -- fund back to $500. --
+        # effective_date is Jan 6 midnight so the ITx slots after T5
+        # (Jan 5) and is captured in T6's window (Jan 6).
         unalloc.refresh_from_db()
         internal_transaction_factory(
             bank_account=account,
@@ -1392,6 +1497,7 @@ class TestRunningBalanceWithInternalTransactions:
             dst_budget=budget,
             amount=Money(200, "USD"),
             actor=user,
+            effective_date=datetime(2024, 1, 6, tzinfo=UTC),
         )
         budget.refresh_from_db()
         assert budget.balance == Money(500, "USD")

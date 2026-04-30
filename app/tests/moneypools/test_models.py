@@ -899,11 +899,13 @@ class TestTransactionAllocation:
         budget = budget_factory(bank_account=account, balance=Money(0, USD))
 
         # Fund the budget: +$500.
+        # effective_date = Jan 1 midnight so it slots before any Jan 1 tx.
         internal_transaction_factory(
             bank_account=account,
             src_budget=unalloc,
             dst_budget=budget,
             amount=Money(500, USD),
+            effective_date=datetime(2024, 1, 1, tzinfo=UTC),
         )
         budget.refresh_from_db()
         assert budget.balance == Money(500, USD)
@@ -937,6 +939,8 @@ class TestTransactionAllocation:
         assert a2.budget_balance == Money(300, USD)
 
         # Mid-stream top-up: +$200 -> budget now $500.
+        # effective_date = Jan 3 midnight so it slots after tx2 (Jan 2)
+        # and is captured in tx3's window (Jan 3).
         budget.refresh_from_db()
         assert budget.balance == Money(300, USD)
         unalloc.refresh_from_db()
@@ -946,6 +950,7 @@ class TestTransactionAllocation:
             src_budget=unalloc,
             dst_budget=budget,
             amount=Money(200, USD),
+            effective_date=datetime(2024, 1, 3, tzinfo=UTC),
         )
         budget.refresh_from_db()
         assert budget.balance == Money(500, USD)

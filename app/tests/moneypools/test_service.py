@@ -119,6 +119,83 @@ class TestBudgetService:
             == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL
         )
         assert budget.fillup_goal.name == "Groceries Fill-up"
+        assert budget.fillup_goal.target_balance == Money(200, "USD")
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "field,new_value,fillup_attr,expected",
+        [
+            (
+                "target_balance",
+                Money(300, "USD"),
+                "target_balance",
+                Money(300, "USD"),
+            ),
+            (
+                "name",
+                "Rent",
+                "name",
+                "Rent Fill-up",
+            ),
+        ],
+    )
+    def test_update_syncs_fillup_goal(
+        self,
+        field: str,
+        new_value: object,
+        fillup_attr: str,
+        expected: object,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget with an existing fill-up goal
+        WHEN:  budget_svc.update() changes target_balance or name
+        THEN:  the fill-up goal's corresponding field is updated to match
+        """
+        account = bank_account_factory()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(200, "USD"),
+            with_fillup_goal=True,
+        )
+        assert budget.fillup_goal is not None
+
+        budget_svc.update(budget, **{field: new_value})
+
+        budget.fillup_goal.refresh_from_db()
+        assert getattr(budget.fillup_goal, fillup_attr) == expected
+
+    ####################################################################
+    #
+    def test_update_unrelated_field_does_not_touch_fillup_goal(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget with an existing fill-up goal
+        WHEN:  budget_svc.update() changes a field not in _FILLUP_SYNCED_FIELDS
+        THEN:  the fill-up goal is not modified
+        """
+        account = bank_account_factory()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(200, "USD"),
+            with_fillup_goal=True,
+        )
+        assert budget.fillup_goal is not None
+        fillup_before = budget.fillup_goal.modified_at
+
+        budget_svc.update(budget, memo="updated memo")
+
+        budget.fillup_goal.refresh_from_db()
+        assert budget.fillup_goal.modified_at == fillup_before
 
 
 ########################################################################

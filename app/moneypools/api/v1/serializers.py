@@ -192,6 +192,8 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "available_balance",
             "available_balance_currency",
             "unallocated_budget",
+            "last_imported_at",
+            "last_posted_through",
             "created_at",
             "modified_at",
         ]
@@ -201,6 +203,8 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "posted_balance_currency",
             "available_balance_currency",
             "unallocated_budget",
+            "last_imported_at",
+            "last_posted_through",
             "created_at",
             "modified_at",
         ]
@@ -686,7 +690,11 @@ class TransactionSerializer(serializers.ModelSerializer):
     ####################################################################
     #
     def validate_pending(self, value: bool) -> bool:
-        """Prevent changing pending after creation.
+        """Prevent reverting a posted transaction back to pending.
+
+        The pending → posted transition is valid (normal settlement flow)
+        and is handled by TransactionService.update().  The reverse is
+        not meaningful and is rejected.
 
         Args:
             value: The pending flag.
@@ -695,11 +703,16 @@ class TransactionSerializer(serializers.ModelSerializer):
             The validated flag.
 
         Raises:
-            ValidationError: If this is an update.
+            ValidationError: If attempting to set pending=True on a
+                transaction that is already posted.
         """
-        if self.instance is not None:
+        if (
+            self.instance is not None
+            and value is True
+            and not self.instance.pending
+        ):
             raise serializers.ValidationError(
-                "Cannot change the pending status after creation."
+                "Cannot revert a posted transaction to pending."
             )
         return value
 
@@ -994,6 +1007,8 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
         queryset=Budget.objects.all(),
     )
 
+    effective_date = serializers.DateTimeField(required=False, default=None)
+
     class Meta:
         model = InternalTransaction
         fields = [
@@ -1004,6 +1019,7 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
             "src_budget",
             "dst_budget",
             "actor",
+            "effective_date",
             "src_budget_balance",
             "src_budget_balance_currency",
             "dst_budget_balance",

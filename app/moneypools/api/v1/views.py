@@ -12,10 +12,12 @@ standard CRUD operations with restrictions documented per-viewset.
 """
 
 # system imports
+from datetime import date
 from decimal import Decimal
 
 # 3rd party imports
 import moneyed
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiResponse,
@@ -156,6 +158,15 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
 
     ####################################################################
     #
+    def perform_update(self, serializer: BankAccountSerializer) -> None:
+        """Update a bank account via BankAccountService (acquires lock)."""
+        bank_account_svc.update(
+            serializer.instance, **serializer.validated_data
+        )
+        serializer.instance.refresh_from_db()
+
+    ####################################################################
+    #
     def perform_create(self, serializer: BankAccountSerializer) -> None:
         """Create a bank account via BankAccountService."""
         data = serializer.validated_data
@@ -177,6 +188,58 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             **optional,
         )
         serializer.instance = account
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Mark import complete",
+        description=(
+            "Record that a transaction import has been completed for "
+            "this account.  Sets last_imported_at to now and advances "
+            "last_posted_through to the supplied date (never regresses "
+            'an existing value).  Body: {"last_posted_through": "YYYY-MM-DD"}.'
+        ),
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "last_posted_through": {"type": "string", "format": "date"}
+                },
+                "required": ["last_posted_through"],
+            }
+        },
+        responses={200: BankAccountSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="mark-imported")
+    def mark_imported(self, request: Request, id: str = "") -> Response:
+        """Set last_imported_at=now and advance last_posted_through."""
+        account: BankAccount = self.get_object()
+
+        raw = request.data.get("last_posted_through")
+        if not raw:
+            raise ValidationError(
+                {"last_posted_through": "This field is required."}
+            )
+        try:
+            posted_through = date.fromisoformat(str(raw))
+        except ValueError as exc:
+            raise ValidationError(
+                {"last_posted_through": "Expected YYYY-MM-DD format."}
+            ) from exc
+
+        new_posted_through = (
+            max(account.last_posted_through, posted_through)
+            if account.last_posted_through is not None
+            else posted_through
+        )
+
+        BankAccount.objects.filter(pkid=account.pkid).update(
+            last_imported_at=timezone.now(),
+            last_posted_through=new_posted_through,
+        )
+        account.refresh_from_db()
+        serializer = self.get_serializer(account)
+        return Response(serializer.data)
 
 
 ########################################################################
@@ -241,6 +304,41 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     search_fields = ["name"]
     ordering_fields = ["name", "created_at", "balance"]
     ordering = ["name"]
+
+    ####################################################################
+    #
+    def perform_create(self, serializer: BudgetSerializer) -> None:
+        """Create a budget via the service layer so fill-up goal is created.
+
+        Raises:
+            ValidationError: On service-layer errors.
+        """
+        validated = serializer.validated_data
+        bank_account = validated.pop("bank_account")
+        name = validated.pop("name")
+        budget_type = validated.pop("budget_type")
+        funding_type = validated.pop("funding_type")
+        target_balance = validated.pop("target_balance")
+        budget = budget_svc.create(
+            bank_account=bank_account,
+            name=name,
+            budget_type=budget_type,
+            funding_type=funding_type,
+            target_balance=target_balance,
+            **validated,
+        )
+        serializer.instance = budget
+
+    ####################################################################
+    #
+    def perform_update(self, serializer: BudgetSerializer) -> None:
+        """Update a budget via the service layer so fill-up goal is created.
+
+        Raises:
+            ValidationError: On service-layer errors.
+        """
+        budget_svc.update(serializer.instance, **serializer.validated_data)
+        serializer.instance.refresh_from_db()
 
     ####################################################################
     #
@@ -374,6 +472,17 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             description=data.get("description", ""),
         )
         serializer.instance = tx
+
+    ####################################################################
+    #
+    def perform_update(self, serializer: TransactionSerializer) -> None:
+        """Update a transaction via TransactionService.
+
+        Routes through the service so that a pending → posted transition
+        correctly updates the bank account's posted_balance.
+        """
+        transaction_svc.update(serializer.instance, **serializer.validated_data)
+        serializer.instance.refresh_from_db()
 
     ####################################################################
     #
@@ -550,6 +659,7 @@ class InternalTransactionViewSet(
             dst_budget=data["dst_budget"],
             amount=data["amount"],
             actor=self.request.user,
+            effective_date=data.get("effective_date"),
         )
 
 

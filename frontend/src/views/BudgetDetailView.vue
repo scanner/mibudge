@@ -21,9 +21,13 @@ import {
   IconPencil,
   IconPlayerPause,
   IconRefresh,
+  IconSearch,
   IconTarget,
+  IconX,
 } from "@tabler/icons-vue";
-import { computed, nextTick, onMounted, ref } from "vue";
+
+import { Fzf } from "fzf";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
@@ -33,11 +37,12 @@ import BudgetForm from "@/components/budgets/BudgetForm.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import InternalTransactionRow from "@/components/transactions/InternalTransactionRow.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
 import { listAllocations } from "@/api/allocations";
 import { archiveBudget, getBudget, updateBudget } from "@/api/budgets";
 import { listBudgets } from "@/api/budgets";
-import { createInternalTransaction } from "@/api/internalTransactions";
+import { createInternalTransaction, listInternalTransactions } from "@/api/internalTransactions";
 import { getTransaction, splitTransaction } from "@/api/transactions";
 import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
@@ -46,7 +51,7 @@ import { useBudgetsStore } from "@/stores/budgets";
 import { parseLocalDate } from "@/utils/budget";
 import { formatDateHeader, todayDateStr, txDateStr } from "@/utils/dates";
 import { rruleHuman } from "@/utils/rrule";
-import type { Budget, Transaction, TransactionAllocation } from "@/types/api";
+import type { Budget, InternalTransaction, Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -99,6 +104,19 @@ onMounted(load);
 const budgetTransactions = ref<Transaction[]>([]);
 const budgetAllocsByTx = ref(new Map<string, TransactionAllocation[]>());
 const txLoading = ref(false);
+const searchOpen = ref(false);
+const searchQuery = ref("");
+const searchResults = ref<Transaction[] | null>(null);
+let fzfDebounce: ReturnType<typeof setTimeout> | null = null;
+const searchInput = ref<HTMLInputElement | null>(null);
+
+////////////////////////////////////////////////////////////////////////
+//
+// Internal transaction toggle state.
+//
+const showInternalTxs = ref(false);
+const budgetInternalTxs = ref<InternalTransaction[]>([]);
+const internalTxsLoading = ref(false);
 
 const budgetNames = computed(() => {
   const map = new Map<string, string>();
@@ -106,25 +124,54 @@ const budgetNames = computed(() => {
   return map;
 });
 
+////////////////////////////////////////////////////////////////////////
+//
+// Date-grouped display — mixes Transaction and InternalTransaction rows,
+// sorted by effective date within each group.
+//
+type DisplayRow = { kind: "tx"; tx: Transaction } | { kind: "itx"; itx: InternalTransaction };
+
 interface DateGroup {
   date: string;
   label: string;
-  transactions: Transaction[];
+  rows: DisplayRow[];
 }
 
 const displayTransactions = computed(() => {
   const tz = auth.timezone;
   const today = todayDateStr(tz);
   const map = new Map<string, DateGroup>();
-  for (const tx of budgetTransactions.value) {
+
+  for (const tx of searchResults.value ?? budgetTransactions.value) {
     const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
-      group = { date, label: formatDateHeader(date, today, tz), transactions: [] };
+      group = { date, label: formatDateHeader(date, today, tz), rows: [] };
       map.set(date, group);
     }
-    group.transactions.push(tx);
+    group.rows.push({ kind: "tx", tx });
   }
+
+  if (showInternalTxs.value) {
+    for (const itx of budgetInternalTxs.value) {
+      const date = txDateStr(itx.effective_date, tz);
+      let group = map.get(date);
+      if (!group) {
+        group = { date, label: formatDateHeader(date, today, tz), rows: [] };
+        map.set(date, group);
+      }
+      group.rows.push({ kind: "itx", itx });
+    }
+    // Sort rows within each group by date desc.
+    for (const group of map.values()) {
+      group.rows.sort((a, b) => {
+        const aDate = a.kind === "tx" ? a.tx.transaction_date : a.itx.effective_date;
+        const bDate = b.kind === "tx" ? b.tx.transaction_date : b.itx.effective_date;
+        return aDate > bDate ? -1 : aDate < bDate ? 1 : 0;
+      });
+    }
+  }
+
   return Array.from(map.values()).sort((a, b) => (a.date > b.date ? -1 : 1));
 });
 
@@ -166,6 +213,69 @@ async function loadBudgetTransactions() {
 
 onMounted(loadBudgetTransactions);
 
+async function loadBudgetInternalTransactions() {
+  internalTxsLoading.value = true;
+  try {
+    const firstPage = await listInternalTransactions({ budget: props.id });
+    budgetInternalTxs.value = await fetchAllPages(firstPage);
+  } catch {
+    // Non-fatal.
+  } finally {
+    internalTxsLoading.value = false;
+  }
+}
+
+async function toggleInternalTxs() {
+  showInternalTxs.value = !showInternalTxs.value;
+  if (showInternalTxs.value && budgetInternalTxs.value.length === 0) {
+    await loadBudgetInternalTransactions();
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// Transaction search — client-side fzf only (all transactions loaded in memory).
+//
+function onSearchInput() {
+  const q = searchQuery.value.trim();
+  if (!q) {
+    searchResults.value = null;
+    return;
+  }
+  if (fzfDebounce) clearTimeout(fzfDebounce);
+  fzfDebounce = setTimeout(() => {
+    const fzf = new Fzf(budgetTransactions.value, {
+      selector: (tx: Transaction) => `${tx.party ?? ""} ${tx.description} ${tx.raw_description}`,
+      casing: "case-insensitive",
+      fuzzy: false,
+    });
+    searchResults.value = fzf.find(q).map((r) => r.item);
+  }, 150);
+}
+
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value;
+  if (!searchOpen.value) {
+    searchQuery.value = "";
+    searchResults.value = null;
+  } else {
+    nextTick(() => searchInput.value?.focus());
+  }
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    if (!searchOpen.value) searchOpen.value = true;
+    nextTick(() => searchInput.value?.focus());
+  } else if (e.key === "Escape" && searchOpen.value) {
+    toggleSearch();
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onSearchKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onSearchKeydown));
+
 async function onRemoveTransaction(transactionId: string) {
   const allocs = budgetAllocsByTx.value.get(transactionId);
   if (!allocs) return;
@@ -184,8 +294,11 @@ async function onRemoveTransaction(transactionId: string) {
     }
     await splitTransaction(transactionId, splits);
 
-    // Remove from local lists.
+    // Remove from local lists (both the source array and any active search results).
     budgetTransactions.value = budgetTransactions.value.filter((tx) => tx.id !== transactionId);
+    if (searchResults.value) {
+      searchResults.value = searchResults.value.filter((tx) => tx.id !== transactionId);
+    }
     budgetAllocsByTx.value.delete(transactionId);
 
     // Refresh budget to update balance.
@@ -511,9 +624,56 @@ async function submitMove() {
 
         <!-- Transactions section -->
         <section class="mt-2">
-          <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-            Transactions
-          </h2>
+          <div class="mb-2 flex items-center justify-between">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+              Transactions
+            </h2>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="flex h-7 w-7 items-center justify-center rounded-full transition-colors"
+                :class="
+                  showInternalTxs
+                    ? 'bg-ocean-400 text-white hover:bg-ocean-600'
+                    : 'text-neutral-500 hover:bg-neutral-100'
+                "
+                :aria-label="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
+                :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
+                @click="toggleInternalTxs"
+              >
+                <IconArrowsRightLeft class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100"
+                aria-label="Search transactions"
+                @click="toggleSearch"
+              >
+                <IconSearch v-if="!searchOpen" class="h-4 w-4" />
+                <IconX v-else class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <Transition
+            enter-active-class="transition-all duration-200 ease-out"
+            enter-from-class="max-h-0 opacity-0"
+            enter-to-class="max-h-12 opacity-100"
+            leave-active-class="transition-all duration-150 ease-in"
+            leave-from-class="max-h-12 opacity-100"
+            leave-to-class="max-h-0 opacity-0"
+          >
+            <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
+              <input
+                ref="searchInput"
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search transactions…"
+                class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
+                @input="onSearchInput"
+              />
+            </div>
+          </Transition>
 
           <div v-if="txLoading" class="space-y-2">
             <div v-for="i in 3" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
@@ -527,22 +687,36 @@ async function submitMove() {
                 {{ group.label }}
               </h3>
               <div class="space-y-2">
-                <TransactionRow
-                  v-for="tx in group.transactions"
-                  :key="tx.id"
-                  :transaction="tx"
-                  :allocations="budgetAllocsByTx.get(tx.id)"
-                  :budget-names="budgetNames"
-                  :unallocated-budget-id="ctx.unallocatedBudgetId"
-                  removable
-                  @remove="onRemoveTransaction"
-                />
+                <template
+                  v-for="row in group.rows"
+                  :key="row.kind + (row.kind === 'tx' ? row.tx.id : row.itx.id)"
+                >
+                  <TransactionRow
+                    v-if="row.kind === 'tx'"
+                    :transaction="row.tx"
+                    :allocations="budgetAllocsByTx.get(row.tx.id)"
+                    :budget-names="budgetNames"
+                    :unallocated-budget-id="ctx.unallocatedBudgetId"
+                    removable
+                    @remove="onRemoveTransaction"
+                  />
+                  <InternalTransactionRow
+                    v-else
+                    :internal-transaction="row.itx"
+                    :budget-names="budgetNames"
+                    :relative-to-budget-id="id"
+                  />
+                </template>
               </div>
             </section>
           </div>
 
           <p v-else class="py-4 text-center text-sm text-neutral-500">
-            No transactions assigned to this budget yet.
+            {{
+              searchQuery
+                ? "No matching transactions."
+                : "No transactions assigned to this budget yet."
+            }}
           </p>
         </section>
 

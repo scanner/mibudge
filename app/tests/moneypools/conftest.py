@@ -1,4 +1,6 @@
+import pytest
 from pytest_factoryboy import register
+from rest_framework.test import APIClient
 
 from .factories import (
     BankAccountFactory,
@@ -19,3 +21,8 @@ register(
 register(
     InternalTransactionFactory
 )  # InternalTransactionFactory -> internal_transaction_factory
+
+
+@pytest.fixture
+def api_client() -> APIClient:
+    return APIClient()

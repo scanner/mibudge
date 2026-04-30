@@ -55,7 +55,12 @@ MANAGED_PREFIX = "[managed] "
 #       },
 #   }
 #
-MANAGED_PERIODIC_TASKS: dict = {}
+MANAGED_PERIODIC_TASKS: dict = {
+    "Fund all accounts daily": {
+        "task": "moneypools.tasks.fund_all_accounts",
+        "schedule": {"crontab": {"minute": "0", "hour": "3"}},
+    },
+}
 
 
 ########################################################################

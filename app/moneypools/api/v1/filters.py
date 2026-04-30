@@ -7,6 +7,9 @@ Filters operate on the already-ownership-scoped queryset returned by
 permission checks are needed here.
 """
 
+# system imports
+from django.db.models import Q
+
 # 3rd party imports
 from django_filters import rest_framework as filters
 
@@ -115,6 +118,7 @@ class InternalTransactionFilter(filters.FilterSet):
     bank_account = filters.UUIDFilter(field_name="bank_account__id")
     src_budget = filters.UUIDFilter(field_name="src_budget__id")
     dst_budget = filters.UUIDFilter(field_name="dst_budget__id")
+    budget = filters.UUIDFilter(method="filter_by_budget")
     date_from = filters.DateTimeFilter(
         field_name="created_at",
         lookup_expr="gte",
@@ -124,12 +128,19 @@ class InternalTransactionFilter(filters.FilterSet):
         lookup_expr="lte",
     )
 
+    def filter_by_budget(self, queryset, name, value):
+        """Match internal transactions where the budget is on either side."""
+        return queryset.filter(
+            Q(src_budget__id=value) | Q(dst_budget__id=value)
+        )
+
     class Meta:
         model = InternalTransaction
         fields = [
             "bank_account",
             "src_budget",
             "dst_budget",
+            "budget",
             "date_from",
             "date_to",
         ]

@@ -367,6 +367,8 @@ Create a new bank account. The authenticated user is automatically added as an o
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
+- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -396,6 +398,8 @@ Return a single bank account by UUID.
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
+- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -461,6 +465,8 @@ Full update of a bank account. Only 'name' is mutable after creation -- bank, ac
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
+- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -526,6 +532,8 @@ Partial update of a bank account. Only 'name' is mutable after creation.
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
+- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -540,6 +548,41 @@ Delete a bank account and all associated budgets, transactions, and allocations.
 - `id` (path, required)
 
 **Response 204:** No response body
+
+#### `POST /api/v1/bank-accounts/{id}/mark-imported/`
+
+**Operation:** `bank_accounts_mark_imported_create`
+
+Record that a transaction import has been completed for this account.  Sets last_imported_at to now and advances last_posted_through to the supplied date (never regresses an existing value).  Body: {"last_posted_through": "YYYY-MM-DD"}.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`last_posted_through`** (`string`) *(required)*
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`owners`** (`array`) *(required, read-only)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`posted_balance_currency`** (`string`) *(required, read-only)*
+- **`available_balance`** (`string`)
+- **`available_balance_currency`** (`string`) *(required, read-only)*
+- **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
+- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
 
 ### banks
 
@@ -1773,6 +1816,8 @@ Group assignment is not yet supported via the API.
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
+- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 

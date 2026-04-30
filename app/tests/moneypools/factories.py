@@ -281,4 +281,5 @@ class InternalTransactionFactory(DjangoModelFactory):
             dst_budget=kwargs["dst_budget"],
             amount=amount,
             actor=kwargs["actor"],
+            effective_date=kwargs.get("effective_date"),
         )
