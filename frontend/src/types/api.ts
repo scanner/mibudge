@@ -185,8 +185,11 @@ export interface InternalTransaction {
   src_budget: string;
   dst_budget: string;
   actor: string;
+  effective_date: string;
   src_budget_balance: string;
+  src_budget_balance_currency: string;
   dst_budget_balance: string;
+  dst_budget_balance_currency: string;
   created_at: string;
   modified_at: string;
 }
@@ -245,6 +248,7 @@ export interface InternalTransactionListParams {
   bank_account?: string;
   src_budget?: string;
   dst_budget?: string;
+  budget?: string;
   date_from?: string;
   date_to?: string;
 }
