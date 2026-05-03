@@ -103,7 +103,7 @@ class Command(BaseCommand):
             if first is None:
                 skipped += 1
                 continue
-            alloc_svc._recalculate_running_balances(budget, first.transaction)
+            alloc_svc.recalculate_from_transaction(budget, first.transaction)
             updated += 1
             self.stderr.write(f"  {budget.name}")
 
