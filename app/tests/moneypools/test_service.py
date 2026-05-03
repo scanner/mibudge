@@ -245,6 +245,81 @@ class TestInternalTransactionService:
         assert it.src_budget_balance == src.balance
         assert it.dst_budget_balance == dst.balance
 
+    ####################################################################
+    #
+    def test_historical_itx_updates_later_snapshots(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        user_factory: Callable[..., User],
+    ) -> None:
+        """
+        GIVEN: two forward ITxs (A at day1, B at day30) from Unallocated
+        WHEN:  a third historical ITx (C at day1, created after A) is inserted
+        THEN:  C's src_budget_balance snapshot is corrected to reflect the
+               balance after A but before C, and B's src_budget_balance is
+               recalculated to account for the extra debit from C
+        """
+        day1 = datetime(2024, 1, 1, tzinfo=UTC)
+        day30 = datetime(2024, 1, 30, tzinfo=UTC)
+
+        account = bank_account_factory(available_balance=Money(1200, "USD"))
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        eat = budget_factory(
+            bank_account=account,
+            balance=Money(0, "USD"),
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        )
+        spend = budget_factory(
+            bank_account=account,
+            balance=Money(0, "USD"),
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        )
+        actor = user_factory()
+
+        # ITx A: day1, Unallocated -> Eat, $400
+        itx_a = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=eat,
+            amount=Money(400, "USD"),
+            actor=actor,
+            effective_date=day1,
+        )
+        assert itx_a.src_budget_balance == Money(800, "USD")
+
+        # ITx B: day30, Unallocated -> Eat, $400
+        itx_b = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=eat,
+            amount=Money(400, "USD"),
+            actor=actor,
+            effective_date=day30,
+        )
+        assert itx_b.src_budget_balance == Money(400, "USD")
+
+        # ITx C: historical, day1 (created after A), Unallocated -> Spend, $200
+        itx_c = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=spend,
+            amount=Money(200, "USD"),
+            actor=actor,
+            effective_date=day1,
+        )
+
+        # C's snapshot: Unallocated was $1200 before A, $800 after A, $600 after C
+        itx_c.refresh_from_db()
+        assert itx_c.src_budget_balance == Money(600, "USD")
+
+        # B's snapshot must be updated: $1200 - $400 (A) - $200 (C) = $600 before B
+        itx_b.refresh_from_db()
+        assert itx_b.src_budget_balance == Money(200, "USD")
+
 
 ########################################################################
 ########################################################################

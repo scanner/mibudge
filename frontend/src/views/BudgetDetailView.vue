@@ -7,7 +7,8 @@
 //  1. Hero block (BudgetDetailHero)
 //  2. "Move money" CTA → inline internal transaction form
 //  3. Configuration rows (read-only display, editing via BudgetForm sheet)
-//  4. Pause / delete action row
+//  4. Pause / archive action row
+//  5. Transaction list
 //
 
 // 3rd party imports
@@ -378,6 +379,60 @@ const movePickerBudgets = computed(() => {
   return otherBudgets.value;
 });
 
+////////////////////////////////////////////////////////////////////////
+//
+// Next funding display — computed from the budget's next_funding field
+// (or from fillupBudget.next_funding for RECURRING+with_fillup budgets).
+//
+interface NextFundingDisplay {
+  date: Date;
+  amount: string;
+  amount_currency: string;
+  daysAway: number;
+  deferred: boolean;
+  deferredReason: string | null; // human-readable explanation when deferred
+  isFillup: boolean; // true when the event belongs to the fill-up goal
+}
+
+const nextFundingDisplay = computed((): NextFundingDisplay | null => {
+  const b = budget.value;
+  if (!b) return null;
+
+  const today = parseLocalDate(todayDateStr(auth.timezone));
+
+  // For RECURRING+with_fillup, the API returns null on the parent. We
+  // display the fill-up goal's next_funding on the parent's detail page.
+  const isRecurringWithFillup = b.budget_type === "R" && b.with_fillup_goal && !!b.fillup_goal;
+  const nf = isRecurringWithFillup ? (fillupBudget.value?.next_funding ?? null) : b.next_funding;
+
+  if (!nf) return null;
+
+  const eventDate = parseLocalDate(nf.date);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysAway = Math.round((eventDate.getTime() - today.getTime()) / msPerDay);
+
+  let deferredReason: string | null = null;
+  if (nf.deferred) {
+    const lpt = ctx.activeBankAccount?.last_posted_through;
+    if (lpt) {
+      const lptDate = parseLocalDate(lpt);
+      deferredReason = `Account data current through ${lptDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    } else {
+      deferredReason = "No import data recorded yet";
+    }
+  }
+
+  return {
+    date: eventDate,
+    amount: nf.amount,
+    amount_currency: nf.amount_currency,
+    daysAway,
+    deferred: nf.deferred,
+    deferredReason,
+    isFillup: isRecurringWithFillup,
+  };
+});
+
 function budgetPickerLabel(b: Budget): string {
   if (b.budget_type === "A") {
     const parent = fillupParentNames.value.get(b.id);
@@ -620,7 +675,63 @@ async function submitMove() {
               </span>
             </div>
           </template>
+
+          <!-- Next funding row — shown for any budget that has an upcoming event -->
+          <div
+            v-if="nextFundingDisplay"
+            class="flex items-start gap-3 border-t border-neutral-100 px-4 py-3"
+          >
+            <IconCalendar class="mt-0.5 h-4 w-4 flex-none text-neutral-400" />
+            <div class="flex-1">
+              <span class="text-sm text-neutral-700"> Next fill-up deposit </span>
+              <div v-if="nextFundingDisplay.deferred" class="mt-0.5 text-xs text-amber-600">
+                Delayed — {{ nextFundingDisplay.deferredReason }}
+              </div>
+            </div>
+            <div class="text-right">
+              <MoneyAmount
+                :amount="nextFundingDisplay.amount"
+                :currency="nextFundingDisplay.amount_currency"
+                size="md"
+              />
+              <div class="mt-0.5 text-xs text-neutral-500">
+                {{
+                  nextFundingDisplay.date.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                }}
+                <span v-if="nextFundingDisplay.daysAway === 0">(today)</span>
+                <span v-else-if="nextFundingDisplay.daysAway === 1">(tomorrow)</span>
+                <span v-else-if="nextFundingDisplay.daysAway > 0">
+                  (in {{ nextFundingDisplay.daysAway }} days)
+                </span>
+                <span v-else>({{ Math.abs(nextFundingDisplay.daysAway) }} days ago)</span>
+              </div>
+            </div>
+          </div>
         </section>
+
+        <!-- Action row -->
+        <div v-if="!isUnallocated" class="mt-2 flex gap-2">
+          <button
+            type="button"
+            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            @click="togglePause"
+          >
+            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
+            {{ budget.paused ? "Resume budget" : "Pause budget" }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            @click="showArchiveConfirm = true"
+          >
+            <IconArchive class="mr-1 inline-block h-4 w-4" />
+            Archive
+          </button>
+        </div>
 
         <!-- Transactions section -->
         <section class="mt-2">
@@ -724,26 +835,6 @@ async function submitMove() {
         <p v-if="error" class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600">
           {{ error }}
         </p>
-
-        <!-- Bottom action row -->
-        <div v-if="!isUnallocated" class="flex gap-2 pb-4">
-          <button
-            type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            @click="togglePause"
-          >
-            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
-            {{ budget.paused ? "Resume budget" : "Pause budget" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            @click="showArchiveConfirm = true"
-          >
-            <IconArchive class="mr-1 inline-block h-4 w-4" />
-            Archive
-          </button>
-        </div>
       </div>
     </template>
 

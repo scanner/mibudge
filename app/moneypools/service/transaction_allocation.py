@@ -227,6 +227,113 @@ def recalculate_from_dt(budget: Budget, from_dt: datetime) -> None:
 ########################################################################
 ########################################################################
 #
+def recalculate_itx_snapshots_from_dt(
+    budget: Budget, from_dt: datetime
+) -> None:
+    """Recalculate src/dst_budget_balance snapshots on InternalTransaction rows.
+
+    Walk all InternalTransactions involving budget at or after from_dt
+    (ordered by effective_date, created_at) and update the balance snapshot
+    field so it reflects the budget's actual balance after that transfer.
+
+    Must be called after recalculate_from_dt so that TransactionAllocation
+    budget_balance snapshots are fresh and can be used as anchors.
+
+    Args:
+        budget: The budget whose ITx snapshots need updating.
+        from_dt: Recalculate ITxs with effective_date >= this datetime.
+    """
+    itxs = list(
+        InternalTransaction.objects.filter(
+            Q(src_budget=budget) | Q(dst_budget=budget),
+            effective_date__gte=from_dt,
+        ).order_by("effective_date", "created_at")
+    )
+    if not itxs:
+        return
+
+    # Anchor: last allocation strictly before from_dt.  By definition there
+    # are no allocations between this anchor and from_dt.
+    prior_alloc = (
+        TransactionAllocation.objects.filter(budget=budget)
+        .filter(transaction__transaction_date__lt=from_dt)
+        .order_by(
+            "-transaction__transaction_date",
+            "-transaction__created_at",
+            "-created_at",
+        )
+        .select_related("transaction")
+        .first()
+    )
+
+    if prior_alloc is not None:
+        running = _money_amount(prior_alloc.budget_balance)
+        anchor_dt = prior_alloc.transaction.transaction_date
+    else:
+        total_allocs = TransactionAllocation.objects.filter(
+            budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_credits = InternalTransaction.objects.filter(
+            dst_budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_debits = InternalTransaction.objects.filter(
+            src_budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        running = (
+            budget.balance.amount
+            - Decimal(total_allocs)
+            - Decimal(total_credits)
+            + Decimal(total_debits)
+        )
+        anchor_dt = datetime.min.replace(tzinfo=UTC)
+
+    # Add net ITx effects strictly between anchor_dt and from_dt.
+    credits_between = InternalTransaction.objects.filter(
+        dst_budget=budget,
+        effective_date__gt=anchor_dt,
+        effective_date__lt=from_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    debits_between = InternalTransaction.objects.filter(
+        src_budget=budget,
+        effective_date__gt=anchor_dt,
+        effective_date__lt=from_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    running += Decimal(credits_between) - Decimal(debits_between)
+
+    # Walk forward, maintaining the running balance.  At each ITx, running
+    # is the budget balance just before the transfer fires.
+    prev_effective_date = from_dt
+    for itx in itxs:
+        # Allocs at effective_date T come after all ITxs at T, so the window
+        # of allocations between consecutive ITxs is [prev, itx.effective_date).
+        if prev_effective_date < itx.effective_date:
+            alloc_delta = TransactionAllocation.objects.filter(
+                budget=budget,
+                transaction__transaction_date__gte=prev_effective_date,
+                transaction__transaction_date__lt=itx.effective_date,
+            ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            running += Decimal(alloc_delta)
+
+        # src_budget FK uses to_field="id" so src_budget_id is a UUID.
+        if itx.src_budget_id == budget.id:
+            new_snapshot = running - _money_amount(itx.amount)
+            if _money_amount(itx.src_budget_balance) != new_snapshot:
+                InternalTransaction.objects.filter(pk=itx.pk).update(
+                    src_budget_balance=new_snapshot
+                )
+        else:
+            new_snapshot = running + _money_amount(itx.amount)
+            if _money_amount(itx.dst_budget_balance) != new_snapshot:
+                InternalTransaction.objects.filter(pk=itx.pk).update(
+                    dst_budget_balance=new_snapshot
+                )
+        running = new_snapshot
+        prev_effective_date = itx.effective_date
+
+
+########################################################################
+########################################################################
+#
 def _recalculate_running_balances(
     budget: Budget,
     from_transaction: Transaction,

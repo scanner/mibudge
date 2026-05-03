@@ -106,6 +106,8 @@ def create(
     from_dt = itx.effective_date
     alloc_svc.recalculate_from_dt(src_budget, from_dt)
     alloc_svc.recalculate_from_dt(dst_budget, from_dt)
+    alloc_svc.recalculate_itx_snapshots_from_dt(src_budget, from_dt)
+    alloc_svc.recalculate_itx_snapshots_from_dt(dst_budget, from_dt)
 
     return itx
 
@@ -147,3 +149,5 @@ def delete(internal_transaction: InternalTransaction) -> None:
 
     alloc_svc.recalculate_from_dt(src_budget, from_dt)
     alloc_svc.recalculate_from_dt(dst_budget, from_dt)
+    alloc_svc.recalculate_itx_snapshots_from_dt(src_budget, from_dt)
+    alloc_svc.recalculate_itx_snapshots_from_dt(dst_budget, from_dt)

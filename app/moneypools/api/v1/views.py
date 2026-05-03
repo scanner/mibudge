@@ -46,6 +46,7 @@ from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import transaction as transaction_svc
+from moneypools.tasks import fund_one_account
 
 from .filters import (
     BudgetFilter,
@@ -238,6 +239,10 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             last_posted_through=new_posted_through,
         )
         account.refresh_from_db()
+
+        # Trigger funding immediately rather than waiting for the 3am cron.
+        fund_one_account.apply_async(args=[str(account.id)])
+
         serializer = self.get_serializer(account)
         return Response(serializer.data)
 
@@ -296,7 +301,9 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     """Virtual sub-accounts (goals, recurring budgets) within a bank account."""
 
     serializer_class = BudgetSerializer
-    queryset = Budget.objects.select_related("bank_account").all()
+    queryset = Budget.objects.select_related(
+        "bank_account", "fillup_goal"
+    ).all()
     lookup_field = "id"
     permission_classes = [IsAuthenticated, IsAccountOwner]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

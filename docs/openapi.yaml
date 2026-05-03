@@ -723,6 +723,11 @@ paths:
           type: string
           format: uuid
       - in: query
+        name: budget
+        schema:
+          type: string
+          format: uuid
+      - in: query
         name: date_from
         schema:
           type: string
@@ -1692,6 +1697,19 @@ components:
           nullable: true
           maxLength: 512
         auto_spend: {}
+        next_funding:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the next scheduled funding event for this budget, or null.
+
+            Args:
+                obj: The Budget instance being serialized.
+
+            Returns:
+                Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1712,6 +1730,7 @@ components:
       - id
       - modified_at
       - name
+      - next_funding
       - target_balance
       - target_balance_currency
     BudgetRequest:
@@ -2139,6 +2158,9 @@ components:
         actor:
           type: integer
           readOnly: true
+        effective_date:
+          type: string
+          format: date-time
         src_budget_balance:
           type: string
           format: decimal
@@ -2206,6 +2228,9 @@ components:
         dst_budget:
           type: string
           format: uuid
+        effective_date:
+          type: string
+          format: date-time
       required:
       - amount
       - bank_account

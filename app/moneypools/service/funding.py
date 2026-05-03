@@ -29,7 +29,7 @@ ensuring the engine never runs ahead of confirmed transaction data.
 #
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -96,6 +96,116 @@ class FundingReport:
     transfers: int = 0
     warnings: list[str] = field(default_factory=list)
     skipped_budgets: list[str] = field(default_factory=list)
+
+
+########################################################################
+########################################################################
+#
+@dataclass
+class NextFundingInfo:
+    """The next scheduled funding event for a budget.
+
+    Attributes:
+        date: Calendar date of the next funding event.
+        amount: Money amount that will be transferred.
+        deferred: True when the import-freshness gate would delay this event.
+    """
+
+    date: date
+    amount: Money
+    deferred: bool = False
+
+
+########################################################################
+########################################################################
+#
+def next_funding_info(
+    budget: Budget,
+    today: date | None = None,
+) -> NextFundingInfo | None:
+    """Return the next scheduled funding event for a budget, or None.
+
+    Returns None for:
+    - Paused or archived budgets
+    - Completed GOAL budgets
+    - RECURRING budgets with a fill-up goal (funded indirectly via fill-up)
+    - Budgets with no upcoming events
+    - CAPPED budgets already at their target (amount would be zero)
+
+    For ASSOCIATED_FILLUP_GOAL budgets, the parent RECURRING budget's
+    schedule and parameters are used to compute the event.
+
+    Args:
+        budget: The Budget to inspect.
+        today: Reference date for event enumeration (defaults to date.today()).
+
+    Returns:
+        NextFundingInfo with the next event's date, amount, and deferred flag,
+        or None if no event is due or applicable.
+    """
+    if today is None:
+        today = date.today()
+
+    if budget.paused or budget.archived:
+        return None
+
+    if budget.budget_type == Budget.BudgetType.GOAL and budget.complete:
+        return None
+
+    # RECURRING + with_fillup_goal budgets are funded indirectly via their
+    # fill-up goal; the recurring budget itself has no direct funding events.
+    if (
+        budget.budget_type == Budget.BudgetType.RECURRING
+        and budget.with_fillup_goal
+    ):
+        return None
+
+    # For ASSOCIATED_FILLUP_GOAL, delegate to the parent RECURRING budget's
+    # schedule while using this budget as the target for amount calculations.
+    if budget.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL:
+        parent = (
+            Budget.objects.filter(fillup_goal=budget)
+            .select_related("bank_account")
+            .first()
+        )
+        if parent is None or parent.paused or parent.archived:
+            return None
+        scheduling_budget = parent
+        target = budget
+    else:
+        scheduling_budget = budget
+        target = budget
+
+    account = scheduling_budget.bank_account
+
+    after = (
+        scheduling_budget.last_funded_on or scheduling_budget.created_at.date()
+    )
+    # Look ahead up to 2 years to find the next event.
+    look_ahead = date(today.year + 2, today.month, today.day)
+    upcoming = _enumerate_schedule(
+        scheduling_budget.funding_schedule, after, look_ahead
+    )
+    if not upcoming:
+        return None
+
+    next_date = upcoming[0]
+
+    amount = _calculate_fund_amount(scheduling_budget, target, next_date, today)
+    if amount.amount <= Decimal("0"):
+        return None
+
+    # An event is deferred whenever the account's import data isn't current
+    # through the event date -- regardless of whether the event is past or
+    # future.  A future event with stale data will fail the gate when its
+    # date arrives; showing it as deferred now avoids a false sense of
+    # certainty.
+    deferred = (
+        account.last_posted_through is None
+        or account.last_posted_through < next_date
+    )
+
+    return NextFundingInfo(date=next_date, amount=amount, deferred=deferred)
 
 
 ########################################################################
@@ -350,6 +460,13 @@ def _process_fund_event(
         )
         amount = Money(available, amount.currency)
 
+    # Use the event date as effective_date so the InternalTransaction
+    # slots into the correct position in the historical timeline when
+    # running a backfill for past periods.
+    effective_date = datetime(
+        ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
+    )
+
     with db_transaction.atomic():
         internal_transaction_svc.create(
             bank_account=account,
@@ -357,6 +474,7 @@ def _process_fund_event(
             dst_budget=target,
             amount=amount,
             actor=actor,
+            effective_date=effective_date,
         )
 
     Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
@@ -526,6 +644,9 @@ def _process_recur_event(
         )
 
     amount = Money(transfer, budget.balance.currency)
+    effective_date = datetime(
+        ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
+    )
 
     with db_transaction.atomic():
         internal_transaction_svc.create(
@@ -534,6 +655,7 @@ def _process_recur_event(
             dst_budget=budget,
             amount=amount,
             actor=actor,
+            effective_date=effective_date,
         )
 
     budget.refresh_from_db()

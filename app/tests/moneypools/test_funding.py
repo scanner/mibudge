@@ -20,6 +20,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from djmoney.money import Money
+from pytest_mock import MockerFixture
 
 # Project imports
 #
@@ -989,6 +990,13 @@ class TestMarkImportedEndpoint:
 
     ####################################################################
     #
+    @pytest.fixture(autouse=True)
+    def suppress_funding_task(self, mocker: MockerFixture) -> None:
+        """Prevent mark-imported from dispatching to Redis in unit tests."""
+        mocker.patch("moneypools.api.v1.views.fund_one_account.apply_async")
+
+    ####################################################################
+    #
     def _url(self, account: BankAccount) -> str:
         return reverse(
             "api_v1:bankaccount-mark-imported", kwargs={"id": str(account.id)}
@@ -1120,3 +1128,241 @@ class TestMarkImportedEndpoint:
         resp = api_client.post(self._url(account), body, format="json")
         assert resp.status_code == 400
         assert expected_field in resp.data
+
+
+########################################################################
+########################################################################
+#
+class TestNextFundingInfo:
+    """next_funding_info() returns the next scheduled event (or None)."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "posted_through,expected_deferred",
+        [
+            pytest.param(date(2026, 3, 1), False, id="current"),
+            pytest.param(None, True, id="deferred"),
+        ],
+    )
+    def test_fixed_amount_goal(
+        self,
+        make_account: Callable[..., BankAccount],
+        posted_through: date | None,
+        expected_deferred: bool,
+    ) -> None:
+        """
+        GIVEN: GOAL budget with FIXED_AMOUNT funding; last_funded_on in prior month
+        WHEN:  next_funding_info called
+        THEN:  returns event with correct date and amount; deferred matches
+               import freshness (False when account is current, True when not)
+        """
+        today = date(2026, 3, 1)
+        account = make_account(posted_through=posted_through)
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Laptop Fund",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(1000, "USD"),
+            funding_amount=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 2, 28)
+        )
+        budget.refresh_from_db()
+
+        info = funding_svc.next_funding_info(budget, today=today)
+
+        assert info is not None
+        assert info.date == date(2026, 3, 1)
+        assert info.amount == Money(100, "USD")
+        assert info.deferred is expected_deferred
+
+    ####################################################################
+    #
+    def test_future_event_deferred_when_no_import_data(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: budget created today; next event is in the future; last_posted_through=None
+        WHEN:  next_funding_info called
+        THEN:  deferred=True even though the event date has not yet passed
+
+        Regression: old code only set deferred when next_date <= today, so a
+        future event on an account with no import data showed deferred=False.
+        """
+        today = date(2026, 4, 30)
+        account = make_account(posted_through=None)
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New Budget",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(1000, "USD"),
+            funding_amount=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        # Budget created today → after = April 30 → first event is May 1
+        budget.refresh_from_db()
+
+        info = funding_svc.next_funding_info(budget, today=today)
+
+        assert info is not None
+        assert info.date > today  # event is in the future
+        assert info.deferred is True
+
+    ####################################################################
+    #
+    def test_target_date_goal_returns_prorated_amount(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: GOAL budget with TARGET_DATE funding; $300 gap; 3 events left
+        WHEN:  next_funding_info called
+        THEN:  amount = $100 (gap / remaining)
+        """
+        today = date(2026, 3, 1)
+        account = make_account(posted_through=today)
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Vacation",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(300, "USD"),
+            target_date=date(2026, 5, 1),
+            funding_schedule=_MONTHLY,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 2, 28)
+        )
+        budget.refresh_from_db()
+
+        info = funding_svc.next_funding_info(budget, today=today)
+
+        assert info is not None
+        assert info.date == date(2026, 3, 1)
+        # $300 gap / 3 remaining months = $100
+        assert info.amount == Money(100, "USD")
+
+    ####################################################################
+    #
+    def test_capped_at_cap_returns_none(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: CAPPED budget already at its target_balance
+        WHEN:  next_funding_info called
+        THEN:  returns None (zero-amount event suppressed)
+        """
+        today = date(2026, 3, 1)
+        account = make_account(posted_through=today)
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Entertainment Cap",
+            budget_type=Budget.BudgetType.CAPPED,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(200, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            balance=Money(200, "USD"),
+            last_funded_on=date(2026, 2, 28),
+        )
+        budget.refresh_from_db()
+
+        info = funding_svc.next_funding_info(budget, today=today)
+
+        assert info is None
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "extra_kwargs",
+        [
+            pytest.param(
+                {
+                    "budget_type": Budget.BudgetType.GOAL,
+                    "target_balance": Money(500, "USD"),
+                    "funding_amount": Money(50, "USD"),
+                    "paused": True,
+                },
+                id="paused",
+            ),
+            pytest.param(
+                {
+                    "budget_type": Budget.BudgetType.RECURRING,
+                    "target_balance": Money(400, "USD"),
+                    "funding_amount": Money(200, "USD"),
+                    "with_fillup_goal": True,
+                },
+                id="recurring_fillup",
+            ),
+        ],
+    )
+    def test_returns_none_for_excluded_states(
+        self,
+        make_account: Callable[..., BankAccount],
+        extra_kwargs: dict,
+    ) -> None:
+        """
+        GIVEN: a budget in an excluded state (paused or RECURRING+with_fillup)
+        WHEN:  next_funding_info called
+        THEN:  returns None before any schedule enumeration
+        """
+        today = date(2026, 3, 1)
+        account = make_account(posted_through=today)
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Test Budget",
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_schedule=_MONTHLY,
+            **extra_kwargs,
+        )
+        budget.refresh_from_db()
+
+        info = funding_svc.next_funding_info(budget, today=today)
+
+        assert info is None
+
+    ####################################################################
+    #
+    def test_fillup_goal_returns_next_event(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: RECURRING+with_fillup budget; fill-up goal has a due event
+        WHEN:  next_funding_info called on the ASSOCIATED_FILLUP_GOAL child
+        THEN:  returns NextFundingInfo using parent's schedule and amount
+        """
+        today = date(2026, 3, 1)
+        account = make_account(posted_through=today)
+        parent = budget_svc.create(
+            bank_account=account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(400, "USD"),
+            funding_amount=Money(200, "USD"),
+            funding_schedule=_MONTHLY,
+            with_fillup_goal=True,
+        )
+        parent.refresh_from_db()
+        fillup = parent.fillup_goal
+        assert fillup is not None
+        Budget.objects.filter(pkid=parent.pkid).update(
+            last_funded_on=date(2026, 2, 28)
+        )
+        fillup.refresh_from_db()
+
+        info = funding_svc.next_funding_info(fillup, today=today)
+
+        assert info is not None
+        assert info.date == date(2026, 3, 1)
+        assert info.amount == Money(200, "USD")

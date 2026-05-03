@@ -366,7 +366,9 @@ class TransactionAdmin(admin.ModelAdmin):
     fields = (
         "id",
         "bank_account",
+        "posted_date",
         "transaction_date",
+        "created_at",
         "amount",
         "transaction_type",
         "pending",
@@ -376,6 +378,7 @@ class TransactionAdmin(admin.ModelAdmin):
         "memo",
         "bank_account_posted_balance",
         "bank_account_available_balance",
+        "linked_transaction",
         "image",
         "document",
     )
@@ -384,7 +387,9 @@ class TransactionAdmin(admin.ModelAdmin):
         "amount",
         "bank_account",
         "party",
+        "posted_date",
         "transaction_date",
+        "created_at",
         "pending",
         "raw_description",
         "bank_account_posted_balance",

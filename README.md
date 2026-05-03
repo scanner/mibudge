@@ -87,13 +87,26 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 | `/api/v1/schema/redoc/`      | drf-spectacular          | ReDoc (interactive docs)                     |
 | `/app/*`                     | `SpaShellView`           | SPA shell; Vue Router handles all sub-routes |
 
-The machine-readable OpenAPI spec and generated API reference docs live in [`docs/openapi.yaml`](docs/openapi.yaml) and [`docs/api.md`](docs/api.md). Regenerate them after any API change with `make api-docs`.
+### REST API resources
 
-### API permissions
+All resources are under `/api/v1/`. Full endpoint docs: [`docs/api.md`](docs/api.md) · OpenAPI schema: [`docs/openapi.yaml`](docs/openapi.yaml) (regenerate with `make api-docs`).
 
-- **Banks** are read-only reference data, accessible to any authenticated user.
-- **Users** list/retrieve/update is restricted to staff; `/api/v1/users/me/` is available to all authenticated users.
-- **All other resources** (accounts, budgets, transactions, allocations, internal transactions) are scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does **not** bypass ownership checks in the REST API.
+| Resource | Endpoint | Notes |
+|----------|----------|-------|
+| Users | `/api/v1/users/` | List/update restricted to staff; `/me/` available to all |
+| Banks | `/api/v1/banks/` | Read-only reference data |
+| Bank Accounts | `/api/v1/bank-accounts/` | Scoped to account owners |
+| Budgets | `/api/v1/budgets/` | Scoped to account owners |
+| Transactions | `/api/v1/transactions/` | Scoped to account owners |
+| Allocations | `/api/v1/allocations/` | Budget assignments for transactions |
+| Internal Transactions | `/api/v1/internal-transactions/` | Budget-to-budget transfers |
+
+All resources except Banks and Users are scoped to bank account ownership -- only members of an account's `owners` M2M can access that account's data. Staff and superuser status does **not** bypass ownership checks in the REST API.
+
+### Data management
+
+- [`docs/importers.md`](docs/importers.md) -- REST API tools for importing bank statements and backfilling budget allocations (no server access required)
+- [`docs/management-commands.md`](docs/management-commands.md) -- Django management commands for service operations, backup/restore, and data correction (requires server access)
 
 ### Auth: JWT two-token pattern
 
