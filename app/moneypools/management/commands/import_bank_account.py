@@ -114,7 +114,7 @@ class Command(BaseCommand):
         self.stdout.write("Relinking transactions...")
         call_command(
             "relink_transactions",
-            account_id=str(account.id),
+            account=str(account.id),
             stdout=self.stdout,
             stderr=self.stderr,
         )
