@@ -61,9 +61,9 @@ export const useAccountContextStore = defineStore("accountContext", () => {
   function setActive(id: string | null) {
     activeBankAccountId.value = id;
     if (id) {
-      window.localStorage.setItem(STORAGE_KEY, id);
+      window.sessionStorage.setItem(STORAGE_KEY, id);
     } else {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.sessionStorage.removeItem(STORAGE_KEY);
     }
   }
 
@@ -83,15 +83,17 @@ export const useAccountContextStore = defineStore("accountContext", () => {
       ]);
       accounts.value = accountsPage.results;
 
-      const cached = window.localStorage.getItem(STORAGE_KEY);
+      const cached = window.sessionStorage.getItem(STORAGE_KEY);
       const validIds = new Set(accounts.value.map((a) => a.id));
 
-      // Preference order: server-side default → cached → first account.
+      // Preference order: cached (explicit tab selection) → server-side
+      // default → first account.  The cached value takes priority so that
+      // reloading a tab preserves the account the user chose in that tab.
       let chosen: string | null = null;
-      if (user?.default_bank_account && validIds.has(user.default_bank_account)) {
-        chosen = user.default_bank_account;
-      } else if (cached && validIds.has(cached)) {
+      if (cached && validIds.has(cached)) {
         chosen = cached;
+      } else if (user?.default_bank_account && validIds.has(user.default_bank_account)) {
+        chosen = user.default_bank_account;
       } else if (accounts.value.length > 0) {
         chosen = accounts.value[0].id;
       }
