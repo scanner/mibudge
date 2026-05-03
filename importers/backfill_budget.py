@@ -37,6 +37,19 @@ NOTE: All transactions, allocations, and internal transactions are fetched
 once at startup.  Any transactions imported while the script is running will
 not be visible to the current session.  Re-run the script after importing
 new transactions to process them.
+
+Re-running this script for a budget you have already backfilled is safe.
+Before processing any periods, the script builds a ``funded_dates`` set from
+all existing InternalTransactions that funded the target budget (Unallocated ->
+target).  Any period whose funding date is already in that set is silently
+skipped -- no duplicate InternalTransaction is created.  Only transactions
+that are still allocated to Unallocated are shown for review; anything already
+allocated to another budget is ignored.
+
+If re-allocating transactions causes the budget's running balance to go
+negative (because spending now exceeds the funding that was originally
+recorded), that is not corrected automatically.  You are responsible for
+making a manual internal transfer to bring the budget back to zero or above.
 """
 
 # system imports

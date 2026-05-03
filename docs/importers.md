@@ -184,6 +184,12 @@ At the end of each monthly period, the tool automatically funds the budget to pr
 - **Recurring budget** -- tops up to `target_balance`
 - **Capped budget** -- adds `funding_amount`, up to the cap ceiling
 
+### Re-running the backfill
+
+Re-running the script for a budget you have already backfilled is safe. Before processing begins, the tool fetches all existing funding transfers (Unallocated → target budget InternalTransactions) and records their effective dates in a `funded_dates` set. Any period whose funding date is already in that set is silently skipped -- no duplicate transfer is created. Only transactions that are still allocated to Unallocated are shown for review; anything already allocated to another budget is ignored.
+
+If reassigning transactions causes the budget's balance to go negative (because spending now exceeds the funding that was originally recorded), that is not corrected automatically. You are responsible for making a manual internal transfer to bring the budget back to zero or above.
+
 ### Flag reference
 
 | Flag            | Purpose                                  |

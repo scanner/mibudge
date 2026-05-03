@@ -448,6 +448,7 @@ class TestTransactionAllocationService:
 
         # Groceries is seeded at $400; the test verifies snapshot consistency,
         # not the account-level sum(budget.balance)==posted_balance invariant.
+        #
         groceries = budget_factory(
             bank_account=account,
             balance=Money(400, "USD"),
@@ -461,6 +462,7 @@ class TestTransactionAllocationService:
         # transactions to budgets that is staged across the three phases.
         # Transaction.objects.create is used directly to skip the bank-account
         # balance update in transaction_svc.create, which is not under test.
+        #
         tx_dt1 = Transaction.objects.create(
             bank_account=account,
             amount=Money(100, "USD"),  # type: ignore[misc]
@@ -487,6 +489,7 @@ class TestTransactionAllocationService:
         )
 
         # -- phase 1: allocate dt2 and dt4 transactions to Groceries ----
+        #
         alloc_dt2 = transaction_allocation_svc.create(
             transaction=tx_dt2, budget=groceries, amount=Money(-100, "USD")
         )
@@ -495,12 +498,14 @@ class TestTransactionAllocationService:
         )
 
         # Groceries: $400 seed -> $300 (dt2) -> $100 (dt4)
+        #
         alloc_dt2.refresh_from_db()
         alloc_dt4.refresh_from_db()
         assert alloc_dt2.budget_balance == Money(300, "USD")
         assert alloc_dt4.budget_balance == Money(100, "USD")
 
         # -- phase 2: backdated ITx at dt3, Unallocated -> Groceries ----
+        #
         itx = internal_transaction_svc.create(
             bank_account=account,
             src_budget=unallocated,
@@ -516,6 +521,7 @@ class TestTransactionAllocationService:
         #   alloc_dt4:     running $400 - $200 = $200  (debit at dt4)
         # Unallocated chain:
         #   itx.src:       $500 seed - $100 = $400     (debit at dt3)
+        #
         itx.refresh_from_db()
         alloc_dt2.refresh_from_db()
         alloc_dt4.refresh_from_db()
@@ -525,6 +531,7 @@ class TestTransactionAllocationService:
         assert itx.src_budget_balance == Money(400, "USD")
 
         # -- phase 3: allocate the dt1 transaction to Groceries ---------
+        #
         alloc_dt1 = transaction_allocation_svc.create(
             transaction=tx_dt1, budget=groceries, amount=Money(100, "USD")
         )
@@ -539,6 +546,7 @@ class TestTransactionAllocationService:
         #   alloc_dt4:   running $500 - $200 = $300
         # Unallocated chain (unchanged):
         #   itx.src:     $400
+        #
         alloc_dt1.refresh_from_db()
         alloc_dt2.refresh_from_db()
         itx.refresh_from_db()
