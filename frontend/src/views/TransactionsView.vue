@@ -210,6 +210,14 @@ async function loadTransactions() {
 
     const allAllocs = await fetchAllPages(allocFirstPage);
     indexAllocations(allAllocs);
+
+    // Re-run search now that allocsByTx is current. Clears any stale results
+    // cached before allocations finished loading (e.g. after returning from
+    // transaction detail having just allocated a transaction).
+    if (searchQuery.value.trim()) {
+      searchResults.value = null;
+      onSearchInput();
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to load transactions.";
   } finally {
@@ -393,12 +401,8 @@ watch(
   { immediate: true },
 );
 
-// Re-run search after data loads if there's a restored query.
 watch(transactions, (txs) => {
   txNav.setIds(txs.map((t) => t.id));
-  if (searchQuery.value.trim() && txs.length > 0 && !searchResults.value) {
-    onSearchInput();
-  }
 });
 
 watch(sentinel, (el) => {
