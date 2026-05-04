@@ -35,7 +35,7 @@ const tabs: TabDef[] = [
       v-for="tab in tabs"
       :key="tab.to"
       :to="tab.to"
-      class="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-neutral-500"
+      class="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-secondary"
       active-class="text-ocean-400"
     >
       <component :is="tab.icon" class="h-5 w-5" />

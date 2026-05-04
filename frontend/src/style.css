@@ -19,6 +19,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Semantic text-color utilities.
+ *
+ * Use these instead of raw neutral shades so contrast can be tuned in
+ * one place for all secondary / tertiary content.
+ *
+ *   text-body      -- default body copy (neutral-900, set on <html>)
+ *   text-secondary -- supporting labels, metadata, type chips, running
+ *                     balances -- anything a step below primary content
+ *   text-hint      -- placeholder-like text, "—" dashes, icon-only button
+ *                     tints; the lowest contrast level used on readable text
+ */
+@layer utilities {
+  .text-secondary {
+    @apply text-neutral-600;
+  }
+  .text-hint {
+    @apply text-neutral-500;
+  }
+}
+
 @layer base {
   html,
   body {

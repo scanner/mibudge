@@ -131,7 +131,7 @@ async function signOut() {
             <div class="truncate text-[15px] font-medium text-neutral-900">
               {{ auth.user?.name || auth.user?.username || "—" }}
             </div>
-            <div class="text-xs text-neutral-500">{{ auth.user?.username }}</div>
+            <div class="text-xs text-secondary">{{ auth.user?.username }}</div>
           </div>
           <IconChevronRight class="h-5 w-5 flex-none text-neutral-400" />
         </button>
@@ -141,7 +141,7 @@ async function signOut() {
         Section 2 — Bank accounts list
       -->
       <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
           Bank accounts
         </h2>
         <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
@@ -161,7 +161,7 @@ async function signOut() {
                   <div class="truncate text-[15px] font-medium text-neutral-900">
                     {{ account.name }}
                   </div>
-                  <div class="text-xs text-neutral-500">{{ accountTypeMeta(account) }}</div>
+                  <div class="text-xs text-secondary">{{ accountTypeMeta(account) }}</div>
                 </div>
                 <div class="flex flex-none flex-col items-end gap-0.5">
                   <MoneyAmount
@@ -215,7 +215,7 @@ async function signOut() {
         Section 3 — Settings
       -->
       <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
           Settings
         </h2>
         <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">

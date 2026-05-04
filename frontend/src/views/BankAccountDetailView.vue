@@ -169,7 +169,7 @@ async function deleteAccount() {
 <template>
   <AppShell>
     <div v-if="loading" class="mt-8 flex justify-center">
-      <span class="text-sm text-neutral-400">Loading…</span>
+      <span class="text-sm text-secondary">Loading…</span>
     </div>
 
     <div
@@ -242,7 +242,7 @@ async function deleteAccount() {
             <IconPencil class="h-4 w-4" />
           </button>
         </div>
-        <p class="text-sm text-neutral-500">
+        <p class="text-sm text-secondary">
           {{ ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type }}
           <template v-if="bankName"> · {{ bankName }}</template>
         </p>
@@ -251,7 +251,7 @@ async function deleteAccount() {
       <!-- Hero balance grid (2×2) -->
       <section class="grid grid-cols-2 gap-3">
         <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
             Posted balance
           </div>
           <MoneyAmount
@@ -261,7 +261,7 @@ async function deleteAccount() {
           />
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
             Available balance
           </div>
           <MoneyAmount
@@ -271,7 +271,7 @@ async function deleteAccount() {
           />
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
             Unallocated
           </div>
           <MoneyAmount
@@ -281,10 +281,10 @@ async function deleteAccount() {
             size="md"
             :coloured="false"
           />
-          <span v-else class="font-mono text-[15px] font-medium text-neutral-400">—</span>
+          <span v-else class="font-mono text-[15px] font-medium text-secondary">—</span>
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
             Currency
           </div>
           <span class="font-mono text-[15px] font-medium text-neutral-900">
@@ -296,13 +296,13 @@ async function deleteAccount() {
       <!-- Details -->
       <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
         <h2
-          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
         >
           Details
         </h2>
         <dl class="divide-y divide-neutral-100">
           <div class="flex items-center justify-between px-4 py-3">
-            <dt class="text-sm text-neutral-500">Account number</dt>
+            <dt class="text-sm text-secondary">Account number</dt>
             <dd class="flex items-center gap-2">
               <span class="font-mono text-sm text-neutral-900">
                 {{ account.account_number ? `····${account.account_number.slice(-4)}` : "—" }}
@@ -318,11 +318,11 @@ async function deleteAccount() {
             </dd>
           </div>
           <div class="flex items-center justify-between px-4 py-3">
-            <dt class="text-sm text-neutral-500">Bank</dt>
+            <dt class="text-sm text-secondary">Bank</dt>
             <dd class="text-sm text-neutral-900">{{ bankName ?? "—" }}</dd>
           </div>
           <div class="flex items-center justify-between px-4 py-3">
-            <dt class="text-sm text-neutral-500">Created</dt>
+            <dt class="text-sm text-secondary">Created</dt>
             <dd class="text-sm text-neutral-900">{{ createdDate }}</dd>
           </div>
         </dl>
@@ -331,7 +331,7 @@ async function deleteAccount() {
       <!-- Owners -->
       <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
         <h2
-          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
         >
           Owners
         </h2>
@@ -360,11 +360,11 @@ async function deleteAccount() {
           <div>
             <div class="text-sm font-medium text-neutral-900">
               Budgets
-              <span v-if="budgetCount !== null" class="ml-1.5 text-neutral-500">
+              <span v-if="budgetCount !== null" class="ml-1.5 text-secondary">
                 {{ budgetCount }}
               </span>
             </div>
-            <div class="text-xs text-neutral-500">View all budgets for this account</div>
+            <div class="text-xs text-secondary">View all budgets for this account</div>
           </div>
           <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
         </button>

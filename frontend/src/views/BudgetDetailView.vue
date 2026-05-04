@@ -191,10 +191,27 @@ async function loadBudgetTransactions() {
       list.push(a);
       allocMap.set(a.transaction, list);
     }
-    budgetAllocsByTx.value = allocMap;
 
     const txPromises = Array.from(txIds).map((id) => getTransaction(id));
     const txs = await Promise.all(txPromises);
+
+    // The budget filter above gives us only one allocation per transaction.
+    // For split transactions (where that single allocation doesn't cover the
+    // full amount), fetch all allocations so the row can display every budget.
+    const splitFetches = txs
+      .filter((tx) => {
+        const allocs = allocMap.get(tx.id);
+        if (!allocs || allocs.length !== 1) return false;
+        return Math.abs(parseFloat(allocs[0].amount)) !== Math.abs(parseFloat(tx.amount));
+      })
+      .map(async (tx) => {
+        const page = await listAllocations({ transaction: tx.id });
+        allocMap.set(tx.id, await fetchAllPages(page));
+      });
+    await Promise.all(splitFetches);
+
+    budgetAllocsByTx.value = allocMap;
+
     txs.sort((a, b) =>
       a.transaction_date !== b.transaction_date
         ? a.transaction_date > b.transaction_date
@@ -549,7 +566,7 @@ async function submitMove() {
           <IconArrowsRightLeft class="mt-0.5 h-5 w-5 flex-none text-ocean-400" />
           <div>
             <div class="text-[15px] font-medium text-ocean-600">Move money</div>
-            <div class="text-xs text-neutral-500">Transfer to or from another budget</div>
+            <div class="text-xs text-secondary">Transfer to or from another budget</div>
           </div>
         </button>
 
@@ -575,12 +592,12 @@ async function submitMove() {
                 :currency="budget.target_balance_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconCalendar class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Target date</span>
-              <span class="text-sm text-neutral-600">
+              <span class="text-sm text-secondary">
                 {{
                   budget.target_date
                     ? parseLocalDate(budget.target_date).toLocaleDateString(undefined, {
@@ -595,7 +612,7 @@ async function submitMove() {
             <div class="flex items-center gap-3 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
               </span>
             </div>
@@ -612,7 +629,7 @@ async function submitMove() {
                 :currency="budget.target_balance_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconCoin class="h-4 w-4 flex-none text-neutral-400" />
@@ -623,12 +640,12 @@ async function submitMove() {
                 :currency="budget.funding_amount_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center gap-3 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
               </span>
             </div>
@@ -639,14 +656,14 @@ async function submitMove() {
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconRefresh class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Refresh cycle</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.recurrance_schedule ? rruleHuman(budget.recurrance_schedule) : "—" }}
               </span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
               </span>
             </div>
@@ -659,7 +676,7 @@ async function submitMove() {
                 :currency="budget.target_balance_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center justify-between gap-3 px-4 py-3">
               <span class="text-sm text-neutral-700">Fill-up goal</span>
@@ -694,7 +711,7 @@ async function submitMove() {
                 :currency="nextFundingDisplay.amount_currency"
                 size="md"
               />
-              <div class="mt-0.5 text-xs text-neutral-500">
+              <div class="mt-0.5 text-xs text-secondary">
                 {{
                   nextFundingDisplay.date.toLocaleDateString(undefined, {
                     month: "short",
@@ -736,7 +753,7 @@ async function submitMove() {
         <!-- Transactions section -->
         <section class="mt-2">
           <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-secondary">
               Transactions
             </h2>
             <div class="flex items-center gap-1">
@@ -793,7 +810,7 @@ async function submitMove() {
           <div v-else-if="displayTransactions.length > 0" class="space-y-4">
             <section v-for="group in displayTransactions" :key="group.date">
               <h3
-                class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 backdrop-blur-sm"
+                class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-secondary backdrop-blur-sm"
               >
                 {{ group.label }}
               </h3>
@@ -822,7 +839,7 @@ async function submitMove() {
             </section>
           </div>
 
-          <p v-else class="py-4 text-center text-sm text-neutral-500">
+          <p v-else class="py-4 text-center text-sm text-secondary">
             {{
               searchQuery
                 ? "No matching transactions."
@@ -895,7 +912,7 @@ async function submitMove() {
                     :class="
                       moveDirection === 'outof'
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="moveDirection = 'outof'"
                   >
@@ -907,7 +924,7 @@ async function submitMove() {
                     :class="
                       moveDirection === 'into'
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="moveDirection = 'into'"
                   >
@@ -927,7 +944,7 @@ async function submitMove() {
                     :class="
                       !moveTargetFillup
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="setMoveTarget(false)"
                   >
@@ -939,7 +956,7 @@ async function submitMove() {
                     :class="
                       moveTargetFillup
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="setMoveTarget(true)"
                   >

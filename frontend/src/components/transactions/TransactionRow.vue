@@ -2,9 +2,15 @@
 //
 // TransactionRow — list-row card for a single transaction.  (UI_SPEC §4.5)
 //
-// Layout:
+// Layout (non-split):
 //   [ Party name               ] [ $amount ]
 //   [ allocation · type label  ] [         ]
+//
+// Layout (split):
+//   [ Party name               ] [ $amount ]
+//   [ SPLIT pill  ] [ type label           ]
+//   [ Budget A    ] [ -$30 ] [ ($370 left) ]
+//   [ Budget B    ] [ -$70 ] [ ($200 left) ]
 //
 // When the transaction is allocated to the unallocated budget, a blue
 // left border is shown and the allocation text reads "Unallocated —
@@ -57,56 +63,54 @@ const typeLabel = computed(() => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Allocation display logic.  Determines what to show in the second
-// row of the transaction card.
+// Allocation display logic.  Determines what to show below the party name.
 //
 interface AllocDisplay {
   name: string;
+  amount: string;
   balance: string;
-  currency: string;
 }
 
 const allocInfo = computed<{
-  text: string;
   isUnallocated: boolean;
   isSplit: boolean;
-  budgets: AllocDisplay[];
+  // Single non-split allocation (isSplit=false, not unallocated).
+  single: AllocDisplay | null;
+  // All legs for split display, including any Unallocated portion.
+  allLegs: AllocDisplay[];
 }>(() => {
   const allocs = props.allocations;
-  if (!allocs || allocs.length === 0) {
-    return { text: "", isUnallocated: false, isSplit: false, budgets: [] };
-  }
+  const empty = { isUnallocated: false, isSplit: false, single: null, allLegs: [] };
+  if (!allocs || allocs.length === 0) return empty;
 
   const unallocId = props.unallocatedBudgetId;
   const names = props.budgetNames;
 
   const allUnallocated = allocs.every((a) => a.budget === unallocId || a.budget === null);
   if (allUnallocated) {
-    return {
-      text: "Unallocated — tap to assign",
-      isUnallocated: true,
-      isSplit: false,
-      budgets: [],
-    };
+    return { isUnallocated: true, isSplit: false, single: null, allLegs: [] };
   }
 
-  const budgets: AllocDisplay[] = allocs
-    .filter((a) => a.budget && a.budget !== unallocId)
-    .map((a) => ({
-      name: names?.get(a.budget!) ?? "Budget",
-      balance: a.budget_balance,
-      currency: a.budget_balance_currency,
-    }));
+  const toDisplay = (a: TransactionAllocation): AllocDisplay => ({
+    name: (a.budget && names?.get(a.budget)) ?? "Unallocated",
+    amount: a.amount,
+    balance: a.budget_balance,
+  });
 
   if (allocs.length === 1) {
-    return { text: "", isUnallocated: false, isSplit: false, budgets };
+    return { isUnallocated: false, isSplit: false, single: toDisplay(allocs[0]), allLegs: [] };
   }
 
-  return { text: "", isUnallocated: false, isSplit: true, budgets };
+  return {
+    isUnallocated: false,
+    isSplit: true,
+    single: null,
+    allLegs: allocs.map(toDisplay),
+  };
 });
 
-function fmtBalance(b: AllocDisplay): string {
-  const n = Number.parseFloat(b.balance);
+function fmtMoney(raw: string): string {
+  const n = Number.parseFloat(raw);
   const abs = Math.abs(n);
   const formatted = abs % 1 === 0 ? `$${abs.toFixed(0)}` : `$${abs.toFixed(2)}`;
   return n < 0 ? `-${formatted}` : formatted;
@@ -144,28 +148,59 @@ function fmtBalance(b: AllocDisplay): string {
         </div>
       </div>
 
-      <!-- Row 2: allocation info + type label -->
-      <div class="mt-0.5 flex items-center justify-between gap-2">
-        <span
-          v-if="allocInfo.isUnallocated"
-          class="min-w-0 truncate text-[12px] italic text-neutral-500"
-        >
+      <!-- Row 2 (unallocated): italic prompt -->
+      <div v-if="allocInfo.isUnallocated" class="mt-0.5 flex items-center justify-between gap-2">
+        <span class="min-w-0 truncate text-[12px] italic text-secondary">
           Unallocated — tap to assign
         </span>
-        <span
-          v-else-if="allocInfo.budgets.length > 0"
-          class="min-w-0 truncate text-[12px] text-ocean-600"
-        >
-          <template v-for="(b, i) in allocInfo.budgets" :key="i">
-            <template v-if="i > 0">, </template>
-            {{ b.name }}
-            <span class="text-neutral-400">({{ fmtBalance(b) }} left)</span>
-          </template>
-        </span>
-        <span v-else class="flex-1" />
-        <span v-if="typeLabel" class="flex-none text-[12px] text-neutral-400">
+        <span v-if="typeLabel" class="flex-none text-[12px] text-secondary">
           {{ typeLabel }}
         </span>
+      </div>
+
+      <!-- Row 2 (single budget): name + running balance -->
+      <div v-else-if="allocInfo.single" class="mt-0.5 flex items-center justify-between gap-2">
+        <span class="min-w-0 truncate text-[12px] text-ocean-600">
+          {{ allocInfo.single.name }}
+          <span class="text-secondary">({{ fmtMoney(allocInfo.single.balance) }} left)</span>
+        </span>
+        <span v-if="typeLabel" class="flex-none text-[12px] text-secondary">
+          {{ typeLabel }}
+        </span>
+      </div>
+
+      <!-- Rows 2+ (split): header row + one line per leg -->
+      <div v-else-if="allocInfo.isSplit" class="mt-0.5">
+        <div class="flex items-center justify-between gap-2">
+          <span
+            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-secondary ring-1 ring-neutral-300"
+          >
+            Split
+          </span>
+          <span v-if="typeLabel" class="flex-none text-[12px] text-secondary">
+            {{ typeLabel }}
+          </span>
+        </div>
+        <div
+          v-for="(leg, i) in allocInfo.allLegs"
+          :key="i"
+          class="mt-0.5 flex items-baseline gap-1.5"
+        >
+          <span class="min-w-0 flex-1 truncate text-[12px] text-ocean-600">
+            {{ leg.name }}
+          </span>
+          <span class="flex-none text-[12px] font-medium text-neutral-700">
+            {{ fmtMoney(leg.amount) }}
+          </span>
+          <span class="flex-none text-[11px] text-secondary">
+            ({{ fmtMoney(leg.balance) }} left)
+          </span>
+        </div>
+      </div>
+
+      <!-- Row 2 (no alloc info): type label only -->
+      <div v-else-if="typeLabel" class="mt-0.5 flex justify-end">
+        <span class="text-[12px] text-secondary">{{ typeLabel }}</span>
       </div>
     </div>
   </article>

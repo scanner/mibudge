@@ -83,10 +83,10 @@ const budgetId = computed(() => props.allocation.budget);
       >
         {{ budgetName }}
       </button>
-      <span v-else class="text-sm italic text-neutral-500">Unallocated</span>
+      <span v-else class="text-sm italic text-secondary">Unallocated</span>
       <button
         type="button"
-        class="text-[11px] text-neutral-400 hover:text-ocean-600"
+        class="text-[11px] text-secondary hover:text-ocean-600"
         @click="emit('reassign', allocation.id)"
       >
         change
@@ -113,7 +113,7 @@ const budgetId = computed(() => props.allocation.budget);
     </div>
 
     <!-- Budget balance after this allocation -->
-    <div class="mt-1 flex items-center gap-2 text-xs text-neutral-500">
+    <div class="mt-1 flex items-center gap-2 text-xs text-secondary">
       <span class="flex-none">Budget balance after</span>
       <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
       <MoneyAmount
@@ -125,7 +125,7 @@ const budgetId = computed(() => props.allocation.budget);
     </div>
 
     <!-- Category -->
-    <div v-if="allocation.category" class="mt-1 text-xs text-neutral-500">
+    <div v-if="allocation.category" class="mt-1 text-xs text-secondary">
       {{ allocation.category }}
     </div>
   </div>

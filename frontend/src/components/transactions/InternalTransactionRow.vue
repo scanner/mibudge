@@ -57,7 +57,7 @@ function fmt(amount: string): string {
     <div class="flex items-start justify-between gap-2">
       <div class="flex min-w-0 items-center gap-1.5">
         <IconArrowsRightLeft class="h-3.5 w-3.5 flex-none text-neutral-400" />
-        <span class="text-[15px] font-medium text-neutral-600">Transfer</span>
+        <span class="text-[15px] font-medium text-secondary">Transfer</span>
       </div>
       <MoneyAmount
         :amount="displayAmount"
@@ -68,12 +68,12 @@ function fmt(amount: string): string {
     </div>
 
     <!-- Row 2: "Src (now $X) → Dst (now $Y)" -->
-    <div class="mt-0.5 text-[12px] text-neutral-500">
+    <div class="mt-0.5 text-[12px] text-secondary">
       {{ srcName }}
-      <span class="text-neutral-400">(now {{ fmt(itx.src_budget_balance) }})</span>
+      <span class="text-secondary">(now {{ fmt(itx.src_budget_balance) }})</span>
       →
       {{ dstName }}
-      <span class="text-neutral-400">(now {{ fmt(itx.dst_budget_balance) }})</span>
+      <span class="text-secondary">(now {{ fmt(itx.dst_budget_balance) }})</span>
     </div>
   </article>
 </template>
