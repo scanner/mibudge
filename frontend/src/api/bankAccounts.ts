@@ -4,7 +4,7 @@
 //
 
 import { useAuthStore } from "@/stores/auth";
-import type { BankAccount, Paginated } from "@/types/api";
+import type { BankAccount, FundingSummary, Paginated } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -42,4 +42,10 @@ export function deleteBankAccount(id: string): Promise<null> {
   return useAuthStore().request<null>(`/bank-accounts/${id}/`, {
     method: "DELETE",
   });
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export function fundingSummary(accountId: string): Promise<FundingSummary> {
+  return useAuthStore().request<FundingSummary>(`/bank-accounts/${accountId}/funding-summary/`);
 }

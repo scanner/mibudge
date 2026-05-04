@@ -33,6 +33,13 @@ const tone = computed(() => progressTone(budgetStatus(props.budget)));
       <div class="flex items-center gap-1.5 text-[13px] text-ocean-600">
         <IconCashPlus class="h-3.5 w-3.5 flex-none" />
         <span>Next cycle saving</span>
+        <span v-if="budget.next_funding" class="text-[11px] text-ocean-400">
+          (+<MoneyAmount
+            :amount="budget.next_funding.amount"
+            :currency="budget.next_funding.amount_currency"
+            size="sm"
+          />)
+        </span>
       </div>
       <div class="text-right">
         <span class="font-mono text-[13px] font-medium text-ocean-800">

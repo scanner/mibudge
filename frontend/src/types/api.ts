@@ -84,6 +84,22 @@ export interface Budget {
 
 ////////////////////////////////////////////////////////////////////////
 //
+export interface FundingScheduleEntry {
+  schedule: string; // RRULE string
+  next_date: string; // ISO date
+  total_amount: string; // decimal string
+  currency: string;
+  budget_count: number;
+}
+
+export interface FundingSummary {
+  schedules: FundingScheduleEntry[];
+  total_amount: string; // decimal string
+  currency: string;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 export type TransactionType =
   | "signature_purchase"
   | "ach"

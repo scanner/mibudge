@@ -549,6 +549,22 @@ Delete a bank account and all associated budgets, transactions, and allocations.
 
 **Response 204:** No response body
 
+#### `GET /api/v1/bank-accounts/{id}/funding-summary/`
+
+**Operation:** `bank_accounts_funding_summary_retrieve`
+
+Return the total amounts that will be automatically funded at the next event for each distinct funding schedule on this account.  Only active, schedulable budgets are included -- paused, archived, completed goals, and RECURRING budgets that delegate to a fill-up goal are excluded.  Results are grouped by funding schedule (RRULE string) and sorted by next event date.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** Per-schedule funding totals.
+
+- **`schedules`** (`array`)
+- **`total_amount`** (`string`)
+- **`currency`** (`string`)
+
 #### `POST /api/v1/bank-accounts/{id}/mark-imported/`
 
 **Operation:** `bank_accounts_mark_imported_create`

@@ -97,8 +97,15 @@ const fundingSchedule = computed(() =>
 
       <!-- Row 3: funding info + status chip -->
       <div class="mt-2 flex items-center justify-between gap-2">
+        <span v-if="budget.next_funding" class="truncate text-[12px] text-secondary">
+          <MoneyAmount
+            :amount="budget.next_funding.amount"
+            :currency="budget.next_funding.amount_currency"
+            size="sm"
+          />/event<template v-if="fundingSchedule">&thinsp;·&thinsp;{{ fundingSchedule }}</template>
+        </span>
         <span
-          v-if="budget.budget_type === 'C' && budget.funding_amount"
+          v-else-if="budget.budget_type === 'C' && budget.funding_amount"
           class="truncate text-[12px] text-secondary"
         >
           <MoneyAmount

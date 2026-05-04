@@ -17,6 +17,7 @@ from decimal import Decimal
 
 # 3rd party imports
 import moneyed
+import recurrence as recurrence_lib
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
@@ -44,6 +45,7 @@ from moneypools.models import (
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
 from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
+from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import transaction as transaction_svc
 from moneypools.tasks import fund_one_account
@@ -245,6 +247,111 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(account)
         return Response(serializer.data)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Funding summary",
+        description=(
+            "Return the total amounts that will be automatically funded "
+            "at the next event for each distinct funding schedule on this "
+            "account.  Only active, schedulable budgets are included -- "
+            "paused, archived, completed goals, and RECURRING budgets "
+            "that delegate to a fill-up goal are excluded.  Results are "
+            "grouped by funding schedule (RRULE string) and sorted by "
+            "next event date."
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Per-schedule funding totals.",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "schedules": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "schedule": {"type": "string"},
+                                    "next_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                    },
+                                    "total_amount": {"type": "string"},
+                                    "currency": {"type": "string"},
+                                    "budget_count": {"type": "integer"},
+                                },
+                            },
+                        },
+                        "total_amount": {"type": "string"},
+                        "currency": {"type": "string"},
+                    },
+                },
+            )
+        },
+    )
+    @action(detail=True, methods=["get"], url_path="funding-summary")
+    def funding_summary(self, request: Request, id: str = "") -> Response:
+        """Aggregate next-event funding amounts across all budgets."""
+        account: BankAccount = self.get_object()
+        today = date.today()
+
+        budgets = list(Budget.objects.filter(bank_account=account))
+
+        # Map ASSOCIATED_FILLUP_GOAL budget UUID -> parent RECURRING budget,
+        # so we can group fill-up goals under the parent's schedule.
+        fillup_to_parent: dict[object, Budget] = {}
+        for b in budgets:
+            if b.fillup_goal_id is not None:
+                fillup_to_parent[b.fillup_goal_id] = b
+
+        groups: dict[str, dict] = {}
+        grand_total = Decimal("0")
+        currency = account.currency
+
+        for budget in budgets:
+            info = funding_svc.next_funding_info(budget, today=today)
+            if info is None:
+                continue
+
+            if budget.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL:
+                parent = fillup_to_parent.get(budget.id)
+                if parent is None:
+                    continue
+                sched_key = recurrence_lib.serialize(parent.funding_schedule)
+            else:
+                sched_key = recurrence_lib.serialize(budget.funding_schedule)
+
+            amount = info.amount.amount
+            currency = str(info.amount.currency)
+
+            if sched_key not in groups:
+                groups[sched_key] = {
+                    "schedule": sched_key,
+                    "next_date": info.date,
+                    "total_amount": Decimal("0"),
+                    "currency": currency,
+                    "budget_count": 0,
+                }
+
+            g = groups[sched_key]
+            g["next_date"] = min(g["next_date"], info.date)
+            g["total_amount"] += amount
+            g["budget_count"] += 1
+            grand_total += amount
+
+        schedules = sorted(groups.values(), key=lambda g: g["next_date"])
+        for g in schedules:
+            g["total_amount"] = str(g["total_amount"])
+            g["next_date"] = g["next_date"].isoformat()
+
+        return Response(
+            {
+                "schedules": schedules,
+                "total_amount": str(grand_total),
+                "currency": currency,
+            }
+        )
 
 
 ########################################################################

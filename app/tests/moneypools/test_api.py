@@ -2,11 +2,12 @@
 
 # system imports
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 # 3rd party imports
 import pytest
+import recurrence
 from django.urls import reverse
 from djmoney.money import Money
 from rest_framework import status
@@ -22,12 +23,25 @@ from moneypools.models import (
     TransactionAllocation,
     get_default_currency,
 )
+from moneypools.service import budget as budget_svc
 from tests.moneypools.factories import (
     BankAccountFactory,
     BudgetFactory,
     TransactionFactory,
 )
 from users.models import User
+
+# Monthly schedule anchored Jan 1 -- dtstart controls which day-of-month fires.
+_MONTHLY = recurrence.Recurrence(
+    dtstart=datetime(2026, 1, 1),
+    rrules=[recurrence.Rule(recurrence.MONTHLY)],
+)
+
+# Weekly schedule anchored on a Friday.
+_WEEKLY = recurrence.Recurrence(
+    dtstart=datetime(2026, 1, 9),
+    rrules=[recurrence.Rule(recurrence.WEEKLY)],
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -326,6 +340,221 @@ class TestBankAccountAPI:
         assert response.status_code == status.HTTP_200_OK
         account.refresh_from_db()
         assert account.name == "Renamed Account"
+
+
+########################################################################
+########################################################################
+#
+class TestBankAccountFundingSummaryAPI:
+    """Tests for GET /api/v1/bank-accounts/<id>/funding-summary/."""
+
+    ####################################################################
+    #
+    def _url(self, account: BankAccount) -> str:
+        return f"/api/v1/bank-accounts/{account.id}/funding-summary/"
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "specs,expected_group_count,expected_total",
+        [
+            # No schedulable budgets -- only the auto-created unallocated
+            # budget exists, which has no funding schedule.
+            ([], 0, Decimal("0")),
+            # Single active budget.
+            (
+                [{"amount": 100, "schedule": "monthly", "paused": False}],
+                1,
+                Decimal("100"),
+            ),
+            # Two active budgets on the same schedule are grouped.
+            (
+                [
+                    {"amount": 100, "schedule": "monthly", "paused": False},
+                    {"amount": 75, "schedule": "monthly", "paused": False},
+                ],
+                1,
+                Decimal("175"),
+            ),
+            # Two different schedules produce two entries.
+            (
+                [
+                    {"amount": 500, "schedule": "monthly", "paused": False},
+                    {"amount": 50, "schedule": "weekly", "paused": False},
+                ],
+                2,
+                Decimal("550"),
+            ),
+            # Paused budget is excluded; only the active one counts.
+            (
+                [
+                    {"amount": 100, "schedule": "monthly", "paused": False},
+                    {"amount": 200, "schedule": "monthly", "paused": True},
+                ],
+                1,
+                Decimal("100"),
+            ),
+        ],
+    )
+    def test_grouping_totals_and_exclusions(
+        self,
+        specs: list[dict],
+        expected_group_count: int,
+        expected_total: Decimal,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a set of budgets with varying schedules and paused flags
+        WHEN:  GET funding-summary
+        THEN:  schedules are grouped by RRULE, paused budgets excluded,
+               and grand total matches the sum of active funding amounts
+        """
+        schedules = {"monthly": _MONTHLY, "weekly": _WEEKLY}
+        account = bank_account_factory(owners=[user])
+        for spec in specs:
+            b = budget_svc.create(
+                bank_account=account,
+                name=f"Budget {spec['amount']}",
+                budget_type=Budget.BudgetType.RECURRING,
+                funding_type=Budget.FundingType.FIXED_AMOUNT,
+                target_balance=Money(1000, "USD"),
+                funding_amount=Money(spec["amount"], "USD"),
+                funding_schedule=schedules[spec["schedule"]],
+                paused=spec["paused"],
+            )
+            Budget.objects.filter(pkid=b.pkid).update(
+                last_funded_on=date(2026, 4, 1)
+            )
+
+        response = auth_client.get(self._url(account))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["schedules"]) == expected_group_count
+        assert Decimal(response.data["total_amount"]) == expected_total
+
+    ####################################################################
+    #
+    def test_schedule_entry_fields(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: one RECURRING budget on a monthly schedule
+        WHEN:  GET funding-summary
+        THEN:  each schedule entry contains schedule, next_date (ISO date),
+               total_amount, currency, and budget_count
+        """
+        account = bank_account_factory(owners=[user])
+        b = budget_svc.create(
+            bank_account=account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(500, "USD"),
+            funding_amount=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        Budget.objects.filter(pkid=b.pkid).update(
+            last_funded_on=date(2026, 4, 1)
+        )
+
+        response = auth_client.get(self._url(account))
+
+        assert response.status_code == status.HTTP_200_OK
+        entry = response.data["schedules"][0]
+        assert "schedule" in entry
+        assert Decimal(entry["total_amount"]) == Decimal("100.00")
+        assert entry["currency"] == "USD"
+        assert entry["budget_count"] == 1
+        # next_date must be a valid ISO date string.
+        parsed = date.fromisoformat(entry["next_date"])
+        assert parsed > date(2026, 4, 1)
+
+    ####################################################################
+    #
+    def test_non_owner_gets_404(
+        self,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        user_factory: Callable[..., User],
+    ) -> None:
+        """
+        GIVEN: an account owned by user A
+        WHEN:  user B (authenticated) requests funding-summary
+        THEN:  404 -- the account is not in user B's queryset
+        """
+        account = bank_account_factory(owners=[user])
+        other = user_factory()
+        client = APIClient()
+        client.force_authenticate(user=other)
+        response = client.get(self._url(account))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+########################################################################
+########################################################################
+#
+class TestBudgetNextFundingField:
+    """API-level tests for the next_funding SerializerMethodField on Budget.
+
+    Service-level logic (what next_funding_info returns for each budget
+    type) is covered in test_funding.py.  These tests verify the field
+    appears in the API response with the expected shape and nullability.
+    """
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "paused,expect_null",
+        [
+            (False, False),  # active budget with schedule -> populated
+            (True, True),  # paused budget -> null
+        ],
+    )
+    def test_next_funding_field_in_budget_response(
+        self,
+        paused: bool,
+        expect_null: bool,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget that is either active or paused
+        WHEN:  GET /api/v1/budgets/<id>/
+        THEN:  next_funding is a dict with the expected keys, or null
+        """
+        account = bank_account_factory(owners=[user])
+        b = budget_svc.create(
+            bank_account=account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(500, "USD"),
+            funding_amount=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+            paused=paused,
+        )
+        Budget.objects.filter(pkid=b.pkid).update(
+            last_funded_on=date(2026, 4, 1)
+        )
+
+        response = auth_client.get(f"/api/v1/budgets/{b.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        nf = response.data["next_funding"]
+        if expect_null:
+            assert nf is None
+        else:
+            assert nf is not None
+            assert date.fromisoformat(nf["date"]) > date(2026, 4, 1)
+            assert Decimal(nf["amount"]) == Decimal("100.00")
+            assert nf["amount_currency"] == "USD"
+            assert isinstance(nf["deferred"], bool)
 
 
 ########################################################################

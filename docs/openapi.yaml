@@ -349,6 +349,54 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/bank-accounts/{id}/funding-summary/:
+    get:
+      operationId: bank_accounts_funding_summary_retrieve
+      description: Return the total amounts that will be automatically funded at the
+        next event for each distinct funding schedule on this account.  Only active,
+        schedulable budgets are included -- paused, archived, completed goals, and
+        RECURRING budgets that delegate to a fill-up goal are excluded.  Results are
+        grouped by funding schedule (RRULE string) and sorted by next event date.
+      summary: Funding summary
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        schedule:
+                          type: string
+                        next_date:
+                          type: string
+                          format: date
+                        total_amount:
+                          type: string
+                        currency:
+                          type: string
+                        budget_count:
+                          type: integer
+                  total_amount:
+                    type: string
+                  currency:
+                    type: string
+          description: Per-schedule funding totals.
   /api/v1/bank-accounts/{id}/mark-imported/:
     post:
       operationId: bank_accounts_mark_imported_create
