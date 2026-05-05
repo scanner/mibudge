@@ -41,6 +41,18 @@ _MONTHLY = recurrence.Recurrence(
     rrules=[recurrence.Rule(recurrence.MONTHLY)],
 )
 
+# Fires on the 10th and 20th of each month -- two events per monthly cycle.
+_TWICE_MONTHLY = recurrence.Recurrence(
+    dtstart=datetime(2026, 2, 10),
+    rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[10, 20])],
+)
+
+# Fires on the 1st of each month -- used as a recurrence reset anchor.
+_MONTHLY_FIRST = recurrence.Recurrence(
+    dtstart=datetime(2026, 2, 1),
+    rrules=[recurrence.Rule(recurrence.MONTHLY)],
+)
+
 
 ########################################################################
 ########################################################################
@@ -1366,3 +1378,184 @@ class TestNextFundingInfo:
         assert info is not None
         assert info.date == date(2026, 3, 1)
         assert info.amount == Money(200, "USD")
+
+
+########################################################################
+########################################################################
+#
+class TestFillAmountProrated:
+    """Unit tests for _fill_amount_prorated -- the core proration formula.
+
+    Uses a twice-monthly funding schedule (10th and 20th) inside a monthly
+    recurrence cycle (resets on the 1st).  cycle_start and cycle_before are
+    passed in directly so these tests are independent of the boundary helpers.
+
+    Feb cycle: N=2 events (Feb 10, Feb 20); steady-state amount = $50/event.
+    """
+
+    _CYCLE_START = date(2026, 2, 1)
+    _CYCLE_BEFORE = date(2026, 2, 28)
+
+    def _make_budgets(
+        self,
+        make_account: Callable[..., BankAccount],
+        fill_up_balance: Money,
+    ) -> tuple[Budget, Budget]:
+        account = make_account()
+        recurring = budget_svc.create(
+            bank_account=account,
+            name="Monthly Budget",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(100, "USD"),
+            funding_schedule=_TWICE_MONTHLY,
+            recurrance_schedule=_MONTHLY_FIRST,
+            with_fillup_goal=True,
+        )
+        recurring.refresh_from_db()
+        fillup = recurring.fillup_goal
+        assert fillup is not None
+        Budget.objects.filter(pkid=fillup.pkid).update(balance=fill_up_balance)
+        fillup.refresh_from_db()
+        return recurring, fillup
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "fill_up_balance,event_date,expected",
+        [
+            pytest.param(
+                Money(0, "USD"),
+                date(2026, 2, 10),
+                Money("50.00", "USD"),
+                id="first_event/empty",
+            ),
+            pytest.param(
+                Money(5, "USD"),
+                date(2026, 2, 10),
+                Money("50.00", "USD"),
+                id="first_event/carryover",
+            ),
+            pytest.param(
+                Money("27.50", "USD"),
+                date(2026, 2, 20),
+                Money("50.00", "USD"),
+                id="last_event/behind",
+            ),
+            pytest.param(
+                Money(95, "USD"),
+                date(2026, 2, 20),
+                Money("5.00", "USD"),
+                id="last_event/nearly_full",
+            ),
+            # ahead_of_steady_state: balance > target/N; capped at full_gap.
+            pytest.param(
+                Money(60, "USD"),
+                date(2026, 2, 10),
+                Money("40.00", "USD"),
+                id="first_event/ahead_capped_by_gap",
+            ),
+            pytest.param(
+                Money(100, "USD"),
+                date(2026, 2, 10),
+                Money("0.00", "USD"),
+                id="first_event/already_at_target",
+            ),
+        ],
+    )
+    def test_prorated_amount(
+        self,
+        make_account: Callable[..., BankAccount],
+        fill_up_balance: Money,
+        event_date: date,
+        expected: Money,
+    ) -> None:
+        """
+        GIVEN: a fill-up goal with a known balance at a point in the Feb cycle
+        WHEN:  _fill_amount_prorated is called with explicit cycle bounds
+        THEN:  the returned amount is min(target/N, full_gap)
+        """
+        recurring, fillup = self._make_budgets(make_account, fill_up_balance)
+
+        amount = funding_svc._fill_amount_prorated(
+            recurring,
+            fillup,
+            event_date=event_date,
+            cycle_start=self._CYCLE_START,
+            cycle_before=self._CYCLE_BEFORE,
+        )
+
+        assert amount == expected
+
+
+########################################################################
+########################################################################
+#
+class TestRecurringTargetDateProration:
+    """Integration: RECURRING+TARGET_DATE+fill-up goes through _fill_amount_prorated."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "today,last_funded_on,initial_balance,expected_balance",
+        [
+            pytest.param(
+                date(2026, 2, 10),
+                date(2026, 1, 31),
+                Money(5, "USD"),
+                Money("55.00", "USD"),
+                id="first_event",
+            ),
+            pytest.param(
+                date(2026, 2, 20),
+                date(2026, 2, 10),
+                Money("55.00", "USD"),
+                Money("100.00", "USD"),
+                id="second_event",
+            ),
+        ],
+    )
+    def test_fund_account_prorates_into_fillup(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+        today: date,
+        last_funded_on: date,
+        initial_balance: Money,
+        expected_balance: Money,
+    ) -> None:
+        """
+        GIVEN: RECURRING+TARGET_DATE+fillup, 2 events/cycle (Feb 10 and Feb 20)
+        WHEN:  fund_account fires at the parametrized event date
+        THEN:  fill-up balance increases by min(target/N, full_gap) = $50 per event
+        """
+        account = make_account(posted_through=today)
+        assert account.unallocated_budget is not None
+        Budget.objects.filter(pkid=account.unallocated_budget.pkid).update(
+            balance=Money(500, "USD")
+        )
+
+        recurring = budget_svc.create(
+            bank_account=account,
+            name="Monthly Bills",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(100, "USD"),
+            funding_schedule=_TWICE_MONTHLY,
+            recurrance_schedule=_MONTHLY_FIRST,
+            with_fillup_goal=True,
+        )
+        recurring.refresh_from_db()
+        fillup = recurring.fillup_goal
+        assert fillup is not None
+
+        Budget.objects.filter(pkid=recurring.pkid).update(
+            last_funded_on=last_funded_on
+        )
+        Budget.objects.filter(pkid=fillup.pkid).update(balance=initial_balance)
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        assert report.transfers == 1
+        fillup.refresh_from_db()
+        assert fillup.balance == expected_balance
