@@ -20,10 +20,12 @@ import { useRouter } from "vue-router";
 import EmptyState from "@/components/shared/EmptyState.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import AppShell from "@/components/layout/AppShell.vue";
+import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { updateCurrentUser } from "@/api/users";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
+import type { FundingSummary } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -72,15 +74,29 @@ function unallocatedFor(account: (typeof ctx.accounts)[0]) {
   return account.unallocated_budget ? budgets.byId(account.unallocated_budget) : null;
 }
 
-onMounted(() => {
+////////////////////////////////////////////////////////////////////////
+//
+// Funding summaries keyed by account ID, fetched in parallel on mount.
+//
+const fundingSummaries = ref(new Map<string, FundingSummary>());
+
+onMounted(async () => {
   // Ensure accounts list is fresh.
-  ctx.refresh();
-  // Load unallocated budget for each account so we can show "$X free".
+  await ctx.refresh();
+
+  // Load unallocated budget and funding summary for each account in parallel.
+  const tasks: Promise<unknown>[] = [];
   for (const account of ctx.accounts) {
     if (account.unallocated_budget && !budgets.byId(account.unallocated_budget)) {
-      budgets.fetchOne(account.unallocated_budget);
+      tasks.push(budgets.fetchOne(account.unallocated_budget));
     }
+    tasks.push(
+      apiFundingSummary(account.id).then((sum) => {
+        fundingSummaries.value.set(account.id, sum);
+      }),
+    );
   }
+  await Promise.allSettled(tasks);
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -179,6 +195,21 @@ async function signOut() {
                       size="sm"
                     />
                     free
+                  </span>
+                  <span
+                    v-if="
+                      fundingSummaries.get(account.id)?.total_amount &&
+                      fundingSummaries.get(account.id)!.total_amount !== '0' &&
+                      fundingSummaries.get(account.id)!.total_amount !== '0.00'
+                    "
+                    class="text-[11px] text-ocean-500"
+                  >
+                    <MoneyAmount
+                      :amount="fundingSummaries.get(account.id)!.total_amount"
+                      :currency="fundingSummaries.get(account.id)!.currency"
+                      size="sm"
+                    />
+                    next event
                   </span>
                 </div>
                 <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />

@@ -22,12 +22,10 @@ import { useRouter } from "vue-router";
 import BudgetCard from "@/components/budgets/BudgetCard.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import EmptyState from "@/components/shared/EmptyState.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { listBudgets } from "@/api/budgets";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
-import type { Budget, FundingSummary } from "@/types/api";
+import type { Budget } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -39,7 +37,6 @@ type Tab = "all" | "recurring" | "goals" | "capped" | "paused";
 const activeTab = ref<Tab>("all");
 
 const allBudgets = ref<Budget[]>([]);
-const summary = ref<FundingSummary | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -153,12 +150,8 @@ async function load() {
   try {
     // Fetch all non-archived budgets so fill-up budgets are available
     // for the FillUpBand even when a filter tab is active.
-    const [page, sum] = await Promise.all([
-      listBudgets({ bank_account: accountId, archived: false, ordering: "name" }),
-      apiFundingSummary(accountId),
-    ]);
+    const page = await listBudgets({ bank_account: accountId, archived: false, ordering: "name" });
     allBudgets.value = page.results;
-    summary.value = sum;
     // Push into shared cache so TopBar unallocated amount stays fresh.
     for (const b of page.results) budgets.upsert(b);
   } catch (err) {
@@ -242,23 +235,6 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
                   : "Paused"
         }}
       </button>
-    </div>
-
-    <!-- Funding summary banner -->
-    <div
-      v-if="summary && summary.total_amount !== '0' && summary.total_amount !== '0.00'"
-      class="mb-4 rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
-    >
-      Funded automatically:
-      <MoneyAmount
-        :amount="summary.total_amount"
-        :currency="summary.currency"
-        size="sm"
-        class="font-medium"
-      />/event
-      <template v-if="summary.schedules.length > 1">
-        across {{ summary.schedules.length }} schedules
-      </template>
     </div>
 
     <!-- Loading skeletons -->
