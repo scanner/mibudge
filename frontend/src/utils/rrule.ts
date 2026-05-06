@@ -177,9 +177,16 @@ export function rruleHuman(rule: string): string {
     }
   } else {
     const prefix = parsed.interval === 1 ? "Every year" : `Every ${parsed.interval} years`;
-    const month = MONTH_NAMES[(parsed.bymonth ?? 1) - 1];
-    const day = ordinal(parsed.bymonthday ?? 1);
-    text = `${prefix} on ${month} ${day}`;
+    if (dtstart) {
+      // DTSTART is the authoritative anchor for the recurrence date; BYMONTH/BYMONTHDAY
+      // may be stale defaults when the budget form uses interval-only mode.
+      const d = new Date(dtstart + "T00:00:00");
+      text = `${prefix} on ${MONTH_NAMES[d.getMonth()]} ${ordinal(d.getDate())}`;
+    } else {
+      const month = MONTH_NAMES[(parsed.bymonth ?? 1) - 1];
+      const day = ordinal(parsed.bymonthday ?? 1);
+      text = `${prefix} on ${month} ${day}`;
+    }
   }
 
   if (dtstart) {
