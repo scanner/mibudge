@@ -1,8 +1,15 @@
-# mibudge local development environment
-# Copied to .env by `make env`
+# mibudge local shell environment
+# Copied to .env by `make env`  (run once; edit .env after if needed)
+#
+# PURPOSE: this file is read by tools that run OUTSIDE docker-compose --
+# `uv run manage.py`, `pytest`, linters, `make api-schema`, etc.
+# It points at the published ports on localhost, not docker-internal hostnames.
+#
+# For docker-compose itself, see deployment/local-dev-docker.env which uses
+# docker-internal hostnames (postgres, redis) and internal port numbers.
 #
 # All values below are safe defaults for local development.
-# In production, every variable must be set explicitly via
+# In production every variable must be set explicitly -- see
 # deployment/dot-env.example.
 
 # General
@@ -11,17 +18,21 @@ DEBUG=True
 DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
 DJANGO_ADMIN_URL=admin/
 ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
+TIME_ZONE=America/Los_Angeles
 
-# Database (SQLite default is baked into settings.py; uncomment for Postgres)
-# DATABASE_URL=postgres://mibudge:mibudge@localhost:5432/mibudge
+# PostgreSQL
+# docker-compose publishes postgres on localhost:6432 (avoids the system port)
+# ------------------------------------------------------------------------------
+DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge
 
 # Redis
+# docker-compose publishes redis on localhost:7379 (avoids the system port)
 # ------------------------------------------------------------------------------
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/1
-CELERY_RESULT_BACKEND=redis://localhost:6379/2
+REDIS_URL=redis://localhost:7379/0
+CELERY_BROKER_URL=redis://localhost:7379/1
+CELERY_RESULT_BACKEND=redis://localhost:7379/2
 
-# Email (Mailpit default)
+# Email (Mailpit, published on localhost:1025)
 # ------------------------------------------------------------------------------
 EMAIL_HOST=localhost
 

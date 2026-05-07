@@ -75,6 +75,10 @@ RUN uv sync --frozen --no-install-project
 
 ENV PATH=/venv/bin:$PATH
 
+# Prevent uv from syncing or caching at runtime -- deps are frozen in /venv
+ENV UV_NO_SYNC=1 \
+    UV_NO_CACHE=1
+
 # Copy application code
 COPY ./app ./
 

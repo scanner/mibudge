@@ -30,10 +30,10 @@ Use --force after:
 Usage:
 
     uv run python app/manage.py backfill_transaction_dates
-    uv run python app/manage.py backfill_transaction_dates --account <uuid>
+    uv run python app/manage.py backfill_transaction_dates --account "Chase Checking"
     uv run python app/manage.py backfill_transaction_dates --dry-run
     uv run python app/manage.py backfill_transaction_dates --force
-    uv run python app/manage.py backfill_transaction_dates --force --account <uuid>
+    uv run python app/manage.py backfill_transaction_dates --force --account a1b2c3
 """
 
 # system imports
@@ -51,6 +51,7 @@ from django.db import models
 # Project imports
 #
 from moneypools.description_utils import parse_transaction_date
+from moneypools.management.commands._budget_admin import resolve_account
 from moneypools.models import Transaction
 
 logger = logging.getLogger(__name__)
@@ -78,9 +79,13 @@ class Command(BaseCommand):
         """
         parser.add_argument(
             "--account",
-            metavar="UUID",
+            metavar="PATTERN",
             default=None,
-            help="Restrict to a single bank account UUID.",
+            help=(
+                "Restrict to a single bank account. Accepts a full UUID, "
+                "UUID prefix/substring, or account name fragment "
+                "(case-insensitive)."
+            ),
         )
         parser.add_argument(
             "--dry-run",
@@ -110,7 +115,8 @@ class Command(BaseCommand):
         """
         dry_run: bool = options["dry_run"]
         force: bool = options["force"]
-        account_id: str | None = options["account"]
+        pattern: str | None = options["account"]
+        account = resolve_account(pattern) if pattern else None
 
         if force:
             qs = Transaction.objects.select_related(
@@ -125,13 +131,15 @@ class Command(BaseCommand):
                 .prefetch_related("bank_account__owners")
             )
 
-        if account_id:
-            qs = qs.filter(bank_account__id=account_id)
+        if account:
+            qs = qs.filter(bank_account=account)
 
         total = qs.count()
         prefix = "[DRY RUN] " if dry_run else ""
         scope = (
-            f"in account {account_id}" if account_id else "across all accounts"
+            f"in account '{account.name}' ({str(account.id)[:8]})"
+            if account
+            else "across all accounts"
         )
         mode = " (force -- all rows)" if force else " (unenriched rows only)"
         self.stdout.write(

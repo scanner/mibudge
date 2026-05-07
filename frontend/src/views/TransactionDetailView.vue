@@ -84,11 +84,6 @@ const allocations = ref<TransactionAllocation[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-const isCredit = computed(() => {
-  const tx = transaction.value;
-  return tx ? Number.parseFloat(tx.amount) > 0 : false;
-});
-
 ////////////////////////////////////////////////////////////////////////
 //
 // Editable fields with debounced autosave.
@@ -472,8 +467,8 @@ function navigateBudget(budgetId: string) {
         </div>
       </section>
 
-      <!-- Allocations section (debits only — credits go to unallocated) -->
-      <section v-if="!isCredit" class="mt-6">
+      <!-- Allocations -->
+      <section class="mt-6">
         <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
           Allocations
         </h2>

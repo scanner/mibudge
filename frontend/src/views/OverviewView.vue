@@ -20,11 +20,12 @@ import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
 import { listAllocations } from "@/api/allocations";
+import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { listBudgets } from "@/api/budgets";
 import { listTransactions } from "@/api/transactions";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
-import type { Budget, Transaction, TransactionAllocation } from "@/types/api";
+import type { Budget, FundingSummary, Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -35,6 +36,7 @@ const budgetsStore = useBudgetsStore();
 const budgets = ref<Budget[]>([]);
 const recentTx = ref<Transaction[]>([]);
 const allocsByTx = ref(new Map<string, TransactionAllocation[]>());
+const summary = ref<FundingSummary | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -96,13 +98,15 @@ async function load() {
   loading.value = true;
   error.value = null;
   try {
-    const [budgetsPage, txPage] = await Promise.all([
+    const [budgetsPage, txPage, sum] = await Promise.all([
       listBudgets({ bank_account: accountId, archived: false, ordering: "name" }),
       listTransactions({
         bank_account: accountId,
         ordering: "-transaction_date,-created_at",
       }),
+      apiFundingSummary(accountId),
     ]);
+    summary.value = sum;
 
     for (const b of budgetsPage.results) budgetsStore.upsert(b);
 
@@ -181,6 +185,23 @@ onMounted(() => {
           <span v-else class="font-mono text-[15px] font-medium text-neutral-400">—</span>
         </div>
       </section>
+
+      <!-- Funding summary banner -->
+      <div
+        v-if="summary && summary.total_amount !== '0' && summary.total_amount !== '0.00'"
+        class="rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
+      >
+        Funded automatically:
+        <MoneyAmount
+          :amount="summary.total_amount"
+          :currency="summary.currency"
+          size="sm"
+          class="font-medium"
+        />/next event
+        <template v-if="summary.schedules.length > 1">
+          across {{ summary.schedules.length }} schedules
+        </template>
+      </div>
 
       <!-- Loading skeleton -->
       <template v-if="loading">

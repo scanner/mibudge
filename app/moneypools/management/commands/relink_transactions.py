@@ -21,18 +21,22 @@ Read-only with respect to account/budget balances. Only the
 Usage:
 
     uv run python app/manage.py relink_transactions
-    uv run python app/manage.py relink_transactions --account <uuid>
+    uv run python app/manage.py relink_transactions --account "Chase Checking"
+    uv run python app/manage.py relink_transactions --account a1b2c3
 """
 
 # system imports
+#
 from typing import Any
 
 # 3rd party imports
+#
 from django.core.management.base import BaseCommand
 
-from moneypools.models import Transaction
-
 # Project imports
+#
+from moneypools.management.commands._budget_admin import resolve_account
+from moneypools.models import Transaction
 from moneypools.service.linking import attempt_link
 
 
@@ -50,23 +54,25 @@ class Command(BaseCommand):
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
             "--account",
-            dest="account_id",
+            metavar="PATTERN",
             help=(
-                "Only consider transactions in the BankAccount with "
-                "this UUID as the driving side of the link attempt."
+                "Only consider transactions in this BankAccount as the "
+                "driving side of the link attempt. Accepts a full UUID, "
+                "UUID prefix/substring, or account name fragment "
+                "(case-insensitive)."
             ),
         )
 
     ####################################################################
     #
     def handle(self, *args: Any, **options: Any) -> None:
-        account_id: str | None = options["account_id"]
+        pattern: str | None = options["account"]
 
         qs = Transaction.objects.filter(
             linked_transaction__isnull=True
         ).order_by("transaction_date", "pkid")
-        if account_id:
-            qs = qs.filter(bank_account__id=account_id)
+        if pattern:
+            qs = qs.filter(bank_account=resolve_account(pattern))
 
         attempted = 0
         linked = 0

@@ -349,6 +349,54 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/bank-accounts/{id}/funding-summary/:
+    get:
+      operationId: bank_accounts_funding_summary_retrieve
+      description: Return the total amounts that will be automatically funded at the
+        next event for each distinct funding schedule on this account.  Only active,
+        schedulable budgets are included -- paused, archived, completed goals, and
+        RECURRING budgets that delegate to a fill-up goal are excluded.  Results are
+        grouped by funding schedule (RRULE string) and sorted by next event date.
+      summary: Funding summary
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        schedule:
+                          type: string
+                        next_date:
+                          type: string
+                          format: date
+                        total_amount:
+                          type: string
+                        currency:
+                          type: string
+                        budget_count:
+                          type: integer
+                  total_amount:
+                    type: string
+                  currency:
+                    type: string
+          description: Per-schedule funding totals.
   /api/v1/bank-accounts/{id}/mark-imported/:
     post:
       operationId: bank_accounts_mark_imported_create
@@ -719,6 +767,11 @@ paths:
       parameters:
       - in: query
         name: bank_account
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: budget
         schema:
           type: string
           format: uuid
@@ -1692,6 +1745,19 @@ components:
           nullable: true
           maxLength: 512
         auto_spend: {}
+        next_funding:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the next scheduled funding event for this budget, or null.
+
+            Args:
+                obj: The Budget instance being serialized.
+
+            Returns:
+                Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1712,6 +1778,7 @@ components:
       - id
       - modified_at
       - name
+      - next_funding
       - target_balance
       - target_balance_currency
     BudgetRequest:
@@ -2139,6 +2206,9 @@ components:
         actor:
           type: integer
           readOnly: true
+        effective_date:
+          type: string
+          format: date-time
         src_budget_balance:
           type: string
           format: decimal
@@ -2206,6 +2276,9 @@ components:
         dst_budget:
           type: string
           format: uuid
+        effective_date:
+          type: string
+          format: date-time
       required:
       - amount
       - bank_account

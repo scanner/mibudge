@@ -549,6 +549,22 @@ Delete a bank account and all associated budgets, transactions, and allocations.
 
 **Response 204:** No response body
 
+#### `GET /api/v1/bank-accounts/{id}/funding-summary/`
+
+**Operation:** `bank_accounts_funding_summary_retrieve`
+
+Return the total amounts that will be automatically funded at the next event for each distinct funding schedule on this account.  Only active, schedulable budgets are included -- paused, archived, completed goals, and RECURRING budgets that delegate to a fill-up goal are excluded.  Results are grouped by funding schedule (RRULE string) and sorted by next event date.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** Per-schedule funding totals.
+
+- **`schedules`** (`array`)
+- **`total_amount`** (`string`)
+- **`currency`** (`string`)
+
 #### `POST /api/v1/bank-accounts/{id}/mark-imported/`
 
 **Operation:** `bank_accounts_mark_imported_create`
@@ -750,6 +766,13 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+- **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -791,6 +814,13 @@ Return a single budget by UUID.
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+- **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -895,6 +925,13 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+- **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -999,6 +1036,13 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+- **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1115,6 +1159,13 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+- **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1139,6 +1190,7 @@ Return budget-to-budget transfers belonging to the authenticated user's accounts
 **Parameters:**
 
 - `bank_account` (query, optional)
+- `budget` (query, optional)
 - `date_from` (query, optional)
 - `date_to` (query, optional)
 - `dst_budget` (query, optional)
@@ -1166,6 +1218,7 @@ Transfer money between two budgets in the same bank account. Required: bank_acco
 - **`amount`** (`string`) *(required)*
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
+- **`effective_date`** (`string`)
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -1173,6 +1226,7 @@ Transfer money between two budgets in the same bank account. Required: bank_acco
 - **`amount`** (`string`) *(required)*
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
+- **`effective_date`** (`string`)
 
 **Request Body** (`multipart/form-data`):
 
@@ -1180,6 +1234,7 @@ Transfer money between two budgets in the same bank account. Required: bank_acco
 - **`amount`** (`string`) *(required)*
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
+- **`effective_date`** (`string`)
 
 **Response 201:** 
 
@@ -1190,6 +1245,7 @@ Transfer money between two budgets in the same bank account. Required: bank_acco
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
 - **`actor`** (`integer`) *(required, read-only)*
+- **`effective_date`** (`string`)
 - **`src_budget_balance`** (`string`) *(required, read-only)*
 - **`src_budget_balance_currency`** (`string`) *(required, read-only)*
 - **`dst_budget_balance`** (`string`) *(required, read-only)*
@@ -1216,6 +1272,7 @@ Return a single internal transaction by UUID.
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
 - **`actor`** (`integer`) *(required, read-only)*
+- **`effective_date`** (`string`)
 - **`src_budget_balance`** (`string`) *(required, read-only)*
 - **`src_budget_balance_currency`** (`string`) *(required, read-only)*
 - **`dst_budget_balance`** (`string`) *(required, read-only)*
@@ -1887,6 +1944,13 @@ signal and is not accepted from the client.
 - **`recurrance_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+- **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -2112,6 +2176,7 @@ field declaration is needed.
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
 - **`actor`** (`integer`) *(required, read-only)*
+- **`effective_date`** (`string`)
 - **`src_budget_balance`** (`string`) *(required, read-only)*
 - **`src_budget_balance_currency`** (`string`) *(required, read-only)*
 - **`dst_budget_balance`** (`string`) *(required, read-only)*
@@ -2138,6 +2203,7 @@ field declaration is needed.
 - **`amount`** (`string`) *(required)*
 - **`src_budget`** (`string`) *(required)*
 - **`dst_budget`** (`string`) *(required)*
+- **`effective_date`** (`string`)
 
 ### PaginatedBankAccountList
 

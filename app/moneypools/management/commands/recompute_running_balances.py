@@ -29,6 +29,10 @@ from django.core.management.base import BaseCommand
 
 # Project imports
 #
+from moneypools.management.commands._budget_admin import (
+    resolve_account,
+    resolve_budget,
+)
 from moneypools.models import Budget, TransactionAllocation
 from moneypools.service import transaction_allocation as alloc_svc
 
@@ -49,13 +53,20 @@ class Command(BaseCommand):
             "--budget",
             default=None,
             metavar="PATTERN",
-            help="Restrict to a single budget (partial name or UUID prefix).",
+            help=(
+                "Restrict to a single budget. Accepts a full UUID, "
+                "UUID prefix/substring, or budget name fragment."
+            ),
         )
         parser.add_argument(
             "--account",
             default=None,
             metavar="PATTERN",
-            help="Restrict to budgets belonging to this bank account.",
+            help=(
+                "Restrict to budgets belonging to this bank account. "
+                "Accepts a full UUID, UUID prefix/substring, or account "
+                "name fragment (case-insensitive)."
+            ),
         )
 
     ####################################################################
@@ -64,12 +75,12 @@ class Command(BaseCommand):
         qs = Budget.objects.all()
 
         if options["account"]:
-            pat = options["account"]
-            qs = qs.filter(bank_account__name__icontains=pat)
+            account = resolve_account(options["account"])
+            qs = qs.filter(bank_account=account)
 
         if options["budget"]:
-            pat = options["budget"]
-            qs = qs.filter(name__icontains=pat)
+            budget = resolve_budget(options["budget"])
+            qs = qs.filter(pk=budget.pk)
 
         budgets = list(qs)
         self.stderr.write(
@@ -92,7 +103,7 @@ class Command(BaseCommand):
             if first is None:
                 skipped += 1
                 continue
-            alloc_svc._recalculate_running_balances(budget, first.transaction)
+            alloc_svc.recalculate_from_transaction(budget, first.transaction)
             updated += 1
             self.stderr.write(f"  {budget.name}")
 

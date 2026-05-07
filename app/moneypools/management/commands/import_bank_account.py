@@ -34,6 +34,7 @@ from uuid import UUID
 import recurrence
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction as db_transaction
 from djmoney.money import Money
@@ -108,7 +109,15 @@ class Command(BaseCommand):
             return
 
         with db_transaction.atomic():
-            self._import(data)
+            account = self._import(data)
+
+        self.stdout.write("Relinking transactions...")
+        call_command(
+            "relink_transactions",
+            account=str(account.id),
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )
 
     ####################################################################
     #
@@ -141,11 +150,14 @@ class Command(BaseCommand):
 
     ####################################################################
     #
-    def _import(self, data: dict[str, Any]) -> None:
+    def _import(self, data: dict[str, Any]) -> BankAccount:
         """Perform the full import inside an atomic block.
 
         Args:
             data: The parsed export dict.
+
+        Returns:
+            The imported BankAccount instance.
         """
         stats: dict[str, int] = {
             "budgets": 0,
@@ -237,6 +249,7 @@ class Command(BaseCommand):
                 f"{stats['internal_transactions']} internal transaction(s)"
             )
         )
+        return account
 
 
 ########################################################################

@@ -14,7 +14,7 @@ services:
         condition: service_healthy
     volumes:
       - ./app:/app:z
-    env_file: .env
+    env_file: deployment/local-dev-docker.env
     environment:
       TZ: ${TIME_ZONE:-America/Los_Angeles}
     command: python /app/manage.py migrate
@@ -35,7 +35,7 @@ services:
     volumes:
       - ./app:/app:z
       - "${HOST_SSL_DIR}:/mnt/ssl:ro"
-    env_file: .env
+    env_file: deployment/local-dev-docker.env
     environment:
       TZ: ${TIME_ZONE:-America/Los_Angeles}
     ports:
@@ -45,18 +45,24 @@ services:
   postgres:
     image: postgres:18-alpine
     container_name: postgres
+    # Expose postgres for local development access. Keeping ports out of
+    # default range to avoid conflicts.
+    #
+    ports:
+      - "6432:5432"
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data
+      - "${HOST_DB_BACKUPS_DIR}:/backups:z"
+    env_file: deployment/local-dev-docker.env
     # Pin PGDATA to the conventional path. postgres:18-alpine's default
     # is /var/lib/postgresql/18/docker -- a version-scoped subpath --
     # which would not receive the named volume mounted below, so all
     # DB state would live in the container's writable layer and be
     # lost on recreate. Keeping this override makes the mount work
     # the same across postgres major versions.
+    #
     environment:
       PGDATA: /var/lib/postgresql/data
-    volumes:
-      - local_postgres_data:/var/lib/postgresql/data
-      - "${HOST_DB_BACKUPS_DIR}:/backups:z"
-    env_file: .env
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-debug} -d ${POSTGRES_DB:-mibudge}"]
       interval: 5s
@@ -73,6 +79,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    # Expose ports for local development access. Keeping ports out of
+    # default range to avoid conflicts.
+    #
+    ports:
+      - "7379:6379"
     volumes:
       - local_redis_data:/data
     command: redis-server --save 60 1 --loglevel warning

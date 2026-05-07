@@ -96,7 +96,7 @@ watch(
       aria-label="Switch bank account"
       @click="switcherOpen = true"
     >
-      <span class="flex items-center gap-1 text-[11px] text-neutral-400">
+      <span class="flex items-center gap-1 text-[11px] text-secondary">
         <span class="truncate">{{ activeAccount.name }}</span>
         <span class="whitespace-nowrap">
           ·

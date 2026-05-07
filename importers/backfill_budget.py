@@ -32,6 +32,24 @@ persist across runs, keyed by budget UUID.
 
 Connection configuration follows the same precedence as the transaction
 importer (CLI flags → env vars → .env file → Vault).
+
+NOTE: All transactions, allocations, and internal transactions are fetched
+once at startup.  Any transactions imported while the script is running will
+not be visible to the current session.  Re-run the script after importing
+new transactions to process them.
+
+Re-running this script for a budget you have already backfilled is safe.
+Before processing any periods, the script builds a ``funded_dates`` set from
+all existing InternalTransactions that funded the target budget (Unallocated ->
+target).  Any period whose funding date is already in that set is silently
+skipped -- no duplicate InternalTransaction is created.  Only transactions
+that are still allocated to Unallocated are shown for review; anything already
+allocated to another budget is ignored.
+
+If re-allocating transactions causes the budget's running balance to go
+negative (because spending now exceeds the funding that was originally
+recorded), that is not corrected automatically.  You are responsible for
+making a manual internal transfer to bring the budget back to zero or above.
 """
 
 # system imports
@@ -1021,7 +1039,41 @@ def _run_backfill(
         allocs_by_tx[tx_id].append(alloc)
 
     # ----------------------------------------------------------------
-    # 3. Group transactions by period.
+    # 3. Fetch existing Unallocated → target InternalTransactions.
+    #    Build a set of their effective_dates so that re-runs skip
+    #    periods that were already funded (instead of creating a second
+    #    ITx for periods whose balance has since been depleted by
+    #    newly-assigned spending).
+    # ----------------------------------------------------------------
+    console.print("[bold]Checking existing funding transactions…[/bold]")
+    with console.status("Loading internal transactions…"):
+        all_itxs: list[dict[str, Any]] = list(
+            client.get_all(
+                "/api/v1/internal-transactions/",
+                {"bank_account": bank_account_id},
+                page_size=500,
+            )
+        )
+    funded_dates: set[date] = set()
+    for itx in all_itxs:
+        if (
+            str(itx.get("src_budget") or "") == unallocated_id
+            and str(itx.get("dst_budget") or "") == target_budget["id"]
+        ):
+            raw_date = itx.get("effective_date")
+            if raw_date:
+                try:
+                    funded_dates.add(_parse_tx_date(str(raw_date)))
+                except Exception:
+                    pass
+    if funded_dates:
+        console.print(
+            f"[dim]Found {len(funded_dates)} existing funding event(s) "
+            "for this budget — those dates will be skipped.[/dim]"
+        )
+
+    # ----------------------------------------------------------------
+    # 4. Group transactions by period.
     #    Capped budgets with a parseable funding_schedule are grouped by
     #    the actual schedule firing dates so that mid-month (or other
     #    sub-calendar) funding events are honoured.  All other budgets
@@ -1109,16 +1161,22 @@ def _run_backfill(
     initial_effective_dt = datetime(
         first_tx_date.year, first_tx_date.month, first_tx_date.day, tzinfo=UTC
     )
-    _fund_to_target(
-        client,
-        target_budget,
-        unallocated_id,
-        bank_account_id,
-        initial_target,
-        initial_effective_dt,
-        console=console,
-        label="Initial funding — ",
-    )
+    if initial_effective_dt.date() in funded_dates:
+        console.print(
+            "[dim]Initial funding — already funded for "
+            f"{initial_effective_dt.date()}, skipping.[/dim]"
+        )
+    else:
+        _fund_to_target(
+            client,
+            target_budget,
+            unallocated_id,
+            bank_account_id,
+            initial_target,
+            initial_effective_dt,
+            console=console,
+            label="Initial funding — ",
+        )
 
     # ----------------------------------------------------------------
     # 6. Period-by-period loop.
@@ -1229,7 +1287,12 @@ def _run_backfill(
         # End-of-period top-up (skip for the last period).
         is_last_period = period_idx == len(sorted_periods) - 1
         if not is_last_period:
-            if budget_type == "C":
+            if topup_effective_dt.date() in funded_dates:
+                console.print(
+                    f"[dim]{topup_label}already funded for "
+                    f"{topup_effective_dt.date()}, skipping.[/dim]"
+                )
+            elif budget_type == "C":
                 assert cap_balance is not None
                 _fund_by_amount(
                     client,

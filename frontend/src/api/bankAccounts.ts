@@ -4,7 +4,7 @@
 //
 
 import { useAuthStore } from "@/stores/auth";
-import type { BankAccount, Paginated } from "@/types/api";
+import type { BankAccount, FundingSummary, Paginated } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -41,5 +41,26 @@ export function updateBankAccount(id: string, body: Partial<BankAccount>): Promi
 export function deleteBankAccount(id: string): Promise<null> {
   return useAuthStore().request<null>(`/bank-accounts/${id}/`, {
     method: "DELETE",
+  });
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export function fundingSummary(accountId: string): Promise<FundingSummary> {
+  return useAuthStore().request<FundingSummary>(`/bank-accounts/${accountId}/funding-summary/`);
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export interface FundingRunResult {
+  deferred: boolean;
+  transfers: number;
+  warnings: string[];
+  skipped_budgets: string[];
+}
+
+export function runFunding(accountId: string): Promise<FundingRunResult> {
+  return useAuthStore().request<FundingRunResult>(`/bank-accounts/${accountId}/run-funding/`, {
+    method: "POST",
   });
 }

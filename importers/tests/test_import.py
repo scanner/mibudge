@@ -119,6 +119,8 @@ class FakeClient:
             row = {"id": tx_id, **json}
             self.transactions[tx_id] = row
             return row
+        if path.endswith("/mark-imported/"):
+            return {}
         raise KeyError(f"FakeClient.post: unhandled path {path!r}")
 
     ####################################################################

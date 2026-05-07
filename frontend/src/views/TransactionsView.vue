@@ -210,6 +210,14 @@ async function loadTransactions() {
 
     const allAllocs = await fetchAllPages(allocFirstPage);
     indexAllocations(allAllocs);
+
+    // Re-run search now that allocsByTx is current. Clears any stale results
+    // cached before allocations finished loading (e.g. after returning from
+    // transaction detail having just allocated a transaction).
+    if (searchQuery.value.trim()) {
+      searchResults.value = null;
+      onSearchInput();
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to load transactions.";
   } finally {
@@ -231,9 +239,20 @@ async function loadMore() {
   if (!nextPageUrl.value || loadingMore.value) return;
   loadingMore.value = true;
   try {
-    const page = await listTransactionsNext(nextPageUrl.value);
-    transactions.value = [...transactions.value, ...page.results];
-    nextPageUrl.value = page.next;
+    // Loop until the sentinel is scrolled off-screen or pages are exhausted.
+    // A single fetch isn't enough when a filter reduces the visible list to
+    // fewer rows than the viewport height — the sentinel never leaves the
+    // viewport so IntersectionObserver won't re-fire without this loop.
+    do {
+      const page = await listTransactionsNext(nextPageUrl.value!);
+      transactions.value = [...transactions.value, ...page.results];
+      nextPageUrl.value = page.next;
+      await nextTick();
+    } while (
+      nextPageUrl.value &&
+      sentinel.value &&
+      sentinel.value.getBoundingClientRect().top < window.innerHeight + 200
+    );
   } catch {
     // Silently ignore — user can scroll again to retry.
   } finally {
@@ -377,6 +396,9 @@ watch(activeFilter, (f) => {
   txNav.savedFilter = f;
   // Re-run search so results reflect the new filter immediately.
   if (searchQuery.value.trim()) onSearchInput();
+  // The new filter may leave fewer rows than the viewport height, stranding
+  // the sentinel on-screen with no scroll to re-trigger the observer.
+  nextTick(() => loadMore());
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -393,12 +415,8 @@ watch(
   { immediate: true },
 );
 
-// Re-run search after data loads if there's a restored query.
 watch(transactions, (txs) => {
   txNav.setIds(txs.map((t) => t.id));
-  if (searchQuery.value.trim() && txs.length > 0 && !searchResults.value) {
-    onSearchInput();
-  }
 });
 
 watch(sentinel, (el) => {
@@ -465,7 +483,7 @@ watch(sentinel, (el) => {
         :class="
           activeFilter === chip.key
             ? 'border-ocean-400 bg-ocean-50 text-ocean-600'
-            : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'
+            : 'border-neutral-200 bg-white text-secondary hover:border-neutral-300'
         "
         @click="activeFilter = chip.key"
       >
@@ -488,7 +506,7 @@ watch(sentinel, (el) => {
       <div v-if="displayTransactions.length > 0" class="space-y-4">
         <section v-for="group in displayTransactions" :key="group.date">
           <h2
-            class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 backdrop-blur-sm"
+            class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-secondary backdrop-blur-sm"
           >
             {{ group.label }}
           </h2>

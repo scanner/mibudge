@@ -24,7 +24,38 @@ As money comes in (paychecks, etc.), it's automatically distributed to budgets o
 
 **Funding** is the act of moving money from the "Unallocated" pool into a specific budget. It does not involve any real bank transfer -- it's a reallocation entirely within mibudge's virtual accounting.
 
-Each budget has a **funding schedule** (e.g. weekly, bi-weekly, monthly) and either a fixed funding amount per event or an automatically calculated amount derived from the target and the time remaining. On each scheduled funding event, mibudge moves that amount out of Unallocated and into the budget. If Unallocated doesn't have enough to cover all scheduled funding events, those events are partially funded or deferred.
+Each budget has a **funding schedule** (e.g. weekly, bi-weekly, monthly) and either a fixed funding amount per event or an automatically calculated amount derived from the target and the time remaining. On each scheduled funding event, mibudge moves that amount out of Unallocated and into the budget.
+
+#### The funding engine
+
+The engine runs automatically for all accounts at **3:00 AM daily** (Celery beat task `fund_all_accounts`). It can also be triggered manually via `POST /api/v1/bank-accounts/<id>/run-funding/` (or the "Run funding now" button in the UI) or via the importer CLI with `--run-funding`. All invocation paths use the same logic and produce the same result.
+
+The engine processes two event types:
+
+- **Fund events** -- fire on `budget.funding_schedule`. Transfer money from Unallocated into the budget (or into its fill-up goal, for recurring-with-fill-up budgets).
+- **Recur events** -- fire on `budget.recurrance_schedule` (recurring-with-fill-up only). Transfer from the fill-up goal into the recurring budget up to its target, then reset the recurring budget's cycle.
+
+Events are collected for all active budgets in the account, sorted chronologically (fund before recur on the same day), and processed in order. This means a catch-up run after several missed cycles replays events in the same sequence they would have occurred in real time.
+
+**Import-freshness gate:** before processing, the engine checks `account.last_posted_through`. If the latest due event falls after that date, the entire run is deferred and no transfers are made. This prevents the engine from funding against stale transaction data.
+
+**Empty Unallocated -- retry behavior:** if Unallocated is at $0 when a fund event fires, the event is skipped and a warning is recorded, but the budget's `last_funded_on` pointer is *not* advanced. The event will be retried on the next funding run once money has arrived. The same applies to recur events when the fill-up goal is empty.
+
+**Partial cap:** if a fill-up goal has some money but not enough to fully fund all pending recur events, the partial amount transfers and the pointer advances. The recurring budget may be underfunded for the current cycle; it is the user's responsibility to add more money.
+
+**Paused budgets:** funding events for a paused budget are skipped, but the budget's pointer is advanced to the event date. When the budget is unpaused, it starts fresh from the current date rather than replaying missed events.
+
+**Result:** the engine returns a `FundingReport` with the number of transfers made, any warnings (e.g. insufficient Unallocated), and a list of skipped budget names. The UI shows this result after each manual run, including the date of the next scheduled funding event when nothing was due.
+
+#### Importing and funding
+
+The transaction importer (`importers/import_transactions.py`) does **not** trigger funding automatically. After importing, run funding explicitly with the `--run-funding` flag:
+
+```bash
+python import_transactions.py ... --run-funding
+```
+
+Without `--run-funding`, the import only updates transaction data and advances `last_posted_through`. The `--run-funding` flag is silently ignored on `--dry-run` imports.
 
 ### Budget types
 
@@ -87,13 +118,26 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 | `/api/v1/schema/redoc/`      | drf-spectacular          | ReDoc (interactive docs)                     |
 | `/app/*`                     | `SpaShellView`           | SPA shell; Vue Router handles all sub-routes |
 
-The machine-readable OpenAPI spec and generated API reference docs live in [`docs/openapi.yaml`](docs/openapi.yaml) and [`docs/api.md`](docs/api.md). Regenerate them after any API change with `make api-docs`.
+### REST API resources
 
-### API permissions
+All resources are under `/api/v1/`. Full endpoint docs: [`docs/api.md`](docs/api.md) · OpenAPI schema: [`docs/openapi.yaml`](docs/openapi.yaml) (regenerate with `make api-docs`).
 
-- **Banks** are read-only reference data, accessible to any authenticated user.
-- **Users** list/retrieve/update is restricted to staff; `/api/v1/users/me/` is available to all authenticated users.
-- **All other resources** (accounts, budgets, transactions, allocations, internal transactions) are scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does **not** bypass ownership checks in the REST API.
+| Resource | Endpoint | Notes |
+|----------|----------|-------|
+| Users | `/api/v1/users/` | List/update restricted to staff; `/me/` available to all |
+| Banks | `/api/v1/banks/` | Read-only reference data |
+| Bank Accounts | `/api/v1/bank-accounts/` | Scoped to account owners |
+| Budgets | `/api/v1/budgets/` | Scoped to account owners |
+| Transactions | `/api/v1/transactions/` | Scoped to account owners |
+| Allocations | `/api/v1/allocations/` | Budget assignments for transactions |
+| Internal Transactions | `/api/v1/internal-transactions/` | Budget-to-budget transfers |
+
+All resources except Banks and Users are scoped to bank account ownership -- only members of an account's `owners` M2M can access that account's data. Staff and superuser status does **not** bypass ownership checks in the REST API.
+
+### Data management
+
+- [`docs/importers.md`](docs/importers.md) -- REST API tools for importing bank statements and backfilling budget allocations (no server access required)
+- [`docs/management-commands.md`](docs/management-commands.md) -- Django management commands for service operations, backup/restore, and data correction (requires server access)
 
 ### Auth: JWT two-token pattern
 
@@ -135,7 +179,7 @@ mibudge/
   frontend/               # Vue 3 SPA
     src/                  # TypeScript source: components, Pinia stores, Vue Router, API client
     dist/                 # Production build output (collected by Django staticfiles)
-  deploy/                 # Production docker-compose and environment config
+  deployment/             # Dev and prod docker env files, SSL certs, DB backups
   Dockerfile              # Multi-stage build: builder → dev → prod
   docker-compose.yml      # Local dev stack (Django, Postgres, Redis, Celery)
   Makefile                # Dev commands (`make help` for full list)
@@ -210,12 +254,31 @@ make uv-upgrade       # Upgrade all dependencies
 
 ### Environment
 
-Local dev uses a single `.env` file at the repo root (gitignored). Copy from the example and adjust if needed:
+Local dev uses **two** env files with distinct purposes:
+
+| File | Read by | Contains |
+|------|---------|----------|
+| `.env` (repo root, gitignored) | Local shell — `uv run manage.py`, `pytest`, linters, `make api-schema` | `localhost` URLs with published ports |
+| `deployment/local-dev-docker.env` (gitignored) | docker-compose (`env_file:`) | Docker-internal hostnames and port numbers |
+
+The split lets you run `app/manage.py` directly from the native shell without docker-execing into a container, while docker-compose services still talk to each other over the docker network.
+
+**Published ports** (docker → localhost):
+
+| Service | docker-internal | localhost |
+|---------|----------------|-----------|
+| PostgreSQL | `postgres:5432` | `localhost:6432` |
+| Redis | `redis:6379` | `localhost:7379` |
+| Mailpit SMTP | `mailpit:1025` | `localhost:1025` |
+
+**First-time setup:**
 
 ```bash
-cp deploy/.env.example .env
-# Edit .env -- the defaults work for local Docker dev
+# Create .env from the template (only needed once; edit after if needed)
+make env
 ```
+
+`make env` generates both files from their committed templates if they do not already exist: `deployment/dot-env.dev` → `.env`, and `deployment/dot-env.docker-dev` → `deployment/local-dev-docker.env`. The defaults in both templates work without any edits for a standard local dev setup.
 
 ## License
 

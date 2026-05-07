@@ -45,6 +45,7 @@ from moneypools.models import (
     TransactionCategory,
     get_default_currency,
 )
+from moneypools.service import funding as funding_svc
 
 
 ########################################################################
@@ -380,6 +381,8 @@ class BudgetSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
+    next_funding = serializers.SerializerMethodField()
+
     class Meta:
         model = Budget
         fields = [
@@ -405,6 +408,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "recurrance_schedule",
             "memo",
             "auto_spend",
+            "next_funding",
             "created_at",
             "modified_at",
         ]
@@ -420,6 +424,27 @@ class BudgetSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
         ]
+
+    ####################################################################
+    #
+    def get_next_funding(self, obj: Budget) -> dict | None:
+        """Return the next scheduled funding event for this budget, or null.
+
+        Args:
+            obj: The Budget instance being serialized.
+
+        Returns:
+            Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+        """
+        info = funding_svc.next_funding_info(obj)
+        if info is None:
+            return None
+        return {
+            "date": info.date.isoformat(),
+            "amount": str(info.amount.amount),
+            "amount_currency": str(info.amount.currency),
+            "deferred": info.deferred,
+        }
 
     ####################################################################
     #

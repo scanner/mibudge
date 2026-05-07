@@ -7,7 +7,8 @@
 //  1. Hero block (BudgetDetailHero)
 //  2. "Move money" CTA → inline internal transaction form
 //  3. Configuration rows (read-only display, editing via BudgetForm sheet)
-//  4. Pause / delete action row
+//  4. Pause / archive action row
+//  5. Transaction list
 //
 
 // 3rd party imports
@@ -190,10 +191,27 @@ async function loadBudgetTransactions() {
       list.push(a);
       allocMap.set(a.transaction, list);
     }
-    budgetAllocsByTx.value = allocMap;
 
     const txPromises = Array.from(txIds).map((id) => getTransaction(id));
     const txs = await Promise.all(txPromises);
+
+    // The budget filter above gives us only one allocation per transaction.
+    // For split transactions (where that single allocation doesn't cover the
+    // full amount), fetch all allocations so the row can display every budget.
+    const splitFetches = txs
+      .filter((tx) => {
+        const allocs = allocMap.get(tx.id);
+        if (!allocs || allocs.length !== 1) return false;
+        return Math.abs(parseFloat(allocs[0].amount)) !== Math.abs(parseFloat(tx.amount));
+      })
+      .map(async (tx) => {
+        const page = await listAllocations({ transaction: tx.id });
+        allocMap.set(tx.id, await fetchAllPages(page));
+      });
+    await Promise.all(splitFetches);
+
+    budgetAllocsByTx.value = allocMap;
+
     txs.sort((a, b) =>
       a.transaction_date !== b.transaction_date
         ? a.transaction_date > b.transaction_date
@@ -378,6 +396,60 @@ const movePickerBudgets = computed(() => {
   return otherBudgets.value;
 });
 
+////////////////////////////////////////////////////////////////////////
+//
+// Next funding display — computed from the budget's next_funding field
+// (or from fillupBudget.next_funding for RECURRING+with_fillup budgets).
+//
+interface NextFundingDisplay {
+  date: Date;
+  amount: string;
+  amount_currency: string;
+  daysAway: number;
+  deferred: boolean;
+  deferredReason: string | null; // human-readable explanation when deferred
+  isFillup: boolean; // true when the event belongs to the fill-up goal
+}
+
+const nextFundingDisplay = computed((): NextFundingDisplay | null => {
+  const b = budget.value;
+  if (!b) return null;
+
+  const today = parseLocalDate(todayDateStr(auth.timezone));
+
+  // For RECURRING+with_fillup, the API returns null on the parent. We
+  // display the fill-up goal's next_funding on the parent's detail page.
+  const isRecurringWithFillup = b.budget_type === "R" && b.with_fillup_goal && !!b.fillup_goal;
+  const nf = isRecurringWithFillup ? (fillupBudget.value?.next_funding ?? null) : b.next_funding;
+
+  if (!nf) return null;
+
+  const eventDate = parseLocalDate(nf.date);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysAway = Math.round((eventDate.getTime() - today.getTime()) / msPerDay);
+
+  let deferredReason: string | null = null;
+  if (nf.deferred) {
+    const lpt = ctx.activeBankAccount?.last_posted_through;
+    if (lpt) {
+      const lptDate = parseLocalDate(lpt);
+      deferredReason = `Account data current through ${lptDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    } else {
+      deferredReason = "No import data recorded yet";
+    }
+  }
+
+  return {
+    date: eventDate,
+    amount: nf.amount,
+    amount_currency: nf.amount_currency,
+    daysAway,
+    deferred: nf.deferred,
+    deferredReason,
+    isFillup: isRecurringWithFillup,
+  };
+});
+
 function budgetPickerLabel(b: Budget): string {
   if (b.budget_type === "A") {
     const parent = fillupParentNames.value.get(b.id);
@@ -494,7 +566,7 @@ async function submitMove() {
           <IconArrowsRightLeft class="mt-0.5 h-5 w-5 flex-none text-ocean-400" />
           <div>
             <div class="text-[15px] font-medium text-ocean-600">Move money</div>
-            <div class="text-xs text-neutral-500">Transfer to or from another budget</div>
+            <div class="text-xs text-secondary">Transfer to or from another budget</div>
           </div>
         </button>
 
@@ -520,12 +592,12 @@ async function submitMove() {
                 :currency="budget.target_balance_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconCalendar class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Target date</span>
-              <span class="text-sm text-neutral-600">
+              <span class="text-sm text-secondary">
                 {{
                   budget.target_date
                     ? parseLocalDate(budget.target_date).toLocaleDateString(undefined, {
@@ -540,7 +612,7 @@ async function submitMove() {
             <div class="flex items-center gap-3 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
               </span>
             </div>
@@ -557,7 +629,7 @@ async function submitMove() {
                 :currency="budget.target_balance_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconCoin class="h-4 w-4 flex-none text-neutral-400" />
@@ -568,12 +640,12 @@ async function submitMove() {
                 :currency="budget.funding_amount_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center gap-3 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
               </span>
             </div>
@@ -584,14 +656,14 @@ async function submitMove() {
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconRefresh class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Refresh cycle</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.recurrance_schedule ? rruleHuman(budget.recurrance_schedule) : "—" }}
               </span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
-              <span class="text-right text-sm text-neutral-600">
+              <span class="text-right text-sm text-secondary">
                 {{ budget.funding_schedule ? rruleHuman(budget.funding_schedule) : "—" }}
               </span>
             </div>
@@ -604,7 +676,7 @@ async function submitMove() {
                 :currency="budget.target_balance_currency"
                 size="md"
               />
-              <span v-else class="text-sm text-neutral-400">—</span>
+              <span v-else class="text-sm text-secondary">—</span>
             </div>
             <div class="flex items-center justify-between gap-3 px-4 py-3">
               <span class="text-sm text-neutral-700">Fill-up goal</span>
@@ -620,12 +692,68 @@ async function submitMove() {
               </span>
             </div>
           </template>
+
+          <!-- Next funding row — shown for any budget that has an upcoming event -->
+          <div
+            v-if="nextFundingDisplay"
+            class="flex items-start gap-3 border-t border-neutral-100 px-4 py-3"
+          >
+            <IconCalendar class="mt-0.5 h-4 w-4 flex-none text-neutral-400" />
+            <div class="flex-1">
+              <span class="text-sm text-neutral-700"> Next fill-up deposit </span>
+              <div v-if="nextFundingDisplay.deferred" class="mt-0.5 text-xs text-amber-600">
+                Delayed — {{ nextFundingDisplay.deferredReason }}
+              </div>
+            </div>
+            <div class="text-right">
+              <MoneyAmount
+                :amount="nextFundingDisplay.amount"
+                :currency="nextFundingDisplay.amount_currency"
+                size="md"
+              />
+              <div class="mt-0.5 text-xs text-secondary">
+                {{
+                  nextFundingDisplay.date.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                }}
+                <span v-if="nextFundingDisplay.daysAway === 0">(today)</span>
+                <span v-else-if="nextFundingDisplay.daysAway === 1">(tomorrow)</span>
+                <span v-else-if="nextFundingDisplay.daysAway > 0">
+                  (in {{ nextFundingDisplay.daysAway }} days)
+                </span>
+                <span v-else>({{ Math.abs(nextFundingDisplay.daysAway) }} days ago)</span>
+              </div>
+            </div>
+          </div>
         </section>
+
+        <!-- Action row -->
+        <div v-if="!isUnallocated" class="mt-2 flex gap-2">
+          <button
+            type="button"
+            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            @click="togglePause"
+          >
+            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
+            {{ budget.paused ? "Resume budget" : "Pause budget" }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            @click="showArchiveConfirm = true"
+          >
+            <IconArchive class="mr-1 inline-block h-4 w-4" />
+            Archive
+          </button>
+        </div>
 
         <!-- Transactions section -->
         <section class="mt-2">
           <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-secondary">
               Transactions
             </h2>
             <div class="flex items-center gap-1">
@@ -682,7 +810,7 @@ async function submitMove() {
           <div v-else-if="displayTransactions.length > 0" class="space-y-4">
             <section v-for="group in displayTransactions" :key="group.date">
               <h3
-                class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 backdrop-blur-sm"
+                class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-secondary backdrop-blur-sm"
               >
                 {{ group.label }}
               </h3>
@@ -711,7 +839,7 @@ async function submitMove() {
             </section>
           </div>
 
-          <p v-else class="py-4 text-center text-sm text-neutral-500">
+          <p v-else class="py-4 text-center text-sm text-secondary">
             {{
               searchQuery
                 ? "No matching transactions."
@@ -724,26 +852,6 @@ async function submitMove() {
         <p v-if="error" class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600">
           {{ error }}
         </p>
-
-        <!-- Bottom action row -->
-        <div v-if="!isUnallocated" class="flex gap-2 pb-4">
-          <button
-            type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            @click="togglePause"
-          >
-            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
-            {{ budget.paused ? "Resume budget" : "Pause budget" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            @click="showArchiveConfirm = true"
-          >
-            <IconArchive class="mr-1 inline-block h-4 w-4" />
-            Archive
-          </button>
-        </div>
       </div>
     </template>
 
@@ -804,7 +912,7 @@ async function submitMove() {
                     :class="
                       moveDirection === 'outof'
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="moveDirection = 'outof'"
                   >
@@ -816,7 +924,7 @@ async function submitMove() {
                     :class="
                       moveDirection === 'into'
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="moveDirection = 'into'"
                   >
@@ -836,7 +944,7 @@ async function submitMove() {
                     :class="
                       !moveTargetFillup
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="setMoveTarget(false)"
                   >
@@ -848,7 +956,7 @@ async function submitMove() {
                     :class="
                       moveTargetFillup
                         ? 'bg-ocean-400 text-white'
-                        : 'text-neutral-600 hover:bg-neutral-50'
+                        : 'text-secondary hover:bg-neutral-50'
                     "
                     @click="setMoveTarget(true)"
                   >

@@ -238,19 +238,27 @@ class Command(BaseCommand):
                 n = reverse_internal_transactions(fillup)
                 self.stderr.write(f"  Done ({n} reversed).")
 
-        # Step 3: reset the complete flag so the budget is no longer marked
-        # funded.  The recurrence handler only clears this on a cycle reset,
-        # so it must be done explicitly here after the balance is zeroed.
-        if fillup is not None:
-            fillup.refresh_from_db()
-            if fillup.complete:
-                fillup.complete = False
-                fillup.save()
+        # Step 3: reset funding-progress pointers so the engine can
+        # re-process historical events after a re-run.  Without this,
+        # fund_budgets would skip every event <= last_funded_on (the
+        # exclusive lower bound), making the second backfill a no-op.
+        reset_fields: dict[str, object] = {
+            "last_funded_on": None,
+            "last_recurrence_on": None,
+            "complete": False,
+        }
+        Budget.objects.filter(pkid=budget.pkid).update(**reset_fields)
         budget.refresh_from_db()
-        if budget.complete:
-            budget.complete = False
-            budget.save()
-            self.stderr.write("Reset 'complete' flag.")
+        self.stderr.write("Reset last_funded_on, last_recurrence_on, complete.")
+
+        if fillup is not None:
+            fillup_reset: dict[str, object] = {
+                "last_funded_on": None,
+                "last_recurrence_on": None,
+                "complete": False,
+            }
+            Budget.objects.filter(pkid=fillup.pkid).update(**fillup_reset)
+            fillup.refresh_from_db()
 
         if also_delete:
             # budget_svc.delete() nulls the fillup_goal FK, deletes the

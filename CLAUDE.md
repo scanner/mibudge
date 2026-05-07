@@ -196,4 +196,9 @@ The mypy config disables the `django-manager-missing` error due to a `django-mon
 
 ### Environment
 
-Local dev uses a single `.env` file (copy from `deploy/.env.example`). Key variables: `DEBUG`, `DJANGO_SECRET_KEY`, `DATABASE_URL` (defaults to SQLite locally), `REDIS_URL`, `CELERY_BROKER_URL`, `SENTRY_DSN`, `SALT_KEY`.
+Local dev uses **two** env files:
+
+- **`.env`** (repo root, gitignored) — read by the local shell (`uv run manage.py`, `pytest`, linters). Uses `localhost` with published ports: postgres on `localhost:6432`, redis on `localhost:7379`. Generate with `make env` (copies `deployment/dot-env.dev`).
+- **`deployment/local-dev-docker.env`** (gitignored) — read by docker-compose via `env_file:`. Uses docker-internal hostnames (`postgres`, `redis`) and internal port numbers. Generate with `make env` (copies `deployment/dot-env.docker-dev`).
+
+Key variables (both files): `DEBUG`, `DJANGO_SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `SALT_KEY`.

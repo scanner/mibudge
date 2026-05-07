@@ -82,8 +82,8 @@ const fundingSchedule = computed(() =>
 
       <!-- Row 2: meta + target -->
       <div class="mt-0.5 flex items-center justify-between gap-2">
-        <span class="truncate text-[12px] text-neutral-500">{{ meta }}</span>
-        <span v-if="budget.target_balance" class="flex-none text-[12px] text-neutral-400">
+        <span class="truncate text-[12px] text-secondary">{{ meta }}</span>
+        <span v-if="budget.target_balance" class="flex-none text-[12px] text-secondary">
           of&nbsp;<MoneyAmount
             :amount="budget.target_balance"
             :currency="budget.target_balance_currency"
@@ -97,9 +97,16 @@ const fundingSchedule = computed(() =>
 
       <!-- Row 3: funding info + status chip -->
       <div class="mt-2 flex items-center justify-between gap-2">
+        <span v-if="budget.next_funding" class="truncate text-[12px] text-secondary">
+          <MoneyAmount
+            :amount="budget.next_funding.amount"
+            :currency="budget.next_funding.amount_currency"
+            size="sm"
+          />/event<template v-if="fundingSchedule">&thinsp;·&thinsp;{{ fundingSchedule }}</template>
+        </span>
         <span
-          v-if="budget.budget_type === 'C' && budget.funding_amount"
-          class="truncate text-[12px] text-neutral-500"
+          v-else-if="budget.budget_type === 'C' && budget.funding_amount"
+          class="truncate text-[12px] text-secondary"
         >
           <MoneyAmount
             :amount="budget.funding_amount"
@@ -107,7 +114,7 @@ const fundingSchedule = computed(() =>
             size="sm"
           />/event<template v-if="fundingSchedule">&thinsp;·&thinsp;{{ fundingSchedule }}</template>
         </span>
-        <span v-else-if="fundingSchedule" class="truncate text-[12px] text-neutral-500">
+        <span v-else-if="fundingSchedule" class="truncate text-[12px] text-secondary">
           Funded&thinsp;·&thinsp;{{ fundingSchedule }}
         </span>
         <span v-else class="flex-1" />

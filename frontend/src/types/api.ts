@@ -37,8 +37,19 @@ export interface BankAccount {
   available_balance: string;
   available_balance_currency: string;
   unallocated_budget: string;
+  last_imported_at: string | null;
+  last_posted_through: string | null;
   created_at: string;
   modified_at: string;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export interface NextFunding {
+  date: string; // ISO date string, e.g. "2026-05-01"
+  amount: string; // decimal string
+  amount_currency: string;
+  deferred: boolean;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -66,8 +77,25 @@ export interface Budget {
   recurrance_schedule: string | null;
   memo: string | null;
   auto_spend: unknown;
+  next_funding: NextFunding | null;
   created_at: string;
   modified_at: string;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export interface FundingScheduleEntry {
+  schedule: string; // RRULE string
+  next_date: string; // ISO date
+  total_amount: string; // decimal string
+  currency: string;
+  budget_count: number;
+}
+
+export interface FundingSummary {
+  schedules: FundingScheduleEntry[];
+  total_amount: string; // decimal string
+  currency: string;
 }
 
 ////////////////////////////////////////////////////////////////////////

@@ -245,6 +245,81 @@ class TestInternalTransactionService:
         assert it.src_budget_balance == src.balance
         assert it.dst_budget_balance == dst.balance
 
+    ####################################################################
+    #
+    def test_historical_itx_updates_later_snapshots(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        user_factory: Callable[..., User],
+    ) -> None:
+        """
+        GIVEN: two forward ITxs (A at day1, B at day30) from Unallocated
+        WHEN:  a third historical ITx (C at day1, created after A) is inserted
+        THEN:  C's src_budget_balance snapshot is corrected to reflect the
+               balance after A but before C, and B's src_budget_balance is
+               recalculated to account for the extra debit from C
+        """
+        day1 = datetime(2024, 1, 1, tzinfo=UTC)
+        day30 = datetime(2024, 1, 30, tzinfo=UTC)
+
+        account = bank_account_factory(available_balance=Money(1200, "USD"))
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        eat = budget_factory(
+            bank_account=account,
+            balance=Money(0, "USD"),
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        )
+        spend = budget_factory(
+            bank_account=account,
+            balance=Money(0, "USD"),
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        )
+        actor = user_factory()
+
+        # ITx A: day1, Unallocated -> Eat, $400
+        itx_a = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=eat,
+            amount=Money(400, "USD"),
+            actor=actor,
+            effective_date=day1,
+        )
+        assert itx_a.src_budget_balance == Money(800, "USD")
+
+        # ITx B: day30, Unallocated -> Eat, $400
+        itx_b = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=eat,
+            amount=Money(400, "USD"),
+            actor=actor,
+            effective_date=day30,
+        )
+        assert itx_b.src_budget_balance == Money(400, "USD")
+
+        # ITx C: historical, day1 (created after A), Unallocated -> Spend, $200
+        itx_c = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=spend,
+            amount=Money(200, "USD"),
+            actor=actor,
+            effective_date=day1,
+        )
+
+        # C's snapshot: Unallocated was $1200 before A, $800 after A, $600 after C
+        itx_c.refresh_from_db()
+        assert itx_c.src_budget_balance == Money(600, "USD")
+
+        # B's snapshot must be updated: $1200 - $400 (A) - $200 (C) = $600 before B
+        itx_b.refresh_from_db()
+        assert itx_b.src_budget_balance == Money(200, "USD")
+
 
 ########################################################################
 ########################################################################
@@ -330,6 +405,157 @@ class TestTransactionAllocationService:
             "second caller should acquire lock after first releases"
         )
         t.join(timeout=2.0)
+
+    ####################################################################
+    #
+    def test_running_balances_updated_across_interleaved_allocations_and_itxs(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        user_factory: Callable[..., User],
+    ) -> None:
+        """
+        GIVEN: three transactions at dt1, dt2, dt4 exist in the system
+        WHEN:  (1) tx_dt2 and tx_dt4 are allocated to Groceries
+               (2) a funding ITx from Unallocated -> Groceries is inserted
+                   at effective_date dt3 (between the two allocations)
+               (3) tx_dt1 is allocated to Groceries (the "forgotten" alloc)
+        THEN:  all budget_balance snapshots on Groceries allocations and
+               src/dst_budget_balance snapshots on the ITx are consistent
+               with the chronological order of each budget's event stream
+               (transaction_date for allocs, effective_date for ITxs)
+
+        Event timeline (chronological):
+          dt1   tx_dt1  $+100   allocated in phase 3 (after the ITx)
+          dt2   tx_dt2  $-100   allocated in phase 1
+          dt3   ITx     $+100   Unallocated -> Groceries, inserted in phase 2
+          dt4   tx_dt4  $-200   allocated in phase 1
+
+        Groceries seed balance: $400
+        Unallocated seed balance: $500 (via bank account posted_balance)
+        """
+        dt1 = datetime(2024, 1, 1, tzinfo=UTC)
+        dt2 = datetime(2024, 2, 1, tzinfo=UTC)
+        dt3 = datetime(2024, 3, 1, tzinfo=UTC)
+        dt4 = datetime(2024, 4, 1, tzinfo=UTC)
+
+        account = bank_account_factory(
+            posted_balance=Money(500, "USD"),
+            available_balance=Money(500, "USD"),
+        )
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+
+        # Groceries is seeded at $400; the test verifies snapshot consistency,
+        # not the account-level sum(budget.balance)==posted_balance invariant.
+        #
+        groceries = budget_factory(
+            bank_account=account,
+            balance=Money(400, "USD"),
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        )
+        actor = user_factory()
+
+        # Create all transactions upfront in chronological order.  Transactions
+        # are not created out of order; it is the allocation of those
+        # transactions to budgets that is staged across the three phases.
+        # Transaction.objects.create is used directly to skip the bank-account
+        # balance update in transaction_svc.create, which is not under test.
+        #
+        tx_dt1 = Transaction.objects.create(
+            bank_account=account,
+            amount=Money(100, "USD"),  # type: ignore[misc]
+            posted_date=dt1,
+            transaction_date=dt1,
+            raw_description="Grocery budget deposit dt1",
+            transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
+        )
+        tx_dt2 = Transaction.objects.create(
+            bank_account=account,
+            amount=Money(-100, "USD"),  # type: ignore[misc]
+            posted_date=dt2,
+            transaction_date=dt2,
+            raw_description="Grocery purchase dt2",
+            transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
+        )
+        tx_dt4 = Transaction.objects.create(
+            bank_account=account,
+            amount=Money(-200, "USD"),  # type: ignore[misc]
+            posted_date=dt4,
+            transaction_date=dt4,
+            raw_description="Grocery purchase dt4",
+            transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
+        )
+
+        # -- phase 1: allocate dt2 and dt4 transactions to Groceries ----
+        #
+        alloc_dt2 = transaction_allocation_svc.create(
+            transaction=tx_dt2, budget=groceries, amount=Money(-100, "USD")
+        )
+        alloc_dt4 = transaction_allocation_svc.create(
+            transaction=tx_dt4, budget=groceries, amount=Money(-200, "USD")
+        )
+
+        # Groceries: $400 seed -> $300 (dt2) -> $100 (dt4)
+        #
+        alloc_dt2.refresh_from_db()
+        alloc_dt4.refresh_from_db()
+        assert alloc_dt2.budget_balance == Money(300, "USD")
+        assert alloc_dt4.budget_balance == Money(100, "USD")
+
+        # -- phase 2: backdated ITx at dt3, Unallocated -> Groceries ----
+        #
+        itx = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=groceries,
+            amount=Money(100, "USD"),
+            actor=actor,
+            effective_date=dt3,
+        )
+
+        # Groceries chain after ITx:
+        #   alloc_dt2:     $400 seed -> $300           (unchanged; ITx is after dt2)
+        #   itx.dst:       running $300 + $100 = $400  (credit at dt3)
+        #   alloc_dt4:     running $400 - $200 = $200  (debit at dt4)
+        # Unallocated chain:
+        #   itx.src:       $500 seed - $100 = $400     (debit at dt3)
+        #
+        itx.refresh_from_db()
+        alloc_dt2.refresh_from_db()
+        alloc_dt4.refresh_from_db()
+        assert alloc_dt2.budget_balance == Money(300, "USD")
+        assert itx.dst_budget_balance == Money(400, "USD")
+        assert alloc_dt4.budget_balance == Money(200, "USD")
+        assert itx.src_budget_balance == Money(400, "USD")
+
+        # -- phase 3: allocate the dt1 transaction to Groceries ---------
+        #
+        alloc_dt1 = transaction_allocation_svc.create(
+            transaction=tx_dt1, budget=groceries, amount=Money(100, "USD")
+        )
+
+        # Adding $100 at dt1 shifts every later Groceries snapshot by +$100.
+        # Unallocated has no allocations so its ITx snapshot is unchanged.
+        #
+        # Groceries chain after dt1 alloc:
+        #   alloc_dt1:   $400 seed + $100 = $500
+        #   alloc_dt2:   running $500 - $100 = $400
+        #   itx.dst:     running $400 + $100 = $500
+        #   alloc_dt4:   running $500 - $200 = $300
+        # Unallocated chain (unchanged):
+        #   itx.src:     $400
+        #
+        alloc_dt1.refresh_from_db()
+        alloc_dt2.refresh_from_db()
+        itx.refresh_from_db()
+        alloc_dt4.refresh_from_db()
+        assert alloc_dt1.budget_balance == Money(500, "USD")
+        assert alloc_dt2.budget_balance == Money(400, "USD")
+        assert itx.dst_budget_balance == Money(500, "USD")
+        assert alloc_dt4.budget_balance == Money(300, "USD")
+        assert itx.src_budget_balance == Money(400, "USD")
 
 
 ########################################################################

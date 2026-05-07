@@ -4,22 +4,30 @@ TransactionAllocation service -- Phase 3.
 Operations:
     create(transaction, budget, amount, **kwargs)
         Credits budget.balance, saves the allocation, recalculates
-        running budget_balance snapshots from this transaction forward.
+        running budget_balance snapshots from this transaction forward,
+        then refreshes InternalTransaction balance snapshots from the
+        same point.
 
     update_amount(allocation, new_amount)
         Adjusts budget.balance by the delta, saves the allocation,
         recalculates running budget_balance snapshots from this
-        transaction forward.
+        transaction forward, then refreshes InternalTransaction balance
+        snapshots from the same point.
 
     delete(allocation)
         Debits budget.balance, deletes the allocation, recalculates
         running budget_balance snapshots from the deleted allocation's
-        transaction forward.
+        transaction forward, then refreshes InternalTransaction balance
+        snapshots from the same point.
 
-Convention: these primitives are not called by views directly.
-TransactionService.split() (Phase 4) composes them.  During the
-Phase 3 → 4 transition, TransactionViewSet.splits/perform_create
-call them directly.
+InternalTransaction snapshots (src_budget_balance, dst_budget_balance)
+must be kept in sync with allocation snapshots because both encode the
+same running balance for a budget.  recalculate_itx_snapshots_from_dt
+is always called after _recalculate_running_balances so it can use the
+freshly updated allocation snapshots as anchors.
+
+These primitives are composed by TransactionService.split() and are not
+called by views directly.
 """
 
 # system imports
@@ -86,7 +94,7 @@ def create(
             )
             allocation.save()
             budget.save()
-            _recalculate_running_balances(budget, transaction)
+        recalculate_from_transaction(budget, transaction)
     return allocation
 
 
@@ -120,7 +128,7 @@ def update_amount(
             allocation.amount = new_amount
             allocation.save()
             budget.save()
-            _recalculate_running_balances(budget, transaction)
+        recalculate_from_transaction(budget, transaction)
     allocation.refresh_from_db()
     return allocation
 
@@ -151,7 +159,7 @@ def delete(allocation: TransactionAllocation) -> None:
             budget.balance -= allocation.amount
             budget.save()
             allocation.delete()
-            _recalculate_running_balances(budget, transaction)
+        recalculate_from_transaction(budget, transaction)
 
 
 ########################################################################
@@ -196,13 +204,44 @@ def _internal_transaction_delta(
 ########################################################################
 ########################################################################
 #
-def recalculate_from_dt(budget: Budget, from_dt: datetime) -> None:
-    """Trigger a running-balance recalculation starting from the first
-    allocation at or after from_dt.
+def recalculate_from_transaction(
+    budget: Budget, from_transaction: Transaction
+) -> None:
+    """Full running-balance recalculation starting from a known Transaction.
 
-    Called by the InternalTransaction service after an ITx is created or
-    deleted, so that the allocation snapshots for both affected budgets
-    stay in sync with the new funding state.
+    Updates both TransactionAllocation budget_balance snapshots and
+    InternalTransaction src/dst_budget_balance snapshots from
+    from_transaction's date forward.  Use this when the caller already
+    holds the Transaction object to avoid the extra query that
+    recalculate_from_dt performs to locate the starting point.
+
+    recalculate_itx_snapshots_from_dt is called after
+    _recalculate_running_balances so it can use the freshly updated
+    allocation snapshots as anchors.
+
+    Must be called while holding the budget lock (acquire_lock(budget.lock_key))
+    to prevent a concurrent allocation or InternalTransaction from modifying
+    the budget mid-scan and producing inconsistent snapshots.
+
+    Args:
+        budget: The budget whose snapshots need updating.
+        from_transaction: Recalculate from this transaction's date forward.
+    """
+    _recalculate_running_balances(budget, from_transaction)
+    recalculate_itx_snapshots_from_dt(budget, from_transaction.transaction_date)
+
+
+########################################################################
+########################################################################
+#
+def recalculate_from_dt(budget: Budget, from_dt: datetime) -> None:
+    """Full running-balance recalculation starting from a datetime.
+
+    Finds the first TransactionAllocation at or after from_dt and
+    recalculates allocation snapshots forward from there, then refreshes
+    InternalTransaction snapshots from from_dt.  Use this when only a
+    datetime is available (e.g. from an InternalTransaction's
+    effective_date).
 
     Args:
         budget: The budget whose snapshots need updating.
@@ -222,6 +261,119 @@ def recalculate_from_dt(budget: Budget, from_dt: datetime) -> None:
     )
     if first is not None:
         _recalculate_running_balances(budget, first.transaction)
+    recalculate_itx_snapshots_from_dt(budget, from_dt)
+
+
+########################################################################
+########################################################################
+#
+def recalculate_itx_snapshots_from_dt(
+    budget: Budget, from_dt: datetime
+) -> None:
+    """Recalculate src/dst_budget_balance snapshots on InternalTransaction rows.
+
+    Walk all InternalTransactions involving budget at or after from_dt
+    (ordered by effective_date, created_at) and update the balance snapshot
+    field so it reflects the budget's actual balance after that transfer.
+
+    Must be called after _recalculate_running_balances (or recalculate_from_dt)
+    so that TransactionAllocation budget_balance snapshots are fresh and can
+    be used as anchors.
+
+    Must be called while holding the budget lock (acquire_lock(budget.lock_key))
+    to prevent a concurrent allocation or InternalTransaction from modifying
+    the budget mid-scan and producing inconsistent snapshots.
+
+    Args:
+        budget: The budget whose ITx snapshots need updating.
+        from_dt: Recalculate ITxs with effective_date >= this datetime.
+    """
+    itxs = list(
+        InternalTransaction.objects.filter(
+            Q(src_budget=budget) | Q(dst_budget=budget),
+            effective_date__gte=from_dt,
+        ).order_by("effective_date", "created_at")
+    )
+    if not itxs:
+        return
+
+    # Anchor: last allocation strictly before from_dt.  By definition there
+    # are no allocations between this anchor and from_dt.
+    prior_alloc = (
+        TransactionAllocation.objects.filter(budget=budget)
+        .filter(transaction__transaction_date__lt=from_dt)
+        .order_by(
+            "-transaction__transaction_date",
+            "-transaction__created_at",
+            "-created_at",
+        )
+        .select_related("transaction")
+        .first()
+    )
+
+    if prior_alloc is not None:
+        running = _money_amount(prior_alloc.budget_balance)
+        anchor_dt = prior_alloc.transaction.transaction_date
+    else:
+        total_allocs = TransactionAllocation.objects.filter(
+            budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_credits = InternalTransaction.objects.filter(
+            dst_budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_debits = InternalTransaction.objects.filter(
+            src_budget=budget
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        running = (
+            budget.balance.amount
+            - Decimal(total_allocs)
+            - Decimal(total_credits)
+            + Decimal(total_debits)
+        )
+        anchor_dt = datetime.min.replace(tzinfo=UTC)
+
+    # Add net ITx effects strictly between anchor_dt and from_dt.
+    credits_between = InternalTransaction.objects.filter(
+        dst_budget=budget,
+        effective_date__gt=anchor_dt,
+        effective_date__lt=from_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    debits_between = InternalTransaction.objects.filter(
+        src_budget=budget,
+        effective_date__gt=anchor_dt,
+        effective_date__lt=from_dt,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    running += Decimal(credits_between) - Decimal(debits_between)
+
+    # Walk forward, maintaining the running balance.  At each ITx, running
+    # is the budget balance just before the transfer fires.
+    prev_effective_date = from_dt
+    for itx in itxs:
+        # Allocs at effective_date T come after all ITxs at T, so the window
+        # of allocations between consecutive ITxs is [prev, itx.effective_date).
+        if prev_effective_date < itx.effective_date:
+            alloc_delta = TransactionAllocation.objects.filter(
+                budget=budget,
+                transaction__transaction_date__gte=prev_effective_date,
+                transaction__transaction_date__lt=itx.effective_date,
+            ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            running += Decimal(alloc_delta)
+
+        # src_budget FK uses to_field="id" so src_budget_id is a UUID.
+        if itx.src_budget_id == budget.id:
+            new_snapshot = running - _money_amount(itx.amount)
+            if _money_amount(itx.src_budget_balance) != new_snapshot:
+                InternalTransaction.objects.filter(pk=itx.pk).update(
+                    src_budget_balance=new_snapshot
+                )
+        else:
+            new_snapshot = running + _money_amount(itx.amount)
+            if _money_amount(itx.dst_budget_balance) != new_snapshot:
+                InternalTransaction.objects.filter(pk=itx.pk).update(
+                    dst_budget_balance=new_snapshot
+                )
+        running = new_snapshot
+        prev_effective_date = itx.effective_date
 
 
 ########################################################################
@@ -243,6 +395,10 @@ def _recalculate_running_balances(
     than allocation.created_at.  This prevents the same InternalTransaction
     from being captured multiple times when allocations are added
     out-of-chronological-session order.
+
+    Must be called while holding the budget lock (acquire_lock(budget.lock_key))
+    to prevent a concurrent allocation or InternalTransaction from modifying
+    the budget mid-scan and producing inconsistent snapshots.
 
     Args:
         budget: The budget whose allocations need recalculation.

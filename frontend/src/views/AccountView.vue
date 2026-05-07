@@ -20,10 +20,12 @@ import { useRouter } from "vue-router";
 import EmptyState from "@/components/shared/EmptyState.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import AppShell from "@/components/layout/AppShell.vue";
+import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { updateCurrentUser } from "@/api/users";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
+import type { FundingSummary } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -72,15 +74,29 @@ function unallocatedFor(account: (typeof ctx.accounts)[0]) {
   return account.unallocated_budget ? budgets.byId(account.unallocated_budget) : null;
 }
 
-onMounted(() => {
+////////////////////////////////////////////////////////////////////////
+//
+// Funding summaries keyed by account ID, fetched in parallel on mount.
+//
+const fundingSummaries = ref(new Map<string, FundingSummary>());
+
+onMounted(async () => {
   // Ensure accounts list is fresh.
-  ctx.refresh();
-  // Load unallocated budget for each account so we can show "$X free".
+  await ctx.refresh();
+
+  // Load unallocated budget and funding summary for each account in parallel.
+  const tasks: Promise<unknown>[] = [];
   for (const account of ctx.accounts) {
     if (account.unallocated_budget && !budgets.byId(account.unallocated_budget)) {
-      budgets.fetchOne(account.unallocated_budget);
+      tasks.push(budgets.fetchOne(account.unallocated_budget));
     }
+    tasks.push(
+      apiFundingSummary(account.id).then((sum) => {
+        fundingSummaries.value.set(account.id, sum);
+      }),
+    );
   }
+  await Promise.allSettled(tasks);
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -131,7 +147,7 @@ async function signOut() {
             <div class="truncate text-[15px] font-medium text-neutral-900">
               {{ auth.user?.name || auth.user?.username || "—" }}
             </div>
-            <div class="text-xs text-neutral-500">{{ auth.user?.username }}</div>
+            <div class="text-xs text-secondary">{{ auth.user?.username }}</div>
           </div>
           <IconChevronRight class="h-5 w-5 flex-none text-neutral-400" />
         </button>
@@ -141,7 +157,7 @@ async function signOut() {
         Section 2 — Bank accounts list
       -->
       <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
           Bank accounts
         </h2>
         <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
@@ -161,7 +177,7 @@ async function signOut() {
                   <div class="truncate text-[15px] font-medium text-neutral-900">
                     {{ account.name }}
                   </div>
-                  <div class="text-xs text-neutral-500">{{ accountTypeMeta(account) }}</div>
+                  <div class="text-xs text-secondary">{{ accountTypeMeta(account) }}</div>
                 </div>
                 <div class="flex flex-none flex-col items-end gap-0.5">
                   <MoneyAmount
@@ -179,6 +195,21 @@ async function signOut() {
                       size="sm"
                     />
                     free
+                  </span>
+                  <span
+                    v-if="
+                      fundingSummaries.get(account.id)?.total_amount &&
+                      fundingSummaries.get(account.id)!.total_amount !== '0' &&
+                      fundingSummaries.get(account.id)!.total_amount !== '0.00'
+                    "
+                    class="text-[11px] text-ocean-500"
+                  >
+                    <MoneyAmount
+                      :amount="fundingSummaries.get(account.id)!.total_amount"
+                      :currency="fundingSummaries.get(account.id)!.currency"
+                      size="sm"
+                    />
+                    next event
                   </span>
                 </div>
                 <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
@@ -215,7 +246,7 @@ async function signOut() {
         Section 3 — Settings
       -->
       <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
           Settings
         </h2>
         <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
