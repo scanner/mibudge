@@ -126,8 +126,21 @@ uv run python -m importers import --dry-run ~/Downloads/*.ofx
 | `--account-type checking\|savings\|credit` | Account type (create mode, CSV only)                        |
 | `--account-number`                         | Account number (create mode, CSV only)                      |
 | `--dry-run, -n`                            | Validate and dedup-check without importing                  |
+| `--run-funding`                            | Run the funding engine after a successful import            |
 | `--verbose, -v`                            | Debug logging                                               |
 | `--plain`                                  | Disable rich terminal output (auto-detected when not a TTY) |
+
+### Running the funding engine after import
+
+The importer does **not** trigger funding automatically. If you want to fund budgets immediately after importing, pass `--run-funding`:
+
+```bash
+uv run python -m importers import ~/Downloads/*.ofx --run-funding
+```
+
+This calls `POST /api/v1/bank-accounts/<id>/run-funding/` after the import completes and prints the result (number of transfers, any warnings, skipped budget names). The flag is silently ignored on `--dry-run` runs.
+
+Without `--run-funding`, the funding engine will still run automatically at 3:00 AM each night.
 
 ### Account resolution
 

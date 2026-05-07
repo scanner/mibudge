@@ -49,3 +49,18 @@ export function deleteBankAccount(id: string): Promise<null> {
 export function fundingSummary(accountId: string): Promise<FundingSummary> {
   return useAuthStore().request<FundingSummary>(`/bank-accounts/${accountId}/funding-summary/`);
 }
+
+////////////////////////////////////////////////////////////////////////
+//
+export interface FundingRunResult {
+  deferred: boolean;
+  transfers: number;
+  warnings: string[];
+  skipped_budgets: string[];
+}
+
+export function runFunding(accountId: string): Promise<FundingRunResult> {
+  return useAuthStore().request<FundingRunResult>(`/bank-accounts/${accountId}/run-funding/`, {
+    method: "POST",
+  });
+}

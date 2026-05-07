@@ -20,7 +20,6 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from djmoney.money import Money
-from pytest_mock import MockerFixture
 
 # Project imports
 #
@@ -559,7 +558,7 @@ class TestCapAndWarn:
 
     ####################################################################
     #
-    def test_empty_unallocated_skips_but_advances_pointer(
+    def test_empty_unallocated_skips_and_does_not_advance_pointer(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,  # type: ignore[valid-type]
@@ -567,9 +566,10 @@ class TestCapAndWarn:
         """
         GIVEN: unallocated=$0
         WHEN:  fund event fires
-        THEN:  no transfer; warning logged; last_funded_on still advances
+        THEN:  no transfer; warning logged; last_funded_on unchanged (retry)
         """
         today = date(2026, 3, 1)
+        prior = date(2026, 2, 28)
         account = make_account(posted_through=today)
         unallocated = account.unallocated_budget
         assert unallocated is not None
@@ -586,18 +586,62 @@ class TestCapAndWarn:
             funding_amount=Money(50, "USD"),
             funding_schedule=_MONTHLY,
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 2, 28)
+        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=prior)
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        assert report.transfers == 0
+        assert len(report.warnings) == 1
+        assert "retry" in report.warnings[0]
+
+        budget.refresh_from_db()
+        assert budget.last_funded_on == prior
+
+    ####################################################################
+    #
+    def test_empty_fillup_skips_and_does_not_advance_recur_pointer(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: fillup=$0, recurring recur event fires
+        WHEN:  recur event processed
+        THEN:  no transfer; warning logged; last_recurrence_on unchanged (retry)
+        """
+        today = date(2026, 2, 1)
+        prior = date(2026, 1, 31)
+        account = make_account(posted_through=today)
+
+        recurring = budget_svc.create(
+            bank_account=account,
+            name="Bills",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(100, "USD"),
+            funding_amount=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+            recurrance_schedule=_MONTHLY,
+            with_fillup_goal=True,
+        )
+        recurring.refresh_from_db()
+        fillup = recurring.fillup_goal
+        assert fillup is not None
+
+        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(0, "USD"))
+        Budget.objects.filter(pkid=recurring.pkid).update(
+            last_funded_on=today,
+            last_recurrence_on=prior,
         )
 
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 0
         assert len(report.warnings) == 1
-        assert "empty" in report.warnings[0]
+        assert "retry" in report.warnings[0]
 
-        budget.refresh_from_db()
-        assert budget.last_funded_on == today
+        recurring.refresh_from_db()
+        assert recurring.last_recurrence_on == prior
 
     ####################################################################
     #
@@ -796,7 +840,8 @@ class TestPausedAndArchived:
         GIVEN: one paused budget, one active budget (parametrized)
         WHEN:  fund_account runs
         THEN:  paused budget gets no transfer; active budget is funded;
-               paused name appears in report.skipped_budgets when paused=True
+               paused name appears in report.skipped_budgets when paused=True;
+               paused budget's last_funded_on advances (start-fresh on unpause)
         """
         today = date(2026, 3, 1)
         account = make_account(posted_through=today)
@@ -836,6 +881,7 @@ class TestPausedAndArchived:
             assert "Paused" in report.skipped_budgets
             paused_budget.refresh_from_db()
             assert paused_budget.balance == Money(0, "USD")
+            assert paused_budget.last_funded_on == today
         else:
             assert report.transfers == 2
             assert not report.skipped_budgets
@@ -999,13 +1045,6 @@ class TestCeleryFanOut:
 #
 class TestMarkImportedEndpoint:
     """POST /api/v1/bank-accounts/<id>/mark-imported/"""
-
-    ####################################################################
-    #
-    @pytest.fixture(autouse=True)
-    def suppress_funding_task(self, mocker: MockerFixture) -> None:
-        """Prevent mark-imported from dispatching to Redis in unit tests."""
-        mocker.patch("moneypools.api.v1.views.fund_one_account.apply_async")
 
     ####################################################################
     #

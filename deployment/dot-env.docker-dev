@@ -1,0 +1,57 @@
+# mibudge docker-compose environment
+# Copied to deployment/local-dev-docker.env by `make env` (run once; edit after if needed)
+#
+# PURPOSE: this file is read by docker-compose via `env_file:` -- it uses
+# docker-internal hostnames (postgres, redis) and internal port numbers.
+# It is NOT for tools running outside the container; for that see dot-env.dev.
+#
+# All values below are safe defaults for local development.
+
+# General
+# ------------------------------------------------------------------------------
+DEBUG=True
+TIME_ZONE=America/Los_Angeles
+ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
+
+# Host paths (for docker-compose volume mounts)
+# ------------------------------------------------------------------------------
+HOST_SSL_DIR=./deployment/ssl
+HOST_DB_BACKUPS_DIR=./deployment/db_backups
+
+# Redis
+# ------------------------------------------------------------------------------
+REDIS_URL=redis://redis:6379/0
+
+# Celery
+# ------------------------------------------------------------------------------
+CELERY_BROKER_URL=redis://redis:6379/1
+CELERY_RESULT_BACKEND=redis://redis:6379/2
+CELERY_FLOWER_USER=debug
+CELERY_FLOWER_PASSWORD=debug
+
+# PostgreSQL
+# ------------------------------------------------------------------------------
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=mibudge
+POSTGRES_USER=debug
+POSTGRES_PASSWORD=debug
+DATABASE_URL=postgres://debug:debug@postgres:5432/mibudge
+
+# django-fernet-encrypted-fields
+# ------------------------------------------------------------------------------
+# Generate a real value with: python -c "import secrets; print(secrets.token_hex(32))"
+# For key rotation use a comma-separated list; see settings.py for details.
+SALT_KEY=dev-salt-key-not-for-production
+DJANGO_SECRET_KEY=local-dev-secret-key-not-for-production
+
+# SSL Certificates (local dev TLS)
+# ------------------------------------------------------------------------------
+# `make certs` generates hostname-prefixed cert files in deployment/ssl/ so
+# that multiple machines sharing the same filesystem each have their own cert.
+# Set these to the filenames (not full paths) within deployment/ssl/.
+# If unset, the dev server falls back to ssl_crt.pem / ssl_key.pem.
+#
+# Example -- replace with the output of `hostname`:
+# SSL_CERT_FILE=mylaptop.local-ssl_crt.pem
+# SSL_KEY_FILE=mylaptop.local-ssl_key.pem

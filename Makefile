@@ -12,11 +12,15 @@ BUILD_SALT_KEY := $(shell openssl rand -hex 32)
 
 .PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
 
-env: $(ROOT_DIR)/.env	## Copy deployment/dot-env.dev to .env if it does not exist
+env: $(ROOT_DIR)/.env $(ROOT_DIR)/deployment/local-dev-docker.env	## Generate .env and deployment/local-dev-docker.env from their templates
 
 $(ROOT_DIR)/.env:
 	@cp $(ROOT_DIR)/deployment/dot-env.dev $(ROOT_DIR)/.env
 	@echo "Created .env from deployment/dot-env.dev"
+
+$(ROOT_DIR)/deployment/local-dev-docker.env:
+	@cp $(ROOT_DIR)/deployment/dot-env.docker-dev $(ROOT_DIR)/deployment/local-dev-docker.env
+	@echo "Created deployment/local-dev-docker.env from deployment/dot-env.docker-dev"
 
 build:	## Build prod and dev Docker images
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target prod --tag mibudge:latest .

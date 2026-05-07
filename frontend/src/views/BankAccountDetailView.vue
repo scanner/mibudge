@@ -16,7 +16,15 @@ import { useRouter } from "vue-router";
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import AppShell from "@/components/layout/AppShell.vue";
-import { deleteBankAccount, getBankAccount, updateBankAccount } from "@/api/bankAccounts";
+import {
+  deleteBankAccount,
+  fundingSummary,
+  getBankAccount,
+  runFunding,
+  updateBankAccount,
+  type FundingRunResult,
+} from "@/api/bankAccounts";
+import type { FundingSummary } from "@/types/api";
 import { getBank } from "@/api/banks";
 import { listBudgets } from "@/api/budgets";
 import { useAccountContextStore } from "@/stores/accountContext";
@@ -47,6 +55,45 @@ const nameError = ref<string | null>(null);
 // Delete confirmation.
 const confirmDelete = ref(false);
 const deleting = ref(false);
+
+// Run-funding state.
+const funding = ref(false);
+const fundingResult = ref<FundingRunResult | null>(null);
+const fundingNextDate = ref<string | null>(null);
+const fundingError = ref<string | null>(null);
+
+const nothingDue = computed(
+  () =>
+    fundingResult.value !== null &&
+    !fundingResult.value.deferred &&
+    fundingResult.value.transfers === 0 &&
+    fundingResult.value.warnings.length === 0 &&
+    fundingResult.value.skipped_budgets.length === 0,
+);
+
+async function triggerFunding() {
+  funding.value = true;
+  fundingResult.value = null;
+  fundingNextDate.value = null;
+  fundingError.value = null;
+  try {
+    fundingResult.value = await runFunding(props.id);
+    // Refresh account balances and next-event date in parallel.
+    const [acct, summary] = await Promise.all([
+      getBankAccount(props.id),
+      fundingSummary(props.id).catch(() => null as FundingSummary | null),
+    ]);
+    account.value = acct;
+    if (acct.unallocated_budget) {
+      budgetsStore.fetchOne(acct.unallocated_budget);
+    }
+    fundingNextDate.value = summary?.schedules[0]?.next_date ?? null;
+  } catch (err) {
+    fundingError.value = err instanceof Error ? err.message : "Funding run failed.";
+  } finally {
+    funding.value = false;
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -368,6 +415,80 @@ async function deleteAccount() {
           </div>
           <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
         </button>
+      </section>
+
+      <!-- Funding -->
+      <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+        <h2
+          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        >
+          Funding
+        </h2>
+        <div class="px-4 py-3 space-y-3">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-secondary">Data current through</span>
+            <span class="font-mono text-neutral-900">
+              {{ account.last_posted_through ?? "—" }}
+            </span>
+          </div>
+          <p class="text-xs text-secondary">
+            After importing transactions and finishing allocations, run the funding engine to move
+            money into budgets based on their schedules.
+          </p>
+          <button
+            type="button"
+            :disabled="funding"
+            class="w-full rounded-subcard bg-ocean-400 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+            @click="triggerFunding"
+          >
+            {{ funding ? "Running…" : "Run funding now" }}
+          </button>
+
+          <!-- Result -->
+          <div
+            v-if="fundingResult"
+            class="rounded-subcard border px-3 py-2.5 text-sm"
+            :class="
+              fundingResult.deferred
+                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                : nothingDue
+                  ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
+                  : 'border-mint-200 bg-mint-50 text-mint-700'
+            "
+          >
+            <template v-if="fundingResult.deferred">
+              Deferred — import data is not current through the next event date.
+            </template>
+            <template v-else-if="nothingDue">
+              Nothing currently due.
+              <span v-if="fundingNextDate" class="text-neutral-500">
+                Next funding event: {{ fundingNextDate }}.
+              </span>
+            </template>
+            <template v-else>
+              {{ fundingResult.transfers }} transfer{{ fundingResult.transfers === 1 ? "" : "s" }}
+              completed.
+            </template>
+            <ul
+              v-if="fundingResult.warnings.length"
+              class="mt-1.5 space-y-0.5 text-xs text-amber-600"
+            >
+              <li v-for="w in fundingResult.warnings" :key="w">{{ w }}</li>
+            </ul>
+            <div v-if="fundingResult.skipped_budgets.length" class="mt-1.5">
+              <span class="text-xs font-medium">Skipped (paused):</span>
+              <ul class="mt-0.5 space-y-0.5 text-xs opacity-80">
+                <li v-for="name in fundingResult.skipped_budgets" :key="name">{{ name }}</li>
+              </ul>
+            </div>
+          </div>
+          <div
+            v-if="fundingError"
+            class="rounded-subcard border border-coral-200 bg-coral-50 px-3 py-2.5 text-sm text-coral-600"
+          >
+            {{ fundingError }}
+          </div>
+        </div>
       </section>
 
       <!-- Delete -->

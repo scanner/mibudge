@@ -1285,6 +1285,115 @@ def _resolve_bank_account(
 
 ####################################################################
 #
+def _mark_imported(
+    client: MibudgeClient,
+    bank_account_id: str,
+    posted_through: date,
+    *,
+    console: Console,
+    interactive: bool,
+) -> None:
+    """Call the mark-imported endpoint to advance last_posted_through.
+
+    Sets last_posted_through on the account (never regresses an existing
+    value), which unblocks the funding engine's import-freshness gate.
+    Funding itself is not triggered here -- use --run-funding for that.
+
+    Non-fatal: a failure here is logged at ERROR but does not abort the
+    import; the transactions are already on the server.
+
+    Args:
+        client: Authenticated MibudgeClient.
+        bank_account_id: UUID of the account just imported into.
+        posted_through: Date through which the statement data is current
+            (statement.ending_date).
+        console: Rich console for user-visible messages.
+        interactive: Whether to render rich output.
+    """
+    try:
+        client.post(
+            f"/api/v1/bank-accounts/{bank_account_id}/mark-imported/",
+            {"last_posted_through": posted_through.isoformat()},
+        )
+        if interactive:
+            console.print(f"[dim]Import marked through {posted_through}.[/dim]")
+        else:
+            logger.info(
+                "mark-imported OK: last_posted_through=%s.", posted_through
+            )
+    except APIError as e:
+        logger.error(
+            "mark-imported failed for account %s: %s",
+            bank_account_id,
+            e,
+        )
+
+
+####################################################################
+#
+def _run_funding(
+    client: MibudgeClient,
+    bank_account_id: str,
+    *,
+    console: Console,
+    interactive: bool,
+) -> None:
+    """Call the run-funding endpoint and print a summary of results.
+
+    Non-fatal: a failure is logged at ERROR but does not abort the
+    caller; the import and mark-imported steps already completed.
+
+    Args:
+        client: Authenticated MibudgeClient.
+        bank_account_id: UUID of the account to fund.
+        console: Rich console for user-visible messages.
+        interactive: Whether to render rich output.
+    """
+    try:
+        result = client.post(
+            f"/api/v1/bank-accounts/{bank_account_id}/run-funding/", {}
+        )
+    except APIError as e:
+        logger.error(
+            "run-funding failed for account %s: %s", bank_account_id, e
+        )
+        return
+
+    deferred = result.get("deferred", False)
+    transfers = result.get("transfers", 0)
+    warnings = result.get("warnings") or []
+    skipped = result.get("skipped_budgets") or []
+
+    if interactive:
+        if deferred:
+            console.print(
+                "[warning]Funding deferred[/warning] -- import data not "
+                "current through the next event date."
+            )
+        else:
+            console.print(
+                f"[success]Funding:[/success] {transfers} transfer(s) completed."
+            )
+        for w in warnings:
+            console.print(f"  [warning]![/warning] {w}")
+        for s in skipped:
+            console.print(f"  [dim]Skipped (paused): {s}[/dim]")
+    else:
+        if deferred:
+            logger.info("run-funding: deferred.")
+        else:
+            logger.info(
+                "run-funding: %d transfer(s). warnings=%d skipped=%d",
+                transfers,
+                len(warnings),
+                len(skipped),
+            )
+        for w in warnings:
+            logger.warning("run-funding warning: %s", w)
+
+
+####################################################################
+#
 def _verify_final_balance(
     client: MibudgeClient,
     bank_account_id: str,
@@ -1750,6 +1859,15 @@ def _print_summary(
         "OFX -- the statement's ACCTID is used."
     ),
 )
+@click.option(
+    "--run-funding",
+    is_flag=True,
+    help=(
+        "Run the funding engine immediately after a successful import. "
+        "Processes all due fund and recurrence events as of today. "
+        "Skipped on --dry-run."
+    ),
+)
 def cli_cmd(
     url: str | None,
     username: str | None,
@@ -1769,6 +1887,7 @@ def cli_cmd(
     bank: str | None,
     account_type: str | None,
     account_number: str | None,
+    run_funding: bool,
 ) -> None:
     """CLI entry point for the statement importer."""
     console = Console(theme=get_theme(theme_name).rich, stderr=True)
@@ -1963,6 +2082,23 @@ def cli_cmd(
                 _verify_final_balance(
                     client, account_id, statement.ending_balance
                 )
+
+                # Advance last_posted_through to unblock the funding gate.
+                _mark_imported(
+                    client,
+                    account_id,
+                    statement.ending_date,
+                    console=console,
+                    interactive=interactive,
+                )
+
+                if run_funding:
+                    _run_funding(
+                        client,
+                        account_id,
+                        console=console,
+                        interactive=interactive,
+                    )
 
     except AuthenticationError as e:
         raise click.ClickException(str(e)) from e

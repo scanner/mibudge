@@ -48,7 +48,6 @@ from moneypools.service import budget as budget_svc
 from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import transaction as transaction_svc
-from moneypools.tasks import fund_one_account
 
 from .filters import (
     BudgetFilter,
@@ -242,11 +241,137 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         )
         account.refresh_from_db()
 
-        # Trigger funding immediately rather than waiting for the 3am cron.
-        fund_one_account.apply_async(args=[str(account.id)])
-
         serializer = self.get_serializer(account)
         return Response(serializer.data)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Run funding",
+        description=(
+            "Run the funding engine for this account immediately.  "
+            "Processes all due fund and recurrence events up to `as_of` "
+            "(defaults to today) and returns a summary of what happened.  "
+            "Pass `as_of` when calling between import batches so the engine "
+            "only sees events up to that batch boundary date."
+        ),
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "as_of": {
+                        "type": "string",
+                        "format": "date",
+                        "description": (
+                            "Upper bound for event enumeration (YYYY-MM-DD). "
+                            "Defaults to today."
+                        ),
+                    }
+                },
+            }
+        },
+        responses={
+            200: OpenApiResponse(
+                description="Funding run result.",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "deferred": {"type": "boolean"},
+                        "transfers": {"type": "integer"},
+                        "warnings": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "skipped_budgets": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                },
+            )
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="run-funding")
+    def run_funding(self, request: Request, id: str = "") -> Response:
+        """Run the funding engine for this account and return a summary."""
+        account: BankAccount = self.get_object()
+
+        as_of_raw = request.data.get("as_of")
+        if as_of_raw is not None:
+            try:
+                as_of = date.fromisoformat(str(as_of_raw))
+            except ValueError as exc:
+                raise ValidationError(
+                    {"as_of": "Must be a date in YYYY-MM-DD format."}
+                ) from exc
+        else:
+            as_of = date.today()
+
+        try:
+            system_user = funding_svc.funding_system_user()
+        except Exception:
+            return Response(
+                {"detail": "Funding system user not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        report = funding_svc.fund_account(account, as_of, system_user)
+        return Response(
+            {
+                "deferred": report.deferred,
+                "transfers": report.transfers,
+                "warnings": report.warnings,
+                "skipped_budgets": report.skipped_budgets,
+            }
+        )
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Funding event dates",
+        description=(
+            "Return all dates in (after, before] on which at least one "
+            "funding or recurrence event is due for this account.  "
+            "The importer uses this to find batch-split boundaries."
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Sorted list of event dates.",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "dates": {
+                            "type": "array",
+                            "items": {"type": "string", "format": "date"},
+                        }
+                    },
+                },
+            )
+        },
+    )
+    @action(detail=True, methods=["get"], url_path="funding-event-dates")
+    def funding_event_dates(self, request: Request, id: str = "") -> Response:
+        """Return funding event dates in a query-param date range."""
+        account: BankAccount = self.get_object()
+
+        after_raw = request.query_params.get("after")
+        before_raw = request.query_params.get("before")
+
+        if not after_raw or not before_raw:
+            raise ValidationError(
+                {
+                    "detail": "Both 'after' and 'before' query params are required."
+                }
+            )
+        try:
+            after = date.fromisoformat(after_raw)
+            before = date.fromisoformat(before_raw)
+        except ValueError as exc:
+            raise ValidationError(
+                {"detail": "Dates must be in YYYY-MM-DD format."}
+            ) from exc
+
+        dates = funding_svc.funding_event_dates(account, after, before)
+        return Response({"dates": [d.isoformat() for d in dates]})
 
     ####################################################################
     #
