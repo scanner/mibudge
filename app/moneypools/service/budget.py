@@ -67,7 +67,7 @@ def create(
         funding_type: One of Budget.FundingType values.
         target_balance: Target funding amount.
         **kwargs: Any other Budget field values (paused, target_date,
-            funding_amount, funding_schedule, recurrance_schedule, memo,
+            funding_amount, funding_schedule, recurrence_schedule, memo,
             with_fillup_goal, etc.).
 
     Returns:

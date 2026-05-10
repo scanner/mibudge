@@ -61,6 +61,7 @@ const funding = ref(false);
 const fundingResult = ref<FundingRunResult | null>(null);
 const fundingNextDate = ref<string | null>(null);
 const fundingError = ref<string | null>(null);
+const fundingSummaryData = ref<FundingSummary | null>(null);
 
 const nothingDue = computed(
   () =>
@@ -87,6 +88,7 @@ async function triggerFunding() {
     if (acct.unallocated_budget) {
       budgetsStore.fetchOne(acct.unallocated_budget);
     }
+    fundingSummaryData.value = summary;
     fundingNextDate.value = summary?.schedules[0]?.next_date ?? null;
   } catch (err) {
     fundingError.value = err instanceof Error ? err.message : "Funding run failed.";
@@ -123,10 +125,12 @@ onMounted(async () => {
   loading.value = true;
   error.value = null;
   try {
-    const [acct, budgetsPage] = await Promise.all([
+    const [acct, budgetsPage, summary] = await Promise.all([
       getBankAccount(props.id),
       listBudgets({ bank_account: props.id }),
+      fundingSummary(props.id).catch(() => null as FundingSummary | null),
     ]);
+    fundingSummaryData.value = summary;
     account.value = acct;
     editName.value = acct.name;
 
@@ -435,6 +439,32 @@ async function deleteAccount() {
             After importing transactions and finishing allocations, run the funding engine to move
             money into budgets based on their schedules.
           </p>
+          <div
+            v-if="
+              fundingSummaryData &&
+              fundingSummaryData.total_amount !== '0' &&
+              fundingSummaryData.total_amount !== '0.00'
+            "
+            class="rounded-subcard border border-ocean-200 bg-ocean-50 px-3 py-2 text-xs text-ocean-700"
+          >
+            Next event:
+            <MoneyAmount
+              :amount="fundingSummaryData.total_amount"
+              :currency="fundingSummaryData.currency"
+              size="sm"
+              class="font-medium"
+            />
+            <template
+              v-if="
+                fundingSummaryData.schedules.length > 0 && fundingSummaryData.schedules[0].next_date
+              "
+            >
+              on {{ fundingSummaryData.schedules[0].next_date }}
+            </template>
+            <template v-if="fundingSummaryData.schedules.length > 1">
+              across {{ fundingSummaryData.schedules.length }} schedules
+            </template>
+          </div>
           <button
             type="button"
             :disabled="funding"

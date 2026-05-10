@@ -692,7 +692,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -713,7 +713,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -734,7 +734,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -763,7 +763,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -811,7 +811,7 @@ Return a single budget by UUID.
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -851,7 +851,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -872,7 +872,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -893,7 +893,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -922,7 +922,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -962,7 +962,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -983,7 +983,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1004,7 +1004,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1033,7 +1033,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -1085,7 +1085,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1106,7 +1106,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1127,7 +1127,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1156,7 +1156,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -1941,7 +1941,7 @@ signal and is not accepted from the client.
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -1981,7 +1981,7 @@ signal and is not accepted from the client.
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -2306,7 +2306,7 @@ signal and is not accepted from the client.
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrance_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 

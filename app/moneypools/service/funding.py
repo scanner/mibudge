@@ -11,7 +11,7 @@ The engine processes two event types per budget:
                    into the target budget (or its fillup_goal for
                    recurring-with-fillup budgets).
 
-  Recur events  -- fire on budget.recurrance_schedule.
+  Recur events  -- fire on budget.recurrence_schedule.
                    Only for Recurring + with_fillup_goal budgets.
                    Transfer from fillup_goal into the recurring budget
                    up to its target_balance; set complete if funded.
@@ -178,9 +178,20 @@ def next_funding_info(
 
     account = scheduling_budget.bank_account
 
-    after = (
-        scheduling_budget.last_funded_on or scheduling_budget.created_at.date()
-    )
+    if scheduling_budget.last_funded_on is not None:
+        after = scheduling_budget.last_funded_on
+    else:
+        # Mirror _collect_events: push back to one day before the most recent
+        # funding boundary so that past-due catch-up events are included.
+        prev = _prev_recurrence_boundary(
+            scheduling_budget.funding_schedule,
+            scheduling_budget.created_at.date(),
+        )
+        after = (
+            prev - timedelta(days=1)
+            if prev is not None
+            else scheduling_budget.created_at.date()
+        )
     # Look ahead up to 2 years to find the next event.
     look_ahead = date(today.year + 2, today.month, today.day)
     upcoming = _enumerate_schedule(
@@ -390,7 +401,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
             budget.budget_type == Budget.BudgetType.RECURRING
             and budget.with_fillup_goal
             and budget.fillup_goal is not None
-            and budget.recurrance_schedule
+            and budget.recurrence_schedule
         ):
             if budget.last_recurrence_on is not None:
                 recur_after = budget.last_recurrence_on
@@ -401,7 +412,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                 # the schedule's DTSTART and created_at is not silently
                 # skipped just because the Django object was created after it.
                 prev = _prev_recurrence_boundary(
-                    budget.recurrance_schedule, budget.created_at.date()
+                    budget.recurrence_schedule, budget.created_at.date()
                 )
                 recur_after = (
                     prev - timedelta(days=1)
@@ -409,7 +420,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                     else budget.created_at.date()
                 )
             for d in _enumerate_schedule(
-                budget.recurrance_schedule, recur_after, today
+                budget.recurrence_schedule, recur_after, today
             ):
                 events.append(
                     FundingEvent(date=d, kind=_KIND_RECUR, budget=budget)
@@ -483,8 +494,10 @@ def _process_fund_event(
     Transfer funds from unallocated into the target budget.
 
     For Recurring + with_fillup_goal, the target is the fillup_goal.
-    Otherwise the target is the budget itself.  Caps at unallocated
-    balance, advances last_funded_on regardless.
+    Otherwise the target is the budget itself.  Caps at unallocated balance.
+    Advances last_funded_on unless unallocated is completely empty, in which
+    case the event retries on the next run.  Partial (capped) transfers still
+    advance the pointer; recovery happens at the next scheduled event.
 
     Args:
         ev: The funding event to process.
@@ -639,10 +652,47 @@ def _fill_amount_prorated(
     if full_gap <= Decimal("0"):
         return zero
 
-    all_cycle_events = _enumerate_schedule(
-        budget.funding_schedule, cycle_start, cycle_before
+    sched = budget.funding_schedule
+    if not sched:
+        return Money(full_gap, currency)
+
+    after_dt = datetime(cycle_start.year, cycle_start.month, cycle_start.day)
+    before_dt = datetime(
+        cycle_before.year, cycle_before.month, cycle_before.day, 23, 59, 59
     )
-    N = len(all_cycle_events)
+
+    raw = sched.dtstart
+    raw_clean = raw.replace(tzinfo=None) if raw is not None else None
+    # Use the earlier of the schedule's DTSTART and cycle_start as the
+    # effective dtstart.  For theoretical prior cycles (e.g. a yearly budget
+    # in its first annual cycle where the funding schedule's DTSTART is later
+    # than the theoretical cycle start), this ensures events from the start of
+    # the full cycle are counted rather than only events after DTSTART.
+    effective_dtstart = (
+        min(raw_clean, after_dt) if raw_clean is not None else after_dt
+    )
+
+    try:
+        occs = list(
+            sched.between(
+                after_dt, before_dt, inc=False, dtstart=effective_dtstart
+            )
+        )
+    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
+        logger.warning("_fill_amount_prorated: recurrence error: %r", exc)
+        return Money(full_gap, currency)
+
+    results = []
+    for occ in occs:
+        d = (
+            occ.date()
+            if hasattr(occ, "date")
+            else date(occ.year, occ.month, occ.day)
+        )
+        if cycle_start < d <= cycle_before:
+            results.append(d)
+
+    N = len(sorted(set(results)))
     if N == 0:
         return Money(full_gap, currency)
 
@@ -698,19 +748,85 @@ def _calculate_fund_amount(
     # the budget itself or its associated fill-up goal.
     if (
         budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.recurrance_schedule
+        and budget.recurrence_schedule
     ):
         cycle_end = _next_recurrence_boundary(
-            budget.recurrance_schedule, event_date + timedelta(days=1)
+            budget.recurrence_schedule, event_date + timedelta(days=1)
         )
         if cycle_end is not None:
-            cycle_start = (
-                _prev_recurrence_boundary(
-                    budget.recurrance_schedule, event_date
-                )
-                or budget.last_recurrence_on
-                or budget.created_at.date()
+            _prev = _prev_recurrence_boundary(
+                budget.recurrence_schedule, event_date
             )
+            cycle_start = (
+                _prev or budget.last_recurrence_on or budget.created_at.date()
+            )
+            if _prev is None and budget.last_recurrence_on is None:
+                # First cycle: the schedule's DTSTART hasn't been reached yet
+                # so _prev_recurrence_boundary returns None.  Compute the
+                # theoretical prior boundary by projecting the rule backward
+                # using cycle_end's month/day as the anchor -- this preserves
+                # the correct day-of-year for YEARLY rules and day-of-month
+                # for MONTHLY rules.  Without this, N counts only the
+                # remaining events (e.g., 8) instead of the full cycle
+                # (e.g., 23), inflating the per-event amount.
+                early_anchor = datetime(
+                    cycle_end.year - 3, cycle_end.month, cycle_end.day
+                )
+                one_before = cycle_end - timedelta(days=1)
+                end_search = datetime(
+                    one_before.year,
+                    one_before.month,
+                    one_before.day,
+                    23,
+                    59,
+                    59,
+                )
+                try:
+                    prior_occs = list(
+                        budget.recurrence_schedule.between(
+                            early_anchor,
+                            end_search,
+                            inc=True,
+                            dtstart=early_anchor,
+                        )
+                    )
+                    if prior_occs:
+                        last_occ = prior_occs[-1]
+                        theoretical_start = (
+                            last_occ.date()
+                            if hasattr(last_occ, "date")
+                            else date(
+                                last_occ.year, last_occ.month, last_occ.day
+                            )
+                        )
+                        cycle_start = theoretical_start
+                except (recurrence_lib.RecurrenceError, TypeError, ValueError):
+                    pass
+            if cycle_start >= cycle_end:
+                # event_date falls before the first recurrence boundary (e.g.,
+                # a catch-up funding event on April 30 with DTSTART May 1).
+                # Use the first full cycle's event count as the rate basis so
+                # _fill_amount_prorated doesn't fall back to N=0 → full_gap.
+                #
+                # Use _enumerate_schedule (inc=False) instead of
+                # _next_recurrence_boundary here: the boundary helper subtracts
+                # one day before calling between(), which causes it to return
+                # cycle_end itself when dtstart == cycle_end.
+                look_ahead = date(
+                    cycle_end.year + 2, cycle_end.month, cycle_end.day
+                )
+                future = _enumerate_schedule(
+                    budget.recurrence_schedule, cycle_end, look_ahead
+                )
+                if future:
+                    next_cycle_end = future[0]
+                    return _fill_amount_prorated(
+                        budget,
+                        target,
+                        event_date,
+                        cycle_end - timedelta(days=1),
+                        next_cycle_end - timedelta(days=1),
+                    )
             return _fill_amount_prorated(
                 budget,
                 target,

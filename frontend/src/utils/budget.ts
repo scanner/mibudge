@@ -93,8 +93,8 @@ export function budgetMeta(budget: Budget): string {
   if (budget.budget_type === "C") {
     return "Capped";
   }
-  if (budget.recurrance_schedule) {
-    return `Recurring · resets ${rruleHuman(budget.recurrance_schedule)}`;
+  if (budget.recurrence_schedule) {
+    return `Recurring · resets ${rruleHuman(budget.recurrence_schedule)}`;
   }
   return "Recurring";
 }

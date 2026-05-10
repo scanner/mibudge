@@ -1737,7 +1737,7 @@ components:
           description: A paused budget does not get automatically funded on its schedule.
         funding_schedule:
           type: string
-        recurrance_schedule:
+        recurrence_schedule:
           type: string
           nullable: true
         memo:
@@ -1829,7 +1829,7 @@ components:
           description: A paused budget does not get automatically funded on its schedule.
         funding_schedule:
           type: string
-        recurrance_schedule:
+        recurrence_schedule:
           type: string
           nullable: true
         memo:
@@ -2535,7 +2535,7 @@ components:
           description: A paused budget does not get automatically funded on its schedule.
         funding_schedule:
           type: string
-        recurrance_schedule:
+        recurrence_schedule:
           type: string
           nullable: true
         memo:

@@ -9,7 +9,7 @@ mark-imported REST endpoint.
 # system imports
 #
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 # 3rd party imports
@@ -50,6 +50,30 @@ _TWICE_MONTHLY = recurrence.Recurrence(
 _MONTHLY_FIRST = recurrence.Recurrence(
     dtstart=datetime(2026, 2, 1),
     rrules=[recurrence.Rule(recurrence.MONTHLY)],
+)
+
+# Fires on the 15th and last day of each month -- matches the real-world
+# semi-monthly funding schedule used in the joint checking account.
+_TWICE_MONTHLY_15_EOM = recurrence.Recurrence(
+    dtstart=datetime(2026, 1, 15),
+    rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
+)
+
+# Recurrence reset on the 1st of each month, first cycle starting May 2026.
+# DTSTART=May 1 means _prev_recurrence_boundary returns None for any date
+# before May 1, which is the trigger for the pre-cycle code path.
+_MONTHLY_MAY_FIRST = recurrence.Recurrence(
+    dtstart=datetime(2026, 5, 1),
+    rrules=[recurrence.Rule(recurrence.MONTHLY)],
+)
+
+# Annual recurrence on Sep 15, starting Sep 15, 2026.  Models a yearly budget
+# whose first full cycle runs Sep 15, 2025 (theoretical) to Sep 15, 2026.
+# DTSTART in the future means _prev_recurrence_boundary returns None for any
+# date before Sep 15, 2026, exercising the theoretical-prior-boundary path.
+_YEARLY_SEP_15 = recurrence.Recurrence(
+    dtstart=datetime(2026, 9, 15),
+    rrules=[recurrence.Rule(recurrence.YEARLY)],
 )
 
 
@@ -247,7 +271,7 @@ class TestFundingEngineRecurringWithFillup:
             target_balance=Money(100, "USD"),
             funding_amount=Money(80, "USD"),
             funding_schedule=_MONTHLY,
-            recurrance_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY,
             with_fillup_goal=True,
         )
         recurring.refresh_from_db()
@@ -303,7 +327,7 @@ class TestFundingEngineRecurringWithFillup:
             target_balance=Money(100, "USD"),
             funding_amount=Money(100, "USD"),
             funding_schedule=_MONTHLY,
-            recurrance_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY,
             with_fillup_goal=True,
         )
         recurring.refresh_from_db()
@@ -621,7 +645,7 @@ class TestCapAndWarn:
             target_balance=Money(100, "USD"),
             funding_amount=Money(100, "USD"),
             funding_schedule=_MONTHLY,
-            recurrance_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY,
             with_fillup_goal=True,
         )
         recurring.refresh_from_db()
@@ -666,7 +690,7 @@ class TestCapAndWarn:
             target_balance=Money(100, "USD"),
             funding_amount=Money(100, "USD"),
             funding_schedule=_MONTHLY,
-            recurrance_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY,
             with_fillup_goal=True,
         )
         recurring.refresh_from_db()
@@ -1418,6 +1442,179 @@ class TestNextFundingInfo:
         assert info.date == date(2026, 3, 1)
         assert info.amount == Money(200, "USD")
 
+    ####################################################################
+    #
+    def test_never_funded_finds_catchup_event(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: RECURRING+fillup budget that has never been funded
+               (last_funded_on=None, created May 1); funding schedule fires on
+               the 15th and last day of each month; last_posted_through=April 30;
+               today=May 9
+        WHEN:  next_funding_info called on the fillup goal
+        THEN:  returns date=April 30 (catch-up), not May 15 (next future event)
+
+        Regression: old anchor used created_at.date() directly, so the April 30
+        event was skipped and May 15 was returned instead.  Fix: mirror
+        _collect_events and use _prev_recurrence_boundary to find the last
+        boundary before created_at, then pull back one day.
+        """
+        today = date(2026, 5, 9)
+        account = make_account(posted_through=date(2026, 4, 30))
+
+        parent = budget_svc.create(
+            bank_account=account,
+            name="Mortgage",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(1000, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+            recurrence_schedule=_MONTHLY_MAY_FIRST,
+            with_fillup_goal=True,
+        )
+        # Simulate a budget created on May 1 that has never been funded.
+        # Old anchor: created_at.date()=May 1 → first event after May 1 = May 15
+        # New anchor: _prev_recurrence_boundary(May 1)=April 30 → after=April 29
+        #             → first event after April 29 = April 30 (catch-up)
+        Budget.objects.filter(pkid=parent.pkid).update(
+            created_at=datetime(2026, 5, 1, tzinfo=UTC),
+        )
+        parent.refresh_from_db()
+        fillup = parent.fillup_goal
+        assert fillup is not None
+
+        info = funding_svc.next_funding_info(fillup, today=today)
+
+        assert info is not None
+        assert info.date == date(2026, 4, 30)
+
+    ####################################################################
+    #
+    def test_yearly_first_cycle_uses_full_annual_event_count(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: RECURRING+fillup with a yearly recurrence (first reset Sep 15,
+               2026) and a twice-monthly funding schedule (DTSTART Jan 15, 2026,
+               15th and EOM); budget created Apr 30, last_funded_on=May 8 so
+               next event is May 15; last_recurrence_on=None (first cycle)
+        WHEN:  next_funding_info called on the fill-up goal
+        THEN:  amount = $3400 / 23 = $147.83 (full annual cycle)
+               NOT $3400 / 8 = $425 (only May-Aug events remaining)
+
+        Regression: _fill_amount_prorated used sched.dtstart (Jan 15, 2026) as
+        the counting anchor, so Sep-Dec 2025 events (before DTSTART but within
+        the theoretical annual cycle Sep 15, 2025 to Sep 14, 2026) were missed.
+        Fix: use min(sched.dtstart, cycle_start) as effective dtstart so the
+        full cycle's 23 events are counted regardless of when DTSTART falls.
+        """
+        today = date(2026, 5, 9)
+        account = make_account(posted_through=today)
+
+        parent = budget_svc.create(
+            bank_account=account,
+            name="AAA Auto Insurance",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(3400, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+            recurrence_schedule=_YEARLY_SEP_15,
+            with_fillup_goal=True,
+        )
+        Budget.objects.filter(pkid=parent.pkid).update(
+            last_funded_on=date(2026, 5, 8),
+            created_at=datetime(2026, 4, 30, tzinfo=UTC),
+        )
+        parent.refresh_from_db()
+        fillup = parent.fillup_goal
+        assert fillup is not None
+
+        info = funding_svc.next_funding_info(fillup, today=today)
+
+        assert info is not None
+        assert info.date == date(2026, 5, 15)
+        # Full annual cycle: Sep 15, 2025 (theoretical) to Sep 14, 2026
+        # Sep-Dec 2025: Sep 30, Oct 15, Oct 31, Nov 15, Nov 30, Dec 15, Dec 31 = 7
+        # Jan-Aug 2026: 16 events (15th + EOM each month, Feb has 28 days)
+        # Total N=23 → steady_state = $3400 / 23 = $147.83
+        assert info.amount == Money("147.83", "USD")
+
+
+########################################################################
+########################################################################
+#
+class TestPreCycleCatchupFunding:
+    """Fund events that fall before the first recurrence cycle boundary.
+
+    When a budget is new and a funding event fires before the first
+    recurrence reset (e.g., April 30 funding event with DTSTART=May 1),
+    _prev_recurrence_boundary returns None for the recurrence_schedule.
+    The fallback to created_at.date() produces cycle_start >= cycle_end,
+    which collapses the N=0 path in _fill_amount_prorated to full_gap.
+
+    The fix detects cycle_start >= cycle_end and uses the first full cycle
+    (cycle_end to next_cycle_end) for event counting instead.
+    """
+
+    ####################################################################
+    #
+    def test_pre_cycle_fund_event_uses_prorated_not_full_gap(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: RECURRING+fillup, target=$1000; funding schedule fires on 15th
+               and last of month; recurrence_schedule DTSTART=May 1 (first full
+               cycle: May 1 to June 1, with May 15 and May 31 as fund events,
+               N=2); budget created May 1, last_funded_on=April 15;
+               next funding event = April 30 (before first cycle boundary)
+        WHEN:  fund_account runs on April 30
+        THEN:  fillup receives $500 ($1000/2 prorated), not $1000 (full_gap)
+
+        Regression: pre-cycle events hit cycle_start >= cycle_end → N=0 → the
+        full remaining gap was deposited in a single event, draining unallocated.
+        """
+        today = date(2026, 4, 30)
+        account = make_account(posted_through=today)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(2000, "USD")
+        )
+
+        recurring = budget_svc.create(
+            bank_account=account,
+            name="Mortgage",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(1000, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+            recurrence_schedule=_MONTHLY_MAY_FIRST,
+            with_fillup_goal=True,
+        )
+        # last_funded_on=April 15 → next event = April 30 (end-of-month catch-up).
+        # created_at=May 1 → cycle_start fallback = May 1 = cycle_end, triggering
+        # the pre-cycle guard.
+        Budget.objects.filter(pkid=recurring.pkid).update(
+            last_funded_on=date(2026, 4, 15),
+            created_at=datetime(2026, 5, 1, tzinfo=UTC),
+        )
+        recurring.refresh_from_db()
+        fillup = recurring.fillup_goal
+        assert fillup is not None
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        assert report.transfers == 1
+        assert not report.warnings
+        fillup.refresh_from_db()
+        # First full cycle (May 1–June 1): May 15 + May 31 → N=2 → $1000/2 = $500
+        assert fillup.balance == Money("500.00", "USD")
+
 
 ########################################################################
 ########################################################################
@@ -1448,7 +1645,7 @@ class TestFillAmountProrated:
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
             funding_schedule=_TWICE_MONTHLY,
-            recurrance_schedule=_MONTHLY_FIRST,
+            recurrence_schedule=_MONTHLY_FIRST,
             with_fillup_goal=True,
         )
         recurring.refresh_from_db()
@@ -1581,7 +1778,7 @@ class TestRecurringTargetDateProration:
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
             funding_schedule=_TWICE_MONTHLY,
-            recurrance_schedule=_MONTHLY_FIRST,
+            recurrence_schedule=_MONTHLY_FIRST,
             with_fillup_goal=True,
         )
         recurring.refresh_from_db()

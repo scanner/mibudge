@@ -492,8 +492,8 @@ def _restore_budget_pass1(
     if funding_sched is not None:
         budget.funding_schedule = funding_sched
 
-    recurrance_sched = _recurrence(d.get("recurrance_schedule"))
-    budget.recurrance_schedule = recurrance_sched
+    recurrence_sched = _recurrence(d.get("recurrence_schedule"))
+    budget.recurrence_schedule = recurrence_sched
 
     budget.save()
     return budget, created

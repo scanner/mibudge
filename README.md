@@ -33,7 +33,7 @@ The engine runs automatically for all accounts at **3:00 AM daily** (Celery beat
 The engine processes two event types:
 
 - **Fund events** -- fire on `budget.funding_schedule`. Transfer money from Unallocated into the budget (or into its fill-up goal, for recurring-with-fill-up budgets).
-- **Recur events** -- fire on `budget.recurrance_schedule` (recurring-with-fill-up only). Transfer from the fill-up goal into the recurring budget up to its target, then reset the recurring budget's cycle.
+- **Recur events** -- fire on `budget.recurrence_schedule` (recurring-with-fill-up only). Transfer from the fill-up goal into the recurring budget up to its target, then reset the recurring budget's cycle.
 
 Events are collected for all active budgets in the account, sorted chronologically (fund before recur on the same day), and processed in order. This means a catch-up run after several missed cycles replays events in the same sequence they would have occurred in real time.
 

@@ -375,7 +375,7 @@ class BudgetSerializer(serializers.ModelSerializer):
     funding_schedule = RecurrenceSerializerField(
         required=False, allow_blank=True
     )
-    recurrance_schedule = RecurrenceSerializerField(
+    recurrence_schedule = RecurrenceSerializerField(
         required=False,
         allow_blank=True,
         allow_null=True,
@@ -405,7 +405,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "complete",
             "paused",
             "funding_schedule",
-            "recurrance_schedule",
+            "recurrence_schedule",
             "memo",
             "auto_spend",
             "next_funding",
