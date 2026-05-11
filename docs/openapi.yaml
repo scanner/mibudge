@@ -349,6 +349,37 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/bank-accounts/{id}/funding-event-dates/:
+    get:
+      operationId: bank_accounts_funding_event_dates_retrieve
+      description: Return all dates in (after, before] on which at least one funding
+        or recurrence event is due for this account.  The importer uses this to find
+        batch-split boundaries.
+      summary: Funding event dates
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dates:
+                    type: array
+                    items:
+                      type: string
+                      format: date
+          description: Sorted list of event dates.
   /api/v1/bank-accounts/{id}/funding-summary/:
     get:
       operationId: bank_accounts_funding_summary_retrieve
@@ -433,6 +464,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankAccount'
           description: ''
+  /api/v1/bank-accounts/{id}/run-funding/:
+    post:
+      operationId: bank_accounts_run_funding_create
+      description: Run the funding engine for this account immediately.  Processes
+        all due fund and recurrence events up to `as_of` (defaults to today) and returns
+        a summary of what happened.  Pass `as_of` when calling between import batches
+        so the engine only sees events up to that batch boundary date.
+      summary: Run funding
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                as_of:
+                  type: string
+                  format: date
+                  description: Upper bound for event enumeration (YYYY-MM-DD). Defaults
+                    to today.
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deferred:
+                    type: boolean
+                  transfers:
+                    type: integer
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                  skipped_budgets:
+                    type: array
+                    items:
+                      type: string
+          description: Funding run result.
   /api/v1/banks/:
     get:
       operationId: banks_list
@@ -1713,8 +1794,6 @@ components:
           type: string
           format: date
           nullable: true
-        with_fillup_goal:
-          type: boolean
         fillup_goal:
           type: string
           format: uuid
@@ -1818,8 +1897,6 @@ components:
           type: string
           format: date
           nullable: true
-        with_fillup_goal:
-          type: boolean
         fillup_goal:
           type: string
           format: uuid
@@ -2524,8 +2601,6 @@ components:
           type: string
           format: date
           nullable: true
-        with_fillup_goal:
-          type: boolean
         fillup_goal:
           type: string
           format: uuid

@@ -73,6 +73,41 @@ from moneypools.models import (
 ########################################################################
 ########################################################################
 #
+def _check_goal_invariant(
+    budget: Budget,
+    tolerance: Decimal,
+) -> str | None:
+    """
+    Verify the Goal funded_amount invariant: balance == funded_amount - spent_amount.
+
+    spent_amount is the sum of all TransactionAllocation amounts against
+    this budget.  Returns an error string on failure, None on pass.
+    """
+    spent = Decimal(
+        TransactionAllocation.objects.filter(budget=budget).aggregate(
+            total=Sum("amount")
+        )["total"]
+        or 0
+    )
+    expected_balance = (budget.funded_amount.amount - spent).quantize(
+        Decimal("0.01")
+    )
+    actual_balance = budget.balance.amount.quantize(Decimal("0.01"))
+    if abs(expected_balance - actual_balance) > tolerance:
+        return (
+            f"    Goal invariant violated: "
+            f"funded_amount={budget.funded_amount.amount}"
+            f"  spent={spent}"
+            f"  expected_balance={expected_balance}"
+            f"  actual_balance={actual_balance}"
+            f"  off_by={actual_balance - expected_balance:+.2f}"
+        )
+    return None
+
+
+########################################################################
+########################################################################
+#
 @dataclass
 class _Event:
     """One balance-changing event in a budget's running-balance chain."""
@@ -306,6 +341,7 @@ class Command(BaseCommand):
         ] = []
         tx_failures: list[tuple[Transaction, Decimal, Decimal]] = []
         chain_failures: list[tuple[Budget, list[str]]] = []
+        goal_failures: list[tuple[Budget, str]] = []
 
         for account in qs:
             total_accounts += 1
@@ -382,6 +418,26 @@ class Command(BaseCommand):
                     for line in chain_errors:
                         self.stdout.write(self.style.ERROR(line))
 
+            # ----------------------------------------------------------
+            # Level 4: Goal funded_amount invariant
+            #   balance == funded_amount - spent_amount
+            # ----------------------------------------------------------
+            for budget in Budget.objects.filter(
+                bank_account=account,
+                budget_type=Budget.BudgetType.GOAL,
+            ).order_by("name"):
+                error = _check_goal_invariant(budget, tolerance)
+                if error is not None:
+                    goal_failures.append((budget, error))
+                    archived_tag = " [archived]" if budget.archived else ""
+                    self.stdout.write(
+                        self.style.ERROR(
+                            f"FAIL  goal {budget.name}{archived_tag}"
+                            f" ({str(budget.id)[:8]}):"
+                        )
+                    )
+                    self.stdout.write(self.style.ERROR(error))
+
         # ------------------------------------------------------------------
         # Summary
         # ------------------------------------------------------------------
@@ -390,10 +446,13 @@ class Command(BaseCommand):
             f"Checked {total_accounts} account(s):"
             f"  {len(account_failures)} account-level failure(s),"
             f"  {len(tx_failures)} transaction failure(s),"
-            f"  {len(chain_failures)} budget-chain failure(s)."
+            f"  {len(chain_failures)} budget-chain failure(s),"
+            f"  {len(goal_failures)} goal-invariant failure(s)."
         )
 
-        any_failures = account_failures or tx_failures or chain_failures
+        any_failures = (
+            account_failures or tx_failures or chain_failures or goal_failures
+        )
 
         if account_failures:
             self.stdout.write("")
@@ -420,5 +479,6 @@ class Command(BaseCommand):
             raise CommandError(
                 f"{len(account_failures)} account-level, "
                 f"{len(tx_failures)} transaction, "
-                f"{len(chain_failures)} budget-chain failure(s) found."
+                f"{len(chain_failures)} budget-chain, "
+                f"{len(goal_failures)} goal-invariant failure(s) found."
             )

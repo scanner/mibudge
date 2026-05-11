@@ -9,10 +9,10 @@ The engine processes two event types per budget:
   Fund events   -- fire on budget.funding_schedule.
                    Transfer money from the account's unallocated budget
                    into the target budget (or its fillup_goal for
-                   recurring-with-fillup budgets).
+                   Recurring budgets).
 
   Recur events  -- fire on budget.recurrence_schedule.
-                   Only for Recurring + with_fillup_goal budgets.
+                   Only for Recurring budgets.
                    Transfer from fillup_goal into the recurring budget
                    up to its target_balance; set complete if funded.
 

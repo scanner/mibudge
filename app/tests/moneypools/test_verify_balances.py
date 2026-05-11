@@ -12,7 +12,8 @@ from django.core.management.base import CommandError
 from djmoney.money import Money
 
 # Project imports
-from moneypools.models import BankAccount
+from moneypools.models import BankAccount, Budget
+from moneypools.service import budget as budget_svc
 
 pytestmark = pytest.mark.django_db
 
@@ -89,3 +90,84 @@ class TestVerifyBalances:
             "verify_balances", "--tolerance", Decimal("0.01"), stdout=out
         )
         assert "PASS" in out.getvalue()
+
+
+########################################################################
+########################################################################
+#
+class TestVerifyBalancesGoalInvariant:
+    """Tests for the Level 4 Goal funded_amount invariant check."""
+
+    ####################################################################
+    #
+    def test_goal_with_consistent_funded_amount_passes(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a Goal budget where balance == funded_amount - spent_amount
+               (no allocations, so spent=0 and balance == funded_amount)
+        WHEN:  verify_balances runs
+        THEN:  no goal-invariant failure is reported
+        """
+        account = bank_account_factory()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Holiday Fund",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money("500.00", "USD"),
+            funding_amount=Money("100.00", "USD"),
+        )
+        # Set balance and funded_amount to the same value so the invariant holds.
+        Budget.objects.filter(pk=budget.pk).update(
+            balance=Money("200.00", "USD"),
+            funded_amount=Money("200.00", "USD"),
+        )
+        # Keep Level 1 clean: posted_balance must equal sum of budget balances.
+        account.posted_balance = Money("200.00", "USD")
+        account.save()
+
+        out = StringIO()
+        call_command("verify_balances", stdout=out)
+        output = out.getvalue()
+        assert "FAIL" not in output
+        assert "0 goal-invariant failure(s)" in output
+
+    ####################################################################
+    #
+    def test_goal_with_broken_funded_amount_fails(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a Goal budget where funded_amount does not match balance
+               (simulating a bug that updated balance without funded_amount)
+        WHEN:  verify_balances runs
+        THEN:  a goal-invariant failure is reported and CommandError is raised
+        """
+        account = bank_account_factory()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Broken Goal",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money("500.00", "USD"),
+            funding_amount=Money("100.00", "USD"),
+        )
+        # Deliberately break the invariant: balance=200 but funded_amount=50.
+        Budget.objects.filter(pk=budget.pk).update(
+            balance=Money("200.00", "USD"),
+            funded_amount=Money("50.00", "USD"),
+        )
+        # Also adjust the account posted_balance so Level 1 stays clean.
+        account.posted_balance = Money("200.00", "USD")
+        account.save()
+
+        out = StringIO()
+        with pytest.raises(CommandError) as exc_info:
+            call_command("verify_balances", stdout=out)
+        output = out.getvalue()
+        assert "FAIL" in output
+        assert "Broken Goal" in output
+        assert "goal-invariant" in str(exc_info.value)

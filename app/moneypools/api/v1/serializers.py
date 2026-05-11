@@ -398,7 +398,6 @@ class BudgetSerializer(serializers.ModelSerializer):
             "budget_type",
             "funding_type",
             "target_date",
-            "with_fillup_goal",
             "fillup_goal",
             "archived",
             "archived_at",

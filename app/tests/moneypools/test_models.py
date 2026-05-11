@@ -104,16 +104,16 @@ class TestBudget:
 
     ####################################################################
     #
-    def test_fillup_budget_created_for_recurring_with_fillup_goal(
+    def test_fillup_budget_created_for_recurring(
         self,
         budget_factory: Callable[..., Budget],
     ) -> None:
         """
-        GIVEN: a Recurring budget created with with_fillup_goal=True
+        GIVEN: a Recurring budget
         WHEN:  the budget is saved
         THEN:  an associated type-A fill-up budget is created and linked
         """
-        budget = budget_factory(budget_type="R", with_fillup_goal=True)
+        budget = budget_factory(budget_type="R")
         budget.refresh_from_db()
         assert budget.fillup_goal is not None
         fillup = budget.fillup_goal
@@ -133,9 +133,7 @@ class TestBudget:
         WHEN:  the parent budget is deleted via BudgetService.delete
         THEN:  the fill-up goal budget is also deleted
         """
-        budget = budget_factory(
-            budget_type="R", with_fillup_goal=True, balance=0
-        )
+        budget = budget_factory(budget_type="R", balance=0)
         budget.refresh_from_db()
         fillup_id = budget.fillup_goal_id
         assert fillup_id is not None

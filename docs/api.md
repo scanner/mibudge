@@ -549,6 +549,20 @@ Delete a bank account and all associated budgets, transactions, and allocations.
 
 **Response 204:** No response body
 
+#### `GET /api/v1/bank-accounts/{id}/funding-event-dates/`
+
+**Operation:** `bank_accounts_funding_event_dates_retrieve`
+
+Return all dates in (after, before] on which at least one funding or recurrence event is due for this account.  The importer uses this to find batch-split boundaries.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** Sorted list of event dates.
+
+- **`dates`** (`array`)
+
 #### `GET /api/v1/bank-accounts/{id}/funding-summary/`
 
 **Operation:** `bank_accounts_funding_summary_retrieve`
@@ -599,6 +613,27 @@ Record that a transaction import has been completed for this account.  Sets last
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+#### `POST /api/v1/bank-accounts/{id}/run-funding/`
+
+**Operation:** `bank_accounts_run_funding_create`
+
+Run the funding engine for this account immediately.  Processes all due fund and recurrence events up to `as_of` (defaults to today) and returns a summary of what happened.  Pass `as_of` when calling between import batches so the engine only sees events up to that batch boundary date.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`as_of`** (`string`) — Upper bound for event enumeration (YYYY-MM-DD). Defaults to today.
+
+**Response 200:** Funding run result.
+
+- **`deferred`** (`boolean`)
+- **`transfers`** (`integer`)
+- **`warnings`** (`array`)
+- **`skipped_budgets`** (`array`)
 
 ### banks
 
@@ -688,7 +723,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -709,7 +743,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -730,7 +763,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -756,7 +788,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
@@ -804,7 +835,6 @@ Return a single budget by UUID.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
@@ -847,7 +877,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -868,7 +897,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -889,7 +917,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -915,7 +942,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
@@ -958,7 +984,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -979,7 +1004,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -1000,7 +1024,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -1026,7 +1049,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
@@ -1081,7 +1103,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -1102,7 +1123,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -1123,7 +1143,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -1149,7 +1168,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
@@ -1934,7 +1952,6 @@ signal and is not accepted from the client.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
@@ -1977,7 +1994,6 @@ signal and is not accepted from the client.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
@@ -2302,7 +2318,6 @@ signal and is not accepted from the client.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`with_fillup_goal`** (`boolean`)
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
