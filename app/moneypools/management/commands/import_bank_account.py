@@ -447,7 +447,6 @@ def _restore_budget_pass1(
     budget.name = d["name"]
     budget.budget_type = d.get("budget_type", Budget.BudgetType.GOAL)
     budget.funding_type = d.get("funding_type", Budget.FundingType.TARGET_DATE)
-    budget.with_fillup_goal = d.get("with_fillup_goal", False)
     budget.fillup_goal = None
 
     balance = _money(d.get("balance"))

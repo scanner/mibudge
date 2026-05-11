@@ -414,9 +414,6 @@ def _add_optional_fields_db(entry: dict[str, Any], budget: Budget) -> None:
     if budget.target_date:
         entry["target_date"] = budget.target_date.isoformat()
 
-    if budget.with_fillup_goal:
-        entry["with_fillup_goal"] = True
-
     if budget.paused:
         entry["paused"] = True
 

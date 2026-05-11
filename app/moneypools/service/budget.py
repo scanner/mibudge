@@ -111,7 +111,6 @@ def update(budget: Budget, **changes: Any) -> Budget:
     fillup: Budget | None = None
     if (
         budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.with_fillup_goal
         and budget.fillup_goal_id is not None
         and _FILLUP_SYNCED_FIELDS & changes.keys()
     ):
@@ -333,7 +332,6 @@ def _maybe_create_fillup(budget: Budget) -> None:
     """
     if not (
         budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.with_fillup_goal
         and budget.fillup_goal_id is None
     ):
         return

@@ -226,7 +226,6 @@ def _serialize_budget(b: Budget) -> dict[str, Any]:
         "target_balance": _money(b.target_balance),
         "funding_amount": _money(b.funding_amount),
         "target_date": b.target_date.isoformat() if b.target_date else None,
-        "with_fillup_goal": b.with_fillup_goal,
         "fillup_goal_id": fillup_id,
         "archived": b.archived,
         "archived_at": (b.archived_at.isoformat() if b.archived_at else None),
