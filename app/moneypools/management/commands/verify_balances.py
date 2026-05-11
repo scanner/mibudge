@@ -78,10 +78,20 @@ def _check_goal_invariant(
     tolerance: Decimal,
 ) -> str | None:
     """
-    Verify the Goal funded_amount invariant: balance == funded_amount - spent_amount.
+    Verify the Goal funded_amount invariant: balance == funded_amount + spent_amount.
 
-    spent_amount is the sum of all TransactionAllocation amounts against
-    this budget.  Returns an error string on failure, None on pass.
+    Allocation amounts follow the credit/debit convention used throughout the
+    service layer: positive = credit to the budget (deposit or refund), negative
+    = debit from the budget (expense).  TransactionAllocationService.create does
+    ``budget.balance += amount``, so:
+
+        balance = funded_amount + sum(allocation amounts)
+
+    Note the ``+`` not ``-``: expenses are *negative* allocation amounts, so
+    adding them reduces the balance as expected.
+
+    spent_amount is the raw signed sum of all TransactionAllocation amounts
+    against this budget.  Returns an error string on failure, None on pass.
     """
     spent = Decimal(
         TransactionAllocation.objects.filter(budget=budget).aggregate(
@@ -89,7 +99,10 @@ def _check_goal_invariant(
         )["total"]
         or 0
     )
-    expected_balance = (budget.funded_amount.amount - spent).quantize(
+    # + not - : expenses are negative allocation amounts, so adding them
+    # reduces the expected balance.  TransactionAllocationService.create
+    # does ``budget.balance += amount``, so the invariant is additive.
+    expected_balance = (budget.funded_amount.amount + spent).quantize(
         Decimal("0.01")
     )
     actual_balance = budget.balance.amount.quantize(Decimal("0.01"))
@@ -420,12 +433,19 @@ class Command(BaseCommand):
 
             # ----------------------------------------------------------
             # Level 4: Goal funded_amount invariant
-            #   balance == funded_amount - spent_amount
+            #   balance == funded_amount + spent_amount
+            # Unallocated is budget_type=GOAL (the model default) but is
+            # seeded with account.available_balance -- a non-zero initial
+            # balance that is never tracked in funded_amount.  The invariant
+            # only applies to user-created Goals that start at zero.
             # ----------------------------------------------------------
-            for budget in Budget.objects.filter(
+            goal_qs = Budget.objects.filter(
                 bank_account=account,
                 budget_type=Budget.BudgetType.GOAL,
-            ).order_by("name"):
+            )
+            if account.unallocated_budget_id is not None:
+                goal_qs = goal_qs.exclude(id=account.unallocated_budget_id)
+            for budget in goal_qs.order_by("name"):
                 error = _check_goal_invariant(budget, tolerance)
                 if error is not None:
                     goal_failures.append((budget, error))
