@@ -22,40 +22,13 @@ As money comes in (paychecks, etc.), it's automatically distributed to budgets o
 
 ### Funding
 
-**Funding** is the act of moving money from the "Unallocated" pool into a specific budget. It does not involve any real bank transfer -- it's a reallocation entirely within mibudge's virtual accounting.
+**Funding** moves money from the per-account "Unallocated" budget into other budgets on a schedule. No real bank transfer happens -- it is reallocation within mibudge's virtual accounting.
 
-Each budget has a **funding schedule** (e.g. weekly, bi-weekly, monthly) and either a fixed funding amount per event or an automatically calculated amount derived from the target and the time remaining. On each scheduled funding event, mibudge moves that amount out of Unallocated and into the budget.
+The funding engine processes two event kinds: **fund events** (on each budget's `funding_schedule`) and **recur events** (on each Recurring budget's `recurrence_schedule`, refreshing it from its Associated Fill-up). It runs daily at 3:00 AM UTC (`fund_all_accounts` Celery beat task), and can be triggered manually via `POST /api/v1/bank-accounts/<id>/run-funding/` or the importer's `--run-funding` flag. The engine is safely re-runnable any number of times in the same day -- a re-run after the user tops up Unallocated will complete partially-funded events without double-funding.
 
-#### The funding engine
+Before running, the engine checks `account.last_posted_through`; if it is behind the latest due event, the entire run is deferred to avoid funding against stale transaction data.
 
-The engine runs automatically for all accounts at **3:00 AM daily** (Celery beat task `fund_all_accounts`). It can also be triggered manually via `POST /api/v1/bank-accounts/<id>/run-funding/` (or the "Run funding now" button in the UI) or via the importer CLI with `--run-funding`. All invocation paths use the same logic and produce the same result.
-
-The engine processes two event types:
-
-- **Fund events** -- fire on `budget.funding_schedule`. Transfer money from Unallocated into the budget (or into its fill-up goal, for recurring-with-fill-up budgets).
-- **Recur events** -- fire on `budget.recurrence_schedule` (recurring-with-fill-up only). Transfer from the fill-up goal into the recurring budget up to its target, then reset the recurring budget's cycle.
-
-Events are collected for all active budgets in the account, sorted chronologically (fund before recur on the same day), and processed in order. This means a catch-up run after several missed cycles replays events in the same sequence they would have occurred in real time.
-
-**Import-freshness gate:** before processing, the engine checks `account.last_posted_through`. If the latest due event falls after that date, the entire run is deferred and no transfers are made. This prevents the engine from funding against stale transaction data.
-
-**Empty Unallocated -- retry behavior:** if Unallocated is at $0 when a fund event fires, the event is skipped and a warning is recorded, but the budget's `last_funded_on` pointer is *not* advanced. The event will be retried on the next funding run once money has arrived. The same applies to recur events when the fill-up goal is empty.
-
-**Partial cap:** if a fill-up goal has some money but not enough to fully fund all pending recur events, the partial amount transfers and the pointer advances. The recurring budget may be underfunded for the current cycle; it is the user's responsibility to add more money.
-
-**Paused budgets:** funding events for a paused budget are skipped, but the budget's pointer is advanced to the event date. When the budget is unpaused, it starts fresh from the current date rather than replaying missed events.
-
-**Result:** the engine returns a `FundingReport` with the number of transfers made, any warnings (e.g. insufficient Unallocated), and a list of skipped budget names. The UI shows this result after each manual run, including the date of the next scheduled funding event when nothing was due.
-
-#### Importing and funding
-
-The transaction importer (`importers/import_transactions.py`) does **not** trigger funding automatically. After importing, run funding explicitly with the `--run-funding` flag:
-
-```bash
-python import_transactions.py ... --run-funding
-```
-
-Without `--run-funding`, the import only updates transaction data and advances `last_posted_through`. The `--run-funding` flag is silently ignored on `--dry-run` imports.
+See **[`docs/funding.md`](docs/funding.md)** for the full specification: per-type funding rules, the `funded_amount` invariant, Goal completion semantics, pause/archive behavior, the migration plan, and the test scenario matrix.
 
 ### Budget types
 
