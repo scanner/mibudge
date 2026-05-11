@@ -74,7 +74,7 @@ export interface Budget {
   archived: boolean;
   funding_schedule: string;
   // NOTE: field is spelled with a typo in the model and serializer.
-  recurrance_schedule: string | null;
+  recurrence_schedule: string | null;
   memo: string | null;
   auto_spend: unknown;
   next_funding: NextFunding | null;

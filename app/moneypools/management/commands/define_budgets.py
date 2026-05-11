@@ -31,7 +31,7 @@ YAML format:
         target_balance: "400.00"
         funding_amount: "100.00"          # required for fixed_amount
         funding_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
-        recurrance_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
+        recurrence_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
         with_fillup_goal: true
         paused: false
 
@@ -219,13 +219,13 @@ class Command(BaseCommand):
                     dates_str = ", ".join(str(d) for d in occurrences)
                     self.stdout.write(f"    funding_schedule next: {dates_str}")
 
-            rsched = entry.get("_recurrance_schedule_obj")
+            rsched = entry.get("_recurrence_schedule_obj")
             if rsched:
                 occurrences = _next_occurrences(rsched)
                 if occurrences:
                     dates_str = ", ".join(str(d) for d in occurrences)
                     self.stdout.write(
-                        f"    recurrance_schedule next: {dates_str}"
+                        f"    recurrence_schedule next: {dates_str}"
                     )
 
     ####################################################################
@@ -257,9 +257,9 @@ class Command(BaseCommand):
             kwargs: dict[str, Any] = {}
             if entry.get("_funding_schedule_obj") is not None:
                 kwargs["funding_schedule"] = entry["_funding_schedule_obj"]
-            if entry.get("_recurrance_schedule_obj") is not None:
-                kwargs["recurrance_schedule"] = entry[
-                    "_recurrance_schedule_obj"
+            if entry.get("_recurrence_schedule_obj") is not None:
+                kwargs["recurrence_schedule"] = entry[
+                    "_recurrence_schedule_obj"
                 ]
             for field in (
                 "target_date",
@@ -399,13 +399,13 @@ def _parse_entry(
             str(raw_fs), label, "funding_schedule"
         )
 
-    # recurrance_schedule (optional, only meaningful for recurring)
+    # recurrence_schedule (optional, only meaningful for recurring)
     #
-    recurrance_schedule_obj: Any = None
-    raw_rs = raw.get("recurrance_schedule")
+    recurrence_schedule_obj: Any = None
+    raw_rs = raw.get("recurrence_schedule")
     if raw_rs:
-        recurrance_schedule_obj = _parse_recurrence(
-            str(raw_rs), label, "recurrance_schedule"
+        recurrence_schedule_obj = _parse_recurrence(
+            str(raw_rs), label, "recurrence_schedule"
         )
 
     entry: dict[str, Any] = {
@@ -417,7 +417,7 @@ def _parse_entry(
         "with_fillup_goal": bool(raw.get("with_fillup_goal", False)),
         "paused": bool(raw.get("paused", False)),
         "_funding_schedule_obj": funding_schedule_obj,
-        "_recurrance_schedule_obj": recurrance_schedule_obj,
+        "_recurrence_schedule_obj": recurrence_schedule_obj,
     }
     if funding_amount is not None:
         entry["funding_amount"] = funding_amount

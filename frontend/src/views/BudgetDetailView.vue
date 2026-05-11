@@ -657,7 +657,7 @@ async function submitMove() {
               <IconRefresh class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Refresh cycle</span>
               <span class="text-right text-sm text-secondary">
-                {{ budget.recurrance_schedule ? rruleHuman(budget.recurrance_schedule) : "—" }}
+                {{ budget.recurrence_schedule ? rruleHuman(budget.recurrence_schedule) : "—" }}
               </span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">

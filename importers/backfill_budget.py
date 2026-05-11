@@ -300,7 +300,7 @@ def _normalize_vendor(vendor: str) -> str:
 ########################################################################
 ########################################################################
 #
-def _parse_recurrance_schedule(
+def _parse_recurrence_schedule(
     rec_str: str | None,
 ) -> tuple[str | None, date | None]:
     """
@@ -1477,12 +1477,12 @@ def cli_cmd(
                 )
 
             # --- Detect period frequency ---
-            # Recurring uses recurrance_schedule; Capped uses funding_schedule.
+            # Recurring uses recurrence_schedule; Capped uses funding_schedule.
             if budget_type == "C":
                 sched_str: str | None = target_budget.get("funding_schedule")
             else:
-                sched_str = target_budget.get("recurrance_schedule")
-            freq, dtstart = _parse_recurrance_schedule(sched_str)
+                sched_str = target_budget.get("recurrence_schedule")
+            freq, dtstart = _parse_recurrence_schedule(sched_str)
             yearly = freq == "YEARLY"
             reset_month = dtstart.month if dtstart else 1
             reset_day = dtstart.day if dtstart else 1

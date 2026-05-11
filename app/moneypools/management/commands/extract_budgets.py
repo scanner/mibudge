@@ -393,9 +393,9 @@ def _add_optional_fields_json(
     if fs:
         entry["funding_schedule"] = fs
 
-    rs = bd.get("recurrance_schedule")
+    rs = bd.get("recurrence_schedule")
     if rs:
-        entry["recurrance_schedule"] = rs
+        entry["recurrence_schedule"] = rs
 
     if bd.get("memo"):
         entry["memo"] = bd["memo"]
@@ -424,9 +424,9 @@ def _add_optional_fields_db(entry: dict[str, Any], budget: Budget) -> None:
     if fs_str:
         entry["funding_schedule"] = fs_str
 
-    rs_str = _serialize_recurrence(budget.recurrance_schedule)
+    rs_str = _serialize_recurrence(budget.recurrence_schedule)
     if rs_str:
-        entry["recurrance_schedule"] = rs_str
+        entry["recurrence_schedule"] = rs_str
 
     if budget.memo:
         entry["memo"] = budget.memo

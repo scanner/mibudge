@@ -50,9 +50,9 @@ const fundingType = ref<"D" | "F">(props.budget?.funding_type ?? "D");
 const fundingAmount = ref(props.budget?.funding_amount ?? "");
 const fundingSchedule = ref(props.budget?.funding_schedule ?? DEFAULT_RRULE);
 
-const existingRecurrance = extractDtstart(props.budget?.recurrance_schedule ?? DEFAULT_RRULE);
-const recurranceSchedule = ref(existingRecurrance.rrule);
-const nextDueDate = ref(existingRecurrance.dtstart ?? "");
+const existingRecurrence = extractDtstart(props.budget?.recurrence_schedule ?? DEFAULT_RRULE);
+const recurrenceSchedule = ref(existingRecurrence.rrule);
+const nextDueDate = ref(existingRecurrence.dtstart ?? "");
 
 const withFillupGoal = ref(props.budget?.with_fillup_goal ?? false);
 const paused = ref(props.budget?.paused ?? false);
@@ -91,9 +91,9 @@ async function submit() {
       payload.funding_amount = fundingAmount.value || null;
     }
   } else if (isRecurring.value) {
-    payload.recurrance_schedule = nextDueDate.value
-      ? combineDtstart(recurranceSchedule.value, nextDueDate.value)
-      : recurranceSchedule.value;
+    payload.recurrence_schedule = nextDueDate.value
+      ? combineDtstart(recurrenceSchedule.value, nextDueDate.value)
+      : recurrenceSchedule.value;
     payload.with_fillup_goal = withFillupGoal.value;
   } else if (isCapped.value) {
     // Capped always uses Fixed Amount funding.
@@ -336,9 +336,9 @@ async function submit() {
 
     <!-- Recurring-specific fields -->
     <template v-else-if="isRecurring">
-      <SchedulePicker v-model="recurranceSchedule" label="Refresh cycle" interval-only />
+      <SchedulePicker v-model="recurrenceSchedule" label="Refresh cycle" interval-only />
 
-      <!-- Next due date (stored as DTSTART in recurrance_schedule) -->
+      <!-- Next due date (stored as DTSTART in recurrence_schedule) -->
       <div>
         <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="next-due-date">
           Next due date

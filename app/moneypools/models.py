@@ -519,7 +519,7 @@ class Budget(MoneyPoolBaseClass):
     # Only relevant for Goal budgets with FundingType 'target_date'.
     # The date by which the budget should be fully funded.  Recurring
     # budgets encode their "next due" date as the DTSTART of the
-    # recurrance_schedule recurrence instead.
+    # recurrence_schedule recurrence instead.
     #
     target_date = models.DateField(null=True, blank=True)
 
@@ -546,7 +546,7 @@ class Budget(MoneyPoolBaseClass):
     #
     # Funding flow:
     #   funding_schedule fires  -> unallocated -> fillup_goal  (accumulation)
-    #   recurrance_schedule fires -> fillup_goal -> recurring  (top-up to target)
+    #   recurrence_schedule fires -> fillup_goal -> recurring  (top-up to target)
     #
     # On the recurrence date, min(gap, fillup.balance) is transferred from the
     # fill-up into the recurring budget, where gap = target_balance - balance.
@@ -624,7 +624,7 @@ class Budget(MoneyPoolBaseClass):
     # idea is that the budget is refreshed just after midnight on its
     # recurrence schedule.
     #
-    recurrance_schedule = recurrence.fields.RecurrenceField(null=True)
+    recurrence_schedule = recurrence.fields.RecurrenceField(null=True)
 
     image = models.ImageField(
         upload_to="budget_images/%Y-%m-%d/",

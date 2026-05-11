@@ -233,7 +233,7 @@ def _serialize_budget(b: Budget) -> dict[str, Any]:
         "paused": b.paused,
         "complete": b.complete,
         "funding_schedule": _recurrence(b.funding_schedule),
-        "recurrance_schedule": _recurrence(b.recurrance_schedule),
+        "recurrence_schedule": _recurrence(b.recurrence_schedule),
         "memo": b.memo,
         "auto_spend": b.auto_spend,
         "last_funded_on": b.last_funded_on.isoformat()

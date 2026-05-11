@@ -211,7 +211,7 @@ budgets:
     target_balance: "400.00"
     funding_amount: "400.00"
     funding_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
-    recurrance_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
+    recurrence_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
     with_fillup_goal: true
 ```
 
@@ -225,7 +225,7 @@ budgets:
 | `funding_amount` | For `fixed_amount` | Amount credited per schedule event |
 | `target_date` | For `goal` + `target_date` | ISO date |
 | `funding_schedule` | Recommended | RFC 5545 RRULE string |
-| `recurrance_schedule` | For `recurring` | RRULE string for cycle reset |
+| `recurrence_schedule` | For `recurring` | RRULE string for cycle reset |
 | `with_fillup_goal` | Optional | `true` to auto-create fill-up goal child |
 | `paused` | Optional | `true` to pause automatic funding |
 | `memo` | Optional | Free-text note |
