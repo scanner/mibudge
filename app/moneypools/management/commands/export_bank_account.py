@@ -223,6 +223,7 @@ def _serialize_budget(b: Budget) -> dict[str, Any]:
         "budget_type": b.budget_type,
         "funding_type": b.funding_type,
         "balance": _money(b.balance),
+        "funded_amount": _money(b.funded_amount),
         "target_balance": _money(b.target_balance),
         "funding_amount": _money(b.funding_amount),
         "target_date": b.target_date.isoformat() if b.target_date else None,
@@ -298,4 +299,10 @@ def _serialize_internal_tx(itx: InternalTransaction) -> dict[str, Any]:
         "dst_budget_balance": _money(itx.dst_budget_balance),
         "effective_date": itx.effective_date.isoformat(),
         "created_at": itx.created_at.isoformat(),
+        "system_event_kind": itx.system_event_kind,
+        "system_event_date": (
+            itx.system_event_date.isoformat()
+            if itx.system_event_date is not None
+            else None
+        ),
     }

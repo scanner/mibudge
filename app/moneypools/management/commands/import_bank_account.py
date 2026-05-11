@@ -37,6 +37,7 @@ from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction as db_transaction
+from django.db.models import Sum
 from djmoney.money import Money
 
 # Project imports
@@ -180,10 +181,18 @@ class Command(BaseCommand):
 
         # 4. Budgets -- pass 1: create without fillup_goal
         budget_map: dict[str, Budget] = {}
+        # Goals whose funded_amount was absent from the JSON (pre-migration
+        # exports) will be backfilled from InternalTransactions after step 9.
+        goals_needing_funded_amount: list[Budget] = []
         for bd in data["budgets"]:
             budget, _ = _restore_budget_pass1(bd, account)
             budget_map[bd["id"]] = budget
             stats["budgets"] += 1
+            if (
+                "funded_amount" not in bd
+                and budget.budget_type == Budget.BudgetType.GOAL
+            ):
+                goals_needing_funded_amount.append(budget)
 
         # 5. Budgets -- pass 2: wire fillup_goal, set unallocated_budget
         for bd in data["budgets"]:
@@ -239,6 +248,15 @@ class Command(BaseCommand):
                         f"actor {itxd['actor_username']!r} not found"
                     )
                 )
+
+        # 10. Backfill funded_amount for Goals absent from pre-migration exports.
+        if goals_needing_funded_amount:
+            self.stdout.write(
+                f"  Backfilling funded_amount for "
+                f"{len(goals_needing_funded_amount)} goal(s) "
+                f"(pre-migration export detected)..."
+            )
+            _backfill_funded_amounts(goals_needing_funded_amount)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -450,11 +468,14 @@ def _restore_budget_pass1(
     budget.fillup_goal = None
 
     balance = _money(d.get("balance"))
+    funded_amount = _money(d.get("funded_amount"))
     target_balance = _money(d.get("target_balance"))
     funding_amount = _money(d.get("funding_amount"))
 
     if balance is not None:
         budget.balance = balance
+    if funded_amount is not None:
+        budget.funded_amount = funded_amount
     if target_balance is not None:
         budget.target_balance = target_balance
     if funding_amount is not None:
@@ -650,5 +671,42 @@ def _restore_internal_tx(
     if dst_bal is not None:
         itx.dst_budget_balance = dst_bal
 
+    itx.system_event_kind = d.get("system_event_kind")
+    raw_event_date = d.get("system_event_date")
+    itx.system_event_date = (
+        date.fromisoformat(raw_event_date) if raw_event_date else None
+    )
+
     itx.save()
     return True
+
+
+########################################################################
+########################################################################
+#
+def _backfill_funded_amounts(budgets: list[Budget]) -> None:
+    """Compute funded_amount from InternalTransactions for each budget.
+
+    Used when importing a pre-migration export that lacks funded_amount.
+    Mirrors the formula in the 0028 data migration: net ITx flow into the
+    budget (credits minus debits) equals the amount that was ever funded.
+
+    Args:
+        budgets: Goal Budget instances whose funded_amount needs computing.
+    """
+    for budget in budgets:
+        credits = Decimal(
+            InternalTransaction.objects.filter(dst_budget=budget).aggregate(
+                total=Sum("amount")
+            )["total"]
+            or 0
+        )
+        debits = Decimal(
+            InternalTransaction.objects.filter(src_budget=budget).aggregate(
+                total=Sum("amount")
+            )["total"]
+            or 0
+        )
+        budget.refresh_from_db()
+        budget.funded_amount = Money(credits - debits, budget.balance.currency)
+        budget.save(update_fields=["funded_amount", "funded_amount_currency"])
