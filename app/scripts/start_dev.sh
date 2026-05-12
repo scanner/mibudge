@@ -19,11 +19,13 @@ _SSL_DIR="/mnt/ssl"
 _CERT="${_SSL_DIR}/${SSL_CERT_FILE:-ssl_crt.pem}"
 _KEY="${_SSL_DIR}/${SSL_KEY_FILE:-ssl_key.pem}"
 
+echo "Cert: ${_CERT}, key: ${_KEY}"
+
 if [ -f "${_CERT}" ] && [ -f "${_KEY}" ]; then
     echo "Starting runserver_plus with TLS.."
     exec python /app/manage.py runserver_plus \
         --cert-file "${_CERT}" --key-file "${_KEY}" 0.0.0.0:8000
 fi
 
-echo "Starting runserver_plus.."
+echo "Starting runserver_plus (without TLS).."
 exec python /app/manage.py runserver_plus 0.0.0.0:8000
