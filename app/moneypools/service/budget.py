@@ -3,13 +3,12 @@ Budget service -- Phase 2.
 
 Operations:
     create(bank_account, name, budget_type, ...)
-        Saves the budget and creates the fill-up goal child when
-        with_fillup_goal=True (logic moved from budget_post_save signal).
+        Saves the budget and auto-creates the fill-up goal child for
+        RECURRING budgets (logic moved from budget_post_save signal).
 
     update(budget, **changes)
         Saves mutable fields under a budget lock.  Creates the fill-up
-        goal child when with_fillup_goal flips to True on an existing
-        budget that has none yet.
+        goal child if the budget is RECURRING and has none yet.
 
     archive(budget, actor)
         Drains fill-up balance first (if any), then this budget's
@@ -26,6 +25,7 @@ Operations:
 # system imports
 #
 from contextlib import ExitStack
+from datetime import timedelta
 from typing import Any
 
 # Project imports
@@ -53,12 +53,11 @@ def create(
     target_balance: Money,
     **kwargs: Any,
 ) -> Budget:
-    """Create a budget and optionally its fill-up goal child.
+    """Create a budget and auto-create its fill-up goal child if RECURRING.
 
     Saves the budget (which fires budget_pre_save for currency alignment
-    and complete-flag management).  If the new budget is RECURRING with
-    with_fillup_goal=True an ASSOCIATED_FILLUP_GOAL child is created and
-    linked back via fillup_goal.
+    and complete-flag management).  If the new budget is RECURRING an
+    ASSOCIATED_FILLUP_GOAL child is created and linked back via fillup_goal.
 
     Args:
         bank_account: The bank account this budget belongs to.
@@ -68,7 +67,7 @@ def create(
         target_balance: Target funding amount.
         **kwargs: Any other Budget field values (paused, target_date,
             funding_amount, funding_schedule, recurrence_schedule, memo,
-            with_fillup_goal, etc.).
+            etc.).
 
     Returns:
         The saved Budget instance (with fillup_goal set if applicable).
@@ -82,6 +81,17 @@ def create(
         **kwargs,
     )
     budget.save()
+
+    # Set pointers to created_at.date() - 1 so the first scheduled event
+    # fires on its scheduled date rather than being treated as already-seen.
+    yesterday = budget.created_at.date() - timedelta(days=1)
+    Budget.objects.filter(pk=budget.pk).update(
+        last_funded_on=yesterday,
+        last_recurrence_on=yesterday,
+    )
+    budget.last_funded_on = yesterday
+    budget.last_recurrence_on = yesterday
+
     _maybe_create_fillup(budget)
     return budget
 
@@ -93,7 +103,7 @@ def update(budget: Budget, **changes: Any) -> Budget:
     """Update mutable fields on an existing budget.
 
     Acquires the budget lock, applies *changes*, saves, then creates the
-    fill-up goal child if with_fillup_goal has just been enabled.
+    fill-up goal child if the budget is RECURRING and lacks one.
 
     If the budget is RECURRING with an existing fill-up goal, any change to
     target_balance, funding_schedule, or name is mirrored onto the fill-up
@@ -111,7 +121,6 @@ def update(budget: Budget, **changes: Any) -> Budget:
     fillup: Budget | None = None
     if (
         budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.with_fillup_goal
         and budget.fillup_goal_id is not None
         and _FILLUP_SYNCED_FIELDS & changes.keys()
     ):
@@ -321,9 +330,7 @@ def _sync_fillup(
 def _maybe_create_fillup(budget: Budget) -> None:
     """Create the fill-up goal child if the budget calls for one.
 
-    Mirrors the logic previously in budget_post_save: only fires when
-    budget_type is RECURRING, with_fillup_goal is True, and fillup_goal
-    is not yet set.
+    Only fires when budget_type is RECURRING and fillup_goal is not yet set.
 
     Uses queryset .update() to back-link fillup_goal_id without
     triggering another save signal on the parent.
@@ -333,7 +340,6 @@ def _maybe_create_fillup(budget: Budget) -> None:
     """
     if not (
         budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.with_fillup_goal
         and budget.fillup_goal_id is None
     ):
         return

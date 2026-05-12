@@ -32,7 +32,6 @@ YAML format:
         funding_amount: "100.00"          # required for fixed_amount
         funding_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
         recurrence_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
-        with_fillup_goal: true
         paused: false
 
 See the RFC 5545 spec for RRULE syntax.  Dry-run mode prints the next
@@ -205,8 +204,6 @@ class Command(BaseCommand):
                 )
             if entry.get("target_date"):
                 self.stdout.write(f"    target_date:    {entry['target_date']}")
-            if entry.get("with_fillup_goal"):
-                self.stdout.write("    with_fillup_goal: true")
             if entry.get("paused"):
                 self.stdout.write("    paused: true")
             if entry.get("memo"):
@@ -264,7 +261,6 @@ class Command(BaseCommand):
             for field in (
                 "target_date",
                 "funding_amount",
-                "with_fillup_goal",
                 "paused",
                 "memo",
             ):
@@ -414,7 +410,6 @@ def _parse_entry(
         "budget_type": budget_type,
         "funding_type": funding_type,
         "target_balance": target_balance,
-        "with_fillup_goal": bool(raw.get("with_fillup_goal", False)),
         "paused": bool(raw.get("paused", False)),
         "_funding_schedule_obj": funding_schedule_obj,
         "_recurrence_schedule_obj": recurrence_schedule_obj,

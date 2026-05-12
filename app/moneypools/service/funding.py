@@ -9,10 +9,10 @@ The engine processes two event types per budget:
   Fund events   -- fire on budget.funding_schedule.
                    Transfer money from the account's unallocated budget
                    into the target budget (or its fillup_goal for
-                   recurring-with-fillup budgets).
+                   Recurring budgets).
 
   Recur events  -- fire on budget.recurrence_schedule.
-                   Only for Recurring + with_fillup_goal budgets.
+                   Only for Recurring budgets.
                    Transfer from fillup_goal into the recurring budget
                    up to its target_balance; set complete if funded.
 
@@ -152,12 +152,9 @@ def next_funding_info(
     if budget.budget_type == Budget.BudgetType.GOAL and budget.complete:
         return None
 
-    # RECURRING + with_fillup_goal budgets are funded indirectly via their
-    # fill-up goal; the recurring budget itself has no direct funding events.
-    if (
-        budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.with_fillup_goal
-    ):
+    # RECURRING budgets are funded indirectly via their fill-up goal;
+    # the recurring budget itself has no direct funding events.
+    if budget.budget_type == Budget.BudgetType.RECURRING:
         return None
 
     # For ASSOCIATED_FILLUP_GOAL, delegate to the parent RECURRING budget's
@@ -399,7 +396,6 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
 
         if (
             budget.budget_type == Budget.BudgetType.RECURRING
-            and budget.with_fillup_goal
             and budget.fillup_goal is not None
             and budget.recurrence_schedule
         ):
@@ -493,7 +489,7 @@ def _process_fund_event(
     """
     Transfer funds from unallocated into the target budget.
 
-    For Recurring + with_fillup_goal, the target is the fillup_goal.
+    For Recurring budgets, the target is the fillup_goal.
     Otherwise the target is the budget itself.  Caps at unallocated balance.
     Advances last_funded_on unless unallocated is completely empty, in which
     case the event retries on the next run.  Partial (capped) transfers still
@@ -513,7 +509,6 @@ def _process_fund_event(
         budget.fillup_goal
         if (
             budget.budget_type == Budget.BudgetType.RECURRING
-            and budget.with_fillup_goal
             and budget.fillup_goal is not None
         )
         else budget

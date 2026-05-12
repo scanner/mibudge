@@ -140,18 +140,33 @@ class BudgetFactory(DjangoModelFactory):
     target_balance_offset = factory.fuzzy.FuzzyInteger(100, 1000)
     target_balance = factory.LazyAttribute(lambda self: 200)
     budget_type = factory.fuzzy.FuzzyChoice(Budget.BudgetType.values)
-    funding_type = factory.fuzzy.FuzzyChoice(Budget.FundingType.values)
+    # funding_type must be consistent with budget_type per the DB constraints:
+    #   RECURRING -> TARGET_DATE only
+    #   CAPPED    -> FIXED_AMOUNT only
+    #   others    -> either (default FIXED_AMOUNT to avoid needing target_date)
+    funding_type = factory.LazyAttribute(
+        lambda self: (
+            Budget.FundingType.TARGET_DATE
+            if self.budget_type == Budget.BudgetType.RECURRING
+            else Budget.FundingType.FIXED_AMOUNT
+            if self.budget_type == Budget.BudgetType.CAPPED
+            else random.choice(Budget.FundingType.values)
+        )
+    )
     # NOTE: This attribute is not part of the model. Instead this is
     # used to create a boolean that can be tested to see if the
     # 'funding type' for this budget is 'by a target date' (instead of
     # 'fixed amount per funding schedule')
     #
+    # RECURRING uses TARGET_DATE funding_type but must NOT have target_date
+    # (recurring budgets reset and have no due date). CAPPED also forbids
+    # target_date by DB constraint.
+    #
     has_target_date = factory.LazyAttribute(
-        lambda x: (
-            True
-            if factory.SelfAttribute("funding_type")
-            == Budget.FundingType.TARGET_DATE
-            else False
+        lambda self: (
+            self.funding_type == Budget.FundingType.TARGET_DATE
+            and self.budget_type
+            not in (Budget.BudgetType.RECURRING, Budget.BudgetType.CAPPED)
         )
     )
     target_date = factory.Maybe(
@@ -161,6 +176,14 @@ class BudgetFactory(DjangoModelFactory):
             end_dt=datetime.now(UTC) + timedelta(days=90),
         ),
         no_declaration=None,
+    )
+    # CAPPED and GOAL+FIXED_AMOUNT require a funding_amount.
+    funding_amount = factory.LazyAttribute(
+        lambda self: (
+            Money(random.randint(10, 200), get_default_currency())
+            if self.funding_type == Budget.FundingType.FIXED_AMOUNT
+            else None
+        )
     )
 
     @classmethod

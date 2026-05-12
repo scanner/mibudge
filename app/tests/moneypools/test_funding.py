@@ -198,7 +198,7 @@ class TestFundingEngineSingleEvent:
 ########################################################################
 #
 class TestFundingEngineRecurringWithFillup:
-    """Recurring + with_fillup_goal: fund into fillup, recur into recurring."""
+    """Recurring budget: fund into fill-up, recur into recurring."""
 
     ####################################################################
     #
@@ -208,7 +208,7 @@ class TestFundingEngineRecurringWithFillup:
         system_user: User,  # type: ignore[valid-type]
     ) -> None:
         """
-        GIVEN: RECURRING/with_fillup_goal budget, funding schedule monthly
+        GIVEN: RECURRING budget, funding schedule monthly
         WHEN:  fund event fires
         THEN:  money moves unallocated -> fillup_goal (not recurring budget)
         """
@@ -224,11 +224,9 @@ class TestFundingEngineRecurringWithFillup:
             bank_account=account,
             name="Monthly Bills",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(100, "USD"),
-            funding_amount=Money(80, "USD"),
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(80, "USD"),
             funding_schedule=_MONTHLY,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal
@@ -267,12 +265,10 @@ class TestFundingEngineRecurringWithFillup:
             bank_account=account,
             name="Monthly Bills",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
-            funding_amount=Money(80, "USD"),
             funding_schedule=_MONTHLY,
             recurrence_schedule=_MONTHLY,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal
@@ -305,7 +301,7 @@ class TestFundingEngineRecurringWithFillup:
         system_user: User,  # type: ignore[valid-type]
     ) -> None:
         """
-        GIVEN: RECURRING/with_fillup_goal budget; fund and recur both on
+        GIVEN: RECURRING budget; fund and recur both on
                the same date
         WHEN:  fund_account processes both events
         THEN:  fund fires first (money hits fillup), then recur (fillup ->
@@ -323,12 +319,10 @@ class TestFundingEngineRecurringWithFillup:
             bank_account=account,
             name="Monthly Bills",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
-            funding_amount=Money(100, "USD"),
             funding_schedule=_MONTHLY,
             recurrence_schedule=_MONTHLY,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal
@@ -641,12 +635,10 @@ class TestCapAndWarn:
             bank_account=account,
             name="Bills",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
-            funding_amount=Money(100, "USD"),
             funding_schedule=_MONTHLY,
             recurrence_schedule=_MONTHLY,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal
@@ -686,12 +678,10 @@ class TestCapAndWarn:
             bank_account=account,
             name="Bills",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
-            funding_amount=Money(100, "USD"),
             funding_schedule=_MONTHLY,
             recurrence_schedule=_MONTHLY,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal
@@ -1363,6 +1353,7 @@ class TestNextFundingInfo:
             pytest.param(
                 {
                     "budget_type": Budget.BudgetType.GOAL,
+                    "funding_type": Budget.FundingType.FIXED_AMOUNT,
                     "target_balance": Money(500, "USD"),
                     "funding_amount": Money(50, "USD"),
                     "paused": True,
@@ -1372,11 +1363,10 @@ class TestNextFundingInfo:
             pytest.param(
                 {
                     "budget_type": Budget.BudgetType.RECURRING,
+                    "funding_type": Budget.FundingType.TARGET_DATE,
                     "target_balance": Money(400, "USD"),
-                    "funding_amount": Money(200, "USD"),
-                    "with_fillup_goal": True,
                 },
-                id="recurring_fillup",
+                id="recurring",
             ),
         ],
     )
@@ -1386,7 +1376,7 @@ class TestNextFundingInfo:
         extra_kwargs: dict,
     ) -> None:
         """
-        GIVEN: a budget in an excluded state (paused or RECURRING+with_fillup)
+        GIVEN: a budget in an excluded state (paused or RECURRING)
         WHEN:  next_funding_info called
         THEN:  returns None before any schedule enumeration
         """
@@ -1395,7 +1385,6 @@ class TestNextFundingInfo:
         budget = budget_svc.create(
             bank_account=account,
             name="Test Budget",
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
             funding_schedule=_MONTHLY,
             **extra_kwargs,
         )
@@ -1422,11 +1411,9 @@ class TestNextFundingInfo:
             bank_account=account,
             name="Groceries",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(400, "USD"),
-            funding_amount=Money(200, "USD"),
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(200, "USD"),
             funding_schedule=_MONTHLY,
-            with_fillup_goal=True,
         )
         parent.refresh_from_db()
         fillup = parent.fillup_goal
@@ -1472,14 +1459,18 @@ class TestNextFundingInfo:
             target_balance=Money(1000, "USD"),
             funding_schedule=_TWICE_MONTHLY_15_EOM,
             recurrence_schedule=_MONTHLY_MAY_FIRST,
-            with_fillup_goal=True,
         )
         # Simulate a budget created on May 1 that has never been funded.
         # Old anchor: created_at.date()=May 1 → first event after May 1 = May 15
         # New anchor: _prev_recurrence_boundary(May 1)=April 30 → after=April 29
         #             → first event after April 29 = April 30 (catch-up)
+        # Simulate "never funded, created on May 1": null out last_funded_on
+        # (budget_svc.create sets it to created_at - 1 day) and backdating
+        # created_at so the catch-up anchor calculation sees May 1.
         Budget.objects.filter(pkid=parent.pkid).update(
             created_at=datetime(2026, 5, 1, tzinfo=UTC),
+            last_funded_on=None,
+            last_recurrence_on=None,
         )
         parent.refresh_from_db()
         fillup = parent.fillup_goal
@@ -1522,10 +1513,12 @@ class TestNextFundingInfo:
             target_balance=Money(3400, "USD"),
             funding_schedule=_TWICE_MONTHLY_15_EOM,
             recurrence_schedule=_YEARLY_SEP_15,
-            with_fillup_goal=True,
         )
+        # Set last_recurrence_on=None to trigger the first-cycle code path
+        # (budget_svc.create initialises it to created_at - 1 day).
         Budget.objects.filter(pkid=parent.pkid).update(
             last_funded_on=date(2026, 5, 8),
+            last_recurrence_on=None,
             created_at=datetime(2026, 4, 30, tzinfo=UTC),
         )
         parent.refresh_from_db()
@@ -1594,7 +1587,6 @@ class TestPreCycleCatchupFunding:
             target_balance=Money(1000, "USD"),
             funding_schedule=_TWICE_MONTHLY_15_EOM,
             recurrence_schedule=_MONTHLY_MAY_FIRST,
-            with_fillup_goal=True,
         )
         # last_funded_on=April 15 → next event = April 30 (end-of-month catch-up).
         # created_at=May 1 → cycle_start fallback = May 1 = cycle_end, triggering
@@ -1646,7 +1638,6 @@ class TestFillAmountProrated:
             target_balance=Money(100, "USD"),
             funding_schedule=_TWICE_MONTHLY,
             recurrence_schedule=_MONTHLY_FIRST,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal
@@ -1779,7 +1770,6 @@ class TestRecurringTargetDateProration:
             target_balance=Money(100, "USD"),
             funding_schedule=_TWICE_MONTHLY,
             recurrence_schedule=_MONTHLY_FIRST,
-            with_fillup_goal=True,
         )
         recurring.refresh_from_db()
         fillup = recurring.fillup_goal

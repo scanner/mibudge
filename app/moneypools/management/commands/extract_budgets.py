@@ -20,7 +20,7 @@ Output defaults to stdout.  Use --output to write to a file.
 By default archived budgets are omitted.  Pass --include-archived to
 include them.  Associated fill-up goal budgets (type 'A') and the
 account's unallocated budget are always omitted -- they are auto-created
-by define_budgets when the parent recurring budget sets with_fillup_goal.
+by define_budgets automatically for every Recurring budget.
 
 The emitted YAML is a valid input for define_budgets:
 
@@ -383,9 +383,6 @@ def _add_optional_fields_json(
     if bd.get("target_date"):
         entry["target_date"] = bd["target_date"]
 
-    if bd.get("with_fillup_goal"):
-        entry["with_fillup_goal"] = True
-
     if bd.get("paused"):
         entry["paused"] = True
 
@@ -413,9 +410,6 @@ def _add_optional_fields_db(entry: dict[str, Any], budget: Budget) -> None:
 
     if budget.target_date:
         entry["target_date"] = budget.target_date.isoformat()
-
-    if budget.with_fillup_goal:
-        entry["with_fillup_goal"] = True
 
     if budget.paused:
         entry["paused"] = True

@@ -499,6 +499,20 @@ class Budget(MoneyPoolBaseClass):
         default=get_default_zero,
         default_currency=get_default_currency,
     )
+    # Running net of all InternalTransactions touching this budget
+    # (credits minus debits).  Meaningful only for Goal budgets; left at 0
+    # for all other types.  Updated by internal_transaction_svc.create/delete.
+    #
+    funded_amount = MoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default=get_default_zero,
+        default_currency=get_default_currency,
+        help_text=(
+            "For Goal budgets: running net of all ITX credits minus debits. "
+            "Unused for other types."
+        ),
+    )
     target_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -536,13 +550,8 @@ class Budget(MoneyPoolBaseClass):
         help_text="Amount credited per funding event (Fixed Amount funding type only).",
     )
 
-    # Only relevant if the BudgetType is 'recurring'
-    #
-    with_fillup_goal = models.BooleanField(default=False)
-
-    # Only relevant if the BudgetType is 'recurring' and 'with_fillup_goal' is
-    # True.  The fill-up goal is an ASSOCIATED_FILLUP_GOAL child budget created
-    # automatically alongside the recurring budget.
+    # The fill-up goal is an ASSOCIATED_FILLUP_GOAL child budget created
+    # automatically alongside every Recurring budget.
     #
     # Funding flow:
     #   funding_schedule fires  -> unallocated -> fillup_goal  (accumulation)
@@ -610,7 +619,7 @@ class Budget(MoneyPoolBaseClass):
         default=None,
         help_text=(
             "Date of the most recently processed recurrence event. "
-            "Only meaningful for Recurring budgets with with_fillup_goal=True."
+            "Only meaningful for Recurring budgets."
         ),
     )
 
@@ -641,6 +650,106 @@ class Budget(MoneyPoolBaseClass):
     #       account has the given fields selected.
     #
     auto_spend = models.JSONField(default=list, blank=True)
+
+    ####################################################################
+    #
+    def clean(self) -> None:
+        """Validate budget type / funding type consistency.
+
+        Raises:
+            ValidationError: If any field combination violates section 11
+                of docs/funding.md.
+        """
+        super().clean()
+        errors: dict[str, str] = {}
+        ft = self.funding_type
+        FT = Budget.FundingType
+
+        match self.budget_type:
+            case Budget.BudgetType.RECURRING:
+                if ft != FT.TARGET_DATE:
+                    errors["funding_type"] = (
+                        "Recurring budgets must use TARGET_DATE funding."
+                    )
+                if self.target_date is not None:
+                    errors["target_date"] = (
+                        "Recurring budgets must not have a target_date."
+                    )
+                if not self.recurrence_schedule:
+                    errors["recurrence_schedule"] = (
+                        "Recurring budgets must have a recurrence_schedule."
+                    )
+                if self.funding_amount is not None:
+                    errors["funding_amount"] = (
+                        "Recurring budgets must not have a funding_amount."
+                    )
+
+            case Budget.BudgetType.CAPPED:
+                if ft != FT.FIXED_AMOUNT:
+                    errors["funding_type"] = (
+                        "Capped budgets must use FIXED_AMOUNT funding."
+                    )
+                if self.target_date is not None:
+                    errors["target_date"] = (
+                        "Capped budgets must not have a target_date."
+                    )
+                if self.funding_amount is None:
+                    errors["funding_amount"] = (
+                        "Capped budgets must have a funding_amount."
+                    )
+                if self.recurrence_schedule:
+                    errors["recurrence_schedule"] = (
+                        "Capped budgets must not have a recurrence_schedule."
+                    )
+                if self.fillup_goal_id is not None:
+                    errors["fillup_goal"] = (
+                        "Only Recurring budgets may have a fillup_goal."
+                    )
+
+            case Budget.BudgetType.GOAL:
+                if ft == FT.TARGET_DATE and self.target_date is None:
+                    errors["target_date"] = (
+                        "Goal budgets with TARGET_DATE funding require a "
+                        "target_date."
+                    )
+                if ft == FT.FIXED_AMOUNT and self.funding_amount is None:
+                    errors["funding_amount"] = (
+                        "Goal budgets with FIXED_AMOUNT funding require a "
+                        "funding_amount."
+                    )
+                if self.recurrence_schedule:
+                    errors["recurrence_schedule"] = (
+                        "Goal budgets must not have a recurrence_schedule."
+                    )
+                if self.fillup_goal_id is not None:
+                    errors["fillup_goal"] = (
+                        "Only Recurring budgets may have a fillup_goal."
+                    )
+
+        if errors:
+            raise ValidationError(errors)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(budget_type="R", funding_type="D")
+                | ~models.Q(budget_type="R"),
+                name="budget_recurring_must_be_target_date",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(budget_type="C", funding_type="F")
+                | ~models.Q(budget_type="C"),
+                name="budget_capped_must_be_fixed_amount",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(budget_type="R", target_date__isnull=True)
+                    | models.Q(budget_type="C", target_date__isnull=True)
+                    | ~models.Q(budget_type__in=["R", "C"])
+                ),
+                name="budget_recurring_capped_no_target_date",
+            ),
+        ]
 
     ####################################################################
     #
@@ -930,6 +1039,29 @@ class InternalTransaction(TransactionBaseClass):
         decimal_places=DECIMAL_PLACES,
         default=get_default_zero,
         default_currency=get_default_currency,
+        editable=False,
+    )
+
+    # Populated iff actor == funding_system_user().  Used by the engine
+    # to compute already_moved (section 7) and state-at-start-of-day
+    # rollback (section 6) in docs/funding.md.
+    #
+    class SystemEventKind(models.TextChoices):
+        FUND = "F", "Fund"
+        RECUR = "R", "Recur"
+
+    system_event_kind = models.CharField(
+        max_length=1,
+        choices=SystemEventKind.choices,
+        null=True,
+        blank=True,
+        default=None,
+        editable=False,
+    )
+    system_event_date = models.DateField(
+        null=True,
+        blank=True,
+        default=None,
         editable=False,
     )
 

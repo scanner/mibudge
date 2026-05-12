@@ -37,6 +37,7 @@ services:
       - "${HOST_SSL_DIR}:/mnt/ssl:ro"
     env_file: deployment/local-dev-docker.env
     environment:
+      ALLOWED_HOSTS: "${HOSTNAME},localhost,0.0.0.0,127.0.0.1"
       TZ: ${TIME_ZONE:-America/Los_Angeles}
     ports:
       - "8000:8000"

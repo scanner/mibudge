@@ -417,7 +417,7 @@ class TestBankAccountFundingSummaryAPI:
             b = budget_svc.create(
                 bank_account=account,
                 name=f"Budget {spec['amount']}",
-                budget_type=Budget.BudgetType.RECURRING,
+                budget_type=Budget.BudgetType.GOAL,
                 funding_type=Budget.FundingType.FIXED_AMOUNT,
                 target_balance=Money(1000, "USD"),
                 funding_amount=Money(spec["amount"], "USD"),
@@ -452,7 +452,7 @@ class TestBankAccountFundingSummaryAPI:
         b = budget_svc.create(
             bank_account=account,
             name="Groceries",
-            budget_type=Budget.BudgetType.RECURRING,
+            budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(500, "USD"),
             funding_amount=Money(100, "USD"),
@@ -532,7 +532,7 @@ class TestBudgetNextFundingField:
         b = budget_svc.create(
             bank_account=account,
             name="Groceries",
-            budget_type=Budget.BudgetType.RECURRING,
+            budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(500, "USD"),
             funding_amount=Money(100, "USD"),
@@ -583,7 +583,7 @@ class TestBudgetAPI:
                 "name": "Groceries",
                 "bank_account": str(account.id),
                 "budget_type": "R",
-                "funding_type": "F",
+                "funding_type": "D",
                 "target_balance": "500.00",
             },
         )
@@ -791,19 +791,16 @@ class TestBudgetAPI:
         THEN:  both the budget and its fill-up goal are archived, and both
                balances are moved to unallocated
         """
-        from moneyed import USD, Money
-
         account = bank_account_factory(owners=[user])
         budget = budget_factory(
             bank_account=account,
             budget_type="R",
-            with_fillup_goal=True,
             balance=200,
         )
         budget.refresh_from_db()
         fillup = budget.fillup_goal
         assert fillup is not None
-        fillup.balance = Money(100, USD)
+        fillup.balance = Money(100, "USD")
         fillup.save()
 
         assert account.unallocated_budget is not None
@@ -821,11 +818,11 @@ class TestBudgetAPI:
 
         assert account.unallocated_budget is not None
         unalloc = Budget.objects.get(id=account.unallocated_budget.id)
-        assert unalloc.balance == unalloc_balance_before + Money(300, USD)
+        assert unalloc.balance == unalloc_balance_before + Money(300, "USD")
 
     ####################################################################
     #
-    def test_create_recurring_with_fillup_goal_creates_child(
+    def test_create_recurring_creates_fillup_child(
         self,
         auth_client: APIClient,
         user: User,
@@ -833,7 +830,7 @@ class TestBudgetAPI:
     ) -> None:
         """
         GIVEN: an owned bank account
-        WHEN:  POST /api/v1/budgets/ with budget_type=R and with_fillup_goal=True
+        WHEN:  POST /api/v1/budgets/ with budget_type=R
         THEN:  the response includes a fillup_goal UUID and an
                ASSOCIATED_FILLUP_GOAL child budget exists in the DB
         """
@@ -844,9 +841,8 @@ class TestBudgetAPI:
                 "name": "Eating Out",
                 "bank_account": str(account.id),
                 "budget_type": "R",
-                "funding_type": "F",
+                "funding_type": "D",
                 "target_balance": "300.00",
-                "with_fillup_goal": True,
             },
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -855,35 +851,6 @@ class TestBudgetAPI:
         fillup = Budget.objects.get(id=fillup_id)
         assert fillup.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL
         assert fillup.name == "Eating Out Fill-up"
-
-    ####################################################################
-    #
-    def test_patch_enable_fillup_goal_creates_child(
-        self,
-        auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
-    ) -> None:
-        """
-        GIVEN: a Recurring budget without a fill-up goal
-        WHEN:  PATCH /api/v1/budgets/<uuid>/ with with_fillup_goal=True
-        THEN:  an ASSOCIATED_FILLUP_GOAL child is created and linked
-        """
-        account = bank_account_factory(owners=[user])
-        budget = budget_factory(
-            bank_account=account, budget_type="R", with_fillup_goal=False
-        )
-        assert budget.fillup_goal_id is None
-
-        response = auth_client.patch(
-            reverse("api_v1:budget-detail", kwargs={"id": budget.id}),
-            {"with_fillup_goal": True},
-        )
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["fillup_goal"] is not None
-        fillup = Budget.objects.get(id=response.data["fillup_goal"])
-        assert fillup.budget_type == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL
 
 
 ########################################################################

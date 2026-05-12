@@ -93,12 +93,12 @@ class TestBudgetService:
 
     ####################################################################
     #
-    def test_create_with_fillup_goal_creates_child(
+    def test_create_recurring_creates_fillup_child(
         self,
         bank_account_factory: Callable[..., BankAccount],
     ) -> None:
         """
-        GIVEN: a RECURRING budget with with_fillup_goal=True
+        GIVEN: a RECURRING budget
         WHEN:  BudgetService.create is called
         THEN:  an ASSOCIATED_FILLUP_GOAL child is created and linked
                back via fillup_goal
@@ -108,9 +108,8 @@ class TestBudgetService:
             bank_account=account,
             name="Groceries",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(200, "USD"),
-            with_fillup_goal=True,
         )
 
         assert budget.fillup_goal is not None
@@ -158,9 +157,8 @@ class TestBudgetService:
             bank_account=account,
             name="Groceries",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(200, "USD"),
-            with_fillup_goal=True,
         )
         assert budget.fillup_goal is not None
 
@@ -185,9 +183,8 @@ class TestBudgetService:
             bank_account=account,
             name="Groceries",
             budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(200, "USD"),
-            with_fillup_goal=True,
         )
         assert budget.fillup_goal is not None
         fillup_before = budget.fillup_goal.modified_at
