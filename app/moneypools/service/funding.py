@@ -1,5 +1,5 @@
 """
-Budget funding engine -- Phase 6.
+Budget funding engine.
 
 Entry point:
     fund_account(account, today, actor) -> FundingReport
@@ -31,28 +31,34 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
 
 # 3rd party imports
 #
-import recurrence as recurrence_lib
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
+from django.db.models import Q
 from djmoney.money import Money
 
 # Project imports
 #
-from moneypools.models import BankAccount, Budget
+from moneypools.models import BankAccount, Budget, InternalTransaction
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service.funding_strategy import (
+    BUDGET_TYPE_TO_STRATEGY,
+    EventKind,
+    _fill_amount_prorated,  # noqa: F401 -- re-exported for test_funding.py
+)
+from moneypools.service.schedules import (
+    enumerate_schedule,
+    prev_recurrence_boundary,
+)
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-_KIND_FUND: Literal["fund"] = "fund"
-_KIND_RECUR: Literal["recur"] = "recur"
-_KIND_ORDER = {_KIND_FUND: 0, _KIND_RECUR: 1}
+_KIND_ORDER = {EventKind.FUND: 0, EventKind.RECUR: 1}
 
 
 ########################################################################
@@ -64,12 +70,12 @@ class FundingEvent:
 
     Attributes:
         date: Calendar date the event falls on.
-        kind: 'fund' for a funding event, 'recur' for a recurrence event.
+        kind: FUND for a funding event, RECUR for a recurrence event.
         budget: The Budget this event belongs to.
     """
 
     date: date
-    kind: Literal["fund", "recur"]
+    kind: EventKind
     budget: Budget
 
     def sort_key(self) -> tuple:
@@ -168,10 +174,8 @@ def next_funding_info(
         if parent is None or parent.paused or parent.archived:
             return None
         scheduling_budget = parent
-        target = budget
     else:
         scheduling_budget = budget
-        target = budget
 
     account = scheduling_budget.bank_account
 
@@ -180,7 +184,7 @@ def next_funding_info(
     else:
         # Mirror _collect_events: push back to one day before the most recent
         # funding boundary so that past-due catch-up events are included.
-        prev = _prev_recurrence_boundary(
+        prev = prev_recurrence_boundary(
             scheduling_budget.funding_schedule,
             scheduling_budget.created_at.date(),
         )
@@ -191,7 +195,7 @@ def next_funding_info(
         )
     # Look ahead up to 2 years to find the next event.
     look_ahead = date(today.year + 2, today.month, today.day)
-    upcoming = _enumerate_schedule(
+    upcoming = enumerate_schedule(
         scheduling_budget.funding_schedule, after, look_ahead
     )
     if not upcoming:
@@ -199,7 +203,10 @@ def next_funding_info(
 
     next_date = upcoming[0]
 
-    amount = _calculate_fund_amount(scheduling_budget, target, next_date, today)
+    strategy = BUDGET_TYPE_TO_STRATEGY[scheduling_budget.budget_type]
+    amount = strategy.intended_for_event(
+        scheduling_budget, next_date, kind=EventKind.FUND
+    )
     if amount.amount <= Decimal("0"):
         return None
 
@@ -242,9 +249,9 @@ def fund_account(
 
     Applies the import-freshness gate, collects due events, sorts them
     in date-grouped order (fund before recur per date, budget.id
-    tiebreak), and dispatches each event.  All balance changes flow
-    through internal_transaction_svc so the budget-balance invariant
-    is maintained.
+    tiebreak), and dispatches each event via its budget-type strategy.
+    All balance changes flow through internal_transaction_svc so the
+    budget-balance invariant is maintained.
 
     Args:
         account: The BankAccount to fund.
@@ -299,7 +306,7 @@ def fund_account(
                 report.skipped_budgets.append(budget.name)
             # Advance the pointer so accumulated events are consumed; when
             # unpaused, only future events fire rather than a backlog.
-            if ev.kind == _KIND_FUND:
+            if ev.kind == EventKind.FUND:
                 Budget.objects.filter(pkid=budget.pkid).update(
                     last_funded_on=ev.date
                 )
@@ -309,8 +316,8 @@ def fund_account(
                 )
             continue
 
-        if ev.kind == _KIND_FUND:
-            _process_fund_event(ev, account, unallocated, actor, report, today)
+        if ev.kind == EventKind.FUND:
+            _process_fund_event(ev, account, unallocated, actor, report)
         else:
             _process_recur_event(ev, account, actor, report)
 
@@ -343,6 +350,46 @@ def funding_event_dates(
     )
     events = _collect_events(budgets, before)
     return sorted({ev.date for ev in events if after < ev.date <= before})
+
+
+########################################################################
+########################################################################
+#
+def state_at_start_of_D(
+    budget: Budget,
+    D: date,
+) -> tuple[Money, Money]:
+    """Return (balance, funded_amount) for budget as of the start of date D.
+
+    Rolls back all system-issued InternalTransactions touching budget with
+    system_event_date >= D.  System-issued ITXs are identified by having a
+    non-null system_event_date.
+
+    Args:
+        budget: The Budget to compute state for.
+        D: The event date to roll back to the start of.
+
+    Returns:
+        Tuple of (balance_at_start_of_D, funded_amount_at_start_of_D).
+    """
+    system_itxs = InternalTransaction.objects.filter(
+        system_event_date__isnull=False,
+        system_event_date__gte=D,
+    ).filter(Q(src_budget=budget) | Q(dst_budget=budget))
+
+    # signed_amount(X) = +amount if dst_budget==X, -amount if src_budget==X
+    # B_0 = current_balance - sum(signed_amount) over S(X, D)
+    net_signed = Decimal("0")
+    for itx in system_itxs:
+        if itx.dst_budget_id == budget.id:
+            net_signed += itx.amount.amount
+        else:
+            net_signed -= itx.amount.amount
+
+    currency = budget.balance.currency
+    balance_0 = Money(budget.balance.amount - net_signed, currency)
+    funded_amount_0 = Money(budget.funded_amount.amount - net_signed, currency)
+    return balance_0, funded_amount_0
 
 
 ########################################################################
@@ -381,7 +428,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
             # recent schedule boundary at or before the budget's creation date
             # so events that fell between DTSTART and created_at are not
             # silently skipped.
-            prev = _prev_recurrence_boundary(
+            prev = prev_recurrence_boundary(
                 budget.funding_schedule, budget.created_at.date()
             )
             fund_after = (
@@ -389,10 +436,10 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                 if prev is not None
                 else budget.created_at.date()
             )
-        for d in _enumerate_schedule(
-            budget.funding_schedule, fund_after, today
-        ):
-            events.append(FundingEvent(date=d, kind=_KIND_FUND, budget=budget))
+        for d in enumerate_schedule(budget.funding_schedule, fund_after, today):
+            events.append(
+                FundingEvent(date=d, kind=EventKind.FUND, budget=budget)
+            )
 
         if (
             budget.budget_type == Budget.BudgetType.RECURRING
@@ -407,7 +454,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                 # creation date. This ensures a recurrence that fell between
                 # the schedule's DTSTART and created_at is not silently
                 # skipped just because the Django object was created after it.
-                prev = _prev_recurrence_boundary(
+                prev = prev_recurrence_boundary(
                     budget.recurrence_schedule, budget.created_at.date()
                 )
                 recur_after = (
@@ -415,11 +462,11 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                     if prev is not None
                     else budget.created_at.date()
                 )
-            for d in _enumerate_schedule(
+            for d in enumerate_schedule(
                 budget.recurrence_schedule, recur_after, today
             ):
                 events.append(
-                    FundingEvent(date=d, kind=_KIND_RECUR, budget=budget)
+                    FundingEvent(date=d, kind=EventKind.RECUR, budget=budget)
                 )
 
     return events
@@ -427,64 +474,12 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
 
 ####################################################################
 #
-def _enumerate_schedule(
-    sched: recurrence_lib.Recurrence | None,
-    after: date,
-    before: date,
-) -> list[date]:
-    """Return all dates on a recurrence schedule in (after, before].
-
-    Args:
-        sched: A recurrence.Recurrence object, or None.
-        after: Exclusive lower bound (last processed date).
-        before: Inclusive upper bound (today).
-
-    Returns:
-        Sorted list of dates strictly after *after* and <= *before*.
-    """
-    if not sched:
-        return []
-
-    # The recurrence library uses naive datetimes internally; passing
-    # timezone-aware datetimes causes a TypeError on the internal comparison.
-    after_dt = datetime(after.year, after.month, after.day)
-    before_dt = datetime(before.year, before.month, before.day, 23, 59, 59)
-
-    # Use the schedule's stored dtstart if present; fall back to after_dt so
-    # the rule fires on the same day-of-month as the last-processed date rather
-    # than defaulting to datetime.now() (which is non-deterministic).
-    # Strip timezone: the stored dtstart comes back as UTC-aware after DB
-    # round-trip, but the recurrence library uses naive datetimes internally.
-    raw = sched.dtstart
-    dtstart = raw.replace(tzinfo=None) if raw is not None else after_dt
-
-    try:
-        occurrences = list(
-            sched.between(after_dt, before_dt, inc=False, dtstart=dtstart)
-        )
-    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
-        logger.warning("_enumerate_schedule: recurrence error: %r", exc)
-        return []
-
-    results = []
-    for occ in occurrences:
-        d = occ.date() if hasattr(occ, "date") else occ
-        if after < d <= before:
-            results.append(d)
-
-    return sorted(set(results))
-
-
-########################################################################
-########################################################################
-#
 def _process_fund_event(
     ev: FundingEvent,
     account: BankAccount,
     unallocated: Budget,
     actor: User,  # type: ignore[valid-type]
     report: FundingReport,
-    today: date,
 ) -> None:
     """
     Transfer funds from unallocated into the target budget.
@@ -501,7 +496,6 @@ def _process_fund_event(
         unallocated: The account's unallocated budget.
         actor: User for the InternalTransaction actor field.
         report: Mutable FundingReport to update.
-        today: Used for TARGET_DATE gap-spread calculation.
     """
     budget = ev.budget
 
@@ -516,8 +510,11 @@ def _process_fund_event(
 
     unallocated.refresh_from_db()
     target.refresh_from_db()
+    budget.refresh_from_db()
 
-    amount = _calculate_fund_amount(budget, target, ev.date, today)
+    strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
+    amount = strategy.intended_for_event(budget, ev.date, kind=EventKind.FUND)
+
     if amount.amount <= Decimal("0"):
         Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
         return
@@ -567,379 +564,6 @@ def _process_fund_event(
 
 ####################################################################
 #
-def _prev_recurrence_boundary(
-    sched: recurrence_lib.Recurrence | None,
-    as_of: date,
-) -> date | None:
-    """Return the most recent occurrence of sched on or before as_of.
-
-    Used to find the start of the current recurrence cycle for fill-up goals.
-
-    Args:
-        sched: The recurrence schedule.
-        as_of: Date to search up to (inclusive).
-
-    Returns:
-        Most recent occurrence date, or None if none found within 2 years.
-    """
-    if not sched:
-        return None
-
-    start_dt = datetime(as_of.year - 2, as_of.month, as_of.day)
-    end_dt = datetime(as_of.year, as_of.month, as_of.day, 23, 59, 59)
-
-    raw = sched.dtstart
-    dtstart = raw.replace(tzinfo=None) if raw is not None else start_dt
-
-    try:
-        occurrences = list(
-            sched.between(start_dt, end_dt, inc=True, dtstart=dtstart)
-        )
-        if not occurrences:
-            return None
-        last = occurrences[-1]
-        return (
-            last.date()
-            if hasattr(last, "date")
-            else date(last.year, last.month, last.day)
-        )
-    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
-        logger.warning("_prev_recurrence_boundary: recurrence error: %r", exc)
-        return None
-
-
-####################################################################
-#
-def _fill_amount_prorated(
-    budget: Budget,
-    target: Budget,
-    event_date: date,
-    cycle_start: date,
-    cycle_before: date,
-) -> Money:
-    """Compute the steady-state deposit toward a budget's target for one event.
-
-    Divides the cycle into N total funding events and transfers 1/N of the
-    target balance per event, capped at the remaining gap.  This gives a
-    predictable per-event amount and stops once the target is reached.
-
-    Example: target_balance=$100, N=2 events per cycle (15th and last day).
-      - Each event transfers min($50, remaining_gap).
-      - If target has $5: amount=min($50, $95)=$50.
-      - If target has $60 (ahead): amount=min($50, $40)=$40.
-      - If target has $95 (nearly full): amount=min($50, $5)=$5.
-      - If target has $100: full_gap=0, returns $0.
-
-    Args:
-        budget: Budget whose funding_schedule defines the event cadence.
-        target: Budget being funded (may equal budget for direct-funded cases).
-        event_date: The funding event date (kept for API compatibility).
-        cycle_start: Exclusive lower bound for counting all events in the cycle.
-        cycle_before: Inclusive upper bound for counting all events in the cycle.
-
-    Returns:
-        Money amount to transfer, >= 0.
-    """
-    currency = target.balance.currency
-    zero = Money(Decimal("0"), currency)
-
-    full_gap = target.target_balance.amount - target.balance.amount
-    if full_gap <= Decimal("0"):
-        return zero
-
-    sched = budget.funding_schedule
-    if not sched:
-        return Money(full_gap, currency)
-
-    after_dt = datetime(cycle_start.year, cycle_start.month, cycle_start.day)
-    before_dt = datetime(
-        cycle_before.year, cycle_before.month, cycle_before.day, 23, 59, 59
-    )
-
-    raw = sched.dtstart
-    raw_clean = raw.replace(tzinfo=None) if raw is not None else None
-    # Use the earlier of the schedule's DTSTART and cycle_start as the
-    # effective dtstart.  For theoretical prior cycles (e.g. a yearly budget
-    # in its first annual cycle where the funding schedule's DTSTART is later
-    # than the theoretical cycle start), this ensures events from the start of
-    # the full cycle are counted rather than only events after DTSTART.
-    effective_dtstart = (
-        min(raw_clean, after_dt) if raw_clean is not None else after_dt
-    )
-
-    try:
-        occs = list(
-            sched.between(
-                after_dt, before_dt, inc=False, dtstart=effective_dtstart
-            )
-        )
-    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
-        logger.warning("_fill_amount_prorated: recurrence error: %r", exc)
-        return Money(full_gap, currency)
-
-    results = []
-    for occ in occs:
-        d = (
-            occ.date()
-            if hasattr(occ, "date")
-            else date(occ.year, occ.month, occ.day)
-        )
-        if cycle_start < d <= cycle_before:
-            results.append(d)
-
-    N = len(sorted(set(results)))
-    if N == 0:
-        return Money(full_gap, currency)
-
-    steady_state = (target.target_balance.amount / Decimal(N)).quantize(
-        Decimal("0.01")
-    )
-    per_event = min(steady_state, full_gap)
-    return Money(per_event, currency)
-
-
-####################################################################
-#
-def _calculate_fund_amount(
-    budget: Budget,
-    target: Budget,
-    event_date: date,
-    today: date,
-) -> Money:
-    """Compute how much to transfer on a fund event.
-
-    Args:
-        budget: The source budget (determines funding type and schedule).
-        target: The destination budget (used for balance/target checks).
-        event_date: The date of this specific event.
-        today: The reference date for TARGET_DATE calculations.
-
-    Returns:
-        A Money amount >= 0 to transfer.
-    """
-    currency = target.balance.currency
-    zero = Money(Decimal("0"), currency)
-
-    if budget.funding_type == Budget.FundingType.FIXED_AMOUNT:
-        if budget.funding_amount is None:
-            return zero
-        amount = budget.funding_amount
-
-        # For Capped budgets, never overfill.
-        if budget.budget_type == Budget.BudgetType.CAPPED:
-            gap = target.target_balance.amount - target.balance.amount
-            if gap <= Decimal("0"):
-                return zero
-            amount = Money(min(amount.amount, gap), currency)
-
-        return amount
-
-    gap = target.target_balance.amount - target.balance.amount
-    if gap <= Decimal("0"):
-        return zero
-
-    # RECURRING budgets: spread the gap over events in the current recurrence
-    # cycle using a prorated cumulative target.  Applies whether the target is
-    # the budget itself or its associated fill-up goal.
-    if (
-        budget.budget_type == Budget.BudgetType.RECURRING
-        and budget.recurrence_schedule
-    ):
-        cycle_end = _next_recurrence_boundary(
-            budget.recurrence_schedule, event_date + timedelta(days=1)
-        )
-        if cycle_end is not None:
-            _prev = _prev_recurrence_boundary(
-                budget.recurrence_schedule, event_date
-            )
-            cycle_start = (
-                _prev or budget.last_recurrence_on or budget.created_at.date()
-            )
-            if _prev is None and budget.last_recurrence_on is None:
-                # First cycle: the schedule's DTSTART hasn't been reached yet
-                # so _prev_recurrence_boundary returns None.  Compute the
-                # theoretical prior boundary by projecting the rule backward
-                # using cycle_end's month/day as the anchor -- this preserves
-                # the correct day-of-year for YEARLY rules and day-of-month
-                # for MONTHLY rules.  Without this, N counts only the
-                # remaining events (e.g., 8) instead of the full cycle
-                # (e.g., 23), inflating the per-event amount.
-                early_anchor = datetime(
-                    cycle_end.year - 3, cycle_end.month, cycle_end.day
-                )
-                one_before = cycle_end - timedelta(days=1)
-                end_search = datetime(
-                    one_before.year,
-                    one_before.month,
-                    one_before.day,
-                    23,
-                    59,
-                    59,
-                )
-                try:
-                    prior_occs = list(
-                        budget.recurrence_schedule.between(
-                            early_anchor,
-                            end_search,
-                            inc=True,
-                            dtstart=early_anchor,
-                        )
-                    )
-                    if prior_occs:
-                        last_occ = prior_occs[-1]
-                        theoretical_start = (
-                            last_occ.date()
-                            if hasattr(last_occ, "date")
-                            else date(
-                                last_occ.year, last_occ.month, last_occ.day
-                            )
-                        )
-                        cycle_start = theoretical_start
-                except (recurrence_lib.RecurrenceError, TypeError, ValueError):
-                    pass
-            if cycle_start >= cycle_end:
-                # event_date falls before the first recurrence boundary (e.g.,
-                # a catch-up funding event on April 30 with DTSTART May 1).
-                # Use the first full cycle's event count as the rate basis so
-                # _fill_amount_prorated doesn't fall back to N=0 → full_gap.
-                #
-                # Use _enumerate_schedule (inc=False) instead of
-                # _next_recurrence_boundary here: the boundary helper subtracts
-                # one day before calling between(), which causes it to return
-                # cycle_end itself when dtstart == cycle_end.
-                look_ahead = date(
-                    cycle_end.year + 2, cycle_end.month, cycle_end.day
-                )
-                future = _enumerate_schedule(
-                    budget.recurrence_schedule, cycle_end, look_ahead
-                )
-                if future:
-                    next_cycle_end = future[0]
-                    return _fill_amount_prorated(
-                        budget,
-                        target,
-                        event_date,
-                        cycle_end - timedelta(days=1),
-                        next_cycle_end - timedelta(days=1),
-                    )
-            return _fill_amount_prorated(
-                budget,
-                target,
-                event_date,
-                cycle_start,
-                cycle_end - timedelta(days=1),
-            )
-
-    # GOAL with target_date: the balance accumulates permanently, so divide the
-    # full remaining gap evenly over all events between now and target_date.
-    if budget.target_date is not None:
-        remaining = _count_remaining_occurrences(
-            budget.funding_schedule, event_date, budget.target_date
-        )
-        per_event = (gap / max(remaining, 1)).quantize(Decimal("0.01"))
-        return Money(per_event, currency)
-
-    # Fallback: no cycle boundaries available; deposit full remaining gap.
-    return Money(gap, currency)
-
-
-####################################################################
-#
-def _next_recurrence_boundary(
-    sched: recurrence_lib.Recurrence | None,
-    from_date: date,
-) -> date | None:
-    """Return the first date the recurrence schedule fires on or after from_date.
-
-    Used to find the next cycle-reset boundary for RECURRING budgets, so
-    gap-spreading is capped at the upcoming reset rather than an arbitrary date.
-
-    Args:
-        sched: The recurrence schedule (e.g. monthly-on-the-1st).
-        from_date: Lower bound (inclusive).
-
-    Returns:
-        Next occurrence date, or None if none found within 2 years.
-    """
-    if not sched:
-        return None
-
-    # Search up to 2 years out; subtract one day so from_date itself is included
-    # (between() is exclusive on the lower bound).
-    start_dt = datetime(
-        from_date.year, from_date.month, from_date.day
-    ) - timedelta(days=1)
-    look_ahead = date(from_date.year + 2, from_date.month, from_date.day)
-    end_dt = datetime(
-        look_ahead.year, look_ahead.month, look_ahead.day, 23, 59, 59
-    )
-
-    raw = sched.dtstart
-    dtstart = raw.replace(tzinfo=None) if raw is not None else start_dt
-
-    try:
-        occurrences = sched.between(start_dt, end_dt, inc=True, dtstart=dtstart)
-        first = next(iter(occurrences), None)
-        if first is None:
-            return None
-        return (
-            first.date()
-            if hasattr(first, "date")
-            else date(first.year, first.month, first.day)
-        )
-    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
-        logger.warning("_next_recurrence_boundary: recurrence error: %r", exc)
-        return None
-
-
-####################################################################
-#
-def _count_remaining_occurrences(
-    sched: recurrence_lib.Recurrence | None,
-    from_date: date,
-    end_date: date,
-) -> int:
-    """Count occurrences of a schedule from from_date (inclusive) to end_date.
-
-    Used for TARGET_DATE gap-spreading: divide remaining gap by this count.
-
-    Args:
-        sched: The funding schedule.
-        from_date: Start date (inclusive).
-        end_date: Upper bound (inclusive); pass budget.target_date for Goals.
-
-    Returns:
-        Number of occurrences in [from_date, end_date] (minimum 1).
-    """
-    if not sched:
-        return 1
-
-    # between() is exclusive on the lower bound; subtract one day so
-    # from_date itself is included.  Use naive datetimes (library requirement).
-    start_dt = datetime(
-        from_date.year, from_date.month, from_date.day
-    ) - timedelta(days=1)
-    end_dt = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
-
-    raw = sched.dtstart
-    dtstart = raw.replace(tzinfo=None) if raw is not None else start_dt
-
-    try:
-        occurrences = list(
-            sched.between(start_dt, end_dt, inc=True, dtstart=dtstart)
-        )
-    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
-        logger.warning(
-            "_count_remaining_occurrences: recurrence error: %r", exc
-        )
-        return 1
-
-    return max(1, len(occurrences))
-
-
-########################################################################
-########################################################################
-#
 def _process_recur_event(
     ev: FundingEvent,
     account: BankAccount,
@@ -970,8 +594,12 @@ def _process_recur_event(
         Budget.objects.filter(pkid=budget.pkid).update(complete=False)
         budget.complete = False
 
-    gap = budget.target_balance.amount - budget.balance.amount
-    if gap <= Decimal("0"):
+    strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
+    intended = strategy.intended_for_event(
+        budget, ev.date, kind=EventKind.RECUR
+    )
+
+    if intended.amount <= Decimal("0"):
         Budget.objects.filter(pkid=budget.pkid).update(
             last_recurrence_on=ev.date,
             complete=True,
@@ -985,11 +613,11 @@ def _process_recur_event(
         )
         return
 
-    transfer = min(gap, fillup_available)
-    if transfer < gap:
+    transfer = min(intended.amount, fillup_available)
+    if transfer < intended.amount:
         report.warnings.append(
             f"[{ev.date}] {budget.name}: fill-up only had "
-            f"{fillup.balance}; needed {gap}; underfunded."
+            f"{fillup.balance}; needed {intended.amount}; underfunded."
         )
 
     amount = Money(transfer, budget.balance.currency)
