@@ -284,8 +284,11 @@ class TestFundingEngineRecurringWithFillup:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
-        assert len(report.warnings) == 1
-        assert "underfunded" in report.warnings[0]
+        assert len(report.warnings) == 2
+        # today's fund event fires (pointer was already at today but today
+        # always re-fires); unallocated is $0 so it produces a skipped warning.
+        assert "transfer skipped" in report.warnings[0]
+        assert "underfunded" in report.warnings[1]
 
         recurring.refresh_from_db()
         fillup.refresh_from_db()
@@ -576,7 +579,7 @@ class TestCapAndWarn:
 
     ####################################################################
     #
-    def test_empty_unallocated_skips_and_does_not_advance_pointer(
+    def test_empty_unallocated_skips_and_advances_pointer(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,  # type: ignore[valid-type]
@@ -584,7 +587,9 @@ class TestCapAndWarn:
         """
         GIVEN: unallocated=$0
         WHEN:  fund event fires
-        THEN:  no transfer; warning logged; last_funded_on unchanged (retry)
+        THEN:  no transfer; warning logged; last_funded_on advances to today
+               (pointer advances unconditionally -- no retry on subsequent days;
+               same-day re-runs will retry via the today-always-fires rule)
         """
         today = date(2026, 3, 1)
         prior = date(2026, 2, 28)
@@ -610,14 +615,14 @@ class TestCapAndWarn:
 
         assert report.transfers == 0
         assert len(report.warnings) == 1
-        assert "retry" in report.warnings[0]
+        assert "transfer skipped" in report.warnings[0]
 
         budget.refresh_from_db()
-        assert budget.last_funded_on == prior
+        assert budget.last_funded_on == today
 
     ####################################################################
     #
-    def test_empty_fillup_skips_and_does_not_advance_recur_pointer(
+    def test_empty_fillup_advances_recur_pointer_and_warns(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,  # type: ignore[valid-type]
@@ -625,7 +630,9 @@ class TestCapAndWarn:
         """
         GIVEN: fillup=$0, recurring recur event fires
         WHEN:  recur event processed
-        THEN:  no transfer; warning logged; last_recurrence_on unchanged (retry)
+        THEN:  no transfer; warning logged; last_recurrence_on advances to today
+               (pointer advances unconditionally -- the missed funding is lost;
+               same-day re-runs will retry once fill-up has funds)
         """
         today = date(2026, 2, 1)
         prior = date(2026, 1, 31)
@@ -653,11 +660,13 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 0
-        assert len(report.warnings) == 1
-        assert "retry" in report.warnings[0]
+        # Two warnings: today's fund event hits empty unallocated; recur event
+        # hits empty fill-up.
+        assert len(report.warnings) == 2
+        assert any("fill-up goal is empty" in w for w in report.warnings)
 
         recurring.refresh_from_db()
-        assert recurring.last_recurrence_on == prior
+        assert recurring.last_recurrence_on == today
 
     ####################################################################
     #
@@ -696,7 +705,10 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
-        assert len(report.warnings) == 1
+        # Two warnings: today's fund event hits empty unallocated; recur event
+        # is underfunded by the fill-up.
+        assert len(report.warnings) == 2
+        assert any("underfunded" in w for w in report.warnings)
 
         recurring.refresh_from_db()
         assert recurring.balance == Money(30, "USD")
@@ -1483,7 +1495,7 @@ class TestNextFundingInfo:
 
     ####################################################################
     #
-    def test_yearly_first_cycle_uses_full_annual_event_count(
+    def test_yearly_remaining_events_from_today(
         self,
         make_account: Callable[..., BankAccount],
     ) -> None:
@@ -1493,14 +1505,21 @@ class TestNextFundingInfo:
                15th and EOM); budget created Apr 30, last_funded_on=May 8 so
                next event is May 15; last_recurrence_on=None (first cycle)
         WHEN:  next_funding_info called on the fill-up goal
-        THEN:  amount = $3400 / 23 = $147.83 (full annual cycle)
-               NOT $3400 / 8 = $425 (only May-Aug events remaining)
+        THEN:  amount = $3400 / 8 = $425 (remaining events May 15 through Sep 15)
 
-        Regression: _fill_amount_prorated used sched.dtstart (Jan 15, 2026) as
-        the counting anchor, so Sep-Dec 2025 events (before DTSTART but within
-        the theoretical annual cycle Sep 15, 2025 to Sep 14, 2026) were missed.
-        Fix: use min(sched.dtstart, cycle_start) as effective dtstart so the
-        full cycle's 23 events are counted regardless of when DTSTART falls.
+        The proration formula uses gap / N_remaining (fund events from event_date
+        through cycle_before = Sep 14, inclusive).  With event_date=May 15,
+        there are 8 remaining events before the Sep 15 recur boundary:
+          May 15, May 31, Jun 15, Jun 30, Jul 15, Jul 31, Aug 15, Aug 31
+        The Sep 15 fund event (which fires the same day as the recur boundary)
+        is NOT counted here -- it deposits toward the NEXT annual cycle.
+        On Sep 15, the recur event closes out the current cycle (sweeps
+        fill-up into recurring, capped at the gap), and the fund event begins
+        the next cycle (first deposit into the now-swept fill-up).  The
+        "fund before recur" sort order has no effect on the boundary day --
+        both orderings produce the same final balances because the recur cap
+        is based on the recurring budget's gap, not the fill-up balance.
+        $3400 / 8 = $425.00
         """
         today = date(2026, 5, 9)
         account = make_account(posted_through=today)
@@ -1529,11 +1548,10 @@ class TestNextFundingInfo:
 
         assert info is not None
         assert info.date == date(2026, 5, 15)
-        # Full annual cycle: Sep 15, 2025 (theoretical) to Sep 14, 2026
-        # Sep-Dec 2025: Sep 30, Oct 15, Oct 31, Nov 15, Nov 30, Dec 15, Dec 31 = 7
-        # Jan-Aug 2026: 16 events (15th + EOM each month, Feb has 28 days)
-        # Total N=23 → steady_state = $3400 / 23 = $147.83
-        assert info.amount == Money("147.83", "USD")
+        # N_remaining from May 15 through Sep 14 (cycle_before = Sep 15 - 1 day)
+        # = May 15, May 31, Jun 15, Jun 30, Jul 15, Jul 31, Aug 15, Aug 31 = 8 events
+        # $3400 / 8 = $425.00
+        assert info.amount == Money("425.00", "USD")
 
 
 ########################################################################
@@ -1562,11 +1580,12 @@ class TestPreCycleCatchupFunding:
         """
         GIVEN: RECURRING+fillup, target=$1000; funding schedule fires on 15th
                and last of month; recurrence_schedule DTSTART=May 1 (first full
-               cycle: May 1 to June 1, with May 15 and May 31 as fund events,
-               N=2); budget created May 1, last_funded_on=April 15;
+               cycle: May 1 to June 1, with May 15 and May 31 as fund events);
+               budget created May 1, last_funded_on=April 15;
                next funding event = April 30 (before first cycle boundary)
         WHEN:  fund_account runs on April 30
-        THEN:  fillup receives $500 ($1000/2 prorated), not $1000 (full_gap)
+        THEN:  fillup receives $333.33 (gap/N_remaining where N=3: April 30,
+               May 15, May 31), not $1000 (full_gap)
 
         Regression: pre-cycle events hit cycle_start >= cycle_end → N=0 → the
         full remaining gap was deposited in a single event, draining unallocated.
@@ -1604,8 +1623,9 @@ class TestPreCycleCatchupFunding:
         assert report.transfers == 1
         assert not report.warnings
         fillup.refresh_from_db()
-        # First full cycle (May 1–June 1): May 15 + May 31 → N=2 → $1000/2 = $500
-        assert fillup.balance == Money("500.00", "USD")
+        # N_remaining from April 30 through May 31 = April 30, May 15, May 31 → N=3
+        # per_event = $1000/3 = $333.33
+        assert fillup.balance == Money("333.33", "USD")
 
 
 ########################################################################
@@ -1618,7 +1638,12 @@ class TestFillAmountProrated:
     recurrence cycle (resets on the 1st).  cycle_start and cycle_before are
     passed in directly so these tests are independent of the boundary helpers.
 
-    Feb cycle: N=2 events (Feb 10, Feb 20); steady-state amount = $50/event.
+    The formula is gap / N_remaining, where N_remaining = funding events from
+    event_date (inclusive) through cycle_before (inclusive).
+
+    Feb cycle, target=$100:
+    - Event on Feb 10: N_remaining=2 (Feb 10 + Feb 20), per_event = gap/2
+    - Event on Feb 20: N_remaining=1 (Feb 20 only),     per_event = gap/1
     """
 
     _CYCLE_START = date(2026, 2, 1)
@@ -1660,13 +1685,16 @@ class TestFillAmountProrated:
             pytest.param(
                 Money(5, "USD"),
                 date(2026, 2, 10),
-                Money("50.00", "USD"),
+                # gap = 95, N_remaining = 2 → 95/2 = 47.50
+                Money("47.50", "USD"),
                 id="first_event/carryover",
             ),
             pytest.param(
                 Money("27.50", "USD"),
                 date(2026, 2, 20),
-                Money("50.00", "USD"),
+                # gap = 72.50, N_remaining = 1 → 72.50/1 = 72.50
+                # (full remaining gap on the last event)
+                Money("72.50", "USD"),
                 id="last_event/behind",
             ),
             pytest.param(
@@ -1675,11 +1703,12 @@ class TestFillAmountProrated:
                 Money("5.00", "USD"),
                 id="last_event/nearly_full",
             ),
-            # ahead_of_steady_state: balance > target/N; capped at full_gap.
+            # ahead: fill-up already holds $60 of $100; gap=40 split over 2
+            # remaining events → 40/2 = $20 per event (even spread).
             pytest.param(
                 Money(60, "USD"),
                 date(2026, 2, 10),
-                Money("40.00", "USD"),
+                Money("20.00", "USD"),
                 id="first_event/ahead_capped_by_gap",
             ),
             pytest.param(
@@ -1700,7 +1729,8 @@ class TestFillAmountProrated:
         """
         GIVEN: a fill-up goal with a known balance at a point in the Feb cycle
         WHEN:  _fill_amount_prorated is called with explicit cycle bounds
-        THEN:  the returned amount is min(target/N, full_gap)
+        THEN:  the returned amount is gap / N_remaining (remaining events from
+               event_date through cycle_before, inclusive on both ends)
         """
         recurring, fillup = self._make_budgets(make_account, fill_up_balance)
 
@@ -1730,7 +1760,8 @@ class TestRecurringTargetDateProration:
                 date(2026, 2, 10),
                 date(2026, 1, 31),
                 Money(5, "USD"),
-                Money("55.00", "USD"),
+                # gap = 95, N_remaining = 2 → 95/2 = 47.50; fillup: 5 + 47.50 = 52.50
+                Money("52.50", "USD"),
                 id="first_event",
             ),
             pytest.param(
@@ -1754,7 +1785,7 @@ class TestRecurringTargetDateProration:
         """
         GIVEN: RECURRING+TARGET_DATE+fillup, 2 events/cycle (Feb 10 and Feb 20)
         WHEN:  fund_account fires at the parametrized event date
-        THEN:  fill-up balance increases by min(target/N, full_gap) = $50 per event
+        THEN:  fill-up balance increases by gap/N_remaining per event
         """
         account = make_account(posted_through=today)
         assert account.unallocated_budget is not None

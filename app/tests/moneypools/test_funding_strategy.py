@@ -182,9 +182,9 @@ class TestGoalStrategy:
         make_account: Callable[..., BankAccount],
     ) -> None:
         """
-        GIVEN: a Goal budget whose target date has already passed and still has $60 remaining
+        GIVEN: a Goal budget whose target date has already passed with $40 funded out of $100
         WHEN:  the strategy computes the intended amount for a fund event after the deadline
-        THEN:  returns the full $60 remaining to close the gap in one event
+        THEN:  returns the full $60 remaining gap (target minus funded_amount) in one event
         """
         account = make_account()
         budget = budget_svc.create(
@@ -196,7 +196,10 @@ class TestGoalStrategy:
             target_date=date(2026, 1, 1),
             funding_schedule=_MONTHLY,
         )
-        Budget.objects.filter(pkid=budget.pkid).update(balance=Money(40, "USD"))
+        Budget.objects.filter(pkid=budget.pkid).update(
+            balance=Money(40, "USD"),
+            funded_amount=Money(40, "USD"),
+        )
         budget.refresh_from_db()
 
         # Event date after target_date: count_occurrences returns 1 (the floor)
@@ -238,6 +241,89 @@ class TestGoalStrategy:
         budget.refresh_from_db()
 
         assert GoalStrategy().is_complete(budget) is expected
+
+
+########################################################################
+########################################################################
+#
+class TestGoalCompletionLatch:
+    """Tests for the sticky completion latch on Goal budgets."""
+
+    ####################################################################
+    #
+    def test_latch_fires_at_threshold_and_stays_set(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: a Goal budget with target $100 and an Unallocated source budget
+        WHEN:  a credit brings funded_amount to exactly $100
+        THEN:  complete flips to True; a second credit keeps complete=True
+               and funded_amount continues to grow; deleting the first credit
+               reverses funded_amount but leaves complete=True (high-water mark)
+        """
+        account = make_account()
+        unallocated = Budget.objects.get(
+            bank_account=account, name="Unallocated"
+        )
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(300, "USD")
+        )
+        unallocated.refresh_from_db()
+
+        goal = budget_svc.create(
+            bank_account=account,
+            name="Laptop",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(100, "USD"),
+            funding_amount=Money(60, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+
+        # First credit: $60 -- below threshold, latch should NOT fire.
+        internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=goal,
+            amount=Money(60, "USD"),
+            actor=system_user,
+        )
+        goal.refresh_from_db()
+        assert goal.funded_amount == Money(60, "USD")
+        assert goal.complete is False
+
+        # Second credit: $40 -- brings funded_amount to exactly $100 (threshold).
+        itx2 = internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=goal,
+            amount=Money(40, "USD"),
+            actor=system_user,
+        )
+        goal.refresh_from_db()
+        assert goal.funded_amount == Money(100, "USD")
+        assert goal.complete is True
+
+        # Third credit: $10 -- funded_amount rises above target; complete stays True.
+        internal_transaction_svc.create(
+            bank_account=account,
+            src_budget=unallocated,
+            dst_budget=goal,
+            amount=Money(10, "USD"),
+            actor=system_user,
+        )
+        goal.refresh_from_db()
+        assert goal.funded_amount == Money(110, "USD")
+        assert goal.complete is True
+
+        # Delete the threshold-crossing credit (itx2); funded_amount drops back.
+        # complete must NOT be cleared -- it is a high-water mark.
+        internal_transaction_svc.delete(itx2)
+        goal.refresh_from_db()
+        assert goal.funded_amount == Money(70, "USD")
+        assert goal.complete is True
 
 
 ########################################################################
