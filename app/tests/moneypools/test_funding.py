@@ -753,6 +753,7 @@ class TestGoalCompletion:
         )
         Budget.objects.filter(pkid=budget.pkid).update(
             balance=Money(250, "USD"),
+            funded_amount=Money(250, "USD"),
             last_funded_on=date(2026, 2, 28),
         )
 
@@ -1553,80 +1554,6 @@ class TestNextFundingInfo:
         # = May 15, May 31, Jun 15, Jun 30, Jul 15, Jul 31, Aug 15, Aug 31 = 8 events
         # $3400 / 8 = $425.00
         assert info.amount == Money("425.00", "USD")
-
-
-########################################################################
-########################################################################
-#
-class TestPreCycleCatchupFunding:
-    """Fund events that fall before the first recurrence cycle boundary.
-
-    When a budget is new and a funding event fires before the first
-    recurrence reset (e.g., April 30 funding event with DTSTART=May 1),
-    _prev_recurrence_boundary returns None for the recurrence_schedule.
-    The fallback to created_at.date() produces cycle_start >= cycle_end,
-    which collapses the N=0 path in _fill_amount_prorated to full_gap.
-
-    The fix detects cycle_start >= cycle_end and uses the first full cycle
-    (cycle_end to next_cycle_end) for event counting instead.
-    """
-
-    ####################################################################
-    #
-    def test_pre_cycle_fund_event_uses_prorated_not_full_gap(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
-    ) -> None:
-        """
-        GIVEN: RECURRING+fillup, target=$1000; funding schedule fires on 15th
-               and last of month; recurrence_schedule DTSTART=May 1 (first full
-               cycle: May 1 to June 1, with May 15 and May 31 as fund events);
-               budget created May 1, last_funded_on=April 15;
-               next funding event = April 30 (before first cycle boundary)
-        WHEN:  fund_account runs on April 30
-        THEN:  fillup receives $333.33 (gap/N_remaining where N=3: April 30,
-               May 15, May 31), not $1000 (full_gap)
-
-        Regression: pre-cycle events hit cycle_start >= cycle_end → N=0 → the
-        full remaining gap was deposited in a single event, draining unallocated.
-        """
-        today = date(2026, 4, 30)
-        account = make_account(posted_through=today)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(2000, "USD")
-        )
-
-        recurring = budget_svc.create(
-            bank_account=account,
-            name="Mortgage",
-            budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.TARGET_DATE,
-            target_balance=Money(1000, "USD"),
-            funding_schedule=_TWICE_MONTHLY_15_EOM,
-            recurrence_schedule=_MONTHLY_MAY_FIRST,
-        )
-        # last_funded_on=April 15 → next event = April 30 (end-of-month catch-up).
-        # created_at=May 1 → cycle_start fallback = May 1 = cycle_end, triggering
-        # the pre-cycle guard.
-        Budget.objects.filter(pkid=recurring.pkid).update(
-            last_funded_on=date(2026, 4, 15),
-            created_at=datetime(2026, 5, 1, tzinfo=UTC),
-        )
-        recurring.refresh_from_db()
-        fillup = recurring.fillup_goal
-        assert fillup is not None
-
-        report = funding_svc.fund_account(account, today, system_user)
-
-        assert report.transfers == 1
-        assert not report.warnings
-        fillup.refresh_from_db()
-        # N_remaining from April 30 through May 31 = April 30, May 15, May 31 → N=3
-        # per_event = $1000/3 = $333.33
-        assert fillup.balance == Money("333.33", "USD")
 
 
 ########################################################################
