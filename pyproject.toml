@@ -91,6 +91,14 @@ dev = [
     "types-python-dateutil>=2.9.0.20260408",
 ]
 
+importers-bofa = [
+    "bofa-scraper",
+    "selenium",
+]
+
+[tool.uv.sources]
+bofa-scraper = { path = "../../github/bofa_scraper" }
+
 ########################################################################
 # Tool configurations
 ########################################################################
