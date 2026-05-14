@@ -23,6 +23,7 @@ from config import celery_app
 from moneypools.models import BankAccount, Transaction
 from moneypools.service import funding as funding_svc
 from moneypools.service.linking import attempt_link
+from moneypools.service.shared import funding_system_user
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def fund_one_account(account_id: str) -> None:
         return
 
     try:
-        actor = funding_svc.funding_system_user()
+        actor = funding_system_user()
     except Exception as exc:
         logger.error(
             "fund_one_account: user %r missing; Exception: %r"

@@ -87,8 +87,10 @@ def budget_pre_save(
     if instance.archived and instance.archived_at is None:
         instance.archived_at = datetime.now(UTC)
 
-    # Manage 'complete' for budget types with meaningful funding targets.
-    # target_balance of 0 means "no cap set" -- skip those.
+    # Manage 'complete' for Goal and Recurring budgets only.
+    # target_balance of 0 means "no target set" -- skip those.
+    # Capped budgets never set complete; the funding engine uses the
+    # balance/target gap directly.
     #
     target = instance.target_balance.amount
     balance = instance.balance.amount
@@ -101,11 +103,6 @@ def budget_pre_save(
                 # Recurring: cleared by the recurrence task on cycle reset.
                 if balance >= target:
                     instance.complete = True
-            case Budget.BudgetType.CAPPED:
-                # Always reflects whether the cap is currently met, so
-                # spending from a capped budget immediately re-enables
-                # automatic funding.
-                instance.complete = balance >= target
 
 
 ####################################################################

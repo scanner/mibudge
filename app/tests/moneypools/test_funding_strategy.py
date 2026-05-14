@@ -24,13 +24,13 @@ from djmoney.money import Money
 from moneypools.models import BankAccount, Budget, InternalTransaction
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
-from moneypools.service.funding import state_at_start_of_D
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
     CappedStrategy,
     EventKind,
     GoalStrategy,
     RecurringStrategy,
+    state_at_start_of_D,
 )
 
 User = get_user_model()

@@ -48,6 +48,7 @@ from moneypools.service import budget as budget_svc
 from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import transaction as transaction_svc
+from moneypools.service.shared import funding_system_user
 
 from .filters import (
     BudgetFilter,
@@ -308,7 +309,7 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             as_of = date.today()
 
         try:
-            system_user = funding_svc.funding_system_user()
+            system_user = funding_system_user()
         except Exception:
             return Response(
                 {"detail": "Funding system user not configured."},
@@ -570,14 +571,31 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
 
     ####################################################################
     #
-    def perform_update(self, serializer: BudgetSerializer) -> None:
-        """Update a budget via the service layer so fill-up goal is created.
+    def update(
+        self, request: Request, *args: object, **kwargs: object
+    ) -> Response:
+        """Update a budget and return the result with any unpause warnings.
 
-        Raises:
-            ValidationError: On service-layer errors.
+        Overrides the default DRF update so that warnings emitted by the
+        service layer (e.g. missed recur boundaries on unpause) are
+        included in the response payload alongside the serialized budget.
+
+        Args:
+            request: The incoming HTTP request.
+            *args: Positional arguments forwarded from the router.
+            **kwargs: Keyword arguments forwarded from the router (may
+                include 'partial' for PATCH requests).
         """
-        budget_svc.update(serializer.instance, **serializer.validated_data)
-        serializer.instance.refresh_from_db()
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial
+        )
+        serializer.is_valid(raise_exception=True)
+        _, warnings = budget_svc.update(instance, **serializer.validated_data)
+        instance.refresh_from_db()
+        serializer.instance = instance
+        return Response({**serializer.data, "warnings": warnings})
 
     ####################################################################
     #

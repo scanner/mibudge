@@ -26,6 +26,7 @@ from djmoney.money import Money
 from moneypools.models import BankAccount, Budget, InternalTransaction
 from moneypools.service import budget as budget_svc
 from moneypools.service import funding as funding_svc
+from moneypools.service.funding_strategy import _fill_amount_prorated
 from moneypools.tasks import fund_all_accounts, fund_one_account
 from tests.users.factories import UserFactory
 
@@ -1734,7 +1735,7 @@ class TestFillAmountProrated:
         """
         recurring, fillup = self._make_budgets(make_account, fill_up_balance)
 
-        amount = funding_svc._fill_amount_prorated(
+        amount = _fill_amount_prorated(
             recurring,
             fillup,
             event_date=event_date,

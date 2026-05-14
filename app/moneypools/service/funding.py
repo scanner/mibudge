@@ -34,7 +34,6 @@ from decimal import Decimal
 
 # 3rd party imports
 #
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
 from djmoney.money import Money
@@ -46,8 +45,6 @@ from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
     EventKind,
-    _fill_amount_prorated,  # noqa: F401 -- re-exported for test_funding.py
-    state_at_start_of_D,  # noqa: F401 -- re-exported for test_funding_strategy.py
 )
 from moneypools.service.schedules import (
     enumerate_schedule,
@@ -221,21 +218,6 @@ def next_funding_info(
     )
 
     return NextFundingInfo(date=next_date, amount=amount, deferred=deferred)
-
-
-########################################################################
-########################################################################
-#
-def funding_system_user() -> User:  # type: ignore[valid-type]
-    """Return the non-loginable funding-system user.
-
-    Returns:
-        The User instance with username 'funding-system'.
-
-    Raises:
-        User.DoesNotExist: If the data migration has not been run.
-    """
-    return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
 
 
 ####################################################################
