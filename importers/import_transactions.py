@@ -551,6 +551,8 @@ class ImportResult:
         self.skipped: int = 0
         self.updated: int = 0
         self.failed: int = 0
+        self.resolved: int = 0
+        self.resolved_amount_changed: int = 0
         self.unrecognized: list[str] = []
 
 

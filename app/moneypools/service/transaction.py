@@ -261,6 +261,105 @@ def delete(transaction: Transaction) -> None:
 ########################################################################
 ########################################################################
 #
+def resolve_pending_to_posted(
+    transaction: Transaction,
+    new_posted_date: datetime,
+    new_amount: moneyed.Money | None = None,
+) -> Transaction:
+    """Atomically transition a pending transaction to posted.
+
+    Clears the pending flag, updates the posted date, and credits the
+    bank account's posted_balance.  If the final settled amount differs
+    from the pending estimate, the bank account's available_balance and
+    the Unallocated allocation are also adjusted.
+
+    ``transaction_date`` is re-derived from ``raw_description`` and
+    ``new_posted_date`` using the same logic as ``create()``, so the
+    snapshot ordering remains correct.
+
+    Args:
+        transaction: A pending Transaction to resolve.
+        new_posted_date: The bank-supplied settlement date.
+        new_amount: Final settled amount.  When omitted the original
+            pending amount is used.
+
+    Returns:
+        The updated Transaction instance (refreshed from DB).
+
+    Raises:
+        ValueError: If the transaction is not pending, has no Unallocated
+            allocation, or its account has no unallocated budget.
+    """
+    if not transaction.pending:
+        raise ValueError("Transaction is not pending.")
+
+    bank_account = transaction.bank_account
+    old_amount = transaction.amount
+    final_amount = new_amount if new_amount is not None else old_amount
+    amount_changed = new_amount is not None and new_amount != old_amount
+
+    unallocated = bank_account.unallocated_budget
+    if unallocated is None:
+        raise ValueError("Account has no unallocated budget.")
+
+    unalloc_alloc = TransactionAllocation.objects.filter(
+        transaction=transaction, budget=unallocated
+    ).first()
+    if unalloc_alloc is None:
+        raise ValueError("Pending transaction has no unallocated allocation.")
+
+    if isinstance(new_posted_date, str):
+        new_posted_date = datetime.fromisoformat(
+            new_posted_date.replace("Z", "+00:00")
+        )
+
+    # Re-derive transaction_date from the settled posted_date so the
+    # snapshot chain stays in the correct calendar order.
+    local_date = new_posted_date.date()
+    parsed = parse_transaction_date(transaction.raw_description, local_date)
+    new_transaction_date = new_posted_date.replace(
+        year=parsed.year,
+        month=parsed.month,
+        day=parsed.day,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    ).astimezone(UTC)
+    new_posted_date = new_posted_date.astimezone(UTC)
+
+    with acquire_lock(bank_account.lock_key):
+        with db_transaction.atomic():
+            bank_account.refresh_from_db()
+            # Pending → posted always credits posted_balance.
+            bank_account.posted_balance += final_amount
+            if amount_changed:
+                # Swap the available contribution: reverse old, apply new.
+                bank_account.available_balance -= old_amount
+                bank_account.available_balance += final_amount
+            bank_account.save()
+
+            transaction.pending = False
+            transaction.posted_date = new_posted_date
+            transaction.transaction_date = new_transaction_date
+            if amount_changed:
+                transaction.amount = final_amount
+            transaction.save()
+
+            if amount_changed:
+                # update_amount acquires the budget lock (bank_account →
+                # budget ordering is consistent with create()).
+                transaction_allocation_svc.update_amount(
+                    unalloc_alloc, final_amount
+                )
+
+    transaction.refresh_from_db()
+    return transaction
+
+
+########################################################################
+########################################################################
+#
 def split(
     transaction: Transaction,
     splits: dict[str, Decimal],
@@ -287,6 +386,9 @@ def split(
             different bank account, has a non-positive amount, or if
             the total exceeds the transaction amount.
     """
+    if transaction.pending:
+        raise ValueError("Cannot split a pending transaction.")
+
     account = transaction.bank_account
     tx_abs = abs(transaction.amount.amount)
     is_debit = transaction.amount.amount < 0

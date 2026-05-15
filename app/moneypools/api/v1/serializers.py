@@ -1130,3 +1130,50 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
                 }
             )
         return attrs
+
+
+########################################################################
+########################################################################
+#
+class ResolvePendingSerializer(serializers.Serializer):
+    """Input serializer for the resolve-pending action.
+
+    Validates the settled posted_date and optional final amount.
+    Requires ``transaction`` in the serializer context for sign validation.
+    """
+
+    posted_date = serializers.DateTimeField()
+    amount = DRFMoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default_currency=get_default_currency(),
+        required=False,
+        allow_null=True,
+    )
+
+    ####################################################################
+    #
+    def validate(self, attrs: dict) -> dict:
+        """Reject amount sign changes relative to the original transaction.
+
+        Args:
+            attrs: Validated field data.
+
+        Returns:
+            The validated attrs dict.
+
+        Raises:
+            ValidationError: If the supplied amount has the wrong sign.
+        """
+        amount = attrs.get("amount")
+        transaction = self.context.get("transaction")
+        if amount is not None and transaction is not None:
+            if (amount.amount > 0) != (transaction.amount.amount > 0):
+                raise serializers.ValidationError(
+                    {
+                        "amount": (
+                            "Amount sign must match the original transaction."
+                        )
+                    }
+                )
+        return attrs

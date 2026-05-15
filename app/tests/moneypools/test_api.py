@@ -1731,6 +1731,121 @@ class TestRunningBalanceWithInternalTransactions:
 ########################################################################
 ########################################################################
 #
+class TestResolvePendingAPI:
+    """Tests for POST /api/v1/transactions/<id>/resolve-pending/."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "pending_amount, payload_extra, expected_final, expected_avail_delta",
+        [
+            # Same amount: no amount in payload, available_balance unchanged.
+            (Money(-60, "USD"), {}, Money(-60, "USD"), Money(0, "USD")),
+            # Amount changed -$100 → -$95: available adjusts by +$5.
+            (
+                Money(-100, "USD"),
+                {"amount": "-95.00", "amount_currency": "USD"},
+                Money(-95, "USD"),
+                Money(5, "USD"),
+            ),
+        ],
+        ids=["same_amount", "amount_changed"],
+    )
+    def test_resolve_pending(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        pending_amount: Money,
+        payload_extra: dict,
+        expected_final: Money,
+        expected_avail_delta: Money,
+    ) -> None:
+        """
+        GIVEN: a pending transaction
+        WHEN:  POST resolve-pending (optionally with a new amount)
+        THEN:  200, pending cleared, posted_balance credited by final amount,
+               available_balance adjusted by the delta
+        """
+        from moneypools.service import transaction as transaction_svc
+
+        account = bank_account_factory(
+            owners=[user],
+            available_balance=Money(1000, "USD"),
+            posted_balance=Money(1000, "USD"),
+        )
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=pending_amount,
+            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+            raw_description="PENDING CHARGE",
+            pending=True,
+        )
+        account.refresh_from_db()
+        avail_before = account.available_balance
+        posted_before = account.posted_balance
+
+        response = auth_client.post(
+            reverse("api_v1:transaction-resolve-pending", kwargs={"id": tx.id}),
+            {"posted_date": "2026-05-03T00:00:00Z", **payload_extra},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pending"] is False
+        assert Decimal(response.data["amount"]) == expected_final.amount
+        account.refresh_from_db()
+        assert account.available_balance == avail_before + expected_avail_delta
+        assert account.posted_balance == posted_before + expected_final
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "pending, payload_extra",
+        [
+            # Already-posted transaction.
+            (False, {}),
+            # Wrong sign: debit supplied with a credit amount.
+            (True, {"amount": "50.00", "amount_currency": "USD"}),
+        ],
+        ids=["already_posted", "wrong_sign"],
+    )
+    def test_resolve_pending_rejected(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        pending: bool,
+        payload_extra: dict,
+    ) -> None:
+        """
+        GIVEN: an invalid resolve-pending request (already posted, or wrong sign)
+        WHEN:  POST resolve-pending
+        THEN:  400 Bad Request
+        """
+        from moneypools.service import transaction as transaction_svc
+
+        account = bank_account_factory(owners=[user])
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-50, "USD"),
+            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+            raw_description="CHARGE",
+            pending=pending,
+        )
+
+        response = auth_client.post(
+            reverse("api_v1:transaction-resolve-pending", kwargs={"id": tx.id}),
+            {"posted_date": "2026-05-03T00:00:00Z", **payload_extra},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+########################################################################
+########################################################################
+#
 class TestInternalTransactionAPI:
     """Tests for the /api/v1/internal-transactions/ endpoint."""
 

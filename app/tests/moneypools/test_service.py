@@ -593,6 +593,132 @@ class TestTransactionService:
         assert allocs[0].budget == account.unallocated_budget
         assert allocs[0].amount == Money(200, "USD")
 
+    ####################################################################
+    #
+    def test_split_raises_for_pending_transaction(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a pending transaction
+        WHEN:  transaction_svc.split() is called on it
+        THEN:  ValueError is raised with a clear message
+        """
+        account = bank_account_factory(
+            available_balance=Money(0, "USD"),
+            posted_balance=Money(0, "USD"),
+        )
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-50, "USD"),
+            posted_date=datetime.now(UTC),
+            raw_description="PENDING PURCHASE",
+            pending=True,
+        )
+
+        with pytest.raises(ValueError, match="Cannot split a pending"):
+            transaction_svc.split(tx, {})
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "pending_amount, new_amount, expected_avail_delta, expected_final",
+        [
+            # Same amount: available_balance unchanged, just clears pending flag.
+            (Money(-75, "USD"), None, Money(0, "USD"), Money(-75, "USD")),
+            # Amount changed: available_balance adjusted by the delta (-100 → -90).
+            (
+                Money(-100, "USD"),
+                Money(-90, "USD"),
+                Money(10, "USD"),
+                Money(-90, "USD"),
+            ),
+        ],
+        ids=["same_amount", "amount_changed"],
+    )
+    def test_resolve_pending_to_posted(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        pending_amount: Money,
+        new_amount: Money | None,
+        expected_avail_delta: Money,
+        expected_final: Money,
+    ) -> None:
+        """
+        GIVEN: a pending debit transaction
+        WHEN:  resolve_pending_to_posted is called (optionally with a new amount)
+        THEN:  pending is cleared, posted_balance is credited by the final amount,
+               available_balance is adjusted by the delta (zero when unchanged),
+               and the Unallocated allocation reflects the final amount
+        """
+        from moneypools.models import TransactionAllocation
+
+        account = bank_account_factory(
+            available_balance=Money(1000, "USD"),
+            posted_balance=Money(1000, "USD"),
+        )
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=pending_amount,
+            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+            raw_description="PENDING PURCHASE",
+            pending=True,
+        )
+        account.refresh_from_db()
+        unalloc = account.unallocated_budget
+        assert unalloc is not None
+
+        avail_before = account.available_balance
+        posted_before = account.posted_balance
+
+        resolved = transaction_svc.resolve_pending_to_posted(
+            tx,
+            new_posted_date=datetime(2026, 5, 3, tzinfo=UTC),
+            new_amount=new_amount,
+        )
+
+        account.refresh_from_db()
+        unalloc.refresh_from_db()
+
+        assert resolved.pending is False
+        assert resolved.amount == expected_final
+        assert account.available_balance == avail_before + expected_avail_delta
+        assert account.posted_balance == posted_before + expected_final
+        allocs = list(
+            TransactionAllocation.objects.filter(transaction=resolved)
+        )
+        assert len(allocs) == 1
+        assert allocs[0].amount == expected_final
+        # Unallocated was seeded with account.available_balance (1000),
+        # so its balance after resolution = seed + final allocation.
+        assert unalloc.balance == Money(1000, "USD") + expected_final
+
+    ####################################################################
+    #
+    def test_resolve_pending_raises_if_already_posted(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a posted (non-pending) transaction
+        WHEN:  resolve_pending_to_posted is called
+        THEN:  ValueError is raised
+        """
+        account = bank_account_factory(
+            available_balance=Money(0, "USD"),
+            posted_balance=Money(0, "USD"),
+        )
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-50, "USD"),
+            posted_date=datetime.now(UTC),
+            raw_description="POSTED TX",
+        )
+        with pytest.raises(ValueError, match="not pending"):
+            transaction_svc.resolve_pending_to_posted(
+                tx, new_posted_date=datetime.now(UTC)
+            )
+
 
 ########################################################################
 ########################################################################

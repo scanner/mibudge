@@ -48,6 +48,7 @@ from rich.table import Table
 # Project imports
 from importers.client import AuthenticationError
 from importers.import_transactions import (
+    ImportResult,
     _build_client,
     _fetch_existing,
     _mark_imported,
@@ -320,6 +321,138 @@ def _build_statement(account: Any) -> ParsedStatement:
         transactions=settled_final + pending_final,
         source_path=f"live:{acct_name}",
     )
+
+
+########################################################################
+########################################################################
+#
+def _resolve_pending_transactions(
+    statement: ParsedStatement,
+    bank_account_id: str,
+    client: Any,
+    user_timezone: str,
+    dry_run: bool = False,
+) -> ImportResult:
+    """Match settled scraped transactions against pending DB rows and resolve them.
+
+    For each settled scraped transaction, looks for a pending transaction in
+    mibudge that has the same ``raw_description`` and a ``posted_date`` within
+    5 calendar days.  When a match is found, calls the ``resolve-pending``
+    endpoint to atomically transition the pending row to posted.
+
+    Must run BEFORE ``_fetch_existing`` so that resolved rows appear in the
+    dedup map and the normal import path skips them.
+
+    Args:
+        statement: Statement built from scraped data (settled + pending).
+        bank_account_id: UUID of the mibudge BankAccount.
+        client: Authenticated ``MibudgeClient``.
+        user_timezone: User's timezone string (for date normalisation).
+        dry_run: When True, log matches but do not POST to the API.
+
+    Returns:
+        An ``ImportResult`` with only ``resolved`` and
+        ``resolved_amount_changed`` populated.
+    """
+    result = ImportResult()
+
+    settled_txs = [tx for tx in statement.transactions if not tx.pending]
+    if not settled_txs:
+        return result
+
+    # Fetch all pending transactions for this account from the DB.
+    pending_db: list[dict[str, Any]] = list(
+        client.get_all(
+            "/api/v1/transactions/",
+            params={"bank_account": bank_account_id, "pending": "true"},
+        )
+    )
+    if not pending_db:
+        return result
+
+    logger.debug(
+        "resolve_pending: %d settled scraped, %d pending in DB",
+        len(settled_txs),
+        len(pending_db),
+    )
+
+    # Index pending DB rows by raw_description for O(1) lookup.
+    pending_by_desc: dict[str, list[dict[str, Any]]] = {}
+    for row in pending_db:
+        desc = row["raw_description"]
+        pending_by_desc.setdefault(desc, []).append(row)
+
+    MAX_DATE_DELTA = 5  # calendar days
+
+    for tx in settled_txs:
+        candidates = pending_by_desc.get(tx.raw_description, [])
+        if not candidates:
+            continue
+
+        # Filter by date proximity (±5 days).
+        settle_date = tx.transaction_date  # already a date object from parser
+        close: list[tuple[int, Decimal, dict[str, Any]]] = []
+        for row in candidates:
+            # posted_date from the API is an ISO datetime string.
+            row_date = datetime.fromisoformat(
+                row["posted_date"].replace("Z", "+00:00")
+            ).date()
+            delta = abs((settle_date - row_date).days)
+            if delta <= MAX_DATE_DELTA:
+                row_amount = Decimal(str(row["amount"]))
+                amount_diff = abs(tx.amount - row_amount)
+                close.append((delta, amount_diff, row))
+
+        if not close:
+            continue
+
+        # Pick closest date; break ties by closest amount.
+        close.sort(key=lambda t: (t[0], t[1]))
+        _, _, matched_row = close[0]
+
+        amount_changed = tx.amount != Decimal(str(matched_row["amount"]))
+        logger.info(
+            "Resolving pending tx %s -> settled %s  desc=%r  "
+            "old_amount=%s  new_amount=%s  amount_changed=%s",
+            matched_row["id"],
+            settle_date,
+            tx.raw_description,
+            matched_row["amount"],
+            tx.amount,
+            amount_changed,
+        )
+
+        if not dry_run:
+            payload: dict[str, Any] = {
+                "posted_date": settle_date.isoformat() + "T00:00:00Z",
+            }
+            if amount_changed:
+                payload["amount"] = str(tx.amount)
+                payload["amount_currency"] = matched_row.get(
+                    "amount_currency", "USD"
+                )
+            try:
+                client.post(
+                    f"/api/v1/transactions/{matched_row['id']}/resolve-pending/",
+                    payload,
+                )
+                result.resolved += 1
+                if amount_changed:
+                    result.resolved_amount_changed += 1
+                # Remove the matched row so it isn't double-matched.
+                pending_by_desc[tx.raw_description].remove(matched_row)
+            except Exception as e:
+                logger.warning(
+                    "Failed to resolve pending tx %s: %s",
+                    matched_row["id"],
+                    e,
+                )
+        else:
+            result.resolved += 1
+            if amount_changed:
+                result.resolved_amount_changed += 1
+
+    return result
 
 
 ########################################################################
@@ -709,6 +842,24 @@ def cli_cmd(
                     any_error = True
                     continue
 
+                # Resolve any DB-pending rows whose settled counterparts
+                # appear in this scrape.  Must run before _fetch_existing so
+                # that the resolved rows appear in the dedup map.
+                resolve_result = _resolve_pending_transactions(
+                    statement,
+                    bank_account_id,
+                    client,
+                    user_timezone,
+                    dry_run=dry_run,
+                )
+                if resolve_result.resolved:
+                    logger.info(
+                        "Resolved %d pending transaction(s) "
+                        "(%d with amount change).",
+                        resolve_result.resolved,
+                        resolve_result.resolved_amount_changed,
+                    )
+
                 # Pre-fetch dedup window (settled transactions only)
                 settled_txs = [
                     tx for tx in statement.transactions if not tx.pending
@@ -759,6 +910,7 @@ def cli_cmd(
                 # Per-account summary
                 if interactive:
                     verb = "Would import" if dry_run else "Imported"
+                    resolve_verb = "Would resolve" if dry_run else "Resolved"
                     update_verb = "Would update" if dry_run else "Updated"
                     title = (
                         f"{'Dry Run ' if dry_run else ''}Summary — {acct_name}"
@@ -766,6 +918,10 @@ def cli_cmd(
                     table = Table(title=title, show_header=False)
                     table.add_column("Metric", style="bold")
                     table.add_column("Count", justify="right")
+                    table.add_row(
+                        f"{resolve_verb} (pending→posted)",
+                        f"[accent]{resolve_result.resolved}[/accent]",
+                    )
                     table.add_row(verb, f"[success]{result.imported}[/success]")
                     table.add_row(
                         "Skipped (duplicates)", f"[dim]{result.skipped}[/dim]"
@@ -795,9 +951,11 @@ def cli_cmd(
                 else:
                     prefix = "DRY RUN. " if dry_run else ""
                     verb = "Would import" if dry_run else "Imported"
+                    resolve_verb = "Would resolve" if dry_run else "Resolved"
                     update_verb = "Would update" if dry_run else "Updated"
                     print(
                         f"{prefix}{acct_name}: "
+                        f"{resolve_verb} {resolve_result.resolved} pending, "
                         f"{verb} {result.imported}, "
                         f"Skipped {result.skipped}, "
                         f"{update_verb} {result.updated}, "
