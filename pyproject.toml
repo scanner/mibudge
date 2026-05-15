@@ -97,7 +97,7 @@ importers-bofa = [
 ]
 
 [tool.uv.sources]
-bofa-scraper = { path = "../../github/bofa_scraper" }
+bofa-scraper = { path = "../../github/bofa_scraper", editable = true }
 
 ########################################################################
 # Tool configurations

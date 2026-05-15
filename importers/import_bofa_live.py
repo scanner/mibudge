@@ -72,6 +72,87 @@ def _normalize_description(text: str) -> str:
 
 ####################################################################
 #
+def _resolve_truncated_descriptions(
+    statement: ParsedStatement,
+    existing: dict[tuple[str, str, str], list[tuple[str, str]]],
+) -> ParsedStatement:
+    """
+    Replace scraper-truncated descriptions with their full stored versions.
+
+    BofA's activity table truncates long ACH descriptions with a literal
+    '...' suffix (e.g. 'APPLE GS SAVINGS ... CO...' instead of the full
+    '...CO ID:XXXXX99999 WEB').  The CSV export has the full string, so
+    when a prior CSV import is followed by a live-scraper run the dedup
+    key (date, amount, description) mismatches and a duplicate is created.
+
+    For each scraped transaction that has no exact match in ``existing``,
+    this function checks whether any existing entry with the same date and
+    amount has a description that starts with the scraped text (after
+    stripping a trailing '...').  When found, it replaces the scraped
+    description with the stored full version so the normal dedup path
+    catches it.
+
+    Args:
+        statement: Statement built from scraped data.
+        existing: Pre-fetched dedup map from ``_fetch_existing``.
+
+    Returns:
+        A new ``ParsedStatement`` with resolved descriptions.
+    """
+    # Index existing keys by (date_str, amount_str) for fast prefix lookup.
+    da_index: dict[tuple[str, str], list[str]] = {}
+    for date_str, amount_str, desc in existing:
+        da_index.setdefault((date_str, amount_str), []).append(desc)
+
+    resolved: list[ParsedTransaction] = []
+    for tx in statement.transactions:
+        date_str = tx.transaction_date.isoformat()
+        amount_str = str(tx.amount.quantize(Decimal("0.01")))
+        scraped = tx.raw_description
+
+        # Nothing to do if the exact key already matches.
+        if (date_str, amount_str, scraped) in existing:
+            resolved.append(tx)
+            continue
+
+        prefix = scraped[:-3] if scraped.endswith("...") else scraped
+        candidates = da_index.get((date_str, amount_str), [])
+        full_desc = next(
+            (d for d in candidates if d != scraped and d.startswith(prefix)),
+            None,
+        )
+
+        if full_desc:
+            logger.debug(
+                "Resolved truncated description %r -> %r", scraped, full_desc
+            )
+            resolved.append(
+                ParsedTransaction(
+                    transaction_date=tx.transaction_date,
+                    raw_description=full_desc,
+                    amount=tx.amount,
+                    running_balance=tx.running_balance,
+                    transaction_type=tx.transaction_type,
+                    pending=tx.pending,
+                )
+            )
+        else:
+            resolved.append(tx)
+
+    return ParsedStatement(
+        beginning_balance=statement.beginning_balance,
+        beginning_date=statement.beginning_date,
+        ending_balance=statement.ending_balance,
+        ending_date=statement.ending_date,
+        total_credits=statement.total_credits,
+        total_debits=statement.total_debits,
+        transactions=resolved,
+        source_path=statement.source_path,
+    )
+
+
+####################################################################
+#
 def _parse_scraped_date(date_str: str) -> tuple[date, bool]:
     """
     Parse a date string from bofa_scraper's date-cell.
@@ -598,6 +679,36 @@ def cli_cmd(
                     any_error = True
                     continue
 
+                # Balance validation: mibudge's tracked available_balance must
+                # match BofA's reported ending balance before we import.  A
+                # mismatch means a transaction is missing from mibudge (e.g.
+                # never imported, or deleted via the admin bypassing the
+                # service layer).  Importing on top of a drifted balance would
+                # produce incorrect running-balance snapshots on every new tx.
+                bank_account_data = client.get(
+                    f"/api/v1/bank-accounts/{bank_account_id}/"
+                )
+                mibudge_balance = Decimal(
+                    str(bank_account_data["available_balance"])
+                ).quantize(Decimal("0.01"))
+                bofa_balance = statement.ending_balance
+                balance_diff = bofa_balance - mibudge_balance
+                if abs(balance_diff) > Decimal("0.00"):
+                    msg = (
+                        f"Balance mismatch for {acct_name!r}: "
+                        f"BofA reports {bofa_balance}, "
+                        f"mibudge has {mibudge_balance} "
+                        f"(off by {balance_diff:+.2f}). "
+                        f"Possible missing transaction(s). "
+                        f"Aborting import for this account."
+                    )
+                    if interactive:
+                        console.print(f"[error]{msg}[/error]")
+                    else:
+                        logger.error(msg)
+                    any_error = True
+                    continue
+
                 # Pre-fetch dedup window (settled transactions only)
                 settled_txs = [
                     tx for tx in statement.transactions if not tx.pending
@@ -626,6 +737,14 @@ def cli_cmd(
                             dedup_end,
                             user_timezone,
                         )
+
+                # Resolve descriptions that BofA truncated in the web UI
+                # (e.g. "...CO...") against their full stored versions so
+                # the exact-match dedup catches prior CSV-imported entries.
+                if existing:
+                    statement = _resolve_truncated_descriptions(
+                        statement, existing
+                    )
 
                 # Import
                 result = import_statement(

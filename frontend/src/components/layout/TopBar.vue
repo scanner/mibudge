@@ -101,8 +101,8 @@ watch(
         <span class="whitespace-nowrap">
           ·
           <MoneyAmount
-            :amount="activeAccount.posted_balance"
-            :currency="activeAccount.posted_balance_currency"
+            :amount="activeAccount.available_balance"
+            :currency="activeAccount.available_balance_currency"
             size="sm"
           />
         </span>
