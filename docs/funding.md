@@ -8,14 +8,6 @@ each behavior in isolation.
 The accompanying README section is a short summary; this document is
 the authoritative reference.
 
-> **Note (remove after the design is implemented):** statements in
-> this document prefixed with ``[TRANSITION]`` describe legacy
-> behavior that is being removed by this redesign.  Once the
-> implementation has landed, all ``[TRANSITION]`` statements should be
-> deleted -- this document is meant to state the system as it *is*,
-> not what it used to be.
-
-
 ## 1. Overview
 
 **Funding** is the act of moving money from a bank account's
@@ -52,10 +44,6 @@ type:
 
 A Recurring budget always has exactly one Associated Fill-up
 sibling, created automatically when the Recurring is created.
-
-[TRANSITION] There is no such thing as a "Recurring without a fill-up"
-in this design.  The ``Budget.with_fillup_goal`` boolean previously
-used to make this optional is removed.
 
 The Associated Fill-up is itself a Budget row, linked from the
 Recurring via the existing ``Budget.fillup_goal`` FK.  It has no
@@ -146,9 +134,6 @@ intended = min(A, max(0, T - B_0))
 
 Capped is purely gap-based.  It is never marked complete; the field
 is unused for this type.
-
-[TRANSITION] The ``signals.py:90-108`` block that toggles
-``Capped.complete`` is removed by this redesign.
 
 ### 4.4 Recurring -- fund event (Unallocated -> fillup)
 

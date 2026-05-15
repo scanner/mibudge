@@ -9,6 +9,9 @@ Operations:
     update(budget, **changes)
         Saves mutable fields under a budget lock.  Creates the fill-up
         goal child if the budget is RECURRING and has none yet.
+        On pause->unpause flip, resets both pointer fields to today-1
+        and emits a warning per missed recur boundary (Recurring only).
+        Returns (budget, warnings) -- warnings is empty on normal updates.
 
     archive(budget, actor)
         Drains fill-up balance first (if any), then this budget's
@@ -24,8 +27,9 @@ Operations:
 
 # system imports
 #
+import logging
 from contextlib import ExitStack
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 # Project imports
@@ -39,7 +43,11 @@ from djmoney.money import Money
 
 from moneypools.models import BankAccount, Budget
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service.schedules import enumerate_schedule
+from moneypools.service.shared import funding_system_user
 from users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 ########################################################################
@@ -99,7 +107,7 @@ def create(
 ########################################################################
 ########################################################################
 #
-def update(budget: Budget, **changes: Any) -> Budget:
+def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
     """Update mutable fields on an existing budget.
 
     Acquires the budget lock, applies *changes*, saves, then creates the
@@ -110,14 +118,49 @@ def update(budget: Budget, **changes: Any) -> Budget:
     goal (those fields are copied from the parent at creation time and must
     stay in sync).  The fill-up goal's lock is also acquired in that case.
 
+    Pause-unpause pointer reset: when 'paused' flips from True to False,
+    both last_funded_on and last_recurrence_on are reset to today-1.  This
+    drops any events that fell during the pause window without replaying
+    them.  For Recurring budgets, one warning is emitted per missed recur
+    boundary so the caller can surface these to the user.
+
     Args:
         budget: The Budget instance to update.
         **changes: Field-value pairs to apply.  Only supply the fields
             being changed.
 
     Returns:
-        The updated Budget instance (refreshed from DB).
+        A tuple of (updated Budget instance, list of warning strings).
+        The warnings list is empty on normal (non-unpause) updates.
     """
+    warnings: list[str] = []
+
+    # Detect pause->unpause before applying changes.
+    was_paused = budget.paused
+    unpausing = was_paused and changes.get("paused") is False
+
+    if unpausing:
+        yesterday = date.today() - timedelta(days=1)
+        changes["last_funded_on"] = yesterday
+        changes["last_recurrence_on"] = yesterday
+
+        if (
+            budget.budget_type == Budget.BudgetType.RECURRING
+            and budget.recurrence_schedule
+        ):
+            old_pointer = budget.last_recurrence_on or (
+                budget.created_at.date() - timedelta(days=1)
+            )
+            for boundary in enumerate_schedule(
+                budget.recurrence_schedule, old_pointer, yesterday
+            ):
+                msg = (
+                    f"Recurring '{budget.name}' was paused across recur"
+                    f" boundary {boundary}; cycle skipped."
+                )
+                warnings.append(msg)
+                logger.warning(msg)
+
     fillup: Budget | None = None
     if (
         budget.budget_type == Budget.BudgetType.RECURRING
@@ -140,7 +183,7 @@ def update(budget: Budget, **changes: Any) -> Budget:
                 _sync_fillup(budget, fillup, changes)
 
     budget.refresh_from_db()
-    return budget
+    return budget, warnings
 
 
 ########################################################################
@@ -183,12 +226,16 @@ def archive(budget: Budget, actor: User) -> Budget:
         if budget.fillup_goal_id:
             fillup = Budget.objects.get(id=budget.fillup_goal_id)
             if fillup.balance.amount > 0:
+                # Fill-up is a system-internal construct; attribute its
+                # sweep to the funding-system user, not the archiving user.
                 internal_transaction_svc.create(
                     bank_account=budget.bank_account,
                     src_budget=fillup,
                     dst_budget=unallocated,
                     amount=fillup.balance,
-                    actor=actor,
+                    actor=funding_system_user(),
+                    system_event_kind=None,
+                    system_event_date=None,
                 )
             fillup.refresh_from_db()
             fillup.archived = True

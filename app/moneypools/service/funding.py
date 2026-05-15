@@ -34,10 +34,8 @@ from decimal import Decimal
 
 # 3rd party imports
 #
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
-from django.db.models import Q
 from djmoney.money import Money
 
 # Project imports
@@ -47,7 +45,6 @@ from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
     EventKind,
-    _fill_amount_prorated,  # noqa: F401 -- re-exported for test_funding.py
 )
 from moneypools.service.schedules import (
     enumerate_schedule,
@@ -223,21 +220,6 @@ def next_funding_info(
     return NextFundingInfo(date=next_date, amount=amount, deferred=deferred)
 
 
-########################################################################
-########################################################################
-#
-def funding_system_user() -> User:  # type: ignore[valid-type]
-    """Return the non-loginable funding-system user.
-
-    Returns:
-        The User instance with username 'funding-system'.
-
-    Raises:
-        User.DoesNotExist: If the data migration has not been run.
-    """
-    return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
-
-
 ####################################################################
 #
 def fund_account(
@@ -355,49 +337,13 @@ def funding_event_dates(
 ########################################################################
 ########################################################################
 #
-def state_at_start_of_D(
-    budget: Budget,
-    D: date,
-) -> tuple[Money, Money]:
-    """Return (balance, funded_amount) for budget as of the start of date D.
-
-    Rolls back all system-issued InternalTransactions touching budget with
-    system_event_date >= D.  System-issued ITXs are identified by having a
-    non-null system_event_date.
-
-    Args:
-        budget: The Budget to compute state for.
-        D: The event date to roll back to the start of.
-
-    Returns:
-        Tuple of (balance_at_start_of_D, funded_amount_at_start_of_D).
-    """
-    system_itxs = InternalTransaction.objects.filter(
-        system_event_date__isnull=False,
-        system_event_date__gte=D,
-    ).filter(Q(src_budget=budget) | Q(dst_budget=budget))
-
-    # signed_amount(X) = +amount if dst_budget==X, -amount if src_budget==X
-    # B_0 = current_balance - sum(signed_amount) over S(X, D)
-    net_signed = Decimal("0")
-    for itx in system_itxs:
-        if itx.dst_budget_id == budget.id:
-            net_signed += itx.amount.amount
-        else:
-            net_signed -= itx.amount.amount
-
-    currency = budget.balance.currency
-    balance_0 = Money(budget.balance.amount - net_signed, currency)
-    funded_amount_0 = Money(budget.funded_amount.amount - net_signed, currency)
-    return balance_0, funded_amount_0
-
-
-########################################################################
-########################################################################
-#
 def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
     """
     Enumerate all due funding and recurrence events for a set of budgets.
+
+    Catch-up events are in (last_pointer, today) exclusive.  Today's events
+    always fire regardless of pointer position -- achieved by clamping
+    fund_after / recur_after to at most today-1 before enumeration.
 
     Args:
         budgets: Budgets to inspect (already filtered to non-archived).
@@ -407,6 +353,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
         Unsorted list of FundingEvent objects.
     """
     events: list[FundingEvent] = []
+    today_minus_1 = today - timedelta(days=1)
 
     for budget in budgets:
         # Fill-up goal children are funded indirectly via their parent's fund
@@ -436,6 +383,8 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                 if prev is not None
                 else budget.created_at.date()
             )
+        # Clamp so today always fires even when the pointer is already at today.
+        fund_after = min(fund_after, today_minus_1)
         for d in enumerate_schedule(budget.funding_schedule, fund_after, today):
             events.append(
                 FundingEvent(date=d, kind=EventKind.FUND, budget=budget)
@@ -462,6 +411,8 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
                     if prev is not None
                     else budget.created_at.date()
                 )
+            # Clamp so today always fires even when the pointer is already at today.
+            recur_after = min(recur_after, today_minus_1)
             for d in enumerate_schedule(
                 budget.recurrence_schedule, recur_after, today
             ):
@@ -485,10 +436,12 @@ def _process_fund_event(
     Transfer funds from unallocated into the target budget.
 
     For Recurring budgets, the target is the fillup_goal.
-    Otherwise the target is the budget itself.  Caps at unallocated balance.
-    Advances last_funded_on unless unallocated is completely empty, in which
-    case the event retries on the next run.  Partial (capped) transfers still
-    advance the pointer; recovery happens at the next scheduled event.
+    Otherwise the target is the budget itself.
+
+    Computes already_moved (existing system fund ITXs for this event date)
+    and transfers only the remainder of intended.  Pointer advances
+    unconditionally -- under-funded events are not retried on subsequent
+    days; same-day re-runs are handled via the already_moved formula.
 
     Args:
         ev: The funding event to process.
@@ -513,26 +466,41 @@ def _process_fund_event(
     budget.refresh_from_db()
 
     strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
-    amount = strategy.intended_for_event(budget, ev.date, kind=EventKind.FUND)
+    intended = strategy.intended_for_event(budget, ev.date, kind=EventKind.FUND)
 
-    if amount.amount <= Decimal("0"):
+    already_moved = sum(
+        (
+            itx.amount.amount
+            for itx in InternalTransaction.objects.filter(
+                dst_budget=target,
+                system_event_kind=InternalTransaction.SystemEventKind.FUND,
+                system_event_date=ev.date,
+            )
+        ),
+        Decimal("0"),
+    )
+    net = max(Decimal("0"), intended.amount - already_moved)
+
+    if net <= Decimal("0"):
         Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
         return
 
     available = unallocated.balance.amount
     if available <= Decimal("0"):
         report.warnings.append(
-            f"[{ev.date}] {budget.name}: unallocated is empty; will retry."
+            f"[{ev.date}] {budget.name}: unallocated is empty; transfer skipped."
         )
+        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
         return
 
-    if amount.amount > available:
+    if net > available:
         report.warnings.append(
-            f"[{ev.date}] {budget.name}: wanted {amount}, "
+            f"[{ev.date}] {budget.name}: wanted {Money(net, intended.currency)}, "
             f"only {unallocated.balance} available; capped."
         )
-        amount = Money(available, amount.currency)
+        net = available
 
+    amount = Money(net, intended.currency)
     # Use the event date as effective_date so the InternalTransaction
     # slots into the correct position in the historical timeline when
     # running a backfill for past periods.
@@ -548,6 +516,8 @@ def _process_fund_event(
             amount=amount,
             actor=actor,
             effective_date=effective_date,
+            system_event_kind=InternalTransaction.SystemEventKind.FUND,
+            system_event_date=ev.date,
         )
 
     Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
@@ -572,8 +542,20 @@ def _process_recur_event(
 ) -> None:
     """Transfer from fillup_goal into the recurring budget up to target.
 
-    Sets budget.complete if the recurring budget reaches its target after
-    the transfer.  Advances last_recurrence_on regardless.
+    Computes already_moved (existing system recur ITXs for this event date)
+    and transfers only the remainder of intended -- never more.  This makes
+    the function safe to call multiple times on the same calendar day:
+
+    - If the fill-up lacked sufficient funds on the first run (partial or
+      zero transfer), a subsequent run on the same day will top up the
+      remainder provided the fill-up has since been replenished (e.g. the
+      user manually moved money into it, or a fund event ran and filled it).
+    - If the event was fully satisfied on the first run, already_moved equals
+      intended, net is zero, and the second run is a no-op.
+
+    Pointer (last_recurrence_on) and complete flag are written
+    unconditionally at the end so the state is consistent regardless of
+    whether a transfer occurred.
 
     Args:
         ev: The recurrence event to process.
@@ -599,55 +581,60 @@ def _process_recur_event(
         budget, ev.date, kind=EventKind.RECUR
     )
 
-    if intended.amount <= Decimal("0"):
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_recurrence_on=ev.date,
-            complete=True,
-        )
-        return
-
-    fillup_available = fillup.balance.amount
-    if fillup_available <= Decimal("0"):
-        report.warnings.append(
-            f"[{ev.date}] {budget.name}: fill-up goal is empty; will retry."
-        )
-        return
-
-    transfer = min(intended.amount, fillup_available)
-    if transfer < intended.amount:
-        report.warnings.append(
-            f"[{ev.date}] {budget.name}: fill-up only had "
-            f"{fillup.balance}; needed {intended.amount}; underfunded."
-        )
-
-    amount = Money(transfer, budget.balance.currency)
-    effective_date = datetime(
-        ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
+    already_moved = sum(
+        (
+            itx.amount.amount
+            for itx in InternalTransaction.objects.filter(
+                dst_budget=budget,
+                system_event_kind=InternalTransaction.SystemEventKind.RECUR,
+                system_event_date=ev.date,
+            )
+        ),
+        Decimal("0"),
     )
+    net = max(Decimal("0"), intended.amount - already_moved)
 
-    with db_transaction.atomic():
-        internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=fillup,
-            dst_budget=budget,
-            amount=amount,
-            actor=actor,
-            effective_date=effective_date,
-        )
+    if net > Decimal("0"):
+        fillup_available = fillup.balance.amount
+        if fillup_available <= Decimal("0"):
+            report.warnings.append(
+                f"[{ev.date}] {budget.name}: fill-up goal is empty; transfer skipped."
+            )
+        else:
+            transfer = min(net, fillup_available)
+            if transfer < net:
+                report.warnings.append(
+                    f"[{ev.date}] {budget.name}: fill-up only had "
+                    f"{fillup.balance}; needed "
+                    f"{Money(net, budget.balance.currency)}; underfunded."
+                )
+            amount = Money(transfer, budget.balance.currency)
+            effective_date = datetime(
+                ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
+            )
+            with db_transaction.atomic():
+                internal_transaction_svc.create(
+                    bank_account=account,
+                    src_budget=fillup,
+                    dst_budget=budget,
+                    amount=amount,
+                    actor=actor,
+                    effective_date=effective_date,
+                    system_event_kind=InternalTransaction.SystemEventKind.RECUR,
+                    system_event_date=ev.date,
+                )
+            budget.refresh_from_db()
+            report.transfers += 1
+            logger.debug(
+                "fund_account: recur %s -> %s  amount=%s  date=%s",
+                fillup.name,
+                budget.name,
+                amount,
+                ev.date,
+            )
 
-    budget.refresh_from_db()
     newly_complete = budget.balance.amount >= budget.target_balance.amount
     Budget.objects.filter(pkid=budget.pkid).update(
         last_recurrence_on=ev.date,
         complete=newly_complete,
-    )
-    report.transfers += 1
-
-    logger.debug(
-        "fund_account: recur %s -> %s  amount=%s  date=%s  complete=%s",
-        fillup.name,
-        budget.name,
-        amount,
-        ev.date,
-        newly_complete,
     )

@@ -77,11 +77,15 @@ class TestBudget:
     @pytest.mark.parametrize(
         "budget_type,balance,expected_complete",
         [
-            ("G", 200, True),
+            # Goal: complete is driven by funded_amount in the ITX service,
+            # not by the pre_save signal.
+            ("G", 200, False),
             ("G", 100, False),
             ("R", 200, True),
             ("R", 100, False),
-            ("C", 200, True),
+            # Capped: complete is never set by the signal; funding engine uses
+            # the balance/target gap directly.
+            ("C", 200, False),
             ("C", 100, False),
         ],
     )
@@ -95,7 +99,7 @@ class TestBudget:
         """
         GIVEN: a budget of the given type with the given balance vs. a 200 target
         WHEN:  the budget is saved
-        THEN:  complete matches expected_complete
+        THEN:  complete matches expected_complete (Capped is always False)
         """
         budget = budget_factory(
             balance=balance, target_balance=200, budget_type=budget_type
@@ -145,36 +149,27 @@ class TestBudget:
 
     ####################################################################
     #
-    @pytest.mark.parametrize(
-        "budget_type,expected_complete_after_spend",
-        [
-            # Goal: stays complete once funded regardless of spending.
-            ("G", True),
-            # Capped: recomputed on every save, so spending clears it.
-            ("C", False),
-        ],
-    )
-    def test_complete_after_spending(
+    def test_complete_stays_set_after_spending_for_goal(
         self,
-        budget_type: str,
-        expected_complete_after_spend: bool,
         budget_factory: Callable[..., Budget],
     ) -> None:
         """
-        GIVEN: a budget at its target (complete=True)
-        WHEN:  the balance drops below the target
-        THEN:  complete reflects the type's clearing semantics
-               (Goal stays True; Capped reverts to False)
+        GIVEN: a Goal budget whose complete flag was set by the ITX service
+        WHEN:  the balance drops below the target via spending
+        THEN:  complete remains True (sticky high-water-mark latch)
         """
         budget = budget_factory(
-            balance=200, target_balance=200, budget_type=budget_type
+            balance=200, target_balance=200, budget_type="G"
         )
-        assert budget.complete is True
+        # complete is set by the ITX service (funded_amount path), not the
+        # signal, so force it here to represent a post-funding state.
+        Budget.objects.filter(pkid=budget.pkid).update(complete=True)
+        budget.refresh_from_db()
 
         budget.balance = Money(100, USD)
         budget.save()
         budget.refresh_from_db()
-        assert budget.complete is expected_complete_after_spend
+        assert budget.complete is True
 
 
 ########################################################################

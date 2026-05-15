@@ -12,6 +12,7 @@ Public API:
     CappedStrategy       -- CAPPED budgets
     RecurringStrategy    -- RECURRING budgets (both event kinds)
     BUDGET_TYPE_TO_STRATEGY -- BudgetType -> FundingStrategy instance
+    state_at_start_of_D  -- roll back system ITXs to get state at start of D
 """
 
 # system imports
@@ -25,11 +26,12 @@ from decimal import Decimal
 # 3rd party imports
 #
 import recurrence as recurrence_lib
+from django.db.models import Q
 from djmoney.money import Money
 
 # Project imports
 #
-from moneypools.models import Budget
+from moneypools.models import Budget, InternalTransaction
 from moneypools.service.schedules import (
     count_occurrences,
     enumerate_schedule,
@@ -38,6 +40,57 @@ from moneypools.service.schedules import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+########################################################################
+########################################################################
+#
+def state_at_start_of_D(
+    budget: Budget,
+    D: date,
+) -> tuple[Money, Money]:
+    """Return (balance, funded_amount) for budget as of the start of date D.
+
+    Rolls back all system-issued InternalTransactions touching budget with
+    system_event_date >= D.  System-issued ITXs are identified by having a
+    non-null system_event_date.
+
+    The filter uses >= rather than == so that a multi-day catch-up run
+    (processing missed days in order) sees the correct pre-event state for
+    each day.  Without >=, when processing day D+1 after D has already been
+    applied, intended_for_(D+1) would see D's transfer already in the
+    balance and compute a smaller gap than it should.
+
+    For same-day re-runs this also rolls back ITXs issued for D on a prior
+    run, so intended_for_D is computed against the same pre-event baseline
+    every time.  The already_moved formula then determines how much of that
+    intended amount is still outstanding.
+
+    Args:
+        budget: The Budget to compute state for.
+        D: The event date to roll back to the start of.
+
+    Returns:
+        Tuple of (balance_at_start_of_D, funded_amount_at_start_of_D).
+    """
+    system_itxs = InternalTransaction.objects.filter(
+        system_event_date__isnull=False,
+        system_event_date__gte=D,
+    ).filter(Q(src_budget=budget) | Q(dst_budget=budget))
+
+    # signed_amount(X) = +amount if dst_budget==X, -amount if src_budget==X
+    # B_0 = current_balance - sum(signed_amount) over S(X, D)
+    net_signed = Decimal("0")
+    for itx in system_itxs:
+        if itx.dst_budget_id == budget.id:
+            net_signed += itx.amount.amount
+        else:
+            net_signed -= itx.amount.amount
+
+    currency = budget.balance.currency
+    balance_0 = Money(budget.balance.amount - net_signed, currency)
+    funded_amount_0 = Money(budget.funded_amount.amount - net_signed, currency)
+    return balance_0, funded_amount_0
 
 
 ########################################################################
@@ -108,11 +161,29 @@ class GoalStrategy(FundingStrategy):
     ) -> Money:
         """Compute intended amount for a Goal fund event.
 
-        FIXED_AMOUNT: returns funding_amount unconditionally (completion
-        is tracked via budget.complete, not the amount formula).
+        Gap calculations use funded_amount_0 (from state_at_start_of_D),
+        not the current balance.  The distinction matters because spending
+        debits the balance via TransactionAllocations but does not affect
+        funded_amount -- only InternalTransactions move funded_amount.
+        Using balance would treat spending as if it were unfunded gap and
+        over-fund the budget.
+
+        Example: a $300 vacation Goal funded $200 so far.  The user then
+        books a $50 flight, leaving balance at $150.  The remaining funding
+        gap is $100 (300 - 200), not $150 (300 - 150).  The $50 spend is
+        already committed; we only need to fund the $100 that was never
+        deposited.
+
+        FIXED_AMOUNT: returns min(funding_amount, gap) so the engine never
+        exceeds the target.  Completion is latched in
+        internal_transaction_svc, not here -- this function returns 0 once
+        funded_amount_0 >= target, which stops further events before the
+        latch check is even needed.
 
         TARGET_DATE: spreads the remaining gap evenly over all schedule
-        occurrences from event_date through target_date.
+        occurrences from event_date through target_date (minimum 1).
+        After the deadline passes, count_occurrences returns 1 so the
+        full remaining gap is closed on the next event.
 
         Args:
             budget: A GOAL budget.
@@ -125,16 +196,17 @@ class GoalStrategy(FundingStrategy):
         currency = budget.balance.currency
         zero = Money(Decimal("0"), currency)
 
-        if budget.funding_type == Budget.FundingType.FIXED_AMOUNT:
-            if budget.funding_amount is None:
-                return zero
-            return budget.funding_amount
-
-        # TARGET_DATE: divide remaining gap over events left until target.
-        gap = budget.target_balance.amount - budget.balance.amount
+        _, funded_amount_0 = state_at_start_of_D(budget, event_date)
+        gap = budget.target_balance.amount - funded_amount_0.amount
         if gap <= Decimal("0"):
             return zero
 
+        if budget.funding_type == Budget.FundingType.FIXED_AMOUNT:
+            if budget.funding_amount is None:
+                return zero
+            return Money(min(budget.funding_amount.amount, gap), currency)
+
+        # TARGET_DATE: divide remaining gap over events left until target.
         if budget.target_date is not None:
             remaining = count_occurrences(
                 budget.funding_schedule, event_date, budget.target_date
@@ -185,7 +257,8 @@ class CappedStrategy(FundingStrategy):
         if budget.funding_amount is None:
             return zero
 
-        gap = budget.target_balance.amount - budget.balance.amount
+        balance_0, _ = state_at_start_of_D(budget, event_date)
+        gap = budget.target_balance.amount - balance_0.amount
         if gap <= Decimal("0"):
             return zero
 
@@ -241,7 +314,36 @@ class RecurringStrategy(FundingStrategy):
     ####################################################################
     #
     def _intended_fund(self, budget: Budget, event_date: date) -> Money:
-        """Prorate the fill-up gap over events in the current cycle."""
+        """Prorate the fill-up gap over the funding events in the current cycle.
+
+        Money flows Unallocated -> fill-up, not directly into the Recurring
+        budget.  The fill-up accumulates across funding events until the
+        recur event sweeps it into the Recurring on the cycle boundary.
+
+        The per-event amount is target_balance / N, where N is the number
+        of funding events in the current recurrence cycle (from the last
+        recur boundary, exclusive, through the next recur boundary,
+        inclusive).  This spreads the cost evenly rather than depositing
+        the full target on the first event of each cycle.
+
+        Example: a $600/month Recurring budget funded weekly (4 events per
+        cycle).  Each fund event contributes $150 to the fill-up.  On the
+        1st of the month the recur event sweeps $600 from the fill-up into
+        the Recurring.
+
+        The first-cycle case is special: when no recurrence has ever fired
+        (last_recurrence_on is None and no prior boundary exists), the
+        theoretical prior boundary is projected backward from cycle_end to
+        find the correct N for a full cycle rather than counting only the
+        remaining events, which would inflate the per-event amount.
+
+        Args:
+            budget: A RECURRING budget.
+            event_date: The fund event date.
+
+        Returns:
+            Money amount >= 0.
+        """
         fillup = budget.fillup_goal
         if fillup is None:
             return Money(Decimal("0"), budget.balance.currency)
@@ -249,7 +351,8 @@ class RecurringStrategy(FundingStrategy):
         currency = fillup.balance.currency
         zero = Money(Decimal("0"), currency)
 
-        gap = fillup.target_balance.amount - fillup.balance.amount
+        fill_balance_0, _ = state_at_start_of_D(fillup, event_date)
+        gap = fillup.target_balance.amount - fill_balance_0.amount
         if gap <= Decimal("0"):
             return zero
 
@@ -327,9 +430,29 @@ class RecurringStrategy(FundingStrategy):
     ####################################################################
     #
     def _intended_recur(self, budget: Budget, event_date: date) -> Money:
-        """Return the gap between the recurring budget's target and balance."""
+        """Return the gap between the Recurring budget's target and its B_0.
+
+        Uses balance_0 (rolled back via state_at_start_of_D) rather than
+        current balance so that a same-day re-run or catch-up run sees the
+        pre-event state for this cycle boundary.
+
+        Example: a Recurring budget has target $600 and balance $0 at the
+        start of the recur date.  The fill-up has $500.  The first run
+        transfers $500 (capped by fill-up balance), leaving the Recurring
+        at $500.  On a re-run after the fill-up is topped up, B_0 is still
+        $0 (the recur ITX is rolled back), so intended is still $600.
+        already_moved is $500, net is $100 -- exactly the remainder needed.
+
+        Args:
+            budget: A RECURRING budget.
+            event_date: The recur event date.
+
+        Returns:
+            Money amount >= 0.
+        """
         currency = budget.balance.currency
-        gap = budget.target_balance.amount - budget.balance.amount
+        balance_0, _ = state_at_start_of_D(budget, event_date)
+        gap = budget.target_balance.amount - balance_0.amount
         if gap <= Decimal("0"):
             return Money(Decimal("0"), currency)
         return Money(gap, currency)
@@ -351,17 +474,40 @@ def _fill_amount_prorated(
     cycle_start: date,
     cycle_before: date,
 ) -> Money:
-    """Compute the steady-state deposit toward a budget's target for one event.
+    """Compute the per-event deposit toward a budget's target for one event.
 
-    Divides the cycle into N total funding events and transfers 1/N of the
-    target balance per event, capped at the remaining gap.
+    Counts N, the remaining funding events from event_date (inclusive)
+    through cycle_before (inclusive), then returns full_gap / N.
+
+    Dividing the current gap by remaining events -- not target_balance by
+    total cycle events -- ensures an even spread regardless of carry-over.
+
+    Example: $600/month target, 3 funding events in the cycle (1st, 15th,
+    and the recur boundary on the 1st of next month), fill-up already
+    holds $100 from the previous cycle.  full_gap = $500.
+
+    - Event on the 1st:  N=3, per_event = $500/3 = $166.67
+    - Event on the 15th: N=2, fill_B_0 = $266.67, gap = $333.33,
+                         per_event = $333.33/2 = $166.67
+    - Event on the recur boundary: N=1, gap = $166.66, per_event = $166.66
+
+    Total deposited = $500 -- exactly the gap, deposited evenly.
+
+    If the simpler target/total-N formula were used, events would deposit
+    $200/$200/$100 -- correct in total but uneven, and wrong when the
+    carry-over changes mid-cycle.
+
+    effective_dtstart is clamped to min(DTSTART, event_date - 1 day) so
+    that the recurrence library counts from the right anchor even when
+    DTSTART is set later than the current event.
 
     Args:
         budget: Budget whose funding_schedule defines the event cadence.
         target: Budget being funded (fill-up goal for Recurring).
-        event_date: The funding event date (kept for API compatibility).
-        cycle_start: Exclusive lower bound for counting events in the cycle.
-        cycle_before: Inclusive upper bound for counting events in the cycle.
+        event_date: The funding event date; used as the lower bound for
+            counting remaining events and for state_at_start_of_D.
+        cycle_start: Unused; kept for call-site compatibility.
+        cycle_before: Inclusive upper bound for counting remaining events.
 
     Returns:
         Money amount to transfer, >= 0.
@@ -369,7 +515,8 @@ def _fill_amount_prorated(
     currency = target.balance.currency
     zero = Money(Decimal("0"), currency)
 
-    full_gap = target.target_balance.amount - target.balance.amount
+    fill_balance_0, _ = state_at_start_of_D(target, event_date)
+    full_gap = target.target_balance.amount - fill_balance_0.amount
     if full_gap <= Decimal("0"):
         return zero
 
@@ -377,15 +524,19 @@ def _fill_amount_prorated(
     if not sched:
         return Money(full_gap, currency)
 
-    after_dt = datetime(cycle_start.year, cycle_start.month, cycle_start.day)
+    # Count remaining events in [event_date, cycle_before].
+    # between() is exclusive on the lower bound, so subtract one day.
+    after_dt = datetime(
+        event_date.year, event_date.month, event_date.day
+    ) - timedelta(days=1)
     before_dt = datetime(
         cycle_before.year, cycle_before.month, cycle_before.day, 23, 59, 59
     )
 
     raw = sched.dtstart
     raw_clean = raw.replace(tzinfo=None) if raw is not None else None
-    # Use the earlier of DTSTART and cycle_start so that prior-cycle events
-    # are counted even when DTSTART is later than the theoretical start.
+    # Clamp dtstart to after_dt so events on or after event_date are
+    # counted even when the stored DTSTART is later.
     effective_dtstart = (
         min(raw_clean, after_dt) if raw_clean is not None else after_dt
     )
@@ -407,17 +558,14 @@ def _fill_amount_prorated(
             if hasattr(occ, "date")
             else date(occ.year, occ.month, occ.day)
         )
-        if cycle_start < d <= cycle_before:
+        if event_date <= d <= cycle_before:
             results.append(d)
 
     N = len(sorted(set(results)))
     if N == 0:
         return Money(full_gap, currency)
 
-    steady_state = (target.target_balance.amount / Decimal(N)).quantize(
-        Decimal("0.01")
-    )
-    per_event = min(steady_state, full_gap)
+    per_event = (full_gap / Decimal(N)).quantize(Decimal("0.01"))
     return Money(per_event, currency)
 
 

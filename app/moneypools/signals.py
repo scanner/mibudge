@@ -60,19 +60,13 @@ def budget_pre_save(
         corrected.
 
     'complete' flag management:
-        Goal (G) -- set True when balance >= target; never cleared here.
-            Once a goal is funded it stays funded regardless of spending.
+        Recurring (R) -- set True when balance >= target; cleared by
+            the recurrence task on cycle reset, not by balance changes.
 
-        Capped (C) -- set True when balance >= target; cleared when
-            balance drops below target.  This produces the "perpetual
-            top-up to a cap" behavior: spending from the budget
-            automatically re-enables automatic funding.
+        Goal (G) -- completion is driven by funded_amount in the ITX
+            service, not here.
 
-        Recurring (R) -- 'complete' is set True when balance >= target
-            here, but it is cleared by the recurrence task (cycle reset),
-            not by balance changes.
-
-        Unallocated / Associated fill-up (no target) -- left unchanged.
+        Capped (C) / Unallocated / Fill-up -- left unchanged.
 
     Args:
         sender: The Budget model class.
@@ -87,25 +81,16 @@ def budget_pre_save(
     if instance.archived and instance.archived_at is None:
         instance.archived_at = datetime.now(UTC)
 
-    # Manage 'complete' for budget types with meaningful funding targets.
-    # target_balance of 0 means "no cap set" -- skip those.
-    #
+    # Recurring budgets flip complete=True when balance hits target; the
+    # recurrence task clears it on cycle reset.  Goal completion is driven
+    # by funded_amount in the ITX service, not here.  Capped budgets never
+    # use complete; the engine uses the balance/target gap directly.
     target = instance.target_balance.amount
     balance = instance.balance.amount
 
-    if target > 0:
-        match instance.budget_type:
-            case Budget.BudgetType.GOAL | Budget.BudgetType.RECURRING:
-                # Set when funded; never cleared here.
-                # Goal: permanently done once funded.
-                # Recurring: cleared by the recurrence task on cycle reset.
-                if balance >= target:
-                    instance.complete = True
-            case Budget.BudgetType.CAPPED:
-                # Always reflects whether the cap is currently met, so
-                # spending from a capped budget immediately re-enables
-                # automatic funding.
-                instance.complete = balance >= target
+    if target > 0 and instance.budget_type == Budget.BudgetType.RECURRING:
+        if balance >= target:
+            instance.complete = True
 
 
 ####################################################################

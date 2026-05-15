@@ -29,6 +29,7 @@ from django.utils import timezone
 from moneypools.management.commands._budget_admin import resolve_account
 from moneypools.models import BankAccount, Budget
 from moneypools.service import funding as funding_svc
+from moneypools.service.shared import funding_system_user
 
 
 ########################################################################
@@ -97,7 +98,7 @@ class Command(BaseCommand):
             self.stdout.write("No accounts found.")
             return
 
-        actor = funding_svc.funding_system_user()
+        actor = funding_system_user()
 
         total_transfers = 0
         total_deferred = 0
