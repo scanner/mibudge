@@ -1,20 +1,25 @@
 """
-InternalTransaction service -- Phase 1.
+InternalTransaction service.
 
 Operations:
-    create(bank_account, src_budget, dst_budget, amount, actor, effective_date)
+    create(bank_account, src_budget, dst_budget, amount, actor, effective_date,
+           system_event_kind, system_event_date)
         Sorted budget locks via ExitStack, one atomic().
         Snapshots src_budget_balance / dst_budget_balance on the row.
+        Maintains funded_amount for Goal budgets.
+        Applies the sticky completion latch when a Goal's funded_amount
+        first reaches target_balance.
         Triggers running-balance recalculation for both budgets.
     delete(internal_transaction)
-        Reverses balance changes under sorted budget locks.
+        Reverses balance and funded_amount changes under sorted budget locks.
+        Does NOT clear complete (high-water mark semantic).
         Triggers running-balance recalculation for both budgets.
 """
 
 # system imports
 #
 from contextlib import ExitStack
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 # Project imports
 #
@@ -40,12 +45,17 @@ def create(
     amount: Money,
     actor: User,
     effective_date: datetime | None = None,
+    system_event_kind: str | None = None,
+    system_event_date: date | None = None,
 ) -> InternalTransaction:
     """Create an internal transaction, transferring funds between two budgets.
 
     Acquires sorted budget locks to prevent deadlocks, then inside a
     single atomic block refreshes both budgets, debits src, credits dst,
     records balance snapshots, and inserts the InternalTransaction row.
+    For Goal budgets, maintains the funded_amount running total and
+    applies the sticky completion latch when funded_amount first reaches
+    target_balance.
     After the row is committed, recalculates running budget_balance
     snapshots for both affected budgets starting from effective_date.
 
@@ -60,6 +70,10 @@ def create(
             COALESCE in running-balance queries.  Backfill passes the
             period-boundary datetime so the ITx slots correctly into the
             historical timeline.
+        system_event_kind: InternalTransaction.SystemEventKind value
+            ('F' or 'R'), or None for user-issued transfers.
+        system_event_date: The scheduled event date the engine is
+            processing, or None for user-issued transfers.
 
     Returns:
         The newly created InternalTransaction instance.
@@ -81,6 +95,26 @@ def create(
 
             src_budget.balance -= amount
             dst_budget.balance += amount
+
+            # Maintain funded_amount for Goal budgets.  Credits increase it
+            # on the destination; debits decrease it on the source.
+            if dst_budget.budget_type == Budget.BudgetType.GOAL:
+                dst_budget.funded_amount += amount
+            if src_budget.budget_type == Budget.BudgetType.GOAL:
+                src_budget.funded_amount -= amount
+
+            # Sticky completion latch: flip False -> True the first time
+            # a Goal's funded_amount reaches target_balance.  Never cleared
+            # here; delete() deliberately does not reset it.
+            if (
+                dst_budget.budget_type == Budget.BudgetType.GOAL
+                and not dst_budget.complete
+                and dst_budget.funded_amount.amount
+                >= dst_budget.target_balance.amount
+                > 0
+            ):
+                dst_budget.complete = True
+
             src_budget.save()
             dst_budget.save()
 
@@ -99,6 +133,8 @@ def create(
                 effective_date=effective_date
                 if effective_date is not None
                 else datetime.now(UTC),
+                system_event_kind=system_event_kind,
+                system_event_date=system_event_date,
             )
 
     # Recalculate outside the lock so we don't hold it during the full
@@ -119,9 +155,11 @@ def delete(internal_transaction: InternalTransaction) -> None:
     """Delete an internal transaction, reversing the budget balance changes.
 
     Acquires sorted budget locks, refreshes both budgets, reverses the
-    debit/credit applied on creation, and removes the row.  After the
-    row is deleted, recalculates running budget_balance snapshots for
-    both affected budgets.
+    debit/credit applied on creation (including funded_amount for Goal
+    budgets), and removes the row.  The complete flag is never cleared
+    here; it is a high-water mark.  After the row is deleted,
+    recalculates running budget_balance snapshots for both affected
+    budgets.
 
     Args:
         internal_transaction: The InternalTransaction to reverse and delete.
@@ -142,6 +180,15 @@ def delete(internal_transaction: InternalTransaction) -> None:
 
             src_budget.balance += amount
             dst_budget.balance -= amount
+
+            # Reverse funded_amount for Goal budgets.  complete is
+            # intentionally left alone -- it is a high-water mark and
+            # is never cleared by deletion.
+            if dst_budget.budget_type == Budget.BudgetType.GOAL:
+                dst_budget.funded_amount -= amount
+            if src_budget.budget_type == Budget.BudgetType.GOAL:
+                src_budget.funded_amount += amount
+
             src_budget.save()
             dst_budget.save()
 
