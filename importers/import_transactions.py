@@ -398,22 +398,29 @@ def _fetch_existing(
     start_date: date,
     end_date: date,
     user_timezone: str = "UTC",
-) -> dict[tuple[str, str, str], list[tuple[str, str]]]:
+) -> tuple[
+    dict[tuple[str, str, str], list[tuple[str, str, str]]],
+    dict[str, tuple[str, str, str]],
+]:
     """
     Query the API for transactions in the date range and index them.
 
-    Returns a mapping from the 3-tuple dedup key (date, amount,
-    raw_description) to a **list** of ``(transaction_id,
-    transaction_type)`` pairs.  Multiple entries under the same key
-    represent genuinely distinct same-day, same-amount,
-    same-description transactions (e.g. two coffee purchases).
-
-    During import, the list is consumed (popped) so that each server
-    transaction is matched to at most one CSV row.
+    Returns two indices:
+    - A mapping from the 3-tuple dedup key (date, amount, raw_description)
+      to a **list** of ``(transaction_id, transaction_type)`` pairs.
+      Multiple entries under the same key represent genuinely distinct
+      same-day, same-amount, same-description transactions (e.g. two
+      coffee purchases).  During import the list is consumed (popped) so
+      that each server transaction is matched to at most one import row.
+    - A mapping from ``bank_transaction_id`` to a single
+      ``(transaction_id, transaction_type)`` pair.  Only populated for
+      rows that carry a non-null bank_transaction_id.  Used by the live
+      scraper importer for primary dedup when the bank supplies a stable
+      per-transaction identifier.
 
     Filters on ``posted_date`` (not ``transaction_date``) so that
     transactions whose description-derived purchase date falls before
-    the CSV window are still found and deduplicated correctly.
+    the import window are still found and deduplicated correctly.
 
     Args:
         client: Authenticated MibudgeClient.
@@ -425,11 +432,11 @@ def _fetch_existing(
             date when building dedup keys.
 
     Returns:
-        A mapping from 3-tuple dedup key to a list of
-        ``(transaction_id, transaction_type)`` entries.
+        A ``(existing_by_key, existing_by_bank_id)`` tuple.
     """
     tz = ZoneInfo(user_timezone)
-    existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
+    existing: dict[tuple[str, str, str], list[tuple[str, str, str]]] = {}
+    existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
     for tx in client.get_all(
         "/api/v1/transactions/",
         {
@@ -446,9 +453,19 @@ def _fetch_existing(
         )
         local_date = posted_utc.astimezone(tz).date()
         key = _dedup_key(local_date, tx["amount"], tx["raw_description"])
-        entry = (tx["id"], tx.get("transaction_type") or "")
+        # 3-tuple: (transaction_id, transaction_type, bank_transaction_id|"")
+        # The third element lets the dedup loop backfill bank_transaction_id
+        # on rows that were imported before this field was added.
+        entry = (
+            tx["id"],
+            tx.get("transaction_type") or "",
+            tx.get("bank_transaction_id") or "",
+        )
         existing.setdefault(key, []).append(entry)
-    return existing
+        bank_tx_id = tx.get("bank_transaction_id")
+        if bank_tx_id:
+            existing_by_bank_id[bank_tx_id] = entry
+    return existing, existing_by_bank_id
 
 
 ####################################################################
@@ -481,7 +498,7 @@ def _post_transaction(
         tx.transaction_date.day,
         tzinfo=tz,
     )
-    payload = {
+    payload: dict[str, Any] = {
         "bank_account": bank_account_id,
         "amount": str(tx.amount),
         "posted_date": posted_date.isoformat(),
@@ -489,6 +506,8 @@ def _post_transaction(
         "raw_description": tx.raw_description,
         "pending": tx.pending,
     }
+    if tx.bank_transaction_id:
+        payload["bank_transaction_id"] = tx.bank_transaction_id
     try:
         return client.post("/api/v1/transactions/", payload)
     except APIError as e:
@@ -540,6 +559,42 @@ def _patch_transaction_type(
         return False
 
 
+####################################################################
+#
+def _patch_bank_transaction_id(
+    client: MibudgeClient,
+    transaction_id: str,
+    bank_transaction_id: str,
+) -> bool:
+    """
+    PATCH a bank_transaction_id onto an existing transaction.
+
+    Used to backfill the field on rows imported before the scraper
+    started supplying it (e.g. transactions originally imported via CSV).
+
+    Args:
+        client: Authenticated MibudgeClient.
+        transaction_id: UUID of the transaction to update.
+        bank_transaction_id: The bank-supplied hash to set.
+
+    Returns:
+        True on success, False on API error.
+    """
+    try:
+        client.patch(
+            f"/api/v1/transactions/{transaction_id}/",
+            {"bank_transaction_id": bank_transaction_id},
+        )
+        return True
+    except APIError as e:
+        logger.error(
+            "Failed to backfill bank_transaction_id on %s: %s",
+            transaction_id,
+            e,
+        )
+        return False
+
+
 ########################################################################
 ########################################################################
 #
@@ -564,7 +619,10 @@ def import_statement(
     client: MibudgeClient,
     user_timezone: str,
     progress_callback: Callable[[int, int], None] | None = None,
-    existing: (dict[tuple[str, str, str], list[tuple[str, str]]] | None) = None,
+    existing: (
+        dict[tuple[str, str, str], list[tuple[str, str, str]]] | None
+    ) = None,
+    existing_by_bank_id: dict[str, tuple[str, str, str]] | None = None,
     *,
     dry_run: bool = False,
 ) -> ImportResult:
@@ -590,6 +648,10 @@ def import_statement(
             pre-fetches so it can wrap the fetch in a rich status
             spinner (rich does not allow nested Live renderers, and
             the POST progress bar is already a Live renderer).
+        existing_by_bank_id: Optional secondary dedup index keyed by
+            ``bank_transaction_id``.  When a scraped transaction
+            carries a bank-supplied ID, this index is consulted first;
+            a hit means the transaction is already in the DB.
         dry_run: When True, classify each transaction (import / skip /
             update) but do not POST or PATCH anything.
 
@@ -617,9 +679,11 @@ def import_statement(
     # Fetch existing transactions in this window (unless the caller
     # pre-fetched so it could render a status spinner).
     if existing is None:
-        existing = _fetch_existing(
+        existing, existing_by_bank_id = _fetch_existing(
             client, bank_account_id, start_date, end_date, user_timezone
         )
+    if existing_by_bank_id is None:
+        existing_by_bank_id = {}
     logger.info(
         "Found %d existing transactions in date range %s to %s",
         len(existing),
@@ -629,6 +693,32 @@ def import_statement(
 
     total = len(transactions)
     for i, tx in enumerate(transactions):
+        # Primary dedup: when the bank supplies a stable per-transaction
+        # identifier, prefer it over the (date, amount, desc) 3-tuple.
+        # This correctly deduplicates transactions scraped in both their
+        # pending and settled states, even if the date or amount changed.
+        if (
+            tx.bank_transaction_id
+            and tx.bank_transaction_id in existing_by_bank_id
+        ):
+            tx_id, existing_type, _ = existing_by_bank_id[
+                tx.bank_transaction_id
+            ]
+            if existing_type == "" and tx.transaction_type != "":
+                if dry_run:
+                    result.updated += 1
+                elif _patch_transaction_type(
+                    client, tx_id, tx.transaction_type
+                ):
+                    result.updated += 1
+                else:
+                    result.failed += 1
+            else:
+                result.skipped += 1
+            if progress_callback:
+                progress_callback(i + 1, total)
+            continue
+
         key = _dedup_key(
             tx.transaction_date,  # ParsedTransaction.transaction_date is the bank/posted date
             tx.amount,
@@ -641,7 +731,7 @@ def import_statement(
             # case: if the CSV has 2 entries and the server has 2,
             # both are skipped; if the server has 1, the second CSV
             # row is imported.
-            tx_id, existing_type = matches.pop(0)
+            tx_id, existing_type, existing_bank_tx_id = matches.pop(0)
             # Backfill the transaction_type on duplicates when the
             # server has it empty but the parser has since learned to
             # classify this description. This lets "add a pattern and
@@ -658,6 +748,14 @@ def import_statement(
                     result.failed += 1
             else:
                 result.skipped += 1
+            # Backfill bank_transaction_id when the scraped transaction
+            # has one but the stored row was imported before this field
+            # existed (e.g. originally imported via CSV).
+            if tx.bank_transaction_id and not existing_bank_tx_id:
+                if not dry_run:
+                    _patch_bank_transaction_id(
+                        client, tx_id, tx.bank_transaction_id
+                    )
         else:
             if dry_run:
                 result.imported += 1
@@ -2005,14 +2103,17 @@ def cli_cmd(
                 min(tx.transaction_date for tx in txs) if txs else None
             )
             dedup_end = max(tx.transaction_date for tx in txs) if txs else None
-            existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
+            existing: dict[
+                tuple[str, str, str], list[tuple[str, str, str]]
+            ] = {}
+            existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
             if txs and dedup_start is not None and dedup_end is not None:
                 if interactive:
                     with console.status(
                         f"[bold]Fetching existing transactions "
                         f"({dedup_start} -> {dedup_end})..."
                     ):
-                        existing = _fetch_existing(
+                        existing, existing_by_bank_id = _fetch_existing(
                             client,
                             account_id,
                             dedup_start,
@@ -2020,7 +2121,7 @@ def cli_cmd(
                             user_timezone,
                         )
                 else:
-                    existing = _fetch_existing(
+                    existing, existing_by_bank_id = _fetch_existing(
                         client,
                         account_id,
                         dedup_start,
@@ -2061,6 +2162,7 @@ def cli_cmd(
                         user_timezone,
                         _progress_cb,
                         existing=existing,
+                        existing_by_bank_id=existing_by_bank_id,
                         dry_run=dry_run,
                     )
                     progress.update(
@@ -2076,6 +2178,7 @@ def cli_cmd(
                     client,
                     user_timezone,
                     existing=existing,
+                    existing_by_bank_id=existing_by_bank_id,
                     dry_run=dry_run,
                 )
 

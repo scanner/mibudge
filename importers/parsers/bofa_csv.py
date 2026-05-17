@@ -156,6 +156,13 @@ _TYPE_RULES: list[TypeRule] = [
         re.compile(r"\b(MOBILE\s+)?PURCHASE\b", re.IGNORECASE),
         "signature_purchase",
     ),
+    # BofA debit-card (checkcard) transactions -- e.g.
+    # "CHECKCARD ACLU XXX-XX92543 NY ON 05/15".
+    TypeRule(
+        "checkcard",
+        re.compile(r"\bCHECKCARD\b", re.IGNORECASE),
+        "pin_purchase",
+    ),
     TypeRule("payroll", re.compile(r"\bPAYROLL\b", re.IGNORECASE), "ach"),
     TypeRule(
         "direct-deposit",

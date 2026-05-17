@@ -562,6 +562,15 @@ class TransactionSerializer(serializers.ModelSerializer):
     )
 
     # Counterpart on another account, populated asynchronously by the
+    # Bank-supplied stable per-transaction identifier.  editable=False
+    # on the model, so must be declared explicitly to be writable here.
+    # Writable on both create (importer supplies it) and PATCH (backfill
+    # for transactions imported before this field existed).
+    #
+    bank_transaction_id = serializers.CharField(
+        max_length=256, required=False, allow_null=True, allow_blank=True
+    )
+
     # cross-account linker (moneypools.linking). Exposed as a plain
     # UUID so the UI can render an affordance without needing a full
     # nested serializer round-trip. Read-only: linking is controlled
@@ -586,6 +595,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "memo",
             "raw_description",
             "description",
+            "bank_transaction_id",
             "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",

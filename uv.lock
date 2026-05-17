@@ -133,8 +133,8 @@ wheels = [
 
 [[package]]
 name = "bofa-scraper"
-version = "1.0.2"
-source = { editable = "../../github/bofa_scraper" }
+version = "1.0.3.dev0"
+source = { editable = "/Users/scanner/src/github/bofa_scraper" }
 dependencies = [
     { name = "selenium" },
 ]
@@ -1513,7 +1513,7 @@ dev = [
     { name = "werkzeug" },
 ]
 importers-bofa = [
-    { name = "bofa-scraper", editable = "../../github/bofa_scraper" },
+    { name = "bofa-scraper", editable = "/Users/scanner/src/github/bofa_scraper" },
     { name = "selenium" },
 ]
 

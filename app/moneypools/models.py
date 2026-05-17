@@ -910,6 +910,20 @@ class Transaction(TransactionBaseClass):
     memo = models.TextField(max_length=512, null=True, blank=True)
     raw_description = models.TextField(max_length=512, editable=False)
 
+    # Opaque identifier assigned by the bank for this transaction. When set
+    # it is the same value for both the pending and settled versions of the
+    # same transaction, enabling reliable dedup across state transitions.
+    # Null for transactions imported before this field was added or from
+    # sources that do not supply a bank-side ID (CSV exports, OFX).
+    #
+    bank_transaction_id = models.CharField(
+        max_length=256,
+        null=True,
+        blank=True,
+        editable=False,
+        db_index=True,
+    )
+
     # TODO: Initial value of the description is a cleaned up version of the
     #       raw_description. It is added in post processing at the same time
     #       that `party` is derived. Initially it is set to the same value as

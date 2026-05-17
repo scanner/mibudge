@@ -46,6 +46,7 @@ class ParsedTransaction:
     running_balance: Decimal
     transaction_type: str
     pending: bool = False
+    bank_transaction_id: str | None = None
 
 
 ########################################################################

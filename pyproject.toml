@@ -97,7 +97,9 @@ importers-bofa = [
 ]
 
 [tool.uv.sources]
-bofa-scraper = { path = "../../github/bofa_scraper", editable = true }
+# TEMPORARY: pinned to local checkout while running_balance / uuid branch is in progress.
+# Revert to: bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", branch = "main" }
+bofa-scraper = { path = "/Users/scanner/src/github/bofa_scraper", editable = true }
 
 ########################################################################
 # Tool configurations
