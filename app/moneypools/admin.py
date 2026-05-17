@@ -164,8 +164,15 @@ class TransactionAllocationInline(admin.TabularInline):
 class BankAdmin(admin.ModelAdmin):
     list_display = ("name", "routing_number", "id")
     search_fields = ("name", "routing_number")
-    readonly_fields = ("id",)
-    fields = ("id", "name", "routing_number")
+    readonly_fields = ("id", "created_at", "modified_at")
+    fields = (
+        "id",
+        "name",
+        "routing_number",
+        "default_currency",
+        "created_at",
+        "modified_at",
+    )
 
 
 ########################################################################
@@ -194,6 +201,7 @@ class BankAccountAdmin(admin.ModelAdmin):
         "name",
         "bank",
         "account_type",
+        "currency",
         "account_number",
         "owners",
         "group",
@@ -201,6 +209,10 @@ class BankAccountAdmin(admin.ModelAdmin):
         "available_balance",
         "unallocated_budget",
         "link_aliases",
+        "last_imported_at",
+        "last_posted_through",
+        "created_at",
+        "modified_at",
     )
 
     ####################################################################
@@ -238,13 +250,25 @@ class BankAccountAdmin(admin.ModelAdmin):
         account_number remains editable so it can be filled in later.
         """
         if obj is None:
-            return ("id", "unallocated_budget")
+            return (
+                "id",
+                "unallocated_budget",
+                "last_imported_at",
+                "last_posted_through",
+                "created_at",
+                "modified_at",
+            )
         return (
             "id",
             "bank",
+            "currency",
             "posted_balance",
             "available_balance",
             "unallocated_budget",
+            "last_imported_at",
+            "last_posted_through",
+            "created_at",
+            "modified_at",
         )
 
 
@@ -279,16 +303,24 @@ class BudgetAdmin(admin.ModelAdmin):
         "budget_type",
         "funding_type",
         "balance",
+        "funded_amount",
         "target_balance",
+        "funding_amount",
         "target_date",
         "funding_schedule",
         "recurrence_schedule",
         "fillup_goal",
+        "complete",
         "paused",
         "archived",
         "archived_at",
+        "last_funded_on",
+        "last_recurrence_on",
+        "auto_spend",
         "memo",
         "image",
+        "created_at",
+        "modified_at",
     )
 
     ####################################################################
@@ -310,11 +342,13 @@ class BudgetAdmin(admin.ModelAdmin):
             "funding_type",
             "balance",
             "target_balance",
+            "funding_amount",
             "target_date",
             "funding_schedule",
             "recurrence_schedule",
             "fillup_goal",
             "paused",
+            "auto_spend",
             "memo",
             "image",
         )
@@ -330,8 +364,29 @@ class BudgetAdmin(admin.ModelAdmin):
         bank_account is immutable, archived fields are signal-managed.
         """
         if obj is None:
-            return ("id", "archived", "archived_at")
-        return ("id", "bank_account", "archived", "archived_at")
+            return (
+                "id",
+                "funded_amount",
+                "complete",
+                "archived",
+                "archived_at",
+                "last_funded_on",
+                "last_recurrence_on",
+                "created_at",
+                "modified_at",
+            )
+        return (
+            "id",
+            "bank_account",
+            "funded_amount",
+            "complete",
+            "archived",
+            "archived_at",
+            "last_funded_on",
+            "last_recurrence_on",
+            "created_at",
+            "modified_at",
+        )
 
 
 ########################################################################
@@ -366,9 +421,11 @@ class TransactionAdmin(admin.ModelAdmin):
         "posted_date",
         "transaction_date",
         "created_at",
+        "modified_at",
         "amount",
         "transaction_type",
         "pending",
+        "bank_transaction_id",
         "description",
         "raw_description",
         "party",
@@ -387,7 +444,9 @@ class TransactionAdmin(admin.ModelAdmin):
         "posted_date",
         "transaction_date",
         "created_at",
+        "modified_at",
         "pending",
+        "bank_transaction_id",
         "raw_description",
         "bank_account_posted_balance",
         "bank_account_available_balance",
@@ -416,8 +475,17 @@ class TransactionAllocationAdmin(admin.ModelAdmin):
         "category",
         "budget_balance",
         "memo",
+        "created_at",
+        "modified_at",
     )
-    readonly_fields = ("id", "transaction", "amount", "budget_balance")
+    readonly_fields = (
+        "id",
+        "transaction",
+        "amount",
+        "budget_balance",
+        "created_at",
+        "modified_at",
+    )
 
 
 ########################################################################
@@ -538,8 +606,13 @@ class InternalTransactionAdmin(admin.ModelAdmin):
             "src_budget",
             "dst_budget",
             "actor",
+            "effective_date",
             "src_budget_balance",
             "dst_budget_balance",
+            "system_event_kind",
+            "system_event_date",
+            "created_at",
+            "modified_at",
         )
 
     ####################################################################
@@ -557,8 +630,13 @@ class InternalTransactionAdmin(admin.ModelAdmin):
             "src_budget",
             "dst_budget",
             "actor",
+            "effective_date",
             "src_budget_balance",
             "dst_budget_balance",
+            "system_event_kind",
+            "system_event_date",
+            "created_at",
+            "modified_at",
         )
 
     ####################################################################
