@@ -1105,17 +1105,26 @@ def cli_cmd(
                         resolve_result.resolved_amount_changed,
                     )
 
-                # Pre-fetch dedup window (settled transactions only)
+                # settled_txs is still needed to guard _mark_imported below.
                 settled_txs = [
                     tx for tx in statement.transactions if not tx.pending
                 ]
+                # Pre-fetch dedup window using ALL transactions (settled +
+                # pending).  Pending transactions use date.today() as their
+                # posted_date, so limiting the range to settled dates leaves
+                # previously-imported pending transactions outside the window
+                # and causes them to be re-imported on every run.
                 existing: dict[
                     tuple[str, str, str], list[tuple[str, str, str]]
                 ] = {}
                 existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
-                if settled_txs:
-                    dedup_start = min(tx.transaction_date for tx in settled_txs)
-                    dedup_end = max(tx.transaction_date for tx in settled_txs)
+                if statement.transactions:
+                    dedup_start = min(
+                        tx.transaction_date for tx in statement.transactions
+                    )
+                    dedup_end = max(
+                        tx.transaction_date for tx in statement.transactions
+                    )
                     if interactive:
                         with console.status(
                             f"[bold]Fetching existing transactions "

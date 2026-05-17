@@ -12,9 +12,9 @@ Useful for:
 
 Usage::
 
-    uv run python -m importers.import_bofa_saved \\
-        saved/2026-05-15-103045-1234.json \\
-        saved/2026-05-15-103045-5678.json \\
+    uv run python -m importers.import_bofa_saved \
+        saved/2026-05-15-103045-1234.json \
+        saved/2026-05-15-103045-5678.json \
         [--dry-run] [--run-funding] [--verbose]
 """
 
@@ -40,6 +40,7 @@ from importers.import_bofa_live import (
     _build_statement,
     _extract_last_four,
     _resolve_pending_transactions,
+    _resolve_truncated_descriptions,
     load_saved_scrape,
 )
 from importers.import_transactions import (
@@ -298,6 +299,9 @@ def cli_cmd(
                     any_error = True
                     continue
 
+                # Must run before _fetch_existing so that any pending rows
+                # resolved here show up in the dedup map as settled and are
+                # not re-imported as new transactions.
                 resolve_result = _resolve_pending_transactions(
                     statement,
                     bank_account_id,
@@ -313,16 +317,25 @@ def cli_cmd(
                         resolve_result.resolved_amount_changed,
                     )
 
+                # Capture settled list now; used later to gate _mark_imported.
                 settled_txs = [
                     tx for tx in statement.transactions if not tx.pending
                 ]
+
+                # Dedup window spans ALL transactions (settled + pending) so
+                # that pending rows -- whose date is today -- are not outside
+                # the fetch range and re-imported on every run.
                 existing: dict[
                     tuple[str, str, str], list[tuple[str, str, str]]
                 ] = {}
                 existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
-                if settled_txs:
-                    dedup_start = min(tx.transaction_date for tx in settled_txs)
-                    dedup_end = max(tx.transaction_date for tx in settled_txs)
+                if statement.transactions:
+                    dedup_start = min(
+                        tx.transaction_date for tx in statement.transactions
+                    )
+                    dedup_end = max(
+                        tx.transaction_date for tx in statement.transactions
+                    )
                     if interactive:
                         with console.status(
                             f"[bold]Fetching existing transactions "
@@ -343,6 +356,14 @@ def cli_cmd(
                             dedup_end,
                             user_timezone,
                         )
+
+                # BofA's web UI truncates long ACH descriptions with '...'.
+                # Map them to the full version from a prior CSV import so the
+                # (date, amount, description) dedup key matches.
+                if existing:
+                    statement = _resolve_truncated_descriptions(
+                        statement, existing
+                    )
 
                 result = import_statement(
                     statement,
