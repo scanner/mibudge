@@ -54,7 +54,6 @@ const existingRecurrence = extractDtstart(props.budget?.recurrence_schedule ?? D
 const recurrenceSchedule = ref(existingRecurrence.rrule);
 const nextDueDate = ref(existingRecurrence.dtstart ?? "");
 
-const withFillupGoal = ref(props.budget?.with_fillup_goal ?? false);
 const paused = ref(props.budget?.paused ?? false);
 
 const saving = ref(false);
@@ -94,7 +93,6 @@ async function submit() {
     payload.recurrence_schedule = nextDueDate.value
       ? combineDtstart(recurrenceSchedule.value, nextDueDate.value)
       : recurrenceSchedule.value;
-    payload.with_fillup_goal = withFillupGoal.value;
   } else if (isCapped.value) {
     // Capped always uses Fixed Amount funding.
     payload.funding_type = "F";
@@ -353,29 +351,6 @@ async function submit() {
       </div>
 
       <SchedulePicker v-model="fundingSchedule" label="Funding schedule" />
-
-      <!-- Fill-up goal toggle -->
-      <label
-        class="flex cursor-pointer items-center justify-between rounded-subcard border border-neutral-200 bg-white px-4 py-3"
-      >
-        <div>
-          <div class="text-[15px] font-medium text-neutral-900">Fill-up goal</div>
-          <div class="mt-0.5 text-xs text-neutral-500">
-            Saves for the next cycle while this one is active
-          </div>
-        </div>
-        <div class="relative">
-          <input v-model="withFillupGoal" type="checkbox" class="sr-only" />
-          <div
-            class="h-6 w-10 rounded-full transition-colors"
-            :class="withFillupGoal ? 'bg-ocean-400' : 'bg-neutral-300'"
-          />
-          <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-            :class="withFillupGoal ? 'translate-x-4' : 'translate-x-0.5'"
-          />
-        </div>
-      </label>
 
       <!-- Start paused toggle -->
       <label

@@ -67,7 +67,6 @@ export interface Budget {
   funding_amount_currency: string;
   funding_type: "D" | "F"; // D = Target Date, F = Fixed Amount
   target_date: string | null;
-  with_fillup_goal: boolean;
   fillup_goal: string | null;
   complete: boolean;
   paused: boolean;
