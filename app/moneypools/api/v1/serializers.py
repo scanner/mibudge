@@ -562,6 +562,15 @@ class TransactionSerializer(serializers.ModelSerializer):
     )
 
     # Counterpart on another account, populated asynchronously by the
+    # Bank-supplied stable per-transaction identifier.  editable=False
+    # on the model, so must be declared explicitly to be writable here.
+    # Writable on both create (importer supplies it) and PATCH (backfill
+    # for transactions imported before this field existed).
+    #
+    bank_transaction_id = serializers.CharField(
+        max_length=256, required=False, allow_null=True, allow_blank=True
+    )
+
     # cross-account linker (moneypools.linking). Exposed as a plain
     # UUID so the UI can render an affordance without needing a full
     # nested serializer round-trip. Read-only: linking is controlled
@@ -586,6 +595,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "memo",
             "raw_description",
             "description",
+            "bank_transaction_id",
             "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
@@ -1129,4 +1139,51 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
                     )
                 }
             )
+        return attrs
+
+
+########################################################################
+########################################################################
+#
+class ResolvePendingSerializer(serializers.Serializer):
+    """Input serializer for the resolve-pending action.
+
+    Validates the settled posted_date and optional final amount.
+    Requires ``transaction`` in the serializer context for sign validation.
+    """
+
+    posted_date = serializers.DateTimeField()
+    amount = DRFMoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default_currency=get_default_currency(),
+        required=False,
+        allow_null=True,
+    )
+
+    ####################################################################
+    #
+    def validate(self, attrs: dict) -> dict:
+        """Reject amount sign changes relative to the original transaction.
+
+        Args:
+            attrs: Validated field data.
+
+        Returns:
+            The validated attrs dict.
+
+        Raises:
+            ValidationError: If the supplied amount has the wrong sign.
+        """
+        amount = attrs.get("amount")
+        transaction = self.context.get("transaction")
+        if amount is not None and transaction is not None:
+            if (amount.amount > 0) != (transaction.amount.amount > 0):
+                raise serializers.ValidationError(
+                    {
+                        "amount": (
+                            "Amount sign must match the original transaction."
+                        )
+                    }
+                )
         return attrs

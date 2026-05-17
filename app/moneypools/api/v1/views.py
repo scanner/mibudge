@@ -61,6 +61,7 @@ from .serializers import (
     BankSerializer,
     BudgetSerializer,
     InternalTransactionSerializer,
+    ResolvePendingSerializer,
     TransactionAllocationSerializer,
     TransactionSerializer,
     TransactionSplitsSerializer,
@@ -811,6 +812,59 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             allocations, many=True
         )
         return Response(response_serializer.data)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Resolve a pending transaction to posted",
+        description=(
+            "Transition a pending transaction to posted status. "
+            "Supplies the bank-confirmed posted date and optionally a "
+            "final settled amount (which may differ from the pending "
+            "estimate). The bank account's posted_balance is credited; "
+            "if the amount changed, available_balance and the "
+            "Unallocated allocation are adjusted atomically."
+        ),
+        request=ResolvePendingSerializer,
+        responses={200: TransactionSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="resolve-pending")
+    def resolve_pending(
+        self, request: Request, id: str | None = None
+    ) -> Response:
+        """Transition a pending transaction to posted.
+
+        Args:
+            request: DRF request with body
+                ``{"posted_date": "<iso-datetime>", "amount": "<value>"}``.
+                ``amount`` is optional; when omitted the original pending
+                amount is used as the final settled amount.
+            id: UUID of the pending transaction to resolve.
+
+        Returns:
+            Response containing the updated Transaction serialized by
+            ``TransactionSerializer``.
+        """
+        transaction = self.get_object()
+        if not transaction.pending:
+            raise ValidationError("Transaction is not pending.")
+
+        serializer = ResolvePendingSerializer(
+            data=request.data,
+            context={"transaction": transaction},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            updated = transaction_svc.resolve_pending_to_posted(
+                transaction,
+                new_posted_date=serializer.validated_data["posted_date"],
+                new_amount=serializer.validated_data.get("amount"),
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+        return Response(TransactionSerializer(updated).data)
 
 
 ########################################################################

@@ -164,6 +164,36 @@ A file that fails its own consistency check is rejected before touching the serv
 
 ---
 
+## Pending Transactions
+
+Banks often surface in-flight transactions (authorizations not yet settled) before they post. mibudge supports this natively: a transaction can be imported with `pending=True`, which affects `available_balance` immediately but not `posted_balance` until it settles.
+
+The BofA live scraper is the current importer that produces pending transactions — BofA shows "Processing" in the date column for unsettled items. Any future importer that can distinguish pending from posted transactions can use the same mechanism.
+
+### What you can and cannot do with pending transactions
+
+- **Pending transactions are display-only.** They are imported with a single allocation to the account's Unallocated budget, and that allocation cannot be changed while the transaction is pending. Attempting to split a pending transaction is rejected.
+- Once a pending transaction settles, it transitions to posted status and behaves like any other transaction — you can split it, allocate it, and so on.
+
+### How pending transactions settle
+
+Each time the live scraper runs, it performs a pending-resolution pass before importing new transactions. For every settled scraped transaction it looks for a matching pending row in mibudge — matching on identical `raw_description` and a `posted_date` within 5 calendar days. When a match is found, mibudge atomically:
+
+1. Clears the `pending` flag
+2. Updates `posted_date` to the settled date
+3. Credits `posted_balance` by the final amount
+4. If the final settled amount differs from the pending estimate, adjusts `available_balance` by the delta and updates the Unallocated allocation
+
+The resolution pass runs before the normal dedup check, so settled rows do not appear as duplicate imports.
+
+Pending resolution is also available directly via the REST API (`POST /api/v1/transactions/<id>/resolve-pending/`) for integrations that handle their own matching logic.
+
+### Known limitation: stuck-pending rows
+
+If a pending transaction never settles (cancelled authorization, returned charge, etc.) the row will remain pending in mibudge indefinitely. Each subsequent scrape that sees the same pending transaction will attempt to match it but find no settled counterpart, leaving it untouched. However, if the bank later shows the same description as a new settled transaction on a different date, the description-match heuristic may resolve it incorrectly. In that edge case, delete the stuck-pending row manually and let the next scrape import the settled version fresh.
+
+---
+
 ## Budget Backfill
 
 Interactively allocates historical transactions to a single budget, month by month. Use this when you've added a new budget and want to assign past transactions to it without doing it one-by-one in the UI.

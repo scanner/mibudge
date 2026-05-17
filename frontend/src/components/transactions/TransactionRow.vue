@@ -115,36 +115,63 @@ function fmtMoney(raw: string): string {
   const formatted = abs % 1 === 0 ? `$${abs.toFixed(0)}` : `$${abs.toFixed(2)}`;
   return n < 0 ? `-${formatted}` : formatted;
 }
+
+function fmtAccountBalance(raw: string, currency: string): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(Number.parseFloat(raw));
+}
 </script>
 
 <template>
   <article
     class="group/row cursor-pointer rounded-card border border-neutral-200 bg-white transition-colors hover:bg-neutral-50"
-    :class="allocInfo.isUnallocated ? 'border-l-[3px] border-l-ocean-400' : ''"
+    :class="
+      transaction.pending
+        ? 'border-l-[3px] border-l-amber-400'
+        : allocInfo.isUnallocated
+          ? 'border-l-[3px] border-l-ocean-400'
+          : ''
+    "
     @click="router.push(`/transactions/${transaction.id}/`)"
   >
     <div class="px-4 py-3">
-      <!-- Row 1: party name + amount + optional remove -->
+      <!-- Row 1: party name + amount (+ account balance below) + optional remove -->
       <div class="flex items-start justify-between gap-2">
         <span class="min-w-0 truncate text-[15px] font-medium text-neutral-900">
           {{ partyName }}
         </span>
-        <div class="flex flex-none items-center gap-1.5">
-          <MoneyAmount
-            :amount="transaction.amount"
-            :currency="transaction.amount_currency"
-            size="md"
-            coloured
-          />
-          <button
-            v-if="removable"
-            type="button"
-            class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 opacity-0 transition-opacity hover:bg-coral-50 hover:text-coral-600 group-hover/row:opacity-100"
-            aria-label="Remove from budget"
-            @click.stop="emit('remove', transaction.id)"
+        <div class="flex flex-none flex-col items-end">
+          <div class="flex items-center gap-1.5">
+            <MoneyAmount
+              :amount="transaction.amount"
+              :currency="transaction.amount_currency"
+              size="md"
+              coloured
+            />
+            <button
+              v-if="removable"
+              type="button"
+              class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 opacity-0 transition-opacity hover:bg-coral-50 hover:text-coral-600 group-hover/row:opacity-100"
+              aria-label="Remove from budget"
+              @click.stop="emit('remove', transaction.id)"
+            >
+              <IconX class="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <span
+            v-if="transaction.bank_account_available_balance"
+            class="tabular-nums text-[11px] text-secondary"
           >
-            <IconX class="h-3.5 w-3.5" />
-          </button>
+            {{
+              fmtAccountBalance(
+                transaction.bank_account_available_balance,
+                transaction.bank_account_available_balance_currency,
+              )
+            }}
+          </span>
         </div>
       </div>
 
@@ -153,9 +180,15 @@ function fmtMoney(raw: string): string {
         <span class="min-w-0 truncate text-[12px] italic text-secondary">
           Unallocated — tap to assign
         </span>
-        <span v-if="typeLabel" class="flex-none text-[12px] text-secondary">
-          {{ typeLabel }}
-        </span>
+        <div class="flex flex-none items-center gap-1.5">
+          <span
+            v-if="transaction.pending"
+            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
+          >
+            Pending
+          </span>
+          <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+        </div>
       </div>
 
       <!-- Row 2 (single budget): name + running balance -->
@@ -164,9 +197,15 @@ function fmtMoney(raw: string): string {
           {{ allocInfo.single.name }}
           <span class="text-secondary">({{ fmtMoney(allocInfo.single.balance) }} left)</span>
         </span>
-        <span v-if="typeLabel" class="flex-none text-[12px] text-secondary">
-          {{ typeLabel }}
-        </span>
+        <div class="flex flex-none items-center gap-1.5">
+          <span
+            v-if="transaction.pending"
+            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
+          >
+            Pending
+          </span>
+          <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+        </div>
       </div>
 
       <!-- Rows 2+ (split): header row + one line per leg -->
@@ -177,9 +216,15 @@ function fmtMoney(raw: string): string {
           >
             Split
           </span>
-          <span v-if="typeLabel" class="flex-none text-[12px] text-secondary">
-            {{ typeLabel }}
-          </span>
+          <div class="flex flex-none items-center gap-1.5">
+            <span
+              v-if="transaction.pending"
+              class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
+            >
+              Pending
+            </span>
+            <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+          </div>
         </div>
         <div
           v-for="(leg, i) in allocInfo.allLegs"
@@ -198,9 +243,15 @@ function fmtMoney(raw: string): string {
         </div>
       </div>
 
-      <!-- Row 2 (no alloc info): type label only -->
-      <div v-else-if="typeLabel" class="mt-0.5 flex justify-end">
-        <span class="text-[12px] text-secondary">{{ typeLabel }}</span>
+      <!-- Row 2 (no alloc info): type label + optional pending badge -->
+      <div v-else-if="typeLabel || transaction.pending" class="mt-0.5 flex justify-end gap-1.5">
+        <span
+          v-if="transaction.pending"
+          class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
+        >
+          Pending
+        </span>
+        <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
       </div>
     </div>
   </article>

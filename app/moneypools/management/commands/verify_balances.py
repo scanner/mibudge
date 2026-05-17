@@ -3,8 +3,10 @@ Verify the core balance invariants for every BankAccount.
 
 Three levels of checks are applied:
 
-  1. Account level -- sum(budget.balance) == posted_balance
+  1. Account level -- sum(budget.balance) == available_balance
      Every dollar in a BankAccount is accounted for by exactly one Budget.
+     Budget balances track available_balance (pending transactions reduce
+     both), so the comparison uses available_balance, not posted_balance.
      The service layer (transaction_allocation.create/update_amount/delete
      and internal_transaction.create/delete) maintains this invariant
      atomically on every operation.  Bulk writes (bulk_create/bulk_update)
@@ -309,7 +311,7 @@ def _check_budget_chain(
 #
 class Command(BaseCommand):
     help = (
-        "Verify sum(budget.balance)==posted_balance, allocation sums, and "
+        "Verify sum(budget.balance)==available_balance, allocation sums, and "
         "budget running-balance chains for every BankAccount. "
         "Exits non-zero on any failure."
     )
@@ -352,6 +354,9 @@ class Command(BaseCommand):
         account_failures: list[
             tuple[BankAccount, Decimal, Decimal, Decimal]
         ] = []
+        posted_failures: list[
+            tuple[BankAccount, Decimal, Decimal, Decimal]
+        ] = []
         tx_failures: list[tuple[Transaction, Decimal, Decimal]] = []
         chain_failures: list[tuple[Budget, list[str]]] = []
         goal_failures: list[tuple[Budget, str]] = []
@@ -360,29 +365,73 @@ class Command(BaseCommand):
             total_accounts += 1
 
             # ----------------------------------------------------------
-            # Level 1: sum(budget.balance) == posted_balance
+            # Level 1a: sum(budget.balance) == available_balance
+            # Level 1b: posted_balance == budget_sum - sum(pending amounts)
+            #
+            # available_balance and budget balances both reflect pending
+            # transactions (pending debits reduce available_balance and
+            # are allocated to budgets, reducing budget balances).
+            # posted_balance excludes pending transactions, so:
+            #   posted_balance == budget_sum - pending_debit_sum
             # ----------------------------------------------------------
             budget_sum: Decimal = Budget.objects.filter(
                 bank_account=account
             ).aggregate(total=Sum("balance"))["total"] or Decimal("0.00")
-            posted: Decimal = account.posted_balance.amount
-            delta = (posted - budget_sum).quantize(Decimal("0.01"))
 
-            if abs(delta) <= tolerance:
+            available: Decimal = account.available_balance.amount.quantize(
+                Decimal("0.01")
+            )
+            avail_delta = (available - budget_sum).quantize(Decimal("0.01"))
+
+            pending_sum: Decimal = Decimal(
+                Transaction.objects.filter(
+                    bank_account=account, pending=True
+                ).aggregate(total=Sum("amount"))["total"]
+                or 0
+            ).quantize(Decimal("0.01"))
+            posted: Decimal = account.posted_balance.amount.quantize(
+                Decimal("0.01")
+            )
+            expected_posted = (budget_sum - pending_sum).quantize(
+                Decimal("0.01")
+            )
+            posted_delta = (posted - expected_posted).quantize(Decimal("0.01"))
+
+            avail_ok = abs(avail_delta) <= tolerance
+            posted_ok = abs(posted_delta) <= tolerance
+
+            if avail_ok and posted_ok:
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"PASS  {account.name} ({str(account.id)[:8]}): "
-                        f"posted={posted}  budgets={budget_sum}  delta={delta}"
+                        f"available={available}  budgets={budget_sum}"
+                        f"  posted={posted}  pending={pending_sum}"
                     )
                 )
             else:
-                account_failures.append((account, posted, budget_sum, delta))
-                self.stdout.write(
-                    self.style.ERROR(
-                        f"FAIL  {account.name} ({str(account.id)[:8]}): "
-                        f"posted={posted}  budgets={budget_sum}  delta={delta}"
+                if not avail_ok:
+                    account_failures.append(
+                        (account, available, budget_sum, avail_delta)
                     )
-                )
+                    self.stdout.write(
+                        self.style.ERROR(
+                            f"FAIL  {account.name} ({str(account.id)[:8]}): "
+                            f"available={available}  budgets={budget_sum}"
+                            f"  delta={avail_delta}"
+                        )
+                    )
+                if not posted_ok:
+                    posted_failures.append(
+                        (account, posted, expected_posted, posted_delta)
+                    )
+                    self.stdout.write(
+                        self.style.ERROR(
+                            f"FAIL  {account.name} ({str(account.id)[:8]}): "
+                            f"posted={posted}  expected={expected_posted}"
+                            f"  delta={posted_delta}"
+                            f"  (pending={pending_sum})"
+                        )
+                    )
 
             # ----------------------------------------------------------
             # Level 2: sum(allocation.amount) == transaction.amount
@@ -464,26 +513,31 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(
             f"Checked {total_accounts} account(s):"
-            f"  {len(account_failures)} account-level failure(s),"
+            f"  {len(account_failures)} available-balance failure(s),"
+            f"  {len(posted_failures)} posted-balance failure(s),"
             f"  {len(tx_failures)} transaction failure(s),"
             f"  {len(chain_failures)} budget-chain failure(s),"
             f"  {len(goal_failures)} goal-invariant failure(s)."
         )
 
         any_failures = (
-            account_failures or tx_failures or chain_failures or goal_failures
+            account_failures
+            or posted_failures
+            or tx_failures
+            or chain_failures
+            or goal_failures
         )
 
         if account_failures:
             self.stdout.write("")
             self.stdout.write(
-                "Per-budget breakdown for account-level failures:"
+                "Per-budget breakdown for available-balance failures:"
             )
-            for account, posted, budget_sum, delta in account_failures:
+            for account, available, budget_sum, delta in account_failures:
                 self.stdout.write("")
                 self.stdout.write(
                     f"  {account.name} ({str(account.id)[:8]})"
-                    f"  posted={posted}  budgets={budget_sum}"
+                    f"  available={available}  budgets={budget_sum}"
                     f"  delta={delta}"
                 )
                 for budget in Budget.objects.filter(
@@ -497,7 +551,8 @@ class Command(BaseCommand):
 
         if any_failures:
             raise CommandError(
-                f"{len(account_failures)} account-level, "
+                f"{len(account_failures)} available-balance, "
+                f"{len(posted_failures)} posted-balance, "
                 f"{len(tx_failures)} transaction, "
                 f"{len(chain_failures)} budget-chain, "
                 f"{len(goal_failures)} goal-invariant failure(s) found."

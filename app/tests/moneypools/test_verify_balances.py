@@ -31,7 +31,7 @@ class TestVerifyBalances:
         bank_account_factory: Callable[..., BankAccount],
     ) -> None:
         """
-        GIVEN: a freshly created bank account with zero posted_balance
+        GIVEN: a freshly created bank account with zero available_balance
                and an auto-created zero-balance Unallocated budget
         WHEN:  verify_balances runs
         THEN:  the command succeeds with a PASS line for the account
@@ -44,21 +44,39 @@ class TestVerifyBalances:
 
     ####################################################################
     #
+    @pytest.mark.parametrize(
+        "balance_field,balance_value,expected_in_output",
+        [
+            (
+                "available_balance",
+                Money("100.00", "USD"),
+                "delta=100.00",
+            ),
+            (
+                "posted_balance",
+                Money("100.00", "USD"),
+                "delta=100.00",
+            ),
+        ],
+        ids=["available-mismatch", "posted-mismatch"],
+    )
     def test_mismatch_raises_command_error(
         self,
         bank_account_factory: Callable[..., BankAccount],
+        balance_field: str,
+        balance_value: Money,
+        expected_in_output: str,
     ) -> None:
         """
-        GIVEN: an account whose posted_balance does not equal the sum of
-               its budget balances
+        GIVEN: an account whose available_balance or posted_balance does not
+               match the expected value derived from budget balances
         WHEN:  verify_balances runs
-        THEN:  the command raises CommandError and reports the failing
-               account with a per-budget breakdown
+        THEN:  the command raises CommandError and reports FAIL with a delta
         """
         account = bank_account_factory()
-        # Force an invariant break by pushing posted_balance away from
-        # the sum of budget balances (which is zero for a fresh account).
-        account.posted_balance = Money("100.00", account.currency)
+        # Force an invariant break by pushing one balance field away from
+        # its expected value (budget sum is zero for a fresh account).
+        setattr(account, balance_field, balance_value)
         account.save()
 
         out = StringIO()
@@ -66,9 +84,28 @@ class TestVerifyBalances:
             call_command("verify_balances", stdout=out)
         output = out.getvalue()
         assert "FAIL" in output
-        assert "delta=100.00" in output
-        # Per-budget breakdown should name the Unallocated budget.
-        assert "Unallocated" in output
+        assert expected_in_output in output
+
+    ####################################################################
+    #
+    def test_mismatch_raises_command_error_budget_breakdown(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: an account whose available_balance does not equal the sum of
+               its budget balances
+        WHEN:  verify_balances runs
+        THEN:  the per-budget breakdown names the Unallocated budget
+        """
+        account = bank_account_factory()
+        account.available_balance = Money("100.00", account.currency)
+        account.save()
+
+        out = StringIO()
+        with pytest.raises(CommandError):
+            call_command("verify_balances", stdout=out)
+        assert "Unallocated" in out.getvalue()
 
     ####################################################################
     #
@@ -82,7 +119,7 @@ class TestVerifyBalances:
         THEN:  the account is reported as PASS
         """
         account = bank_account_factory()
-        account.posted_balance = Money("0.01", account.currency)
+        account.available_balance = Money("0.01", account.currency)
         account.save()
 
         out = StringIO()
@@ -124,7 +161,10 @@ class TestVerifyBalancesGoalInvariant:
             balance=Money("200.00", "USD"),
             funded_amount=Money("200.00", "USD"),
         )
-        # Keep Level 1 clean: posted_balance must equal sum of budget balances.
+        # Keep Level 1 clean: available_balance and posted_balance must both
+        # equal budget_sum (200). No pending transactions, so expected_posted
+        # == budget_sum - 0 == 200.
+        account.available_balance = Money("200.00", "USD")
         account.posted_balance = Money("200.00", "USD")
         account.save()
 
@@ -160,7 +200,9 @@ class TestVerifyBalancesGoalInvariant:
             balance=Money("200.00", "USD"),
             funded_amount=Money("50.00", "USD"),
         )
-        # Also adjust the account posted_balance so Level 1 stays clean.
+        # Also adjust both account balances so Level 1 stays clean.
+        # No pending transactions, so expected_posted == budget_sum == 200.
+        account.available_balance = Money("200.00", "USD")
         account.posted_balance = Money("200.00", "USD")
         account.save()
 

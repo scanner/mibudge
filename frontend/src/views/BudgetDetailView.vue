@@ -86,7 +86,7 @@ async function load() {
     budget.value = b;
     store.upsert(b);
     // Fetch fill-up budget if present
-    if (b.with_fillup_goal && b.fillup_goal) {
+    if (b.fillup_goal) {
       fillupBudget.value = await getBudget(b.fillup_goal);
     }
   } catch {
@@ -417,9 +417,9 @@ const nextFundingDisplay = computed((): NextFundingDisplay | null => {
 
   const today = parseLocalDate(todayDateStr(auth.timezone));
 
-  // For RECURRING+with_fillup, the API returns null on the parent. We
-  // display the fill-up goal's next_funding on the parent's detail page.
-  const isRecurringWithFillup = b.budget_type === "R" && b.with_fillup_goal && !!b.fillup_goal;
+  // For RECURRING budgets (which always have a fill-up goal), next_funding
+  // lives on the fill-up child, not the parent -- display it here instead.
+  const isRecurringWithFillup = b.budget_type === "R" && !!b.fillup_goal;
   const nf = isRecurringWithFillup ? (fillupBudget.value?.next_funding ?? null) : b.next_funding;
 
   if (!nf) return null;
@@ -680,15 +680,8 @@ async function submitMove() {
             </div>
             <div class="flex items-center justify-between gap-3 px-4 py-3">
               <span class="text-sm text-neutral-700">Fill-up goal</span>
-              <span
-                class="rounded-full px-2 py-0.5 text-xs font-medium"
-                :class="
-                  budget.with_fillup_goal
-                    ? 'bg-mint-50 text-mint-600'
-                    : 'bg-neutral-100 text-neutral-500'
-                "
-              >
-                {{ budget.with_fillup_goal ? "Enabled" : "Disabled" }}
+              <span class="rounded-full bg-mint-50 px-2 py-0.5 text-xs font-medium text-mint-600">
+                Enabled
               </span>
             </div>
           </template>
