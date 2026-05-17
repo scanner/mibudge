@@ -158,7 +158,7 @@ class TestRecomputeAfterOrmDelete:
         with pytest.raises(CommandError):
             call_command("verify_balances", stdout=out)
         output = out.getvalue()
-        assert "1 account-level failure(s)" in output
+        assert "1 available-balance failure(s)" in output
         assert "1 budget-chain failure(s)" in output
         assert unallocated.name in output
 
@@ -178,7 +178,7 @@ class TestRecomputeAfterOrmDelete:
         call_command("verify_balances", stdout=out)
         output = out.getvalue()
         assert "FAIL" not in output
-        assert "0 account-level failure(s)" in output
+        assert "0 available-balance failure(s)" in output
         assert "0 budget-chain failure(s)" in output
 
         # posted_balance and available_balance are fixed to match
