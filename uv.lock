@@ -133,14 +133,11 @@ wheels = [
 
 [[package]]
 name = "bofa-scraper"
-version = "1.0.3.dev0"
-source = { editable = "/Users/scanner/src/github/bofa_scraper" }
+version = "1.0.4"
+source = { git = "https://github.com/scanner/bofa_scraper?tag=v1.0.4#961d1017d9c4be1d9fd1e21fcbeb7f6db36296c3" }
 dependencies = [
     { name = "selenium" },
 ]
-
-[package.metadata]
-requires-dist = [{ name = "selenium" }]
 
 [[package]]
 name = "celery"
@@ -1513,7 +1510,7 @@ dev = [
     { name = "werkzeug" },
 ]
 importers-bofa = [
-    { name = "bofa-scraper", editable = "/Users/scanner/src/github/bofa_scraper" },
+    { name = "bofa-scraper", git = "https://github.com/scanner/bofa_scraper?tag=v1.0.4" },
     { name = "selenium" },
 ]
 
