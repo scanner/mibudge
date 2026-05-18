@@ -207,14 +207,13 @@ def next_funding_info(
     if amount.amount <= Decimal("0"):
         return None
 
-    # An event is deferred whenever the account's import data isn't current
-    # through the event date -- regardless of whether the event is past or
-    # future.  A future event with stale data will fail the gate when its
-    # date arrives; showing it as deferred now avoids a false sense of
-    # certainty.
-    deferred = (
-        account.last_posted_through is None
-        or account.last_posted_through < next_date
+    # Deferred when there is no import data at all (the account has never
+    # been imported so any funding amount could be wrong), or when the event
+    # date is today/past-due but the account data hasn't caught up to it yet.
+    # A future event on a regularly-imported account is NOT deferred -- data
+    # will be refreshed before the event date arrives.
+    deferred = account.last_posted_through is None or (
+        next_date <= today and account.last_posted_through < next_date
     )
 
     return NextFundingInfo(date=next_date, amount=amount, deferred=deferred)

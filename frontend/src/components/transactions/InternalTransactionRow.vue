@@ -45,9 +45,13 @@ const displayAmount = computed(() => {
 
 function fmt(amount: string): string {
   const n = Number.parseFloat(amount);
-  const abs = Math.abs(n);
-  const s = abs % 1 === 0 ? `$${abs.toFixed(0)}` : `$${abs.toFixed(2)}`;
-  return n < 0 ? `-${s}` : s;
+  const currency = itx.value.amount_currency ?? "USD";
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(Math.abs(n));
+  return n < 0 ? `-${formatted}` : formatted;
 }
 </script>
 

@@ -653,6 +653,11 @@ class Budget(MoneyPoolBaseClass):
 
     ####################################################################
     #
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bank_account.name})"
+
+    ####################################################################
+    #
     def clean(self) -> None:
         """Validate budget type / funding type consistency.
 
@@ -1040,7 +1045,7 @@ class InternalTransaction(TransactionBaseClass):
     # transfers are slotted correctly without any extra input.  Backfill
     # sets this to the period-boundary datetime so running-balance snapshots
     # place the ITx at the right point in the economic timeline.
-    effective_date = models.DateTimeField()
+    effective_date = models.DateTimeField(editable=False)
     src_budget_balance = MoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
