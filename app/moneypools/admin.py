@@ -8,10 +8,11 @@ from typing import Any
 #
 from django import forms
 from django.contrib import admin
-from django.contrib.admin.widgets import AdminDateWidget
+from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.http import HttpRequest
+from djmoney.money import Money
 
 # Project imports
 #
@@ -25,6 +26,9 @@ from .models import (
     Transaction,
     TransactionAllocation,
 )
+from .service import bank_account as bank_account_svc
+from .service import budget as budget_svc
+from .service import internal_transaction as itx_svc
 
 ########################################################################
 ########################################################################
@@ -271,6 +275,40 @@ class BankAccountAdmin(admin.ModelAdmin):
             "modified_at",
         )
 
+    ####################################################################
+    #
+    def save_model(
+        self,
+        request: HttpRequest,
+        obj: BankAccount,
+        form: BankAccountForm,
+        change: bool,
+    ) -> None:
+        """Use the service layer on creation so the Unallocated budget is seeded."""
+        if not change:
+            cleaned = form.cleaned_data
+            optional = {
+                field: cleaned[field]
+                for field in (
+                    "account_number",
+                    "group",
+                    "link_aliases",
+                    "posted_balance",
+                    "available_balance",
+                )
+                if cleaned.get(field) is not None
+            }
+            account = bank_account_svc.create(
+                bank=cleaned["bank"],
+                name=cleaned["name"],
+                account_type=cleaned["account_type"],
+                owners=list(cleaned.get("owners") or []),
+                **optional,
+            )
+            form.instance = account
+            return
+        super().save_model(request, obj, form, change)
+
 
 ########################################################################
 ########################################################################
@@ -387,6 +425,44 @@ class BudgetAdmin(admin.ModelAdmin):
             "created_at",
             "modified_at",
         )
+
+    ####################################################################
+    #
+    def save_model(
+        self,
+        request: HttpRequest,
+        obj: Budget,
+        form: BudgetForm,
+        change: bool,
+    ) -> None:
+        """Use the service layer on creation so scheduling state and fill-up goals are initialized."""
+        if not change:
+            cleaned = form.cleaned_data
+            optional = {
+                field: cleaned[field]
+                for field in (
+                    "balance",
+                    "target_date",
+                    "funding_schedule",
+                    "recurrence_schedule",
+                    "fillup_goal",
+                    "paused",
+                    "memo",
+                    "image",
+                )
+                if cleaned.get(field) is not None
+            }
+            budget = budget_svc.create(
+                bank_account=cleaned["bank_account"],
+                name=cleaned["name"],
+                budget_type=cleaned["budget_type"],
+                funding_type=cleaned["funding_type"],
+                target_balance=cleaned["target_balance"],
+                **optional,
+            )
+            form.instance = budget
+            return
+        super().save_model(request, obj, form, change)
 
 
 ########################################################################
@@ -513,6 +589,18 @@ class InternalTransactionForm(forms.ModelForm):
     dst_budget: forms.ModelChoiceField = forms.ModelChoiceField(
         queryset=Budget.objects.all()
     )
+    # Optional: backdate the transfer so it slots into the correct position
+    # in the running-balance chain.  Defaults to now() in the service layer
+    # when left blank.  Use this when manually reversing and recreating a
+    # transfer to fix the running-balance display.
+    effective_date: forms.SplitDateTimeField = forms.SplitDateTimeField(
+        required=False,
+        widget=AdminSplitDateTime(),
+        help_text=(
+            "Leave blank to use the current time. "
+            "Set this to a past date/time to backdate the transfer."
+        ),
+    )
 
     ####################################################################
     #
@@ -548,7 +636,9 @@ class InternalTransactionForm(forms.ModelForm):
     ####################################################################
     #
     def save(self, commit: bool = True) -> InternalTransaction:
-        _apply_extra_fields(self, ("amount", "src_budget", "dst_budget"))
+        _apply_extra_fields(
+            self, ("amount", "src_budget", "dst_budget", "effective_date")
+        )
         return super().save(commit=commit)
 
 
@@ -598,7 +688,7 @@ class InternalTransactionAdmin(admin.ModelAdmin):
     ) -> tuple[str, ...]:
         """Show editable fields on creation, all fields when viewing."""
         if obj is None:
-            return ("amount", "src_budget", "dst_budget")
+            return ("amount", "src_budget", "dst_budget", "effective_date")
         return (
             "id",
             "bank_account",
@@ -648,10 +738,22 @@ class InternalTransactionAdmin(admin.ModelAdmin):
         form: InternalTransactionForm,
         change: bool,
     ) -> None:
-        """Set actor and bank_account automatically on creation."""
+        """Delegate to the service layer on creation so balances are updated."""
         if not change:
-            obj.actor_id = int(request.user.pk)  # type: ignore[arg-type]
-            obj.bank_account = obj.src_budget.bank_account
+            cleaned = form.cleaned_data
+            src: Budget = cleaned["src_budget"]
+            amount = Money(cleaned["amount"], src.balance.currency)
+            effective_date = cleaned.get("effective_date") or None
+            itx_svc.create(
+                bank_account=src.bank_account,
+                src_budget=src,
+                dst_budget=cleaned["dst_budget"],
+                amount=amount,
+                actor=request.user,  # type: ignore[arg-type]
+                effective_date=effective_date,
+            )
+            # The service created and saved the row; skip super().save_model()
+            return
         super().save_model(request, obj, form, change)
 
     ####################################################################

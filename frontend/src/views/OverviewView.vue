@@ -9,16 +9,19 @@
 
 // 3rd party imports
 //
-import { IconChevronRight } from "@tabler/icons-vue";
+import { IconBucket, IconChevronRight, IconRepeat, IconTarget } from "@tabler/icons-vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
 //
 import AppShell from "@/components/layout/AppShell.vue";
+import FillUpBand from "@/components/budgets/FillUpBand.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
+import StatusChip from "@/components/shared/StatusChip.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
+import { budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
 import { listAllocations } from "@/api/allocations";
 import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { listBudgets } from "@/api/budgets";
@@ -34,6 +37,7 @@ const ctx = useAccountContextStore();
 const budgetsStore = useBudgetsStore();
 
 const budgets = ref<Budget[]>([]);
+const fillupMap = ref(new Map<string, Budget>());
 const recentTx = ref<Transaction[]>([]);
 const allocsByTx = ref(new Map<string, TransactionAllocation[]>());
 const summary = ref<FundingSummary | null>(null);
@@ -58,36 +62,9 @@ const budgetNames = computed(() => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Progress percentage for a budget (0–100).  Returns null when there
-// is no meaningful target to compare against.
-//
-function progressPct(b: Budget): number | null {
-  const bal = Number.parseFloat(b.balance);
-  if (b.budget_type === "G" || b.budget_type === "C") {
-    const target = b.target_balance ? Number.parseFloat(b.target_balance) : null;
-    if (!target || target <= 0) return null;
-    return Math.min(100, (bal / target) * 100);
-  }
-  if (b.budget_type === "R") {
-    const funding = b.funding_amount ? Number.parseFloat(b.funding_amount) : null;
-    if (!funding || funding <= 0) return null;
-    return Math.min(100, (bal / funding) * 100);
-  }
-  return null;
-}
-
-function progressTone(b: Budget): "mint" | "ocean" | "amber" | "coral" {
-  const pct = progressPct(b);
-  if (pct === null) return "ocean";
-  if (b.budget_type === "G" || b.budget_type === "C") {
-    if (pct >= 100) return "mint";
-    if (pct >= 50) return "ocean";
-    return "amber";
-  }
-  if (pct >= 80) return "mint";
-  if (pct >= 40) return "ocean";
-  if (pct >= 20) return "amber";
-  return "coral";
+function fillupFor(b: Budget): Budget | undefined {
+  if (!b.fillup_goal) return undefined;
+  return fillupMap.value.get(b.fillup_goal);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -114,6 +91,9 @@ async function load() {
     budgets.value = budgetsPage.results
       .filter((b) => b.budget_type !== "A" && b.id !== unallocId)
       .slice(0, 6);
+    fillupMap.value = new Map(
+      budgetsPage.results.filter((b) => b.budget_type === "A").map((b) => [b.id, b]),
+    );
 
     const top5 = txPage.results.slice(0, 5);
     recentTx.value = top5;
@@ -240,26 +220,61 @@ onMounted(() => {
               <li
                 v-for="b in budgets"
                 :key="b.id"
-                class="cursor-pointer px-4 py-3 hover:bg-neutral-50"
+                class="cursor-pointer hover:bg-neutral-50"
                 @click="router.push(`/budgets/${b.id}/`)"
               >
-                <div class="mb-1.5 flex items-baseline justify-between gap-2">
-                  <span class="min-w-0 truncate text-[14px] font-medium text-neutral-900">
-                    {{ b.name }}
-                  </span>
-                  <MoneyAmount
-                    :amount="b.balance"
-                    :currency="b.balance_currency"
-                    size="sm"
-                    class="flex-none"
+                <div class="px-4 py-3">
+                  <div class="mb-1.5 flex items-baseline justify-between gap-2">
+                    <div class="flex min-w-0 items-center gap-1.5">
+                      <IconTarget
+                        v-if="b.budget_type === 'G'"
+                        class="h-3.5 w-3.5 flex-none text-neutral-400"
+                      />
+                      <IconRepeat
+                        v-else-if="b.budget_type === 'R'"
+                        class="h-3.5 w-3.5 flex-none text-neutral-400"
+                      />
+                      <IconBucket
+                        v-else-if="b.budget_type === 'C'"
+                        class="h-3.5 w-3.5 flex-none text-neutral-400"
+                      />
+                      <span class="min-w-0 truncate text-[14px] font-medium text-neutral-900">{{
+                        b.name
+                      }}</span>
+                    </div>
+                    <MoneyAmount
+                      :amount="b.balance"
+                      :currency="b.balance_currency"
+                      size="sm"
+                      class="flex-none"
+                    />
+                  </div>
+                  <ProgressBar
+                    :value="budgetProgress(b)"
+                    :tone="progressTone(budgetStatus(b))"
+                    :height="3"
+                    class="mb-1.5"
                   />
+                  <div class="flex items-center justify-between gap-2">
+                    <span
+                      v-if="b.next_funding && (b.budget_type === 'G' || b.budget_type === 'C')"
+                      class="truncate text-[12px] text-secondary"
+                    >
+                      <MoneyAmount
+                        :amount="b.next_funding.amount"
+                        :currency="b.next_funding.amount_currency"
+                        size="sm"
+                      />/event
+                    </span>
+                    <span v-else class="flex-1" />
+                    <StatusChip
+                      v-if="budgetStatus(b) !== 'progress'"
+                      :status="budgetStatus(b)"
+                      class="flex-none"
+                    />
+                  </div>
                 </div>
-                <ProgressBar
-                  v-if="progressPct(b) !== null"
-                  :value="progressPct(b)!"
-                  :tone="progressTone(b)"
-                  :height="3"
-                />
+                <FillUpBand v-if="fillupFor(b)" :budget="fillupFor(b)!" />
               </li>
             </ul>
           </div>

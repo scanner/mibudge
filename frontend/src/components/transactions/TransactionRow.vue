@@ -111,8 +111,12 @@ const allocInfo = computed<{
 
 function fmtMoney(raw: string): string {
   const n = Number.parseFloat(raw);
-  const abs = Math.abs(n);
-  const formatted = abs % 1 === 0 ? `$${abs.toFixed(0)}` : `$${abs.toFixed(2)}`;
+  const currency = props.transaction.amount_currency ?? "USD";
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(Math.abs(n));
   return n < 0 ? `-${formatted}` : formatted;
 }
 
