@@ -17,7 +17,6 @@ import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import { budgetProgress, progressTone, budgetStatus } from "@/utils/budget";
 import type { Budget } from "@/types/api";
-import { IconCashPlus } from "@tabler/icons-vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -29,19 +28,16 @@ const tone = computed(() => progressTone(budgetStatus(props.budget)));
 
 <template>
   <div class="border-t border-[#D4E9F7] bg-[#F5FAFF] px-4 pb-3 pt-2">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-1.5 text-[13px] text-ocean-600">
-        <IconCashPlus class="h-3.5 w-3.5 flex-none" />
-        <span>Next cycle saving</span>
-        <span v-if="budget.next_funding" class="text-[11px] text-ocean-400">
-          (+<MoneyAmount
-            :amount="budget.next_funding.amount"
-            :currency="budget.next_funding.amount_currency"
-            size="sm"
-          />)
-        </span>
-      </div>
-      <div class="text-right">
+    <div class="flex items-center justify-between gap-2">
+      <span v-if="budget.next_funding" class="truncate text-[12px] text-ocean-600">
+        <MoneyAmount
+          :amount="budget.next_funding.amount"
+          :currency="budget.next_funding.amount_currency"
+          size="sm"
+        />/event
+      </span>
+      <span v-else class="flex-1" />
+      <div class="flex-none text-right">
         <span class="font-mono text-[13px] font-medium text-ocean-800">
           <MoneyAmount :amount="budget.balance" :currency="budget.balance_currency" size="sm" />
         </span>
@@ -55,7 +51,6 @@ const tone = computed(() => progressTone(budgetStatus(props.budget)));
         </span>
       </div>
     </div>
-
     <ProgressBar class="mt-1.5" :value="pct" :tone="tone" :height="3" />
   </div>
 </template>
