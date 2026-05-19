@@ -225,8 +225,9 @@ def fund_account(
     account: BankAccount,
     today: date,
     actor: User,  # type: ignore[valid-type]
+    kinds: set[EventKind] | None = None,
 ) -> FundingReport:
-    """Process all due funding and recurrence events for one account.
+    """Process due funding and recurrence events for one account.
 
     Applies the import-freshness gate, collects due events, sorts them
     in date-grouped order (fund before recur per date, budget.id
@@ -234,10 +235,18 @@ def fund_account(
     All balance changes flow through internal_transaction_svc so the
     budget-balance invariant is maintained.
 
+    When 'kinds' is given, only events of those types are processed.
+    This lets the scheduler run FUND and RECUR events in separate passes
+    at different times of day.  The import-freshness gate is computed
+    from the filtered set only, so the FUND pass is not gated on RECUR
+    event dates and vice versa.
+
     Args:
         account: The BankAccount to fund.
         today: The date to treat as 'today' (allows back-fill via CLI).
         actor: The User recorded as actor on generated InternalTransactions.
+        kinds: If given, restrict processing to these EventKind values.
+            Pass None (the default) to process all event types together.
 
     Returns:
         A FundingReport describing what was done (or why it was deferred).
@@ -252,6 +261,8 @@ def fund_account(
     )
 
     events = _collect_events(budgets, today)
+    if kinds is not None:
+        events = [ev for ev in events if ev.kind in kinds]
     if not events:
         return report
 

@@ -29,7 +29,11 @@ from moneypools.service import budget as budget_svc
 from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import _fill_amount_prorated
-from moneypools.tasks import fund_all_accounts, fund_one_account
+from moneypools.tasks import (
+    fund_one_account,
+    recur_one_account,
+    schedule_funding_runs,
+)
 from tests.users.factories import UserFactory
 
 User = get_user_model()
@@ -1705,60 +1709,173 @@ class TestRecurringScenarios:
 ########################################################################
 ########################################################################
 #
-class TestCeleryFanOut:
-    """fund_all_accounts fans out one fund_one_account per account."""
+class TestScheduleFundingRuns:
+    """schedule_funding_runs dispatches workers based on owner local time."""
+
+    # UTC offsets used to put accounts inside / outside each window.
+    # America/New_York is UTC-4 in summer (EDT).
+    _TZ_NY = "America/New_York"
+    # Pacific/Auckland is UTC+12 in summer (NZST) -- useful for an
+    # account whose local midnight differs widely from UTC.
+    _TZ_NZ = "Pacific/Auckland"
 
     ####################################################################
     #
-    def test_fund_all_accounts_dispatches_one_task_per_account(
+    @pytest.mark.parametrize(
+        "utc_hour,utc_minute,tz,expect_fund,expect_recur",
+        [
+            pytest.param(
+                3,
+                10,
+                _TZ_NY,
+                True,
+                False,
+                id="fund-window: 03:10 UTC = 23:10 EDT",
+            ),
+            pytest.param(
+                7,
+                10,
+                _TZ_NY,
+                False,
+                True,
+                id="recur-window: 07:10 UTC = 03:10 EDT",
+            ),
+            pytest.param(
+                12,
+                0,
+                _TZ_NY,
+                False,
+                False,
+                id="no-window: 12:00 UTC = 08:00 EDT",
+            ),
+        ],
+    )
+    def test_schedule_dispatches_correct_task(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        utc_hour: int,
+        utc_minute: int,
+        tz: str,
+        expect_fund: bool,
+        expect_recur: bool,
+    ) -> None:
+        """
+        GIVEN: one account whose owner is in a known timezone
+        WHEN:  schedule_funding_runs fires at a specific UTC time
+        THEN:  fund_one_account is enqueued iff local time is in [23:00, 23:30)
+               recur_one_account is enqueued iff local time is in [03:00, 03:30)
+        """
+        account = bank_account_factory()
+        owner = account.owners.first()
+        assert owner is not None
+        owner.timezone = tz
+        owner.save()
+
+        fake_now = datetime(2026, 5, 18, utc_hour, utc_minute, tzinfo=UTC)
+
+        with (
+            patch("moneypools.tasks.datetime") as mock_dt,
+            patch("moneypools.tasks.fund_one_account.apply_async") as mock_fund,
+            patch(
+                "moneypools.tasks.recur_one_account.apply_async"
+            ) as mock_recur,
+        ):
+            mock_dt.now.return_value = fake_now
+            schedule_funding_runs()
+
+        assert mock_fund.called == expect_fund
+        assert mock_recur.called == expect_recur
+
+    ####################################################################
+    #
+    def test_schedule_passes_local_date_str(
         self,
         bank_account_factory: Callable[..., BankAccount],
     ) -> None:
         """
-        GIVEN: 3 bank accounts exist
-        WHEN:  fund_all_accounts runs
-        THEN:  fund_one_account.apply_async called exactly 3 times with
-               each account's UUID and a non-negative countdown
+        GIVEN: an account in America/New_York, UTC time 03:10 (= 23:10 EDT)
+        WHEN:  schedule_funding_runs fires
+        THEN:  fund_one_account is called with local_date_str='2026-05-17'
+               (the local date, which is one day behind UTC)
         """
-        accounts = [bank_account_factory() for _ in range(3)]
-        account_ids = {str(a.id) for a in accounts}
+        account = bank_account_factory()
+        owner = account.owners.first()
+        assert owner is not None
+        owner.timezone = self._TZ_NY
+        owner.save()
 
-        with patch(
-            "moneypools.tasks.fund_one_account.apply_async"
-        ) as mock_dispatch:
-            fund_all_accounts()
+        # 03:10 UTC on the 18th = 23:10 EDT on the *17th*
+        fake_now = datetime(2026, 5, 18, 3, 10, tzinfo=UTC)
 
-        assert mock_dispatch.call_count == 3
-        dispatched_ids = {
-            call.kwargs["args"][0] for call in mock_dispatch.call_args_list
-        }
-        assert dispatched_ids == account_ids
+        with (
+            patch("moneypools.tasks.datetime") as mock_dt,
+            patch("moneypools.tasks.fund_one_account.apply_async") as mock_fund,
+            patch("moneypools.tasks.recur_one_account.apply_async"),
+        ):
+            mock_dt.now.return_value = fake_now
+            schedule_funding_runs()
 
-        for call in mock_dispatch.call_args_list:
-            assert call.kwargs["countdown"] >= 0
+        assert mock_fund.call_count == 1
+        kwargs = mock_fund.call_args.kwargs
+        assert kwargs["kwargs"]["local_date_str"] == "2026-05-17"
 
     ####################################################################
     #
-    def test_fund_one_account_calls_fund_account(
+    def test_fund_one_account_calls_fund_account_with_fund_kind(
         self,
         bank_account_factory: Callable[..., BankAccount],
         system_user: User,  # type: ignore[valid-type]
     ) -> None:
         """
         GIVEN: a valid account and a funding-system user
-        WHEN:  fund_one_account runs
-        THEN:  funding_svc.fund_account is called with the correct account
+        WHEN:  fund_one_account runs with a local_date_str
+        THEN:  funding_svc.fund_account is called with kinds={EventKind.FUND}
+               and the parsed local date
         """
+        from moneypools.service.funding_strategy import EventKind
+
         account = bank_account_factory()
 
         with patch("moneypools.tasks.funding_svc.fund_account") as mock_fund:
             mock_fund.return_value = funding_svc.FundingReport(
                 account_id=str(account.id)
             )
-            fund_one_account(str(account.id))
+            fund_one_account(str(account.id), local_date_str="2026-05-17")
 
         assert mock_fund.call_count == 1
-        assert mock_fund.call_args.args[0].id == account.id
+        call = mock_fund.call_args
+        assert call.args[0].id == account.id
+        assert call.args[1] == date(2026, 5, 17)
+        assert call.kwargs["kinds"] == {EventKind.FUND}
+
+    ####################################################################
+    #
+    def test_recur_one_account_calls_fund_account_with_recur_kind(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: a valid account and a funding-system user
+        WHEN:  recur_one_account runs with a local_date_str
+        THEN:  funding_svc.fund_account is called with kinds={EventKind.RECUR}
+               and the parsed local date
+        """
+        from moneypools.service.funding_strategy import EventKind
+
+        account = bank_account_factory()
+
+        with patch("moneypools.tasks.funding_svc.fund_account") as mock_fund:
+            mock_fund.return_value = funding_svc.FundingReport(
+                account_id=str(account.id)
+            )
+            recur_one_account(str(account.id), local_date_str="2026-05-17")
+
+        assert mock_fund.call_count == 1
+        call = mock_fund.call_args
+        assert call.args[0].id == account.id
+        assert call.args[1] == date(2026, 5, 17)
+        assert call.kwargs["kinds"] == {EventKind.RECUR}
 
 
 ########################################################################
