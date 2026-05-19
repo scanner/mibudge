@@ -60,7 +60,6 @@ def _make_statement(
     *,
     tx_date: date = _TX_DATE,
     amount: Decimal = _AMOUNT,
-    bank_tx_id: str | None = None,
     balance: Decimal = Decimal("1000.00"),
 ) -> ParsedStatement:
     """Build a minimal single-transaction ParsedStatement."""
@@ -71,7 +70,6 @@ def _make_statement(
         running_balance=(balance + amount).quantize(Decimal("0.01")),
         transaction_type="deposit",
         pending=False,
-        bank_transaction_id=bank_tx_id,
     )
     return ParsedStatement(
         beginning_balance=balance,
@@ -93,11 +91,10 @@ def _existing_map(
     amount: Decimal = _AMOUNT,
     tx_id: str = "tx-0001",
     tx_type: str = "deposit",
-    bank_tx_id: str = "",
-) -> dict[tuple[str, str, str], list[tuple[str, str, str]]]:
+) -> dict[tuple[str, str, str], list[tuple[str, str]]]:
     """Build a minimal ``_fetch_existing``-style dedup map."""
     key = (tx_date.isoformat(), str(amount.quantize(Decimal("0.01"))), desc)
-    return {key: [(tx_id, tx_type, bank_tx_id)]}
+    return {key: [(tx_id, tx_type)]}
 
 
 ########################################################################
@@ -108,26 +105,20 @@ class TestResolveTruncatedDescriptions:
 
     ####################################################################
     #
-    def test_truncated_description_resolved_and_bank_tx_id_preserved(
-        self,
-    ) -> None:
+    def test_truncated_description_resolved(self) -> None:
         """
         GIVEN: An existing transaction stored with the full ACH description
                and a scraped transaction with the same date/amount but a
-               BofA-truncated '...' description.  The scraped transaction
-               carries a bank_transaction_id.
+               BofA-truncated '...' description.
         WHEN:  ``_resolve_truncated_descriptions`` is called.
-        THEN:  The truncated description is replaced with the full one AND
-               the bank_transaction_id is carried through unchanged.
+        THEN:  The truncated description is replaced with the full one.
         """
-        stmt = _make_statement(TRUNCATED_DESC, bank_tx_id="deadbeef1234")
+        stmt = _make_statement(TRUNCATED_DESC)
         existing = _existing_map(FULL_DESC)
 
         result = _resolve_truncated_descriptions(stmt, existing)
 
-        tx = result.transactions[0]
-        assert tx.raw_description == FULL_DESC
-        assert tx.bank_transaction_id == "deadbeef1234"
+        assert result.transactions[0].raw_description == FULL_DESC
 
     ####################################################################
     #
@@ -309,7 +300,6 @@ def _seed_transaction(
     tx_date: date = _TX_DATE,
     amount: Decimal = _AMOUNT,
     desc: str = FULL_DESC,
-    bank_tx_id: str = "",
 ) -> dict[str, Any]:
     """Seed a settled transaction (simulates a prior CSV import)."""
     tx_id = fake._mint_id("tx")
@@ -321,7 +311,6 @@ def _seed_transaction(
         "raw_description": desc,
         "transaction_type": "deposit",
         "pending": False,
-        "bank_transaction_id": bank_tx_id,
     }
     fake.transactions[tx_id] = row
     return row

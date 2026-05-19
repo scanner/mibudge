@@ -325,10 +325,7 @@ def cli_cmd(
                 # Dedup window spans ALL transactions (settled + pending) so
                 # that pending rows -- whose date is today -- are not outside
                 # the fetch range and re-imported on every run.
-                existing: dict[
-                    tuple[str, str, str], list[tuple[str, str, str]]
-                ] = {}
-                existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
+                existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
                 if statement.transactions:
                     dedup_start = min(
                         tx.transaction_date for tx in statement.transactions
@@ -341,7 +338,7 @@ def cli_cmd(
                             f"[bold]Fetching existing transactions "
                             f"({dedup_start} -> {dedup_end})..."
                         ):
-                            existing, existing_by_bank_id = _fetch_existing(
+                            existing = _fetch_existing(
                                 client,
                                 bank_account_id,
                                 dedup_start,
@@ -349,7 +346,7 @@ def cli_cmd(
                                 user_timezone,
                             )
                     else:
-                        existing, existing_by_bank_id = _fetch_existing(
+                        existing = _fetch_existing(
                             client,
                             bank_account_id,
                             dedup_start,
@@ -371,7 +368,6 @@ def cli_cmd(
                     client,
                     user_timezone,
                     existing=existing,
-                    existing_by_bank_id=existing_by_bank_id,
                     dry_run=dry_run,
                 )
 

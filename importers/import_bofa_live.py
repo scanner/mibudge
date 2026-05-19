@@ -34,6 +34,7 @@ Scraper behaviour verified against all 4 accounts via
 import json
 import logging
 import re
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -82,8 +83,9 @@ class SavedTransaction:
 
     ``txn_hash`` is the BofA-supplied per-transaction SHA-256 hash scraped
     from the ``data-txnhash`` attribute of the view-transaction-details
-    element.  It is stable across pending and settled states.
-    Empty string for files saved before format_version 2.
+    element.  Saved for reference but not used for dedup -- empirically the
+    hash changes on every scrape for every transaction, pending and settled
+    alike.  Empty string for files saved before format_version 2.
 
     ``running_balance`` is the available balance after this transaction
     as shown in BofA's activity table.  Used to validate the
@@ -219,7 +221,14 @@ def load_saved_scrape(path: Path) -> SavedScrape:
 ########################################################################
 #
 def _normalize_description(text: str) -> str:
-    """Collapse internal whitespace to match CSV-imported raw_description values."""
+    """Collapse internal whitespace to match CSV-imported raw_description values.
+
+    BofA appends extra text after a <br> tag (rendered as \\n by the
+    scraper) for some pending transactions, e.g. "Amount may change -
+    waiting for final amount from merchant".  Everything from the first
+    \\n onwards is UI noise, not part of the transaction description.
+    """
+    text = text.split("\n")[0]
     return " ".join(text.split())
 
 
@@ -227,7 +236,7 @@ def _normalize_description(text: str) -> str:
 #
 def _resolve_truncated_descriptions(
     statement: ParsedStatement,
-    existing: dict[tuple[str, str, str], list[tuple[str, str, str]]],
+    existing: dict[tuple[str, str, str], list[tuple[str, str]]],
 ) -> ParsedStatement:
     """
     Replace scraper-truncated descriptions with their full stored versions.
@@ -287,7 +296,6 @@ def _resolve_truncated_descriptions(
                     running_balance=tx.running_balance,
                     transaction_type=tx.transaction_type,
                     pending=tx.pending,
-                    bank_transaction_id=tx.bank_transaction_id,
                 )
             )
         else:
@@ -302,6 +310,168 @@ def _resolve_truncated_descriptions(
         total_debits=statement.total_debits,
         transactions=resolved,
         source_path=statement.source_path,
+    )
+
+
+####################################################################
+#
+def _get_variable_amount_descs(account: Any) -> set[str]:
+    """Return normalized descriptions of pending transactions whose amount may change.
+
+    BofA appends "Amount may change..." text (via a <br> tag, rendered as
+    \\n by the scraper) only for restaurant-style transactions where the
+    merchant's final charge may differ from the authorization amount.  The
+    presence of \\n in the raw description is the reliable signal.
+
+    Args:
+        account: A bofa_scraper Account (or ``_ReplayAccount``) whose
+            ``get_transactions()`` returns objects with ``.date`` and
+            ``.desc`` string attributes.
+
+    Returns:
+        Set of normalized (cleaned) descriptions for which the amount is
+        not guaranteed stable across scrape runs.
+    """
+    result: set[str] = set()
+    for tx in account.get_transactions():
+        _, is_pending = _parse_scraped_date(tx.date)
+        if is_pending and "\n" in tx.desc:
+            result.add(_normalize_description(tx.desc))
+    return result
+
+
+####################################################################
+#
+def _pending_desc_matches(db_desc: str, scraped_desc: str) -> bool:
+    """True when a DB pending description matches a clean scraped description.
+
+    DB entries imported before the description-cleanup fix may have the
+    "Amount may change..." noise collapsed into the description via a
+    space (because the old ``_normalize_description`` joined all tokens
+    including post-newline text).  This function handles both the clean
+    case (exact match) and the noisy-DB case (DB description starts with
+    the clean scraped description followed by a space).
+
+    Args:
+        db_desc: Raw description stored in the DB (may be noisy).
+        scraped_desc: Clean description from the current scrape.
+
+    Returns:
+        True if the descriptions refer to the same transaction.
+    """
+    return db_desc == scraped_desc or db_desc.startswith(scraped_desc + " ")
+
+
+####################################################################
+#
+def _filter_existing_pending(
+    statement: ParsedStatement,
+    bank_account_id: str,
+    client: Any,
+    variable_amount_descs: set[str] | None = None,
+) -> tuple[ParsedStatement, int]:
+    """Remove pending transactions already in the DB from the statement.
+
+    The transaction date is always ``today`` for pending rows, so the
+    standard (date, amount, description) dedup key fails on re-runs done
+    on a different calendar day.
+
+    This function fetches all pending rows for the account from the DB and
+    matches them against the scraped pending transactions by description
+    (and amount for transactions whose amount is known to be stable).
+    Matching is count-aware: if two pending rows share a description, two
+    scraped transactions must match before either is considered a duplicate.
+
+    Must be called AFTER ``_resolve_pending_transactions`` so that any
+    pending rows resolved to settled are no longer returned by the
+    ``pending=true`` filter.
+
+    Args:
+        statement: Statement built from scraped data.
+        bank_account_id: UUID of the mibudge BankAccount.
+        client: Authenticated ``MibudgeClient``.
+        variable_amount_descs: Set of normalized descriptions whose amounts
+            may change between scrapes (restaurant-style authorizations).
+            When ``None``, all pending transactions are matched by
+            (description, amount).
+
+    Returns:
+        A ``(statement, skipped)`` tuple where ``statement`` has the
+        already-imported pending transactions removed and ``skipped`` is
+        the count of removed transactions.
+    """
+    if variable_amount_descs is None:
+        variable_amount_descs = set()
+
+    scraped_pending = [tx for tx in statement.transactions if tx.pending]
+    if not scraped_pending:
+        return statement, 0
+
+    pending_db_rows = list(
+        client.get_all(
+            "/api/v1/transactions/",
+            params={"bank_account": bank_account_id, "pending": "true"},
+        )
+    )
+    if not pending_db_rows:
+        return statement, 0
+
+    # Build a mutable pool keyed by (db_raw_description, amount_str).
+    # Counts allow correct handling of multiple same-description transactions
+    # (e.g. two pending charges at the same restaurant).
+    pool: Counter[tuple[str, str]] = Counter()
+    for row in pending_db_rows:
+        amount_str = str(Decimal(str(row["amount"])).quantize(Decimal("0.01")))
+        pool[(row["raw_description"], amount_str)] += 1
+
+    def _consume(
+        scraped_desc: str, scraped_amount: str, is_variable: bool
+    ) -> bool:
+        """Find and consume one DB pool entry matching the scraped transaction."""
+        for key in list(pool):
+            if pool[key] <= 0:
+                continue
+            db_desc, db_amount = key
+            if not _pending_desc_matches(db_desc, scraped_desc):
+                continue
+            # For variable-amount transactions match by description alone;
+            # for stable-amount transactions also require amount equality.
+            if is_variable or db_amount == scraped_amount:
+                pool[key] -= 1
+                return True
+        return False
+
+    new_pending: list[ParsedTransaction] = []
+    skipped = 0
+    for tx in scraped_pending:
+        amount_str = str(tx.amount.quantize(Decimal("0.01")))
+        is_variable = tx.raw_description in variable_amount_descs
+        if _consume(tx.raw_description, amount_str, is_variable):
+            logger.debug(
+                "Skipping already-imported pending: %r (variable_amount=%s)",
+                tx.raw_description,
+                is_variable,
+            )
+            skipped += 1
+        else:
+            new_pending.append(tx)
+
+    if skipped == 0:
+        return statement, 0
+
+    settled = [tx for tx in statement.transactions if not tx.pending]
+    return (
+        ParsedStatement(
+            beginning_balance=statement.beginning_balance,
+            beginning_date=statement.beginning_date,
+            ending_balance=statement.ending_balance,
+            ending_date=statement.ending_date,
+            total_credits=statement.total_credits,
+            total_debits=statement.total_debits,
+            transactions=settled + new_pending,
+            source_path=statement.source_path,
+        ),
+        skipped,
     )
 
 
@@ -361,11 +531,6 @@ def _build_statement(account: Any) -> ParsedStatement:
     computed value is validated against the scraped value; a mismatch
     indicates a missing transaction and is logged as a warning.
 
-    Each transaction's ``txn_hash`` (the BofA-supplied SHA-256 hash from
-    the ``data-txnhash`` attribute) is stored as ``bank_transaction_id``
-    on the ``ParsedTransaction`` so the import pipeline can deduplicate
-    by stable ID rather than by the (date, amount, description) 3-tuple.
-
     NOTE: ``validate_statement`` is intentionally NOT called -- pending
     transactions break the balance-walk formula used by that function.
 
@@ -393,7 +558,6 @@ def _build_statement(account: Any) -> ParsedStatement:
         # date-cell showing "Processing" -- verified via bofa_test.py.
         amount = Decimal(str(tx.amount)).quantize(Decimal("0.01"))
         raw_description = _normalize_description(tx.desc)
-        bank_tx_id: str | None = getattr(tx, "txn_hash", "") or None
         scraped_running_balance: Decimal | None = None
         raw_rb = getattr(tx, "running_balance", None)
         if raw_rb is not None:
@@ -405,13 +569,12 @@ def _build_statement(account: Any) -> ParsedStatement:
                 pass
 
         logger.debug(
-            "raw tx: date=%r type=%r amount=%s desc=%r pending=%s txn_hash=%r",
+            "raw tx: date=%r type=%r amount=%s desc=%r pending=%s",
             tx.date,
             tx.type,
             tx.amount,
             tx.desc,
             is_pending,
-            bank_tx_id,
         )
 
         transaction_type = _infer_transaction_type(raw_description, amount)
@@ -422,7 +585,6 @@ def _build_statement(account: Any) -> ParsedStatement:
             running_balance=Decimal("0"),  # placeholder; filled in below
             transaction_type=transaction_type,
             pending=is_pending,
-            bank_transaction_id=bank_tx_id,
         )
         if is_pending:
             pending.append(parsed)
@@ -454,7 +616,6 @@ def _build_statement(account: Any) -> ParsedStatement:
                 running_balance=computed_rb,
                 transaction_type=parsed_tx.transaction_type,
                 pending=False,
-                bank_transaction_id=parsed_tx.bank_transaction_id,
             )
         )
         if (
@@ -476,8 +637,7 @@ def _build_statement(account: Any) -> ParsedStatement:
     settled_final.reverse()
     beginning_balance = running
 
-    # Pending transactions: bank_transaction_id is stored for dedup;
-    # running_balance is not meaningful here.
+    # running_balance is not meaningful for pending transactions.
     pending_final = [
         ParsedTransaction(
             transaction_date=tx.transaction_date,
@@ -486,7 +646,6 @@ def _build_statement(account: Any) -> ParsedStatement:
             running_balance=ending_balance,
             transaction_type=tx.transaction_type,
             pending=True,
-            bank_transaction_id=tx.bank_transaction_id,
         )
         for tx in pending
     ]
@@ -577,14 +736,9 @@ def _resolve_pending_transactions(
         len(pending_db),
     )
 
-    # Index pending DB rows by bank_transaction_id (primary) and
-    # raw_description (fallback) for O(1) lookup.
-    pending_by_bank_id: dict[str, dict[str, Any]] = {}
+    # Index pending DB rows by raw_description for O(1) lookup.
     pending_by_desc: dict[str, list[dict[str, Any]]] = {}
     for row in pending_db:
-        btid = row.get("bank_transaction_id")
-        if btid:
-            pending_by_bank_id[btid] = row
         desc = row["raw_description"]
         pending_by_desc.setdefault(desc, []).append(row)
 
@@ -644,15 +798,7 @@ def _resolve_pending_transactions(
     for tx in settled_txs:
         settle_date = tx.transaction_date  # already a date object from parser
 
-        # Primary match: bank_transaction_id is the same for pending and
-        # settled states, so it's a reliable anchor when both sides have it.
-        if tx.bank_transaction_id:
-            matched = pending_by_bank_id.pop(tx.bank_transaction_id, None)
-            if matched:
-                _resolve_row(matched, settle_date, tx)
-                continue
-
-        # Fallback: match by description + date proximity (±5 days).
+        # Match by description + date proximity (±5 days).
         candidates = pending_by_desc.get(tx.raw_description, [])
         if not candidates:
             continue
@@ -1114,10 +1260,7 @@ def cli_cmd(
                 # posted_date, so limiting the range to settled dates leaves
                 # previously-imported pending transactions outside the window
                 # and causes them to be re-imported on every run.
-                existing: dict[
-                    tuple[str, str, str], list[tuple[str, str, str]]
-                ] = {}
-                existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
+                existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
                 if statement.transactions:
                     dedup_start = min(
                         tx.transaction_date for tx in statement.transactions
@@ -1130,7 +1273,7 @@ def cli_cmd(
                             f"[bold]Fetching existing transactions "
                             f"({dedup_start} -> {dedup_end})..."
                         ):
-                            existing, existing_by_bank_id = _fetch_existing(
+                            existing = _fetch_existing(
                                 client,
                                 bank_account_id,
                                 dedup_start,
@@ -1138,7 +1281,7 @@ def cli_cmd(
                                 user_timezone,
                             )
                     else:
-                        existing, existing_by_bank_id = _fetch_existing(
+                        existing = _fetch_existing(
                             client,
                             bank_account_id,
                             dedup_start,
@@ -1161,7 +1304,6 @@ def cli_cmd(
                     client,
                     user_timezone,
                     existing=existing,
-                    existing_by_bank_id=existing_by_bank_id,
                     dry_run=dry_run,
                 )
 
