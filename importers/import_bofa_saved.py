@@ -39,6 +39,8 @@ from importers.import_bofa_live import (
     SavedTransaction,
     _build_statement,
     _extract_last_four,
+    _filter_existing_pending,
+    _get_variable_amount_descs,
     _resolve_pending_transactions,
     _resolve_truncated_descriptions,
     load_saved_scrape,
@@ -315,6 +317,20 @@ def cli_cmd(
                         "(%d with amount change).",
                         resolve_result.resolved,
                         resolve_result.resolved_amount_changed,
+                    )
+
+                # Drop pending transactions already in the DB.
+                variable_amount_descs = _get_variable_amount_descs(account)
+                statement, skipped_pending = _filter_existing_pending(
+                    statement,
+                    bank_account_id,
+                    client,
+                    variable_amount_descs,
+                )
+                if skipped_pending:
+                    logger.info(
+                        "Skipped %d already-imported pending transaction(s).",
+                        skipped_pending,
                     )
 
                 # Capture settled list now; used later to gate _mark_imported.

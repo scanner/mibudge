@@ -736,11 +736,11 @@ def _resolve_pending_transactions(
         len(pending_db),
     )
 
-    # Index pending DB rows by raw_description for O(1) lookup.
-    pending_by_desc: dict[str, list[dict[str, Any]]] = {}
-    for row in pending_db:
-        desc = row["raw_description"]
-        pending_by_desc.setdefault(desc, []).append(row)
+    # Mutable pool; removed entries cannot be matched a second time.
+    # Linear scan (not a dict) so that _pending_desc_matches can compare
+    # DB descriptions that contain pre-fix noise ("Amount may change...")
+    # against clean scraped descriptions.
+    pending_available: list[dict[str, Any]] = list(pending_db)
 
     MAX_DATE_DELTA = 5  # calendar days
 
@@ -778,12 +778,6 @@ def _resolve_pending_transactions(
                 result.resolved += 1
                 if amount_changed:
                     result.resolved_amount_changed += 1
-                # Remove from description index so it isn't double-matched.
-                desc_list = pending_by_desc.get(
-                    matched_row["raw_description"], []
-                )
-                if matched_row in desc_list:
-                    desc_list.remove(matched_row)
             except Exception as e:
                 logger.warning(
                     "Failed to resolve pending tx %s: %s",
@@ -798,13 +792,15 @@ def _resolve_pending_transactions(
     for tx in settled_txs:
         settle_date = tx.transaction_date  # already a date object from parser
 
-        # Match by description + date proximity (±5 days).
-        candidates = pending_by_desc.get(tx.raw_description, [])
-        if not candidates:
-            continue
-
+        # Match by description (prefix-aware) + date proximity (±5 days).
+        # _pending_desc_matches handles DB entries imported before the
+        # description-cleanup fix, which have "Amount may change..." appended.
         close: list[tuple[int, Decimal, dict[str, Any]]] = []
-        for row in candidates:
+        for row in pending_available:
+            if not _pending_desc_matches(
+                row["raw_description"], tx.raw_description
+            ):
+                continue
             # posted_date from the API is an ISO datetime string.
             row_date = datetime.fromisoformat(
                 row["posted_date"].replace("Z", "+00:00")
@@ -821,8 +817,9 @@ def _resolve_pending_transactions(
         # Pick closest date; break ties by closest amount.
         close.sort(key=lambda t: (t[0], t[1]))
         _, _, matched_row = close[0]
-        # Remove from description index to prevent double-matching.
-        pending_by_desc[tx.raw_description].remove(matched_row)
+        # Remove from pool before resolving so a second settled tx cannot
+        # match the same pending row.
+        pending_available.remove(matched_row)
         _resolve_row(matched_row, settle_date, tx)
 
     return result
@@ -1249,6 +1246,22 @@ def cli_cmd(
                         "(%d with amount change).",
                         resolve_result.resolved,
                         resolve_result.resolved_amount_changed,
+                    )
+
+                # Drop pending transactions already in the DB.  The pending
+                # date is always today, so the standard dedup key fails across
+                # calendar-day boundaries.
+                variable_amount_descs = _get_variable_amount_descs(account)
+                statement, skipped_pending = _filter_existing_pending(
+                    statement,
+                    bank_account_id,
+                    client,
+                    variable_amount_descs,
+                )
+                if skipped_pending:
+                    logger.info(
+                        "Skipped %d already-imported pending transaction(s).",
+                        skipped_pending,
                     )
 
                 # settled_txs is still needed to guard _mark_imported below.
