@@ -220,7 +220,7 @@ onMounted(() => {
               <li
                 v-for="b in budgets"
                 :key="b.id"
-                class="cursor-pointer hover:bg-neutral-50"
+                class="group cursor-pointer hover:bg-neutral-50"
                 @click="router.push(`/budgets/${b.id}/`)"
               >
                 <div class="px-4 py-3">

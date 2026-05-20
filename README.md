@@ -99,7 +99,7 @@ All resources are under `/api/v1/`. Full endpoint docs: [`docs/api.md`](docs/api
 |----------|----------|-------|
 | Users | `/api/v1/users/` | List/update restricted to staff; `/me/` available to all |
 | Banks | `/api/v1/banks/` | Read-only reference data |
-| Bank Accounts | `/api/v1/bank-accounts/` | Scoped to account owners |
+| Bank Accounts | `/api/v1/bank-accounts/` | Scoped to account owners; `sync-scrape` action reconciles a full bank-side snapshot atomically |
 | Budgets | `/api/v1/budgets/` | Scoped to account owners |
 | Transactions | `/api/v1/transactions/` | Scoped to account owners |
 | Allocations | `/api/v1/allocations/` | Budget assignments for transactions |

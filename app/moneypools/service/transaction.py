@@ -483,6 +483,72 @@ def split(
 ########################################################################
 ########################################################################
 #
+def recompute_transaction_snapshots(bank_account: BankAccount) -> int:
+    """Rewrite per-transaction bank_account balance snapshots for an account.
+
+    Walks every Transaction belonging to `bank_account` in the UI
+    display order (`-transaction_date, -created_at`) and assigns each
+    row's `bank_account_available_balance` and
+    `bank_account_posted_balance` so they match the running balance
+    the user sees in the transaction list.
+
+    The walk runs newest-first starting from
+    `bank_account.available_balance` / `bank_account.posted_balance`
+    (which are the current totals).  For each transaction the snapshot
+    is set to the current running balance, then the running balance is
+    rolled back by that transaction's amount: pending transactions roll
+    back available only; posted transactions roll back both.
+
+    This is the bulk fix-up routine used by the scrape-sync pipeline
+    after inserts and deletes may have changed the chronological order.
+    It does not touch budget allocations or InternalTransaction
+    snapshots -- those have their own recompute paths.
+
+    Args:
+        bank_account: The account whose transaction snapshots need
+            refreshing.
+
+    Returns:
+        The number of Transaction rows that were updated (rows whose
+        existing snapshots already matched are skipped).
+    """
+    currency = bank_account.currency
+    running_available = bank_account.available_balance.amount
+    running_posted = bank_account.posted_balance.amount
+
+    transactions = list(
+        Transaction.objects.filter(bank_account=bank_account).order_by(
+            "-transaction_date", "-created_at"
+        )
+    )
+
+    updated = 0
+    for tx in transactions:
+        new_available = moneyed.Money(running_available, currency)
+        new_posted = moneyed.Money(running_posted, currency)
+        changed = (
+            tx.bank_account_available_balance != new_available
+            or tx.bank_account_posted_balance != new_posted
+        )
+        if changed:
+            Transaction.objects.filter(pkid=tx.pkid).update(
+                bank_account_available_balance=new_available.amount,
+                bank_account_available_balance_currency=currency,
+                bank_account_posted_balance=new_posted.amount,
+                bank_account_posted_balance_currency=currency,
+            )
+            updated += 1
+
+        running_available -= tx.amount.amount
+        if not tx.pending:
+            running_posted -= tx.amount.amount
+
+    return updated
+
+
+########################################################################
+########################################################################
+#
 def _validate_splits(
     splits: dict[str, Decimal],
     account: BankAccount,

@@ -13,8 +13,8 @@
 //   [ Budget B    ] [ -$70 ] [ ($200 left) ]
 //
 // When the transaction is allocated to the unallocated budget, a blue
-// left border is shown and the allocation text reads "Unallocated —
-// tap to assign".
+// left border is shown.  Pending transactions show "Unallocated (X left)";
+// posted transactions show the "Unallocated — tap to assign" prompt.
 //
 
 // 3rd party imports
@@ -179,9 +179,15 @@ function fmtAccountBalance(raw: string, currency: string): string {
         </div>
       </div>
 
-      <!-- Row 2 (unallocated): italic prompt -->
+      <!-- Row 2 (unallocated): balance info for pending, tap-to-assign prompt otherwise -->
       <div v-if="allocInfo.isUnallocated" class="mt-0.5 flex items-center justify-between gap-2">
-        <span class="min-w-0 truncate text-[12px] italic text-secondary">
+        <span v-if="transaction.pending" class="min-w-0 truncate text-[12px] text-ocean-600">
+          Unallocated
+          <span v-if="allocations?.[0]?.budget_balance" class="text-secondary">
+            ({{ fmtMoney(allocations[0].budget_balance) }} left)
+          </span>
+        </span>
+        <span v-else class="min-w-0 truncate text-[12px] italic text-secondary">
           Unallocated — tap to assign
         </span>
         <div class="flex flex-none items-center gap-1.5">

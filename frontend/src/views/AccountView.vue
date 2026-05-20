@@ -180,11 +180,22 @@ async function signOut() {
                   <div class="text-xs text-secondary">{{ accountTypeMeta(account) }}</div>
                 </div>
                 <div class="flex flex-none flex-col items-end gap-0.5">
-                  <MoneyAmount
-                    :amount="account.posted_balance"
-                    :currency="account.posted_balance_currency"
-                    size="sm"
-                  />
+                  <span class="text-[11px] text-secondary">
+                    Available:
+                    <MoneyAmount
+                      :amount="account.available_balance"
+                      :currency="account.available_balance_currency"
+                      size="sm"
+                    />
+                  </span>
+                  <span class="text-[11px] text-secondary">
+                    Posted:
+                    <MoneyAmount
+                      :amount="account.posted_balance"
+                      :currency="account.posted_balance_currency"
+                      size="sm"
+                    />
+                  </span>
                   <span
                     v-if="unallocatedFor(account)"
                     class="text-[11px] font-medium text-mint-600"
@@ -194,7 +205,7 @@ async function signOut() {
                       :currency="unallocatedFor(account)!.balance_currency"
                       size="sm"
                     />
-                    free
+                    unallocated
                   </span>
                   <span
                     v-if="

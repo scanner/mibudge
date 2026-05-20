@@ -1,32 +1,36 @@
 """
 Import live Bank of America transactions into mibudge via its REST API.
 
-Logs into Bank of America using the bofa_scraper Selenium/Firefox scraper,
-scrapes all accessible accounts, and submits their transactions through the
-same dedup + POST pipeline used by the CSV/OFX importers.
+Logs into Bank of America using the bofa_scraper Selenium/Firefox
+scraper, scrapes all accessible accounts, and POSTs each scrape to
+mibudge's scrape-sync endpoint
+(`POST /api/v1/bank-accounts/{id}/sync-scrape/`).  The server handles
+pending wipe-and-reinsert, posted-row dedup, snapshot recomputation,
+and balance validation atomically.
 
 Requires the importers-bofa optional dependency group::
 
     uv sync --group importers-bofa
     uv run --group importers-bofa python -m importers.import_bofa_live
 
-BofA credentials are read from BOFA_ID and BOFA_PASSCODE environment variables
-or the --bofa-id / --bofa-passcode flags.  mibudge credentials follow the same
-resolution order as the CSV importer (CLI flags > env vars > .env > Vault).
+BofA credentials are read from BOFA_ID and BOFA_PASSCODE environment
+variables or the --bofa-id / --bofa-passcode flags.  mibudge
+credentials follow the same resolution order as the CSV importer (CLI
+flags > env vars > .env > Vault).
 
-2FA: if BofA requires it, the scraper prompts for the code interactively via
-stdin.  Run with --no-headless to watch the browser.
+2FA: if BofA requires it, the scraper prompts for the code
+interactively via stdin.  Run with --no-headless to watch the browser.
 
-Scraper behaviour verified against all 4 accounts via
-~/src/bank_project/bofa_test/bofa_test.py (2026-05-13):
+Scraper-output notes (verified against all four accounts via
+~/src/bank_project/bofa_test/bofa_test.py on 2026-05-13):
 
-* Amount signs are correct -- BofA renders debits as ``-$xx.xx`` in the
+* Amount signs are correct -- BofA renders debits as `-$xx.xx` in the
   amount-cell so the scraped floats are already negative for debits.
-* Pending transactions show ``"Processing"`` in the date-cell (not a
-  parseable date) and ``"Debit"`` / ``"Virtual Card"`` etc. in the
-  type-cell (not ``"Pending"``).  Pending detection relies solely on the
-  date parse failing.
-* Account names follow the pattern ``NAME - XXXX`` where XXXX is the
+* Pending transactions show `Processing` in the date-cell instead of
+  a parseable date.  `_parse_scraped_date` treats any unparseable
+  date string as pending, which keeps the importer tolerant of other
+  banks' markers if we ever wire one up here.
+* Account names follow the pattern `NAME - XXXX` where XXXX is the
   last 4 digits used to match the mibudge BankAccount.
 """
 
@@ -39,6 +43,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 # 3rd party imports
 import click
@@ -50,16 +55,11 @@ from rich.table import Table
 # Project imports
 from importers.client import AuthenticationError
 from importers.import_transactions import (
-    ImportResult,
     _build_client,
-    _fetch_existing,
-    _mark_imported,
     _resolve_account_by_query,
     _run_funding,
-    import_statement,
 )
 from importers.parsers.bofa_csv import _infer_transaction_type
-from importers.parsers.common import ParsedStatement, ParsedTransaction
 from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
@@ -75,20 +75,19 @@ class SavedTransaction:
     """One transaction as scraped from the BofA activity table.
 
     Field names match what bofa_scraper's transaction objects expose so
-    that a list of these can be fed directly to ``_build_statement`` via
-    ``_ReplayAccount``.  ``date`` is the raw BofA string -- e.g.
-    ``"05/07/2026"`` for settled transactions and ``"Processing"`` for
+    that a list of these can be fed straight to the payload builder via
+    `_ReplayAccount`.  `date` is the raw BofA string -- e.g.
+    `'05/07/2026'` for settled transactions and `'Processing'` for
     pending ones.
 
-    ``txn_hash`` is the BofA-supplied per-transaction SHA-256 hash scraped
-    from the ``data-txnhash`` attribute of the view-transaction-details
-    element.  It is stable across pending and settled states.
+    `txn_hash` is captured from the scraper for reference but is not
+    used: it changes on every scrape, so it is not a stable dedup key.
     Empty string for files saved before format_version 2.
 
-    ``running_balance`` is the available balance after this transaction
-    as shown in BofA's activity table.  Used to validate the
-    walk-backward computation in ``_build_statement``.  "0.00" for files
-    saved before format_version 2.
+    `running_balance` is the available balance after this transaction
+    as shown in BofA's activity table.  Passed through to the server
+    for the posting-order sanity walk.  `'0.00'` for files saved before
+    format_version 2.
     """
 
     date: str
@@ -106,9 +105,9 @@ class SavedTransaction:
 class SavedScrape:
     """Complete scrape result for one BofA account.
 
-    Stores the raw pre-``_build_statement`` data so that replay produces
-    identical results to the original run and the raw date strings remain
-    comparable with CSV exports.
+    Stores the raw scraped fields verbatim so that `import_bofa_saved`
+    can replay the file through the scrape-sync endpoint and produce
+    identical server-side state to the original live run.
     """
 
     format_version: int
@@ -219,90 +218,15 @@ def load_saved_scrape(path: Path) -> SavedScrape:
 ########################################################################
 #
 def _normalize_description(text: str) -> str:
-    """Collapse internal whitespace to match CSV-imported raw_description values."""
+    """Collapse internal whitespace to match CSV-imported raw_description values.
+
+    BofA appends extra text after a <br> tag (rendered as \\n by the
+    scraper) for some pending transactions, e.g. "Amount may change -
+    waiting for final amount from merchant".  Everything from the first
+    \\n onwards is UI noise, not part of the transaction description.
+    """
+    text = text.split("\n")[0]
     return " ".join(text.split())
-
-
-####################################################################
-#
-def _resolve_truncated_descriptions(
-    statement: ParsedStatement,
-    existing: dict[tuple[str, str, str], list[tuple[str, str, str]]],
-) -> ParsedStatement:
-    """
-    Replace scraper-truncated descriptions with their full stored versions.
-
-    BofA's activity table truncates long ACH descriptions with a literal
-    '...' suffix (e.g. 'APPLE GS SAVINGS ... CO...' instead of the full
-    '...CO ID:XXXXX99999 WEB').  The CSV export has the full string, so
-    when a prior CSV import is followed by a live-scraper run the dedup
-    key (date, amount, description) mismatches and a duplicate is created.
-
-    For each scraped transaction that has no exact match in ``existing``,
-    this function checks whether any existing entry with the same date and
-    amount has a description that starts with the scraped text (after
-    stripping a trailing '...').  When found, it replaces the scraped
-    description with the stored full version so the normal dedup path
-    catches it.
-
-    Args:
-        statement: Statement built from scraped data.
-        existing: Pre-fetched dedup map from ``_fetch_existing``.
-
-    Returns:
-        A new ``ParsedStatement`` with resolved descriptions.
-    """
-    # Index existing keys by (date_str, amount_str) for fast prefix lookup.
-    da_index: dict[tuple[str, str], list[str]] = {}
-    for date_str, amount_str, desc in existing:
-        da_index.setdefault((date_str, amount_str), []).append(desc)
-
-    resolved: list[ParsedTransaction] = []
-    for tx in statement.transactions:
-        date_str = tx.transaction_date.isoformat()
-        amount_str = str(tx.amount.quantize(Decimal("0.01")))
-        scraped = tx.raw_description
-
-        # Nothing to do if the exact key already matches.
-        if (date_str, amount_str, scraped) in existing:
-            resolved.append(tx)
-            continue
-
-        prefix = scraped[:-3] if scraped.endswith("...") else scraped
-        candidates = da_index.get((date_str, amount_str), [])
-        full_desc = next(
-            (d for d in candidates if d != scraped and d.startswith(prefix)),
-            None,
-        )
-
-        if full_desc:
-            logger.debug(
-                "Resolved truncated description %r -> %r", scraped, full_desc
-            )
-            resolved.append(
-                ParsedTransaction(
-                    transaction_date=tx.transaction_date,
-                    raw_description=full_desc,
-                    amount=tx.amount,
-                    running_balance=tx.running_balance,
-                    transaction_type=tx.transaction_type,
-                    pending=tx.pending,
-                    bank_transaction_id=tx.bank_transaction_id,
-                )
-            )
-        else:
-            resolved.append(tx)
-
-    return ParsedStatement(
-        beginning_balance=statement.beginning_balance,
-        beginning_date=statement.beginning_date,
-        ending_balance=statement.ending_balance,
-        ending_date=statement.ending_date,
-        total_credits=statement.total_credits,
-        total_debits=statement.total_debits,
-        transactions=resolved,
-        source_path=statement.source_path,
-    )
 
 
 ####################################################################
@@ -344,342 +268,230 @@ def _extract_last_four(account_name: str) -> str | None:
     return m.group(1) if m else None
 
 
-####################################################################
+########################################################################
+########################################################################
 #
-def _build_statement(account: Any) -> ParsedStatement:
-    """
-    Build a ParsedStatement from a fully-scraped BofA Account.
+def _build_sync_payload(
+    account: Any, scraped_at: datetime, user_timezone: str
+) -> tuple[dict[str, Any], int, int]:
+    """Convert a scraped account into a sync-scrape POST body.
 
-    The current account balance is used as the ending_balance.  Only
-    settled transactions contribute to balance calculations; pending
-    transactions (detected via the date-cell showing "Processing") are
-    included with ``pending=True``.
+    Iterates `account.get_transactions()` in its native (newest-first)
+    order and emits a JSON-ready payload matching
+    `ScrapeSyncSerializer` on the mibudge side.  The server takes
+    over from here -- pending detection from `is_pending`, dedup of
+    posted rows, snapshot recomputation, balance verification.
 
-    Running balances for settled transactions are computed by walking
-    backward from ``ending_balance``.  When the scraper supplies a
-    per-transaction running_balance (format_version >= 2), each
-    computed value is validated against the scraped value; a mismatch
-    indicates a missing transaction and is logged as a warning.
+    `posted_date` values are anchored to midnight in `user_timezone`
+    so they line up with the convention used by the CSV / OFX
+    importers (see `import_transactions._post_transaction`).  The bank
+    only gives us a bare MM/DD/YYYY with no timezone tag; the codebase
+    treats that as a calendar date in the user's timezone.
 
-    Each transaction's ``txn_hash`` (the BofA-supplied SHA-256 hash from
-    the ``data-txnhash`` attribute) is stored as ``bank_transaction_id``
-    on the ``ParsedTransaction`` so the import pipeline can deduplicate
-    by stable ID rather than by the (date, amount, description) 3-tuple.
-
-    NOTE: ``validate_statement`` is intentionally NOT called -- pending
-    transactions break the balance-walk formula used by that function.
+    TODO: verify this assumption by running the scraper with
+    `--save-only` from a host configured to a different timezone (or
+    with the browser's timezone overridden) and comparing the date
+    column to a control run from the user's home timezone.  If BofA's
+    JS converts dates client-side, we'd see them shift.  If not, the
+    date column is bank-side and our user-tz-midnight anchor is just a
+    pragmatic convention.
 
     Args:
-        account: A bofa_scraper ``Account`` with transactions populated.
+        account: A `bofa_scraper.Account` (or `_ReplayAccount`) whose
+            `get_transactions()` returns objects with `.date`,
+            `.desc`, `.amount`, `.type`, and optionally
+            `.running_balance`.
+        scraped_at: Wall-clock UTC datetime of the scrape.
+        user_timezone: IANA timezone name for the account owner
+            (e.g. 'America/Los_Angeles').
 
     Returns:
-        A ``ParsedStatement`` ready for ``import_statement()``.
+        A `(payload, posted_count, pending_count)` tuple.  The counts
+        are reported in the CLI summary so the user sees what was
+        scraped without waiting on the server.
     """
+    tz = ZoneInfo(user_timezone)
     raw_txs = account.get_transactions()
-    ending_balance = Decimal(str(account.get_balance())).quantize(
-        Decimal("0.01")
-    )
-    acct_name = account.get_name()
+    transactions: list[dict[str, Any]] = []
+    posted_count = 0
+    pending_count = 0
 
-    # Pairs of (ParsedTransaction, scraped_running_balance_or_None)
-    # kept together so we can validate after the walk.
-    settled_pairs: list[tuple[ParsedTransaction, Decimal | None]] = []
-    pending: list[ParsedTransaction] = []
+    # Pending rows do not have a settled date yet (BofA shows
+    # 'Processing' in the date column; other banks may use other
+    # markers), so substitute the scrape's wall-clock -- in the user's
+    # tz -- as the placeholder posted_date.  The server derives
+    # transaction_date from the embedded MM/DD in the description,
+    # falling back to this value only when no MM/DD is present.
+    pending_posted_date = scraped_at.astimezone(tz)
 
     for tx in raw_txs:
-        tx_date, is_pending = _parse_scraped_date(tx.date)
-        # NOTE: the type-cell shows "Debit"/"Virtual Card"/etc. for pending
-        # rows (not "Pending"), so pending detection relies solely on the
-        # date-cell showing "Processing" -- verified via bofa_test.py.
+        parsed_date, is_pending = _parse_scraped_date(tx.date)
         amount = Decimal(str(tx.amount)).quantize(Decimal("0.01"))
         raw_description = _normalize_description(tx.desc)
-        bank_tx_id: str | None = getattr(tx, "txn_hash", "") or None
-        scraped_running_balance: Decimal | None = None
-        raw_rb = getattr(tx, "running_balance", None)
-        if raw_rb is not None:
+        transaction_type = _infer_transaction_type(raw_description, amount)
+
+        if is_pending:
+            posted_dt = pending_posted_date
+            pending_count += 1
+        else:
+            posted_dt = datetime(
+                parsed_date.year,
+                parsed_date.month,
+                parsed_date.day,
+                tzinfo=tz,
+            )
+            posted_count += 1
+
+        running_balance = getattr(tx, "running_balance", None)
+        running_balance_out: str | None = None
+        if running_balance is not None:
             try:
-                scraped_running_balance = Decimal(str(raw_rb)).quantize(
-                    Decimal("0.01")
-                )
+                rb = Decimal(str(running_balance)).quantize(Decimal("0.01"))
+                if rb != Decimal("0.00"):
+                    running_balance_out = str(rb)
             except Exception:
                 pass
 
-        logger.debug(
-            "raw tx: date=%r type=%r amount=%s desc=%r pending=%s txn_hash=%r",
-            tx.date,
-            tx.type,
-            tx.amount,
-            tx.desc,
-            is_pending,
-            bank_tx_id,
+        transactions.append(
+            {
+                "is_pending": is_pending,
+                "posted_date": posted_dt.isoformat(),
+                "raw_description": raw_description,
+                "amount": str(amount),
+                "amount_currency": "USD",
+                "transaction_type": transaction_type,
+                "running_balance": running_balance_out,
+            }
         )
 
-        transaction_type = _infer_transaction_type(raw_description, amount)
-        parsed = ParsedTransaction(
-            transaction_date=tx_date,
-            raw_description=raw_description,
-            amount=amount,
-            running_balance=Decimal("0"),  # placeholder; filled in below
-            transaction_type=transaction_type,
-            pending=is_pending,
-            bank_transaction_id=bank_tx_id,
-        )
-        if is_pending:
-            pending.append(parsed)
-        else:
-            settled_pairs.append((parsed, scraped_running_balance))
-
-    # BofA's avail-balance-cell records the *posted* running balance at each
-    # settled transaction (pending not yet deducted), while account.get_balance()
-    # returns the *available* balance (current pending already deducted).  Walk
-    # backward from the posted ending balance so the validation check compares
-    # like with like.
-    pending_total = sum(tx.amount for tx in pending)
-    posted_ending_balance = ending_balance - pending_total
-
-    # Walk backward in original scraper order (newest-first).  Do NOT pre-sort
-    # by date before the walk: stable sort preserves scraper order within same-
-    # date groups, so reversed(sorted) would process same-date items oldest-
-    # first -- wrong for the walk.  Iterating in scraper order processes the
-    # most-recent transaction first, which is what the walk-backward requires.
-    running = posted_ending_balance
-    settled_final: list[ParsedTransaction] = []
-    for parsed_tx, scraped_rb in settled_pairs:
-        computed_rb = running
-        settled_final.append(
-            ParsedTransaction(
-                transaction_date=parsed_tx.transaction_date,
-                raw_description=parsed_tx.raw_description,
-                amount=parsed_tx.amount,
-                running_balance=computed_rb,
-                transaction_type=parsed_tx.transaction_type,
-                pending=False,
-                bank_transaction_id=parsed_tx.bank_transaction_id,
-            )
-        )
-        if (
-            scraped_rb is not None
-            and scraped_rb != Decimal("0.00")
-            and computed_rb != scraped_rb
-        ):
-            logger.warning(
-                "%s: running_balance mismatch for %r on %s: "
-                "computed=%s scraped=%s -- possible missing transaction",
-                acct_name,
-                parsed_tx.raw_description,
-                parsed_tx.transaction_date,
-                computed_rb,
-                scraped_rb,
-            )
-        running -= parsed_tx.amount
-    # Reverse to oldest-first for chronological import.
-    settled_final.reverse()
-    beginning_balance = running
-
-    # Pending transactions: bank_transaction_id is stored for dedup;
-    # running_balance is not meaningful here.
-    pending_final = [
-        ParsedTransaction(
-            transaction_date=tx.transaction_date,
-            raw_description=tx.raw_description,
-            amount=tx.amount,
-            running_balance=ending_balance,
-            transaction_type=tx.transaction_type,
-            pending=True,
-            bank_transaction_id=tx.bank_transaction_id,
-        )
-        for tx in pending
-    ]
-
-    today = date.today()
-    settled_dates = [tx.transaction_date for tx in settled_final]
-    beginning_date = min(settled_dates) if settled_dates else today
-    ending_date = max(settled_dates) if settled_dates else today
-
-    total_credits = sum(
-        (tx.amount for tx in settled_final if tx.amount > 0), Decimal("0")
+    ending_balance = Decimal(str(account.get_balance())).quantize(
+        Decimal("0.01")
     )
-    total_debits = sum(
-        (tx.amount for tx in settled_final if tx.amount < 0), Decimal("0")
-    )
-
-    logger.info(
-        "%s: %d settled, %d pending; ending_balance=%s beginning_balance=%s",
-        acct_name,
-        len(settled_final),
-        len(pending_final),
-        ending_balance,
-        beginning_balance,
-    )
-
-    return ParsedStatement(
-        beginning_balance=beginning_balance,
-        beginning_date=beginning_date,
-        ending_balance=ending_balance,
-        ending_date=ending_date,
-        total_credits=total_credits,
-        total_debits=total_debits,
-        transactions=settled_final + pending_final,
-        source_path=f"live:{acct_name}",
-    )
+    payload: dict[str, Any] = {
+        "scraped_at": scraped_at.isoformat(),
+        "ending_balance": str(ending_balance),
+        "ending_balance_currency": "USD",
+        "transactions": transactions,
+    }
+    return payload, posted_count, pending_count
 
 
 ########################################################################
 ########################################################################
 #
-def _resolve_pending_transactions(
-    statement: ParsedStatement,
-    bank_account_id: str,
+def _post_sync_scrape(
     client: Any,
-    user_timezone: str,
-    dry_run: bool = False,
-) -> ImportResult:
-    """Match settled scraped transactions against pending DB rows and resolve them.
-
-    For each settled scraped transaction, looks for a pending transaction in
-    mibudge that has the same ``raw_description`` and a ``posted_date`` within
-    5 calendar days.  When a match is found, calls the ``resolve-pending``
-    endpoint to atomically transition the pending row to posted.
-
-    Must run BEFORE ``_fetch_existing`` so that resolved rows appear in the
-    dedup map and the normal import path skips them.
+    bank_account_id: str,
+    payload: dict[str, Any],
+    posted_count: int,
+    pending_count: int,
+    account_label: str,
+    dry_run: bool,
+    console: Console,
+    interactive: bool,
+) -> bool:
+    """POST the scrape to mibudge and render the result.
 
     Args:
-        statement: Statement built from scraped data (settled + pending).
-        bank_account_id: UUID of the mibudge BankAccount.
-        client: Authenticated ``MibudgeClient``.
-        user_timezone: User's timezone string (for date normalisation).
-        dry_run: When True, log matches but do not POST to the API.
+        client: Authenticated `MibudgeClient`.
+        bank_account_id: UUID string of the mibudge BankAccount.
+        payload: Body built by `_build_sync_payload`.
+        posted_count: Number of settled rows in the payload (for the
+            summary, in case the server skips a few as duplicates).
+        pending_count: Number of pending rows in the payload.
+        account_label: Display label for the account.
+        dry_run: When true, print the would-send summary and do not
+            POST.
+        console: Rich console for interactive output.
+        interactive: Whether to render via Rich tables.
 
     Returns:
-        An ``ImportResult`` with only ``resolved`` and
-        ``resolved_amount_changed`` populated.
+        True on success (including dry-run); False if the POST raised
+        or the server reported a balance mismatch / posting-order
+        warning.
     """
-    result = ImportResult()
-
-    settled_txs = [tx for tx in statement.transactions if not tx.pending]
-    if not settled_txs:
-        return result
-
-    # Fetch all pending transactions for this account from the DB.
-    pending_db: list[dict[str, Any]] = list(
-        client.get_all(
-            "/api/v1/transactions/",
-            params={"bank_account": bank_account_id, "pending": "true"},
+    if dry_run:
+        msg = (
+            f"DRY RUN. {account_label}: would sync "
+            f"{posted_count} posted, {pending_count} pending."
         )
-    )
-    if not pending_db:
-        return result
-
-    logger.debug(
-        "resolve_pending: %d settled scraped, %d pending in DB",
-        len(settled_txs),
-        len(pending_db),
-    )
-
-    # Index pending DB rows by bank_transaction_id (primary) and
-    # raw_description (fallback) for O(1) lookup.
-    pending_by_bank_id: dict[str, dict[str, Any]] = {}
-    pending_by_desc: dict[str, list[dict[str, Any]]] = {}
-    for row in pending_db:
-        btid = row.get("bank_transaction_id")
-        if btid:
-            pending_by_bank_id[btid] = row
-        desc = row["raw_description"]
-        pending_by_desc.setdefault(desc, []).append(row)
-
-    MAX_DATE_DELTA = 5  # calendar days
-
-    def _resolve_row(
-        matched_row: dict[str, Any],
-        settle_date: date,
-        tx: ParsedTransaction,
-    ) -> None:
-        """POST the resolve-pending call and update result counters."""
-        amount_changed = tx.amount != Decimal(str(matched_row["amount"]))
-        logger.info(
-            "Resolving pending tx %s -> settled %s  desc=%r  "
-            "old_amount=%s  new_amount=%s  amount_changed=%s",
-            matched_row["id"],
-            settle_date,
-            tx.raw_description,
-            matched_row["amount"],
-            tx.amount,
-            amount_changed,
-        )
-        if not dry_run:
-            resolve_payload: dict[str, Any] = {
-                "posted_date": settle_date.isoformat() + "T00:00:00Z",
-            }
-            if amount_changed:
-                resolve_payload["amount"] = str(tx.amount)
-                resolve_payload["amount_currency"] = matched_row.get(
-                    "amount_currency", "USD"
-                )
-            try:
-                client.post(
-                    f"/api/v1/transactions/{matched_row['id']}/resolve-pending/",
-                    resolve_payload,
-                )
-                result.resolved += 1
-                if amount_changed:
-                    result.resolved_amount_changed += 1
-                # Remove from description index so it isn't double-matched.
-                desc_list = pending_by_desc.get(
-                    matched_row["raw_description"], []
-                )
-                if matched_row in desc_list:
-                    desc_list.remove(matched_row)
-            except Exception as e:
-                logger.warning(
-                    "Failed to resolve pending tx %s: %s",
-                    matched_row["id"],
-                    e,
-                )
+        if interactive:
+            console.print(f"[warning]{msg}[/warning]")
         else:
-            result.resolved += 1
-            if amount_changed:
-                result.resolved_amount_changed += 1
+            print(msg)
+        return True
 
-    for tx in settled_txs:
-        settle_date = tx.transaction_date  # already a date object from parser
+    try:
+        report = client.post(
+            f"/api/v1/bank-accounts/{bank_account_id}/sync-scrape/",
+            payload,
+        )
+    except Exception as exc:
+        if interactive:
+            console.print(
+                f"[error]sync-scrape failed for {account_label}: {exc}[/error]"
+            )
+        else:
+            logger.error("sync-scrape failed for %s: %s", account_label, exc)
+        return False
 
-        # Primary match: bank_transaction_id is the same for pending and
-        # settled states, so it's a reliable anchor when both sides have it.
-        if tx.bank_transaction_id:
-            matched = pending_by_bank_id.pop(tx.bank_transaction_id, None)
-            if matched:
-                _resolve_row(matched, settle_date, tx)
-                continue
+    # DRF serializes DecimalField as a string -- coerce so we can apply
+    # signed numeric formatting.  None means the totals matched.
+    raw_mismatch = report.get("balance_mismatch")
+    balance_mismatch: Decimal | None = (
+        Decimal(raw_mismatch) if raw_mismatch is not None else None
+    )
+    posting_warnings = report.get("posting_order_mismatches") or []
+    ok = balance_mismatch is None and not posting_warnings
 
-        # Fallback: match by description + date proximity (±5 days).
-        candidates = pending_by_desc.get(tx.raw_description, [])
-        if not candidates:
-            continue
+    if interactive:
+        table = Table(title=f"Summary -- {account_label}", show_header=False)
+        table.add_column("Metric", style="bold")
+        table.add_column("Value", justify="right")
+        table.add_row(
+            "Deleted pending", f"[accent]{report['deleted_pending']}[/accent]"
+        )
+        table.add_row(
+            "Inserted posted", f"[success]{report['inserted_posted']}[/success]"
+        )
+        table.add_row(
+            "Skipped posted (already in DB)",
+            f"[dim]{report['skipped_posted']}[/dim]",
+        )
+        table.add_row(
+            "Inserted pending",
+            f"[success]{report['inserted_pending']}[/success]",
+        )
+        bal_str = (
+            f"[error]{balance_mismatch:+}[/error]"
+            if balance_mismatch is not None
+            else "[success]match[/success]"
+        )
+        table.add_row("Ending balance", bal_str)
+        last_through = report.get("last_posted_through") or "-"
+        table.add_row("last_posted_through", str(last_through))
+        console.print()
+        console.print(table)
+        for w in posting_warnings:
+            console.print(f"[warning]posting-order: {w}[/warning]")
+    else:
+        bal_str = (
+            f"mismatch={balance_mismatch:+}"
+            if balance_mismatch is not None
+            else "balance OK"
+        )
+        print(
+            f"{account_label}: "
+            f"deleted_pending={report['deleted_pending']}, "
+            f"inserted_posted={report['inserted_posted']}, "
+            f"skipped_posted={report['skipped_posted']}, "
+            f"inserted_pending={report['inserted_pending']}, "
+            f"{bal_str}."
+        )
+        for w in posting_warnings:
+            logger.warning("posting-order: %s", w)
 
-        close: list[tuple[int, Decimal, dict[str, Any]]] = []
-        for row in candidates:
-            # posted_date from the API is an ISO datetime string.
-            row_date = datetime.fromisoformat(
-                row["posted_date"].replace("Z", "+00:00")
-            ).date()
-            delta = abs((settle_date - row_date).days)
-            if delta <= MAX_DATE_DELTA:
-                row_amount = Decimal(str(row["amount"]))
-                amount_diff = abs(tx.amount - row_amount)
-                close.append((delta, amount_diff, row))
-
-        if not close:
-            continue
-
-        # Pick closest date; break ties by closest amount.
-        close.sort(key=lambda t: (t[0], t[1]))
-        _, _, matched_row = close[0]
-        # Remove from description index to prevent double-matching.
-        pending_by_desc[tx.raw_description].remove(matched_row)
-        _resolve_row(matched_row, settle_date, tx)
-
-    return result
+    return ok
 
 
 ########################################################################
@@ -1048,10 +860,7 @@ def cli_cmd(
                 else:
                     logger.info("--- Importing account: %s ---", acct_name)
 
-                # Build statement
-                statement = _build_statement(account)
-
-                # Auto-match mibudge account by last-4-digits substring query
+                # Auto-match mibudge account by last-4-digits substring query.
                 last_four = _extract_last_four(acct_name)
                 if last_four is None:
                     if interactive:
@@ -1087,201 +896,34 @@ def cli_cmd(
                     any_error = True
                     continue
 
-                # Resolve any DB-pending rows whose settled counterparts
-                # appear in this scrape.  Must run before _fetch_existing so
-                # that the resolved rows appear in the dedup map.
-                resolve_result = _resolve_pending_transactions(
-                    statement,
-                    bank_account_id,
-                    client,
-                    user_timezone,
-                    dry_run=dry_run,
+                payload, posted_count, pending_count = _build_sync_payload(
+                    account, scrape_time, user_timezone
                 )
-                if resolve_result.resolved:
-                    logger.info(
-                        "Resolved %d pending transaction(s) "
-                        "(%d with amount change).",
-                        resolve_result.resolved,
-                        resolve_result.resolved_amount_changed,
-                    )
-
-                # settled_txs is still needed to guard _mark_imported below.
-                settled_txs = [
-                    tx for tx in statement.transactions if not tx.pending
-                ]
-                # Pre-fetch dedup window using ALL transactions (settled +
-                # pending).  Pending transactions use date.today() as their
-                # posted_date, so limiting the range to settled dates leaves
-                # previously-imported pending transactions outside the window
-                # and causes them to be re-imported on every run.
-                existing: dict[
-                    tuple[str, str, str], list[tuple[str, str, str]]
-                ] = {}
-                existing_by_bank_id: dict[str, tuple[str, str, str]] = {}
-                if statement.transactions:
-                    dedup_start = min(
-                        tx.transaction_date for tx in statement.transactions
-                    )
-                    dedup_end = max(
-                        tx.transaction_date for tx in statement.transactions
-                    )
-                    if interactive:
-                        with console.status(
-                            f"[bold]Fetching existing transactions "
-                            f"({dedup_start} -> {dedup_end})..."
-                        ):
-                            existing, existing_by_bank_id = _fetch_existing(
-                                client,
-                                bank_account_id,
-                                dedup_start,
-                                dedup_end,
-                                user_timezone,
-                            )
-                    else:
-                        existing, existing_by_bank_id = _fetch_existing(
-                            client,
-                            bank_account_id,
-                            dedup_start,
-                            dedup_end,
-                            user_timezone,
-                        )
-
-                # Resolve descriptions that BofA truncated in the web UI
-                # (e.g. "...CO...") against their full stored versions so
-                # the exact-match dedup catches prior CSV-imported entries.
-                if existing:
-                    statement = _resolve_truncated_descriptions(
-                        statement, existing
-                    )
-
-                # Import
-                result = import_statement(
-                    statement,
-                    bank_account_id,
+                ok = _post_sync_scrape(
                     client,
-                    user_timezone,
-                    existing=existing,
-                    existing_by_bank_id=existing_by_bank_id,
+                    bank_account_id,
+                    payload,
+                    posted_count=posted_count,
+                    pending_count=pending_count,
+                    account_label=acct_name,
                     dry_run=dry_run,
+                    console=console,
+                    interactive=interactive,
                 )
-
-                # Per-account summary
-                if interactive:
-                    verb = "Would import" if dry_run else "Imported"
-                    resolve_verb = "Would resolve" if dry_run else "Resolved"
-                    update_verb = "Would update" if dry_run else "Updated"
-                    title = (
-                        f"{'Dry Run ' if dry_run else ''}Summary — {acct_name}"
-                    )
-                    table = Table(title=title, show_header=False)
-                    table.add_column("Metric", style="bold")
-                    table.add_column("Count", justify="right")
-                    table.add_row(
-                        f"{resolve_verb} (pending→posted)",
-                        f"[accent]{resolve_result.resolved}[/accent]",
-                    )
-                    table.add_row(verb, f"[success]{result.imported}[/success]")
-                    table.add_row(
-                        "Skipped (duplicates)", f"[dim]{result.skipped}[/dim]"
-                    )
-                    table.add_row(
-                        f"{update_verb} (type backfill)",
-                        f"[accent]{result.updated}[/accent]",
-                    )
-                    table.add_row(
-                        "Failed",
-                        f"[error]{result.failed}[/error]"
-                        if result.failed
-                        else "0",
-                    )
-                    console.print()
-                    console.print(table)
-                    if result.unrecognized:
-                        console.print(
-                            f"\n[warning]{len(result.unrecognized)} "
-                            f"transaction(s) with unrecognized type[/warning]"
-                        )
-                        seen: set[str] = set()
-                        for desc in result.unrecognized:
-                            if desc not in seen:
-                                seen.add(desc)
-                                console.print(f"  [dim]{desc}[/dim]")
-                else:
-                    prefix = "DRY RUN. " if dry_run else ""
-                    verb = "Would import" if dry_run else "Imported"
-                    resolve_verb = "Would resolve" if dry_run else "Resolved"
-                    update_verb = "Would update" if dry_run else "Updated"
-                    print(
-                        f"{prefix}{acct_name}: "
-                        f"{resolve_verb} {resolve_result.resolved} pending, "
-                        f"{verb} {result.imported}, "
-                        f"Skipped {result.skipped}, "
-                        f"{update_verb} {result.updated}, "
-                        f"Failed {result.failed}."
-                    )
-
-                if result.failed > 0:
+                if not ok:
                     any_error = True
 
-                # mark-imported and run-funding only when there are settled
-                # transactions to anchor last_posted_through; skipped when the
-                # account has only pending transactions (avoids falsely
-                # advancing the funding gate).
-                if not dry_run and settled_txs:
-                    _mark_imported(
+                # run-funding only fires when at least one settled
+                # transaction was in this scrape (pending-only scrapes do
+                # not advance last_posted_through and should not trigger
+                # funding).
+                if not dry_run and run_funding and posted_count > 0:
+                    _run_funding(
                         client,
                         bank_account_id,
-                        statement.ending_date,
                         console=console,
                         interactive=interactive,
                     )
-                    if run_funding:
-                        _run_funding(
-                            client,
-                            bank_account_id,
-                            console=console,
-                            interactive=interactive,
-                        )
-
-                # Post-import balance check: after all transactions are
-                # posted, mibudge's available_balance should match BofA's
-                # ending (available) balance.  A mismatch after import
-                # suggests transactions exist in BofA's history that
-                # aren't in the scrape window (e.g. older than the
-                # activity page) or were never imported.
-                if not dry_run:
-                    updated = client.get(
-                        f"/api/v1/bank-accounts/{bank_account_id}/"
-                    )
-                    mibudge_bal = Decimal(
-                        str(updated["available_balance"])
-                    ).quantize(Decimal("0.01"))
-                    bofa_bal = statement.ending_balance
-                    bal_diff = bofa_bal - mibudge_bal
-                    if bal_diff != Decimal("0.00"):
-                        bal_msg = (
-                            f"Post-import balance mismatch for "
-                            f"{acct_name!r}: BofA={bofa_bal}, "
-                            f"mibudge={mibudge_bal} "
-                            f"(off by {bal_diff:+.2f}) -- "
-                            f"possible transactions outside the scraped "
-                            f"window or never imported."
-                        )
-                        if interactive:
-                            console.print(f"[warning]{bal_msg}[/warning]")
-                        else:
-                            logger.warning(bal_msg)
-                        any_error = True
-                    else:
-                        if interactive:
-                            console.print(
-                                f"[success]Balance verified: "
-                                f"{bofa_bal}[/success]"
-                            )
-                        else:
-                            logger.info(
-                                "Post-import balance verified: %s", bofa_bal
-                            )
 
     except AuthenticationError as e:
         raise click.ClickException(str(e)) from e

@@ -11,6 +11,8 @@ These tools will eventually live in their own repository. For now they share the
 | Tool | Command | Purpose |
 |------|---------|---------|
 | Statement importer | `python -m importers import` | Parse bank statement files (OFX/QFX or BofA CSV) and POST new transactions to mibudge |
+| BofA live scraper | `python -m importers.import_bofa_live` | Log in to Bank of America, scrape all accessible accounts, and sync each one into mibudge via the `sync-scrape` endpoint |
+| BofA saved-scrape replayer | `python -m importers.import_bofa_saved` | Replay saved BofA scrape JSON files through the same `sync-scrape` endpoint without re-logging in to BofA |
 | Budget backfill | `python -m importers backfill_budget` | Interactively allocate historical transactions to a budget, month by month |
 
 ---
@@ -26,6 +28,23 @@ MIBUDGE_URL=https://your-mibudge-host
 MIBUDGE_USERNAME=you@example.com
 MIBUDGE_PASSWORD=yourpassword
 ```
+
+### Environment variables for every flag
+
+Every flag on every command has a corresponding environment variable. All importers use `MIBUDGE_` as the prefix; click derives the variable name automatically: `--flag-name` → `MIBUDGE_FLAG_NAME` (uppercase, hyphens replaced with underscores). For example:
+
+| Flag | Environment variable |
+|------|----------------------|
+| `--url` | `MIBUDGE_URL` |
+| `--username` | `MIBUDGE_USERNAME` |
+| `--dry-run` | `MIBUDGE_DRY_RUN` |
+| `--run-funding` | `MIBUDGE_RUN_FUNDING` |
+| `--save-dir` | `MIBUDGE_SAVE_DIR` |
+| `--verbose` | `MIBUDGE_VERBOSE` |
+
+Two flags on the BofA live scraper use explicit names that override the auto-prefix: `--bofa-id` reads `BOFA_ID` and `--bofa-passcode` reads `BOFA_PASSCODE` (not `MIBUDGE_BOFA_ID` / `MIBUDGE_BOFA_PASSCODE`).
+
+CLI flags always take precedence over environment variables.
 
 Alternatively, pull credentials from HashiCorp Vault:
 
@@ -116,6 +135,8 @@ uv run python -m importers import --dry-run ~/Downloads/*.ofx
 
 ### Flag reference
 
+Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see [Environment variables for every flag](#environment-variables-for-every-flag)).
+
 | Flag                                       | Purpose                                                     |
 |--------------------------------------------|-------------------------------------------------------------|
 | positional paths or `-f, --file`           | Statement files (repeatable, shell globs accepted)          |
@@ -164,6 +185,61 @@ A file that fails its own consistency check is rejected before touching the serv
 
 ---
 
+## BofA Live Scraper
+
+The live scraper logs into Bank of America using a Selenium/Firefox driver and syncs all accessible accounts into mibudge.
+
+### Installation
+
+The scraper requires an optional dependency group:
+
+```bash
+uv sync --group importers-bofa
+```
+
+### Usage
+
+```bash
+uv run --group importers-bofa python -m importers.import_bofa_live
+```
+
+BofA credentials are read from `BOFA_ID` and `BOFA_PASSCODE` environment variables (or `--bofa-id` / `--bofa-passcode` flags). mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → Vault).
+
+If BofA requires 2FA, the scraper prompts for the code interactively via stdin. Run with `--no-headless` to watch the browser.
+
+### Saving scrape output
+
+Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file (`YYYY-MM-DD-HHMMSS-<last4>.json`). This lets you re-import from the saved file later without re-logging in to BofA. Combine with `--save-only` to capture the data on a machine that can reach BofA but not mibudge:
+
+```bash
+# Capture on BofA-accessible machine:
+uv run --group importers-bofa python -m importers.import_bofa_live \
+    --save-dir ./saved --save-only
+
+# Replay later:
+uv run python -m importers.import_bofa_saved saved/*.json
+```
+
+### Flag reference
+
+Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see [Environment variables for every flag](#environment-variables-for-every-flag)). The two exceptions are noted below.
+
+| Flag | Purpose |
+|------|---------|
+| `--bofa-id` | BofA Online ID (env var: `BOFA_ID`, not `MIBUDGE_BOFA_ID`) |
+| `--bofa-passcode` | BofA passcode (env var: `BOFA_PASSCODE`, not `MIBUDGE_BOFA_PASSCODE`) |
+| `--account, -a` | Filter by BofA account name substring (repeatable; omit for all accounts) |
+| `--headless / --no-headless` | Run Firefox headlessly (default) or visibly for debugging/2FA |
+| `--timeout` | Selenium page-load timeout in seconds (default: 5) |
+| `--save-dir` | Directory to write raw scrape JSON files |
+| `--save-only` | Scrape and save without importing; requires `--save-dir` |
+| `--dry-run, -n` | Show what would be synced without making any changes |
+| `--run-funding` | Run the funding engine after each successful account sync |
+| `--verbose, -v` | Debug logging |
+| `--plain` | Disable rich terminal output |
+
+---
+
 ## Pending Transactions
 
 Banks often surface in-flight transactions (authorizations not yet settled) before they post. mibudge supports this natively: a transaction can be imported with `pending=True`, which affects `available_balance` immediately but not `posted_balance` until it settles.
@@ -175,22 +251,24 @@ The BofA live scraper is the current importer that produces pending transactions
 - **Pending transactions are display-only.** They are imported with a single allocation to the account's Unallocated budget, and that allocation cannot be changed while the transaction is pending. Attempting to split a pending transaction is rejected.
 - Once a pending transaction settles, it transitions to posted status and behaves like any other transaction — you can split it, allocate it, and so on.
 
-### How pending transactions settle
+### How the scrapers handle pending transactions
 
-Each time the live scraper runs, it performs a pending-resolution pass before importing new transactions. For every settled scraped transaction it looks for a matching pending row in mibudge — matching on identical `raw_description` and a `posted_date` within 5 calendar days. When a match is found, mibudge atomically:
+The BofA live and saved scrapers use the `sync-scrape` endpoint (`POST /api/v1/bank-accounts/<id>/sync-scrape/`). On every run, the scraper hands the server the full current bank-side snapshot — posted and pending transactions together. The server reconciles atomically:
 
-1. Clears the `pending` flag
-2. Updates `posted_date` to the settled date
-3. Credits `posted_balance` by the final amount
-4. If the final settled amount differs from the pending estimate, adjusts `available_balance` by the delta and updates the Unallocated allocation
+1. **Wipe pending**: all existing pending rows for the account are deleted (along with their Unallocated allocations).
+2. **Dedup posted**: new settled transactions are compared against existing posted rows by (date, amount, raw description). Already-known rows are skipped; genuinely new ones are inserted.
+3. **Re-insert pending**: the scraper's current pending list is inserted fresh.
+4. **Snapshots recomputed**: per-transaction running balance snapshots and the Unallocated budget allocation snapshots are updated before the response returns.
 
-The resolution pass runs before the normal dedup check, so settled rows do not appear as duplicate imports.
+This approach means pending transaction UUIDs are not stable across scrapes -- the DB record is deleted and re-created on every sync. Any external reference to a pending transaction's UUID will be stale after the next run.
 
-Pending resolution is also available directly via the REST API (`POST /api/v1/transactions/<id>/resolve-pending/`) for integrations that handle their own matching logic.
+Cancelled authorizations and "stuck" pending rows are cleaned up automatically: if the bank stops showing a pending transaction, the next sync removes it with no manual intervention.
 
-### Known limitation: stuck-pending rows
+**Description normalization**: BofA appends "Amount may change - waiting for final amount from merchant" (via a `<br>` tag, rendered as a newline by the scraper) to some pending descriptions for restaurant-style transactions where the final charge may differ from the authorization. The scraper strips everything from the first newline onward so that raw descriptions are clean and consistent regardless of pending/settled status.
 
-If a pending transaction never settles (cancelled authorization, returned charge, etc.) the row will remain pending in mibudge indefinitely. Each subsequent scrape that sees the same pending transaction will attempt to match it but find no settled counterpart, leaving it untouched. However, if the bank later shows the same description as a new settled transaction on a different date, the description-match heuristic may resolve it incorrectly. In that edge case, delete the stuck-pending row manually and let the next scrape import the settled version fresh.
+### Manual pending resolution
+
+The `resolve-pending` REST API (`POST /api/v1/transactions/<id>/resolve-pending/`) is available for integrations or importers that handle their own matching logic and need to transition an individual pending row to posted status.
 
 ---
 
@@ -234,6 +312,8 @@ Re-running the script for a budget you have already backfilled is safe. Before p
 If reassigning transactions causes the budget's balance to go negative (because spending now exceeds the funding that was originally recorded), that is not corrected automatically. You are responsible for making a manual internal transfer to bring the budget back to zero or above.
 
 ### Flag reference
+
+Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see [Environment variables for every flag](#environment-variables-for-every-flag)).
 
 | Flag            | Purpose                                  |
 |-----------------|------------------------------------------|

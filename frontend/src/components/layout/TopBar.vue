@@ -97,26 +97,24 @@ watch(
       @click="switcherOpen = true"
     >
       <span class="flex items-center gap-1 text-[11px] text-secondary">
-        <span class="truncate">{{ activeAccount.name }}</span>
-        <span class="whitespace-nowrap">
-          ·
-          <MoneyAmount
-            :amount="activeAccount.available_balance"
-            :currency="activeAccount.available_balance_currency"
-            size="sm"
-          />
-        </span>
-        <IconChevronDown class="h-3 w-3" />
+        <span class="truncate">{{ activeAccount.name }}, Available:</span>
+        <MoneyAmount
+          :amount="activeAccount.available_balance"
+          :currency="activeAccount.available_balance_currency"
+          size="sm"
+          class="whitespace-nowrap"
+        />
+        <IconChevronDown class="h-3 w-3 flex-none" />
       </span>
-      <MoneyAmount
-        v-if="unallocated"
-        :amount="unallocated.balance"
-        :currency="unallocated.balance_currency"
-        size="lg"
-      />
-      <span v-else class="font-mono text-[22px] font-medium text-neutral-400">—</span>
-      <span class="text-[10px] font-semibold uppercase tracking-wider text-mint-400">
+      <span class="text-[14px] font-medium text-mint-600">
         Unallocated
+        <MoneyAmount
+          v-if="unallocated"
+          :amount="unallocated.balance"
+          :currency="unallocated.balance_currency"
+          size="sm"
+        />
+        <span v-else class="font-mono text-neutral-400">—</span>
       </span>
     </button>
     <div v-else class="flex-1" />

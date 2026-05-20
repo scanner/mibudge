@@ -22,7 +22,9 @@ importers/
   __init__.py
   __main__.py             # python -m importers entry point
   client.py               # REST API client (auth, pagination, retries)
-  import_transactions.py  # Main import script (click CLI)
+  import_transactions.py  # Statement importer (click CLI): OFX/QFX + BofA CSV
+  import_bofa_live.py     # BofA live scraper: Selenium login -> sync-scrape endpoint
+  import_bofa_saved.py    # BofA saved-scrape replayer: JSON file -> sync-scrape endpoint
   parsers/
     __init__.py
     common.py             # Shared ParsedStatement / ParsedTransaction dataclasses
@@ -64,6 +66,23 @@ can mix formats in one run *for the same destination account*.
 
 Connection/credentials options live on the group itself and apply to
 both subcommands.
+
+The BofA scrapers are separate entry points (not subcommands of the
+group): `python -m importers.import_bofa_live` and
+`python -m importers.import_bofa_saved`.  See their module docstrings
+and `docs/importers.md` for usage.
+
+### Environment variables for every flag
+
+Every command uses `auto_envvar_prefix="MIBUDGE"`, so every flag
+automatically reads from a `MIBUDGE_FLAG_NAME` environment variable
+when the flag is not set on the CLI.  Click derives the name as:
+uppercase, hyphens replaced with underscores, `MIBUDGE_` prepended.
+Examples: `--dry-run` → `MIBUDGE_DRY_RUN`; `--vault-path` →
+`MIBUDGE_VAULT_PATH`.
+
+Two flags on `import_bofa_live` override this with explicit names:
+`--bofa-id` reads `BOFA_ID` and `--bofa-passcode` reads `BOFA_PASSCODE`.
 
 ## Usage examples
 
@@ -189,6 +208,9 @@ silently guessing:
 
 ## Flag reference (import subcommand)
 
+Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment
+variable (see [Environment variables for every flag](#environment-variables-for-every-flag)).
+
 | Flag | Purpose |
 |------|---------|
 | positional paths / `-f, --file` | Statement files (CSV/OFX/QFX); both forms accepted, repeatable, combinable with shell globs. |
@@ -270,7 +292,8 @@ which begin/end pair.
 Resolved in this order (first win):
 
 1. CLI flags
-2. Environment variables (`MIBUDGE_URL`, `MIBUDGE_USERNAME`, `MIBUDGE_PASSWORD`, etc.)
+2. Environment variables -- every flag has a `MIBUDGE_FLAG_NAME` equivalent
+   (see [Environment variables for every flag](#environment-variables-for-every-flag))
 3. `.env` file (loaded via python-dotenv)
 4. Vault KV2 secret (if `--vault-path` / `MIBUDGE_VAULT_PATH` is set)
 
