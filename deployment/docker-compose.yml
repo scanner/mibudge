@@ -1,0 +1,50 @@
+# Deployment compose file -- copy to the host running the service alongside a
+# .env file.  The image is pulled from GHCR; nothing is built here.
+#
+# Environment variables (set in .env):
+#   VERSION   -- image tag to run (e.g. "1.2.3" or "latest")
+#   PORT      -- localhost port the reverse proxy connects to (default 8000)
+
+services:
+  migrate: &mibudge
+    image: "ghcr.io/scanner/mibudge:${VERSION}"
+    restart: "no"
+    env_file: .env
+    command: python /app/manage.py migrate --no-input
+    networks:
+      - default
+      - redis_network
+      - telegraf_network
+
+  web:
+    <<: *mibudge
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${PORT:-8000}:8000"
+
+  celeryworker:
+    <<: *mibudge
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: /app/scripts/start_celeryworker.sh
+
+  celerybeat:
+    <<: *mibudge
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: /app/scripts/start_celerybeat.sh
+
+networks:
+  redis_network:
+    name: redis_network
+    external: true
+  telegraf_network:
+    name: telegraf_network
+    external: true
