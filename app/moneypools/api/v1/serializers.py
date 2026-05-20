@@ -1187,3 +1187,88 @@ class ResolvePendingSerializer(serializers.Serializer):
                     }
                 )
         return attrs
+
+
+########################################################################
+########################################################################
+#
+class ScrapeSyncTransactionSerializer(serializers.Serializer):
+    """One transaction in a scrape-sync payload.
+
+    Mirrors `service.sync_scrape.ScrapedTransaction`.  Pending rows
+    carry the scrape's local `posted_date` (banks typically render
+    pending rows without a real settlement date -- e.g. BofA shows
+    'Processing' in the date column -- and the scraper substitutes
+    the current local datetime).  Posted rows carry the bank-supplied
+    settlement datetime.  `transaction_date` is derived server-side
+    from the embedded MM/DD pattern in `raw_description`.
+
+    `running_balance` is optional and used only for the posting-order
+    sanity walk; never persisted.
+    """
+
+    is_pending = serializers.BooleanField()
+    posted_date = serializers.DateTimeField()
+    raw_description = serializers.CharField(max_length=512)
+    amount = DRFMoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default_currency=get_default_currency(),
+    )
+    transaction_type = serializers.CharField(
+        max_length=32, required=False, allow_blank=True, default=""
+    )
+    running_balance = serializers.DecimalField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+
+########################################################################
+########################################################################
+#
+class ScrapeSyncSerializer(serializers.Serializer):
+    """Input serializer for the bank-account scrape-sync action.
+
+    Validates a full bank-side snapshot for one account: when the
+    scrape was taken, the bank's ending available balance, and the
+    list of transactions (newest-first as the bank renders them).
+    """
+
+    scraped_at = serializers.DateTimeField()
+    ending_balance = DRFMoneyField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        default_currency=get_default_currency(),
+    )
+    transactions = ScrapeSyncTransactionSerializer(many=True)
+
+
+########################################################################
+########################################################################
+#
+class ScrapeSyncReportSerializer(serializers.Serializer):
+    """Output serializer for the bank-account scrape-sync action.
+
+    Mirrors `service.sync_scrape.ScrapeSyncReport`.  Reports
+    everything the caller needs to summarise what changed and surface
+    validation warnings.
+    """
+
+    deleted_pending = serializers.IntegerField()
+    inserted_posted = serializers.IntegerField()
+    skipped_posted = serializers.IntegerField()
+    inserted_pending = serializers.IntegerField()
+    balance_mismatch = serializers.DecimalField(
+        max_digits=MAX_DIGITS,
+        decimal_places=DECIMAL_PLACES,
+        allow_null=True,
+    )
+    posting_order_mismatches = serializers.ListField(
+        child=serializers.CharField()
+    )
+    last_posted_through = serializers.DateField(allow_null=True)
+    new_transaction_ids = serializers.ListField(child=serializers.UUIDField())

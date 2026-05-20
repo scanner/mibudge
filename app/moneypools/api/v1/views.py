@@ -47,6 +47,7 @@ from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
 from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service import sync_scrape as sync_scrape_svc
 from moneypools.service import transaction as transaction_svc
 from moneypools.service.shared import funding_system_user
 
@@ -62,6 +63,8 @@ from .serializers import (
     BudgetSerializer,
     InternalTransactionSerializer,
     ResolvePendingSerializer,
+    ScrapeSyncReportSerializer,
+    ScrapeSyncSerializer,
     TransactionAllocationSerializer,
     TransactionSerializer,
     TransactionSplitsSerializer,
@@ -245,6 +248,70 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(account)
         return Response(serializer.data)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Sync a bank-side scrape",
+        description=(
+            "Reconcile this account against a fresh snapshot from a "
+            "live bank scraper.  All existing pending transactions on "
+            "the account are deleted, posted transactions from the "
+            "scrape are de-duplicated against the database, and any "
+            "new posted/pending rows are inserted in the order the "
+            "scraper supplies (newest-first).  Per-transaction running "
+            "balance snapshots and the unallocated-budget allocation "
+            "snapshots are recomputed before the request returns.  "
+            "Runs atomically under the account + unallocated-budget "
+            "locks; on any error the database is unchanged."
+        ),
+        request=ScrapeSyncSerializer,
+        responses={200: ScrapeSyncReportSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="sync-scrape")
+    def sync_scrape(self, request: Request, id: str = "") -> Response:
+        """Reconcile the account against a fresh bank-side scrape."""
+        account: BankAccount = self.get_object()
+
+        serializer = ScrapeSyncSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        scraped_txs = [
+            sync_scrape_svc.ScrapedTransaction(
+                is_pending=stx["is_pending"],
+                posted_date=stx["posted_date"],
+                raw_description=stx["raw_description"],
+                amount=stx["amount"],
+                transaction_type=stx.get("transaction_type", ""),
+                running_balance=stx.get("running_balance"),
+            )
+            for stx in validated["transactions"]
+        ]
+        payload = sync_scrape_svc.ScrapeSyncPayload(
+            scraped_at=validated["scraped_at"],
+            ending_balance=validated["ending_balance"],
+            transactions=scraped_txs,
+        )
+
+        try:
+            report = sync_scrape_svc.sync_scrape(account, payload)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+        out = ScrapeSyncReportSerializer(
+            {
+                "deleted_pending": report.deleted_pending,
+                "inserted_posted": report.inserted_posted,
+                "skipped_posted": report.skipped_posted,
+                "inserted_pending": report.inserted_pending,
+                "balance_mismatch": report.balance_mismatch,
+                "posting_order_mismatches": report.posting_order_mismatches,
+                "last_posted_through": report.last_posted_through,
+                "new_transaction_ids": report.new_transaction_ids,
+            }
+        )
+        return Response(out.data)
 
     ####################################################################
     #

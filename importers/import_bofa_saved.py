@@ -1,9 +1,10 @@
 """
 Replay saved BofA scrape files into mibudge without logging in to BofA.
 
-Loads one or more JSON files written by ``import_bofa_live --save-dir`` and
-runs them through the same dedup + POST pipeline as the live scraper, but
-without requiring a browser or BofA credentials.
+Loads one or more JSON files written by `import_bofa_live --save-dir`
+and submits each one through the same scrape-sync endpoint the live
+importer uses.  No browser, no BofA credentials -- just the saved
+snapshot rolling forward into the database.
 
 Useful for:
 - Re-importing after fixing an issue without re-scraping
@@ -12,15 +13,16 @@ Useful for:
 
 Usage::
 
-    uv run python -m importers.import_bofa_saved \
-        saved/2026-05-15-103045-1234.json \
-        saved/2026-05-15-103045-5678.json \
+    uv run python -m importers.import_bofa_saved \\
+        saved/2026-05-15-103045-1234.json \\
+        saved/2026-05-15-103045-5678.json \\
         [--dry-run] [--run-funding] [--verbose]
 """
 
 # system imports
 #
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 # 3rd party imports
@@ -29,7 +31,6 @@ import click
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.table import Table
 
 # Project imports
 #
@@ -37,21 +38,15 @@ from importers.client import AuthenticationError
 from importers.import_bofa_live import (
     SavedScrape,
     SavedTransaction,
-    _build_statement,
+    _build_sync_payload,
     _extract_last_four,
-    _filter_existing_pending,
-    _get_variable_amount_descs,
-    _resolve_pending_transactions,
-    _resolve_truncated_descriptions,
+    _post_sync_scrape,
     load_saved_scrape,
 )
 from importers.import_transactions import (
     _build_client,
-    _fetch_existing,
-    _mark_imported,
     _resolve_account_by_query,
     _run_funding,
-    import_statement,
 )
 from importers.theme import get_theme, theme_option
 
@@ -62,10 +57,11 @@ logger = logging.getLogger(__name__)
 ########################################################################
 #
 class _ReplayAccount:
-    """Mock bofa_scraper Account backed by a ``SavedScrape``.
+    """Mock bofa_scraper Account backed by a `SavedScrape`.
 
-    Implements the same interface as bofa_scraper's Account object so that
-    ``_build_statement`` can be called without a real browser session.
+    Implements the same interface as bofa_scraper's Account object so
+    that `_build_sync_payload` can be called without a real browser
+    session.
     """
 
     def __init__(self, saved: SavedScrape) -> None:
@@ -121,11 +117,13 @@ def _setup_logging(
         "Replay saved BofA scrape files into mibudge without logging in "
         "to Bank of America.\n\n"
         "Accepts one or more JSON files written by "
-        "``import_bofa_live --save-dir`` and runs them through the same "
-        "dedup + POST pipeline as the live scraper.  mibudge credentials "
-        "follow the same resolution order as the other importers.\n\n"
-        "Useful for re-importing after a fix, dry-running to preview what "
-        "would be created, or verifying coverage against CSV exports."
+        "`import_bofa_live --save-dir` and submits each through the "
+        "same scrape-sync endpoint the live importer uses.  mibudge "
+        "credentials follow the same resolution order as the other "
+        "importers.\n\n"
+        "Useful for re-importing after a fix, dry-running to preview "
+        "what would be created, or verifying coverage against CSV "
+        "exports."
     ),
 )
 @click.argument(
@@ -168,7 +166,7 @@ def _setup_logging(
     is_flag=True,
     help=(
         "Show what would be imported without making any changes. "
-        "Checks for duplicates but does not POST or PATCH."
+        "Resolves accounts and builds the payload but does not POST."
     ),
 )
 @click.option(
@@ -207,7 +205,7 @@ def cli_cmd(
 
     if dry_run and interactive:
         console.print(
-            "[bold warning]DRY RUN[/bold warning] — no changes will be made."
+            "[bold warning]DRY RUN[/bold warning] -- no changes will be made."
         )
 
     # Load and validate all files up front so we fail fast before auth.
@@ -264,7 +262,6 @@ def cli_cmd(
                     )
 
                 account = _ReplayAccount(saved)
-                statement = _build_statement(account)
 
                 last_four = _extract_last_four(acct_name)
                 if last_four is None:
@@ -301,165 +298,41 @@ def cli_cmd(
                     any_error = True
                     continue
 
-                # Must run before _fetch_existing so that any pending rows
-                # resolved here show up in the dedup map as settled and are
-                # not re-imported as new transactions.
-                resolve_result = _resolve_pending_transactions(
-                    statement,
-                    bank_account_id,
+                # The scrape's original scraped_at lives on the SavedScrape;
+                # parse it back into a datetime for the payload.  Falls back
+                # to the file's mtime then now() if the field is malformed
+                # (shouldn't happen with a current-format file).
+                try:
+                    scraped_at = datetime.fromisoformat(saved.scraped_at)
+                    if scraped_at.tzinfo is None:
+                        scraped_at = scraped_at.replace(tzinfo=UTC)
+                except ValueError:
+                    scraped_at = datetime.now(UTC)
+
+                payload, posted_count, pending_count = _build_sync_payload(
+                    account, scraped_at, user_timezone
+                )
+                ok = _post_sync_scrape(
                     client,
-                    user_timezone,
+                    bank_account_id,
+                    payload,
+                    posted_count=posted_count,
+                    pending_count=pending_count,
+                    account_label=acct_name,
                     dry_run=dry_run,
+                    console=console,
+                    interactive=interactive,
                 )
-                if resolve_result.resolved:
-                    logger.info(
-                        "Resolved %d pending transaction(s) "
-                        "(%d with amount change).",
-                        resolve_result.resolved,
-                        resolve_result.resolved_amount_changed,
-                    )
-
-                # Drop pending transactions already in the DB.
-                variable_amount_descs = _get_variable_amount_descs(account)
-                statement, skipped_pending = _filter_existing_pending(
-                    statement,
-                    bank_account_id,
-                    client,
-                    variable_amount_descs,
-                )
-                if skipped_pending:
-                    logger.info(
-                        "Skipped %d already-imported pending transaction(s).",
-                        skipped_pending,
-                    )
-
-                # Capture settled list now; used later to gate _mark_imported.
-                settled_txs = [
-                    tx for tx in statement.transactions if not tx.pending
-                ]
-
-                # Dedup window spans ALL transactions (settled + pending) so
-                # that pending rows -- whose date is today -- are not outside
-                # the fetch range and re-imported on every run.
-                existing: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
-                if statement.transactions:
-                    dedup_start = min(
-                        tx.transaction_date for tx in statement.transactions
-                    )
-                    dedup_end = max(
-                        tx.transaction_date for tx in statement.transactions
-                    )
-                    if interactive:
-                        with console.status(
-                            f"[bold]Fetching existing transactions "
-                            f"({dedup_start} -> {dedup_end})..."
-                        ):
-                            existing = _fetch_existing(
-                                client,
-                                bank_account_id,
-                                dedup_start,
-                                dedup_end,
-                                user_timezone,
-                            )
-                    else:
-                        existing = _fetch_existing(
-                            client,
-                            bank_account_id,
-                            dedup_start,
-                            dedup_end,
-                            user_timezone,
-                        )
-
-                # BofA's web UI truncates long ACH descriptions with '...'.
-                # Map them to the full version from a prior CSV import so the
-                # (date, amount, description) dedup key matches.
-                if existing:
-                    statement = _resolve_truncated_descriptions(
-                        statement, existing
-                    )
-
-                result = import_statement(
-                    statement,
-                    bank_account_id,
-                    client,
-                    user_timezone,
-                    existing=existing,
-                    dry_run=dry_run,
-                )
-
-                if interactive:
-                    verb = "Would import" if dry_run else "Imported"
-                    resolve_verb = "Would resolve" if dry_run else "Resolved"
-                    update_verb = "Would update" if dry_run else "Updated"
-                    title = (
-                        f"{'Dry Run ' if dry_run else ''}Summary — {acct_name}"
-                    )
-                    table = Table(title=title, show_header=False)
-                    table.add_column("Metric", style="bold")
-                    table.add_column("Count", justify="right")
-                    table.add_row(
-                        f"{resolve_verb} (pending→posted)",
-                        f"[accent]{resolve_result.resolved}[/accent]",
-                    )
-                    table.add_row(verb, f"[success]{result.imported}[/success]")
-                    table.add_row(
-                        "Skipped (duplicates)",
-                        f"[dim]{result.skipped}[/dim]",
-                    )
-                    table.add_row(
-                        f"{update_verb} (type backfill)",
-                        f"[accent]{result.updated}[/accent]",
-                    )
-                    table.add_row(
-                        "Failed",
-                        f"[error]{result.failed}[/error]"
-                        if result.failed
-                        else "0",
-                    )
-                    console.print()
-                    console.print(table)
-                    if result.unrecognized:
-                        console.print(
-                            f"\n[warning]{len(result.unrecognized)} "
-                            f"transaction(s) with unrecognized type[/warning]"
-                        )
-                        seen: set[str] = set()
-                        for desc in result.unrecognized:
-                            if desc not in seen:
-                                seen.add(desc)
-                                console.print(f"  [dim]{desc}[/dim]")
-                else:
-                    prefix = "DRY RUN. " if dry_run else ""
-                    verb = "Would import" if dry_run else "Imported"
-                    resolve_verb = "Would resolve" if dry_run else "Resolved"
-                    update_verb = "Would update" if dry_run else "Updated"
-                    print(
-                        f"{prefix}{acct_name}: "
-                        f"{resolve_verb} {resolve_result.resolved} pending, "
-                        f"{verb} {result.imported}, "
-                        f"Skipped {result.skipped}, "
-                        f"{update_verb} {result.updated}, "
-                        f"Failed {result.failed}."
-                    )
-
-                if result.failed > 0:
+                if not ok:
                     any_error = True
 
-                if not dry_run and settled_txs:
-                    _mark_imported(
+                if not dry_run and run_funding and posted_count > 0:
+                    _run_funding(
                         client,
                         bank_account_id,
-                        statement.ending_date,
                         console=console,
                         interactive=interactive,
                     )
-                    if run_funding:
-                        _run_funding(
-                            client,
-                            bank_account_id,
-                            console=console,
-                            interactive=interactive,
-                        )
 
     except AuthenticationError as e:
         raise click.ClickException(str(e)) from e

@@ -108,11 +108,33 @@ function availableForRow(rowIndex: number): Budget[] {
   return selectableBudgets.value.filter((b) => !taken.has(b.id));
 }
 
+// Format the budget's current balance for the option label.  Each
+// budget can carry its own currency, so we honour `balance_currency`
+// rather than assuming USD.  Falls back to a plain placeholder if the
+// value is unparseable (shouldn't happen with API-supplied data, but
+// keeps the dropdown rendering robust).
+function formatBalance(b: Budget): string {
+  const n = Number(b.balance);
+  if (Number.isNaN(n)) return "";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: b.balance_currency || "USD",
+  }).format(n);
+}
+
+// Label rendered in the <option>: budget name + its current balance,
+// matching the "Name ($X left)" pattern used elsewhere in the
+// transaction UI.
+function budgetLabel(b: Budget): string {
+  return `${b.name} (${formatBalance(b)} left)`;
+}
+
 // Needed for the option label when a budget is already in the list but
 // belongs to this row's selection (always include it, even if absent from
 // availableForRow due to another row occupying the same slot momentarily).
-function budgetName(id: string): string {
-  return props.budgets.find((b) => b.id === id)?.name ?? "Budget";
+function fallbackBudgetLabel(id: string): string {
+  const b = props.budgets.find((bb) => bb.id === id);
+  return b ? budgetLabel(b) : "Budget";
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -209,7 +231,7 @@ function onKeydown(e: KeyboardEvent) {
                 >
                   <option value="">Select budget…</option>
                   <option v-for="b in availableForRow(i)" :key="b.id" :value="b.id">
-                    {{ b.name }}
+                    {{ budgetLabel(b) }}
                   </option>
                   <!-- Keep the current selection visible even when temporarily
                        displaced by another row's selection. -->
@@ -217,7 +239,7 @@ function onKeydown(e: KeyboardEvent) {
                     v-if="row.budgetId && !availableForRow(i).find((b) => b.id === row.budgetId)"
                     :value="row.budgetId"
                   >
-                    {{ budgetName(row.budgetId) }}
+                    {{ fallbackBudgetLabel(row.budgetId) }}
                   </option>
                 </select>
 

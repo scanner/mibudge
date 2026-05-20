@@ -635,6 +635,45 @@ Run the funding engine for this account immediately.  Processes all due fund and
 - **`warnings`** (`array`)
 - **`skipped_budgets`** (`array`)
 
+#### `POST /api/v1/bank-accounts/{id}/sync-scrape/`
+
+**Operation:** `bank_accounts_sync_scrape_create`
+
+Reconcile this account against a fresh snapshot from a live bank scraper.  All existing pending transactions on the account are deleted, posted transactions from the scrape are de-duplicated against the database, and any new posted/pending rows are inserted in the order the scraper supplies (newest-first).  Per-transaction running balance snapshots and the unallocated-budget allocation snapshots are recomputed before the request returns.  Runs atomically under the account + unallocated-budget locks; on any error the database is unchanged.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`scraped_at`** (`string`) *(required)*
+- **`ending_balance`** (`string`) *(required)*
+- **`transactions`** (`array`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`scraped_at`** (`string`) *(required)*
+- **`ending_balance`** (`string`) *(required)*
+- **`transactions`** (`array`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`scraped_at`** (`string`) *(required)*
+- **`ending_balance`** (`string`) *(required)*
+- **`transactions`** (`array`) *(required)*
+
+**Response 200:** 
+
+- **`deleted_pending`** (`integer`) *(required)*
+- **`inserted_posted`** (`integer`) *(required)*
+- **`skipped_posted`** (`integer`) *(required)*
+- **`inserted_pending`** (`integer`) *(required)*
+- **`balance_mismatch`** (`string`) *(required)*
+- **`posting_order_mismatches`** (`array`) *(required)*
+- **`last_posted_through`** (`string`) *(required)*
+- **`new_transaction_ids`** (`array`) *(required)*
+
 ### banks
 
 #### `GET /api/v1/banks/`
@@ -1367,6 +1406,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1381,6 +1421,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1395,6 +1436,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1412,6 +1454,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
@@ -1446,6 +1489,7 @@ Return a single transaction by UUID.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
@@ -1477,6 +1521,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1491,6 +1536,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1505,6 +1551,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1522,6 +1569,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
@@ -1553,6 +1601,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1567,6 +1616,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1581,6 +1631,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -1598,6 +1649,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
@@ -1619,6 +1671,56 @@ Delete a transaction. Balance changes are reversed by the pre_delete signal. Ass
 - `id` (path, required)
 
 **Response 204:** No response body
+
+#### `POST /api/v1/transactions/{id}/resolve-pending/`
+
+**Operation:** `transactions_resolve_pending_create`
+
+Transition a pending transaction to posted status. Supplies the bank-confirmed posted date and optionally a final settled amount (which may differ from the pending estimate). The bank account's posted_balance is credited; if the amount changed, available_balance and the Unallocated allocation are adjusted atomically.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`posted_date`** (`string`) *(required)*
+- **`amount`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`posted_date`** (`string`) *(required)*
+- **`amount`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`posted_date`** (`string`) *(required)*
+- **`amount`** (`string`)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`bank_account`** (`string`) *(required)*
+- **`amount`** (`string`) *(required)*
+- **`amount_currency`** (`string`) *(required, read-only)*
+- **`party`** (`string`) *(required, read-only)*
+- **`posted_date`** (`string`) *(required)*
+- **`transaction_date`** (`string`)
+- **`transaction_type`** (``) *(required)*
+- **`pending`** (`boolean`)
+- **`memo`** (`string`)
+- **`raw_description`** (`string`) *(required)*
+- **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
+- **`linked_transaction`** (`string`) *(required, read-only)*
+- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
+- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
+- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
+- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
+- **`image`** (`string`)
+- **`document`** (`string`)
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
 
 #### `POST /api/v1/transactions/{id}/splits/`
 
@@ -2350,6 +2452,7 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 
@@ -2364,6 +2467,67 @@ output it returns the UUID string (or null).
 - **`name`** (`string`)
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+
+### ResolvePendingRequest
+
+Input serializer for the resolve-pending action.
+
+Validates the settled posted_date and optional final amount.
+Requires ``transaction`` in the serializer context for sign validation.
+
+- **`posted_date`** (`string`) *(required)*
+- **`amount`** (`string`)
+
+### ScrapeSyncReport
+
+Output serializer for the bank-account scrape-sync action.
+
+Mirrors `service.sync_scrape.ScrapeSyncReport`.  Reports
+everything the caller needs to summarise what changed and surface
+validation warnings.
+
+- **`deleted_pending`** (`integer`) *(required)*
+- **`inserted_posted`** (`integer`) *(required)*
+- **`skipped_posted`** (`integer`) *(required)*
+- **`inserted_pending`** (`integer`) *(required)*
+- **`balance_mismatch`** (`string`) *(required)*
+- **`posting_order_mismatches`** (`array`) *(required)*
+- **`last_posted_through`** (`string`) *(required)*
+- **`new_transaction_ids`** (`array`) *(required)*
+
+### ScrapeSyncRequest
+
+Input serializer for the bank-account scrape-sync action.
+
+Validates a full bank-side snapshot for one account: when the
+scrape was taken, the bank's ending available balance, and the
+list of transactions (newest-first as the bank renders them).
+
+- **`scraped_at`** (`string`) *(required)*
+- **`ending_balance`** (`string`) *(required)*
+- **`transactions`** (`array`) *(required)*
+
+### ScrapeSyncTransactionRequest
+
+One transaction in a scrape-sync payload.
+
+Mirrors `service.sync_scrape.ScrapedTransaction`.  Pending rows
+carry the scrape's local `posted_date` (banks typically render
+pending rows without a real settlement date -- e.g. BofA shows
+'Processing' in the date column -- and the scraper substitutes
+the current local datetime).  Posted rows carry the bank-supplied
+settlement datetime.  `transaction_date` is derived server-side
+from the embedded MM/DD pattern in `raw_description`.
+
+`running_balance` is optional and used only for the posting-order
+sanity walk; never persisted.
+
+- **`is_pending`** (`boolean`) *(required)*
+- **`posted_date`** (`string`) *(required)*
+- **`raw_description`** (`string`) *(required)*
+- **`amount`** (`string`) *(required)*
+- **`transaction_type`** (`string`)
+- **`running_balance`** (`string`)
 
 ### TokenObtainPair
 
@@ -2412,6 +2576,7 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
 - **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
@@ -2631,6 +2796,7 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
 

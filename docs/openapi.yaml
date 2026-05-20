@@ -514,6 +514,47 @@ paths:
                     items:
                       type: string
           description: Funding run result.
+  /api/v1/bank-accounts/{id}/sync-scrape/:
+    post:
+      operationId: bank_accounts_sync_scrape_create
+      description: Reconcile this account against a fresh snapshot from a live bank
+        scraper.  All existing pending transactions on the account are deleted, posted
+        transactions from the scrape are de-duplicated against the database, and any
+        new posted/pending rows are inserted in the order the scraper supplies (newest-first).  Per-transaction
+        running balance snapshots and the unallocated-budget allocation snapshots
+        are recomputed before the request returns.  Runs atomically under the account
+        + unallocated-budget locks; on any error the database is unchanged.
+      summary: Sync a bank-side scrape
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScrapeSyncRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ScrapeSyncRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ScrapeSyncRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeSyncReport'
+          description: ''
   /api/v1/banks/:
     get:
       operationId: banks_list
@@ -1226,6 +1267,45 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/transactions/{id}/resolve-pending/:
+    post:
+      operationId: transactions_resolve_pending_create
+      description: Transition a pending transaction to posted status. Supplies the
+        bank-confirmed posted date and optionally a final settled amount (which may
+        differ from the pending estimate). The bank account's posted_balance is credited;
+        if the amount changed, available_balance and the Unallocated allocation are
+        adjusted atomically.
+      summary: Resolve a pending transaction to posted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transactions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolvePendingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResolvePendingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResolvePendingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+          description: ''
   /api/v1/transactions/{id}/splits/:
     post:
       operationId: transactions_splits_create
@@ -2667,6 +2747,10 @@ components:
         description:
           type: string
           maxLength: 512
+        bank_transaction_id:
+          type: string
+          nullable: true
+          maxLength: 256
         image:
           type: string
           format: binary
@@ -2696,6 +2780,135 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+    ResolvePendingRequest:
+      type: object
+      description: |-
+        Input serializer for the resolve-pending action.
+
+        Validates the settled posted_date and optional final amount.
+        Requires ``transaction`` in the serializer context for sign validation.
+      properties:
+        posted_date:
+          type: string
+          format: date-time
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - posted_date
+    ScrapeSyncReport:
+      type: object
+      description: |-
+        Output serializer for the bank-account scrape-sync action.
+
+        Mirrors `service.sync_scrape.ScrapeSyncReport`.  Reports
+        everything the caller needs to summarise what changed and surface
+        validation warnings.
+      properties:
+        deleted_pending:
+          type: integer
+        inserted_posted:
+          type: integer
+        skipped_posted:
+          type: integer
+        inserted_pending:
+          type: integer
+        balance_mismatch:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        posting_order_mismatches:
+          type: array
+          items:
+            type: string
+        last_posted_through:
+          type: string
+          format: date
+          nullable: true
+        new_transaction_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - balance_mismatch
+      - deleted_pending
+      - inserted_pending
+      - inserted_posted
+      - last_posted_through
+      - new_transaction_ids
+      - posting_order_mismatches
+      - skipped_posted
+    ScrapeSyncRequest:
+      type: object
+      description: |-
+        Input serializer for the bank-account scrape-sync action.
+
+        Validates a full bank-side snapshot for one account: when the
+        scrape was taken, the bank's ending available balance, and the
+        list of transactions (newest-first as the bank renders them).
+      properties:
+        scraped_at:
+          type: string
+          format: date-time
+        ending_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScrapeSyncTransactionRequest'
+      required:
+      - ending_balance
+      - scraped_at
+      - transactions
+    ScrapeSyncTransactionRequest:
+      type: object
+      description: |-
+        One transaction in a scrape-sync payload.
+
+        Mirrors `service.sync_scrape.ScrapedTransaction`.  Pending rows
+        carry the scrape's local `posted_date` (banks typically render
+        pending rows without a real settlement date -- e.g. BofA shows
+        'Processing' in the date column -- and the scraper substitutes
+        the current local datetime).  Posted rows carry the bank-supplied
+        settlement datetime.  `transaction_date` is derived server-side
+        from the embedded MM/DD pattern in `raw_description`.
+
+        `running_balance` is optional and used only for the posting-order
+        sanity walk; never persisted.
+      properties:
+        is_pending:
+          type: boolean
+        posted_date:
+          type: string
+          format: date-time
+        raw_description:
+          type: string
+          minLength: 1
+          maxLength: 512
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        transaction_type:
+          type: string
+          default: ''
+          maxLength: 32
+        running_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - amount
+      - is_pending
+      - posted_date
+      - raw_description
     TokenObtainPair:
       type: object
       properties:
@@ -2800,6 +3013,10 @@ components:
         description:
           type: string
           maxLength: 512
+        bank_transaction_id:
+          type: string
+          nullable: true
+          maxLength: 256
         linked_transaction:
           type: string
           format: uuid
@@ -2975,6 +3192,10 @@ components:
         description:
           type: string
           maxLength: 512
+        bank_transaction_id:
+          type: string
+          nullable: true
+          maxLength: 256
         image:
           type: string
           format: binary

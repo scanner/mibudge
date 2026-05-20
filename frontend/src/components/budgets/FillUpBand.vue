@@ -27,7 +27,7 @@ const tone = computed(() => progressTone(budgetStatus(props.budget)));
 </script>
 
 <template>
-  <div class="border-t border-[#D4E9F7] bg-[#F5FAFF] px-4 pb-3 pt-2">
+  <div class="border-t border-[#D4E9F7] bg-[#F5FAFF] px-4 pb-3 pt-2 group-hover:bg-[#E8F4FD]">
     <div class="flex items-center justify-between gap-2">
       <span v-if="budget.next_funding" class="truncate text-[12px] text-ocean-600">
         <MoneyAmount

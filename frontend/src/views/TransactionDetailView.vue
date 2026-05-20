@@ -501,8 +501,14 @@ function navigateBudget(budgetId: string) {
           />
         </div>
 
-        <!-- Assign / add split button -->
+        <!-- Assign / add split button.  Pending transactions cannot be
+             allocated to user budgets -- the server rejects the action
+             and the UI carries only the auto Unallocated row until the
+             transaction posts.  When pending, swap the call-to-action
+             for a quiet explanatory note so the section reads clearly
+             rather than silently dropping the row. -->
         <button
+          v-if="!transaction.pending"
           type="button"
           class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ocean-300 px-3 py-2 text-sm font-medium text-ocean-600 transition-colors hover:border-ocean-400 hover:bg-ocean-50"
           @click="openPicker()"
@@ -510,39 +516,49 @@ function navigateBudget(budgetId: string) {
           <IconPlus class="h-4 w-4" />
           {{ visibleAllocations.length > 0 ? "Add split" : "Assign to budget" }}
         </button>
+        <p v-else class="mt-3 px-3 py-2 text-center text-sm text-neutral-500">
+          Pending transactions can't be assigned to a budget. The allocation becomes editable once
+          the bank posts this transaction.
+        </p>
       </section>
 
-      <!-- Memo -->
-      <section class="mt-6">
-        <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-          Memo
-        </label>
-        <textarea
-          v-model="memo"
-          rows="2"
-          placeholder="Add a memo…"
-          class="mt-1 block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400"
-          @input="onMemoInput"
-        />
-      </section>
+      <!-- Memo + attachments.  All three are hidden on pending rows
+           because the next sync wipes pending transactions and
+           reinserts whatever the bank currently shows; anything the
+           user attached here would be lost on the next scrape. -->
+      <template v-if="!transaction.pending">
+        <!-- Memo -->
+        <section class="mt-6">
+          <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            Memo
+          </label>
+          <textarea
+            v-model="memo"
+            rows="2"
+            placeholder="Add a memo…"
+            class="mt-1 block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400"
+            @input="onMemoInput"
+          />
+        </section>
 
-      <!-- Attachments -->
-      <section class="mt-6 flex gap-3">
-        <button
-          type="button"
-          class="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-center text-sm text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
-          @click="onAttach('image')"
-        >
-          {{ transaction.image ? "Replace photo" : "Attach photo" }}
-        </button>
-        <button
-          type="button"
-          class="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-center text-sm text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
-          @click="onAttach('document')"
-        >
-          {{ transaction.document ? "Replace document" : "Attach document" }}
-        </button>
-      </section>
+        <!-- Attachments -->
+        <section class="mt-6 flex gap-3">
+          <button
+            type="button"
+            class="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-center text-sm text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+            @click="onAttach('image')"
+          >
+            {{ transaction.image ? "Replace photo" : "Attach photo" }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-center text-sm text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+            @click="onAttach('document')"
+          >
+            {{ transaction.document ? "Replace document" : "Attach document" }}
+          </button>
+        </section>
+      </template>
 
       <!-- Footer -->
       <p class="mt-8 pb-4 text-center text-xs text-neutral-400">
