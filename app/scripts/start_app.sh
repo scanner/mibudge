@@ -2,7 +2,8 @@
 #
 # Start the mibudge web application (production).
 #
-# Starts gunicorn with uvicorn workers.
+# Launches supervisord, which manages nginx (static files + reverse proxy on
+# port 8000) and gunicorn (ASGI via Unix socket).
 # Migrations are handled by the dedicated migrate container.
 # Static files are collected at Docker build time.
 #
@@ -11,9 +12,4 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-wait-for-it --service "${REDIS_HOST:-redis}:${REDIS_PORT:-6379}" -- echo "Redis available"
-
-exec gunicorn config.asgi \
-    --bind 0.0.0.0:5000 \
-    --chdir=/app \
-    -k uvicorn.workers.UvicornWorker
+exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf

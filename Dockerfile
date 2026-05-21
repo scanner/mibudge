@@ -34,6 +34,25 @@ RUN find /venv -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null ||
 
 ########################################################################
 #
+# Frontend builder stage -- build the Vue SPA with pnpm
+#
+FROM node:22-slim AS frontend-builder
+
+WORKDIR /frontend
+
+# pnpm 9.x matches the lockfile format (lockfileVersion: '9.0')
+RUN npm install -g pnpm@9
+
+# Install dependencies (cached layer)
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Build the production bundle
+COPY frontend/ ./
+RUN pnpm build
+
+########################################################################
+#
 # Development stage -- includes dev dependencies and debugging tools
 #
 FROM python:${PYTHON_VERSION}-slim AS dev
@@ -89,11 +108,15 @@ RUN chown -R app /app
 
 USER app
 
-CMD ["/app/scripts/start_app.sh"]
+CMD ["/app/scripts/start_dev.sh"]
 
 ########################################################################
 #
-# Production stage -- minimal runtime image
+# Production stage -- nginx + gunicorn in a single deployable unit.
+#
+# nginx (port 8000) serves /static/ directly from the collected staticfiles
+# and proxies all other requests to gunicorn via a Unix socket.
+# supervisord manages both processes.
 #
 FROM python:${PYTHON_VERSION}-slim AS prod
 
@@ -106,11 +129,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ARG APP_HOME=/app
 WORKDIR ${APP_HOME}
 
-# Install ONLY runtime dependencies
+# Install runtime dependencies, nginx, and supervisor
 RUN apt-get update && \
     apt-get install --assume-yes --no-install-recommends \
     libpq5 \
     gettext \
+    nginx \
+    supervisor \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -125,19 +150,29 @@ ENV PATH=/venv/bin:$PATH
 # Copy application code
 COPY ./app ./
 
+# Copy built frontend assets from the frontend builder stage.
+# NOTE: REPO_DIR in settings.py resolves to the parent of /app (i.e. /),
+# so the frontend dist must land at /frontend/dist for collectstatic to find it.
+COPY --from=frontend-builder /frontend/dist /frontend/dist
+
 # Provided at build time so collectstatic can load settings.
 # Never written to ENV so it is not present at runtime.
 ARG SALT_KEY
 
-# Collect static files and pre-compile bytecode
-RUN /venv/bin/python /app/manage.py collectstatic --no-input && \
+# Collect static files (Django app + built frontend assets) and pre-compile bytecode
+RUN DJANGO_VITE_DEV_MODE=False /venv/bin/python /app/manage.py collectstatic --no-input && \
     /venv/bin/python -m compileall /venv
+
+# Install nginx and supervisord configuration
+COPY deployment/nginx.conf /etc/nginx/nginx.conf
+COPY deployment/supervisord.conf /etc/supervisor/supervisord.conf
 
 RUN addgroup --system --gid 900 app && \
     adduser --system --uid 900 --ingroup app app
 
 RUN chown -R app /app/staticfiles
 
-USER app
+EXPOSE 8000
 
-CMD ["/app/scripts/start_app.sh"]
+# supervisord manages nginx (as root) and gunicorn (as app user)
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
