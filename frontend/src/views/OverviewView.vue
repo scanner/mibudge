@@ -21,7 +21,7 @@ import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
-import { budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
+import { budgetProgress, budgetStatus, parseLocalDate, progressTone } from "@/utils/budget";
 import { listAllocations } from "@/api/allocations";
 import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { listBudgets } from "@/api/budgets";
@@ -177,7 +177,16 @@ onMounted(() => {
           :currency="summary.currency"
           size="sm"
           class="font-medium"
-        />/next event
+        />
+        <template v-if="summary.schedules.length > 0 && summary.schedules[0].next_date">
+          on
+          {{
+            parseLocalDate(summary.schedules[0].next_date).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })
+          }}
+        </template>
         <template v-if="summary.schedules.length > 1">
           across {{ summary.schedules.length }} schedules
         </template>
