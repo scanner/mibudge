@@ -39,6 +39,8 @@ dependencies = [
     "uvicorn[standard]",
     # Service readiness
     "wait-for-it",
+    # Email
+    "django-anymail",
     # Utilities
     "python-slugify",
     "python-dateutil",

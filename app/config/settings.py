@@ -39,10 +39,9 @@ env = environ.FileAwareEnv(
     ),
     DJANGO_EMAIL_BACKEND=(
         str,
-        "django.core.mail.backends.smtp.EmailBackend",
+        "anymail.backends.smtp.EmailBackend",
     ),
     DJANGO_SECRET_KEY=(str, get_random_string(50, random_chars)),
-    EMAIL_HOST=(str, "mailpit"),
     REDIS_URL=(str, "redis://localhost:6379/0"),
     SENTRY_DSN=(str, None),
     SENTRY_TRACES_SAMPLE_RATE=(float, 0.0),
@@ -116,6 +115,7 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "guardian",
     "django_vite",
+    "anymail",
 ]
 LOCAL_APPS = [
     "users.apps.UsersConfig",
@@ -282,17 +282,39 @@ if not DEBUG:
 # ------------------------------------------------------------------------------
 EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND")
 EMAIL_TIMEOUT = 5
+DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL")
+SERVER_EMAIL = env("DJANGO_SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
+EMAIL_SUBJECT_PREFIX = env(
+    "DJANGO_EMAIL_SUBJECT_PREFIX", default="[My Budgets]"
+)
 
 if DEBUG:
-    EMAIL_HOST = env("EMAIL_HOST")
-    EMAIL_PORT = 1025
+    # Route through the local mailpit container (no auth needed).
+    EMAIL_HOST = env("EMAIL_HOST", default="mailpit")
+    EMAIL_PORT = env.int("EMAIL_PORT", default=1025)
 else:
-    DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL")
-    SERVER_EMAIL = env("DJANGO_SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
-    EMAIL_SUBJECT_PREFIX = env(
-        "DJANGO_EMAIL_SUBJECT_PREFIX",
-        default="[My Budgets]",
-    )
+    # SMTP settings -- used when EMAIL_BACKEND is anymail.backends.smtp.
+    # For API-based providers (Postmark, Mailgun, etc.) set EMAIL_BACKEND to
+    # the appropriate anymail backend and supply the provider token below.
+    EMAIL_HOST = env("EMAIL_HOST", default="")
+    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+    EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+    EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+
+    # Anymail provider tokens -- only the key matching the active backend is
+    # used; the rest are ignored.
+    ANYMAIL = {
+        k: v
+        for k, v in {
+            "POSTMARK_SERVER_TOKEN": env("POSTMARK_SERVER_TOKEN", default=""),
+            "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=""),
+            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=""),
+            "SENDGRID_API_KEY": env("SENDGRID_API_KEY", default=""),
+            "SPARKPOST_API_KEY": env("SPARKPOST_API_KEY", default=""),
+        }.items()
+        if v
+    }
 
 # ADMIN
 # ------------------------------------------------------------------------------

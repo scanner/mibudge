@@ -253,6 +253,42 @@ make env
 
 `make env` generates both files from their committed templates if they do not already exist: `deployment/dot-env.dev` → `.env`, and `deployment/dot-env.docker-dev` → `deployment/local-dev-docker.env`. The defaults in both templates work without any edits for a standard local dev setup.
 
+### Email
+
+mibudge uses [django-anymail](https://anymail.dev/) as its email backend. The active backend is selected by the `DJANGO_EMAIL_BACKEND` env var, which defaults to `anymail.backends.smtp.EmailBackend` (plain SMTP submission).
+
+#### Local dev (Mailpit)
+
+No configuration needed. The default SMTP backend points at the Mailpit container (`mailpit:1025` in Docker, `localhost:1025` from the native shell). Mailpit catches all outbound mail and exposes it at http://localhost:8025.
+
+#### Production: own SMTP server
+
+Set these env vars:
+
+```
+DJANGO_DEFAULT_FROM_EMAIL=My Budgets <noreply@example.com>
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587                 # default
+EMAIL_HOST_USER=user@example.com
+EMAIL_HOST_PASSWORD=secret
+EMAIL_USE_TLS=True             # default
+```
+
+`DJANGO_EMAIL_BACKEND` can be left at its default (`anymail.backends.smtp.EmailBackend`).
+
+#### Production: API-based provider (Postmark, Mailgun, SendGrid, SparkPost)
+
+Set `DJANGO_EMAIL_BACKEND` to the anymail backend for your provider, then supply the corresponding token:
+
+| Provider | `DJANGO_EMAIL_BACKEND` | Token env var |
+|----------|------------------------|---------------|
+| Postmark | `anymail.backends.postmark.EmailBackend` | `POSTMARK_SERVER_TOKEN` |
+| Mailgun | `anymail.backends.mailgun.EmailBackend` | `MAILGUN_API_KEY`, `MAILGUN_SENDER_DOMAIN` |
+| SendGrid | `anymail.backends.sendgrid.EmailBackend` | `SENDGRID_API_KEY` |
+| SparkPost | `anymail.backends.sparkpost.EmailBackend` | `SPARKPOST_API_KEY` |
+
+The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backend.
+
 ## License
 
 BSD

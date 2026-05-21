@@ -33,8 +33,12 @@ CELERY_BROKER_URL=redis://localhost:7379/1
 CELERY_RESULT_BACKEND=redis://localhost:7379/2
 
 # Email (Mailpit, published on localhost:1025)
+# DJANGO_EMAIL_BACKEND defaults to anymail.backends.smtp.EmailBackend -> Mailpit
+# For a real provider: set DJANGO_EMAIL_BACKEND=anymail.backends.postmark.EmailBackend
+# and supply POSTMARK_SERVER_TOKEN (or MAILGUN_API_KEY etc.)
 # ------------------------------------------------------------------------------
 EMAIL_HOST=localhost
+EMAIL_PORT=1025
 
 # SSL Certificates (local dev TLS)
 # ------------------------------------------------------------------------------
