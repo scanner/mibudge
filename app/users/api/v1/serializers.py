@@ -23,7 +23,14 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["username", "name", "url", "default_bank_account", "timezone"]
+        fields = [
+            "username",
+            "email",
+            "name",
+            "url",
+            "default_bank_account",
+            "timezone",
+        ]
 
         extra_kwargs = {
             "url": {
@@ -31,6 +38,7 @@ class UserSerializer(serializers.ModelSerializer):
                 "lookup_field": "username",
             },
             "username": {"read_only": True},
+            "email": {"read_only": True},
         }
 
     ####################################################################

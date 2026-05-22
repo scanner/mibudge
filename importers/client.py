@@ -85,7 +85,7 @@ class MibudgeClient:
     """
     HTTP client for the mibudge REST API.
 
-    Authenticates via username/password (POST /api/token/) and stores a
+    Authenticates via email/password (POST /api/token/) and stores a
     JWT access token in memory.  On a 401 response the client
     re-authenticates once and retries the request automatically -- this
     covers the normal token-expiry case without embedding expiry-time
@@ -97,7 +97,7 @@ class MibudgeClient:
     Args:
         base_url: Root URL of the mibudge service, e.g.
             'http://localhost:8000'.  Trailing slash is stripped.
-        username: Account username.
+        email: Account email address.
         password: Account password.
         timeout: Per-request timeout in seconds (default 30).
         verify: TLS verification setting forwarded to httpx. Pass a
@@ -116,14 +116,14 @@ class MibudgeClient:
     def __init__(
         self,
         base_url: str,
-        username: str,
+        email: str,
         password: str,
         timeout: float = 30.0,
         verify: bool | str | None = None,
         max_throttle_wait: float = 60.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._username = username
+        self._email = email
         self._password = password
         self._access_token: str | None = None
         self._max_throttle_wait = max_throttle_wait
@@ -147,15 +147,15 @@ class MibudgeClient:
         """
         resp = self._http.post(
             f"{self._base_url}/api/token/",
-            json={"username": self._username, "password": self._password},
+            json={"email": self._email, "password": self._password},
         )
         if resp.status_code == 401:
             raise AuthenticationError(
-                f"Authentication failed for user {self._username!r}."
+                f"Authentication failed for user {self._email!r}."
             )
         resp.raise_for_status()
         self._access_token = resp.json()["access"]
-        logger.debug("Authenticated as %r", self._username)
+        logger.debug("Authenticated as %r", self._email)
 
     ####################################################################
     #

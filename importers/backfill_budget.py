@@ -1356,7 +1356,7 @@ def _run_backfill(
     default=None,
     help="Base URL of the mibudge API.  [default: https://localhost:8000]",
 )
-@click.option("--username", default=None, help="API username.")
+@click.option("--email", default=None, help="API login email.")
 @click.option(
     "--password",
     default=None,
@@ -1413,7 +1413,7 @@ def _run_backfill(
 @theme_option
 def cli_cmd(
     url: str | None,
-    username: str | None,
+    email: str | None,
     password: str | None,
     vault_path: str | None,
     ca_bundle: Path | None,
@@ -1433,7 +1433,7 @@ def cli_cmd(
     try:
         with _build_client(
             url=url,
-            username=username,
+            email=email,
             password=password,
             vault_path=vault_path,
             ca_bundle=ca_bundle,

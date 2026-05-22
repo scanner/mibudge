@@ -202,7 +202,7 @@ def _invoke(*args: str) -> Any:
     runner = CliRunner()
     env = {
         "MIBUDGE_URL": "http://testserver",
-        "MIBUDGE_USERNAME": "u",
+        "MIBUDGE_EMAIL": "u@example.com",
         "MIBUDGE_PASSWORD": "p",
     }
     return runner.invoke(
