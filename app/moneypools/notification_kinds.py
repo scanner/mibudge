@@ -7,6 +7,10 @@ Call register_all() from MoneyPoolsConfig.ready() to make these kinds
 available to the notification service.
 """
 
+# system imports
+#
+from typing import Any
+
 # 3rd party imports
 #
 from notifications.models import NotificationPriority
@@ -26,6 +30,14 @@ IMPORT_ERROR = "moneypools.import_error"
 ########################################################################
 ########################################################################
 #
+def _account_owners(account: Any) -> Any:
+    """Return the owners queryset for a BankAccount."""
+    return account.owners.all()
+
+
+########################################################################
+########################################################################
+#
 def register_all() -> None:
     """Register all moneypools notification kinds with the registry.
 
@@ -37,6 +49,7 @@ def register_all() -> None:
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
         default_opt_in=True,
+        recipients=_account_owners,
     )
     registry.register(
         kind=IMPORT_COMPLETE,
@@ -44,6 +57,7 @@ def register_all() -> None:
         default_priority=NotificationPriority.LOW,
         can_suppress=True,
         default_opt_in=False,
+        recipients=_account_owners,
     )
     registry.register(
         kind=BUDGET_GOAL_REACHED,
@@ -51,6 +65,7 @@ def register_all() -> None:
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
         default_opt_in=True,
+        recipients=_account_owners,
     )
     registry.register(
         kind=TRANSACTION_POSTED,
@@ -58,6 +73,7 @@ def register_all() -> None:
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
         default_opt_in=True,
+        recipients=_account_owners,
     )
     registry.register(
         kind=BALANCE_MISMATCH,
@@ -65,6 +81,7 @@ def register_all() -> None:
         default_priority=NotificationPriority.HIGH,
         can_suppress=False,
         default_opt_in=True,
+        recipients=_account_owners,
     )
     registry.register(
         kind=IMPORT_ERROR,
@@ -72,4 +89,5 @@ def register_all() -> None:
         default_priority=NotificationPriority.HIGH,
         can_suppress=False,
         default_opt_in=True,
+        recipients=_account_owners,
     )

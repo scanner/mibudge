@@ -13,7 +13,7 @@ from notifications.models import (
     NotificationPriority,
 )
 from notifications.registry import NotificationRegistry
-from notifications.service import notify, notify_account_owners
+from notifications.service import notify, notify_for
 
 from users.models import User
 
@@ -207,18 +207,28 @@ class TestNotify:
 ########################################################################
 ########################################################################
 #
-class TestNotifyAccountOwners:
-    """Tests for notify_account_owners()."""
+class TestNotifyFor:
+    """Tests for notify_for()."""
 
     ####################################################################
     #
     @pytest.fixture(autouse=True)
-    def isolated_registry(self):
+    def isolated_registry(self, user_factory: Callable):
         fresh = NotificationRegistry()
         with patch("notifications.service.registry", fresh):
+            self._owner_a = user_factory()
+            self._owner_b = user_factory()
             fresh.register(
                 kind="test.event",
                 display_name="Test event",
+                default_priority=NotificationPriority.NORMAL,
+                can_suppress=True,
+                default_opt_in=True,
+                recipients=lambda obj: obj.owners.all(),
+            )
+            fresh.register(
+                kind="test.no_recipients",
+                display_name="No recipients kind",
                 default_priority=NotificationPriority.NORMAL,
                 can_suppress=True,
                 default_opt_in=True,
@@ -227,45 +237,49 @@ class TestNotifyAccountOwners:
 
     ####################################################################
     #
-    def test_notifies_all_owners(
-        self,
-        user_factory: Callable,
-    ):
+    def test_notifies_all_recipients(self):
         """
-        GIVEN: an account with two owners
-        WHEN:  notify_account_owners() is called
-        THEN:  one Notification is created per owner
+        GIVEN: a kind with a recipients callable returning two users
+        WHEN:  notify_for() is called
+        THEN:  one Notification is created per recipient
         """
-        owner_a = user_factory()
-        owner_b = user_factory()
         account = MagicMock()
-        account.owners.all.return_value = [owner_a, owner_b]
+        account.owners.all.return_value = [self._owner_a, self._owner_b]
 
-        results = notify_account_owners(account, "test.event", {"x": 1})
+        results = notify_for(account, "test.event", {"x": 1})
 
         assert len(results) == 2
-        assert {n.user_id for n in results} == {owner_a.pk, owner_b.pk}
+        assert {n.user_id for n in results} == {
+            self._owner_a.pk,
+            self._owner_b.pk,
+        }
 
     ####################################################################
     #
-    def test_respects_individual_opt_outs(
-        self,
-        user_factory: Callable,
-    ):
+    def test_respects_individual_opt_outs(self):
         """
-        GIVEN: an account with two owners where one has opted out
-        WHEN:  notify_account_owners() is called
-        THEN:  only the opted-in owner receives a Notification
+        GIVEN: a recipients callable returning two users, one opted out
+        WHEN:  notify_for() is called
+        THEN:  only the opted-in recipient receives a Notification
         """
-        opted_in = user_factory()
-        opted_out = user_factory()
         account = MagicMock()
-        account.owners.all.return_value = [opted_in, opted_out]
+        account.owners.all.return_value = [self._owner_a, self._owner_b]
         NotificationPreference.objects.create(
-            user=opted_out, kind="test.event", enabled=False
+            user=self._owner_b, kind="test.event", enabled=False
         )
 
-        results = notify_account_owners(account, "test.event", {})
+        results = notify_for(account, "test.event", {})
 
         assert len(results) == 1
-        assert results[0].user == opted_in
+        assert results[0].user == self._owner_a
+
+    ####################################################################
+    #
+    def test_missing_recipients_raises(self):
+        """
+        GIVEN: a kind registered without a recipients callable
+        WHEN:  notify_for() is called
+        THEN:  ValueError is raised with a helpful message
+        """
+        with pytest.raises(ValueError, match="no recipients callable"):
+            notify_for(MagicMock(), "test.no_recipients", {})

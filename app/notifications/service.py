@@ -6,7 +6,7 @@ Notification service.
 Public API::
 
     notify(user, kind, context, priority=None, locale=None)
-    notify_account_owners(account, kind, context, priority=None)
+    notify_for(obj, kind, context, priority=None)
 
 Both functions are fire-and-forget: they write a Notification row and,
 for CRITICAL priority, enqueue a Celery task.  Non-critical notifications
@@ -34,7 +34,6 @@ from notifications.models import (
 from notifications.registry import registry
 
 if TYPE_CHECKING:
-    from moneypools.models import BankAccount
     from users.models import User as UserType
 
 logger = logging.getLogger(__name__)
@@ -156,32 +155,49 @@ def notify(
 ########################################################################
 ########################################################################
 #
-def notify_account_owners(
-    account: "BankAccount",
+def notify_for(
+    obj: Any,
     kind: str,
     context: dict[str, Any],
     priority: int | None = None,
 ) -> list[Notification]:
     """
-    Queue a notification for every owner of a bank account.
+    Fan out notifications to all recipients registered for this kind.
 
-    Each owner uses their own preferences and locale independently.
-    Joint accounts may have multiple owners, each of whom receives
-    their own notification.
+    Looks up the recipients callable registered with the kind and calls
+    notify() for each returned user.  Each recipient uses their own
+    preferences and locale independently.
 
     Args:
-        account: The BankAccount whose owners should be notified.
+        obj: The domain object passed to the registered recipients
+            callable (e.g. a BankAccount instance).
         kind: Dotted kind string.
         context: Template context dict.
         priority: Optional priority override.
 
     Returns:
         List of created Notification instances (may be shorter than the
-        owner count if some owners have opted out).
+        recipient count if some have opted out).
+
+    Raises:
+        ValueError: If the kind is not registered or has no recipients
+            callable registered.
     """
+    kind_info = registry.get(kind)
+    if kind_info is None:
+        raise ValueError(
+            f"Unknown notification kind: {kind!r}. "
+            "Did you register it in AppConfig.ready()?"
+        )
+    if kind_info.recipients is None:
+        raise ValueError(
+            f"Notification kind {kind!r} has no recipients callable. "
+            "Pass one via registry.register(recipients=...)."
+        )
+
     results = []
-    for owner in account.owners.all():
-        notification = notify(owner, kind, context, priority=priority)
+    for user in kind_info.recipients(obj):
+        notification = notify(user, kind, context, priority=priority)
         if notification is not None:
             results.append(notification)
     return results

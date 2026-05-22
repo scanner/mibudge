@@ -23,7 +23,7 @@ from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
-from notifications.service import notify_account_owners
+from notifications.service import notify_for
 
 # Project imports
 from config import celery_app
@@ -239,7 +239,7 @@ def _run_funding_task(
         logger.warning("%s: %s: %s", label, account_id, warning)
 
     if report.transfers > 0:
-        notify_account_owners(
+        notify_for(
             account,
             FUNDING_COMPLETE,
             {
