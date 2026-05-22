@@ -14,6 +14,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory
 from django.urls import reverse
+from pytest_mock import MockerFixture
 
 # app imports
 #
@@ -64,7 +65,9 @@ class TestUserUpdateView:
 
         assert view.get_object() == user
 
-    def test_form_valid(self, user: User, rf: RequestFactory):
+    def test_form_valid(
+        self, user: User, rf: RequestFactory, mocker: MockerFixture
+    ):
         """
         GIVEN: an authenticated user submitting a valid profile update
         WHEN:  form_valid() is called
@@ -79,6 +82,10 @@ class TestUserUpdateView:
 
         form = UserChangeForm()
         form.cleaned_data = {}
+        # Stub out form.save() -- this test is only checking the flash message,
+        # not the DB write.  Without the stub, saving an empty UserChangeForm
+        # (with blank email) collides with the unique-email constraint.
+        mocker.patch.object(form, "save", return_value=user)
         view.form_valid(form)
 
         messages_sent = [m.message for m in messages.get_messages(request)]

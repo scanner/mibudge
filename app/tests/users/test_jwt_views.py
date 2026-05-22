@@ -62,7 +62,7 @@ class TestCookieTokenObtainPairView:
         """
         response = client.post(
             reverse("token-obtain"),
-            data={"username": "nobody", "password": "wrong"},
+            data={"email": "nobody@example.com", "password": "wrong"},
             content_type="application/json",
         )
         assert response.status_code == 401
@@ -85,7 +85,7 @@ class TestCookieTokenObtainPairView:
         user = user_factory(password=password)  # type: ignore[operator]
         response = client.post(
             reverse("token-obtain"),
-            data={"username": user.username, "password": password},
+            data={"email": user.email, "password": password},
             content_type="application/json",
         )
         assert response.status_code == 200
@@ -113,7 +113,7 @@ class TestCookieTokenObtainPairView:
         user = user_factory(password=password)  # type: ignore[operator]
         response = client.post(
             reverse("token-obtain"),
-            data={"username": user.username, "password": password},
+            data={"email": user.email, "password": password},
             content_type="application/json",
         )
         lifetime = cast(
@@ -137,7 +137,7 @@ class TestCookieTokenObtainPairView:
         user = user_factory(password=password)  # type: ignore[operator]
         response = client.post(
             reverse("token-obtain"),
-            data={"username": user.username, "password": password},
+            data={"email": user.email, "password": password},
             content_type="application/json",
         )
         assert response.status_code == 200

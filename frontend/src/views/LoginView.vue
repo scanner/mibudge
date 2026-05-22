@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// LoginView — username + password → POST /api/token/.  The backend
+// LoginView — email + password → POST /api/token/.  The backend
 // sets the httpOnly refresh cookie on the response, so the auth store
 // only needs to stash the access token in memory.
 //
@@ -21,7 +21,7 @@ import { useAuthStore } from "@/stores/auth";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const username = ref("");
+const email = ref("");
 const password = ref("");
 const submitting = ref(false);
 const errorMessage = ref<string | null>(null);
@@ -37,14 +37,14 @@ async function onSubmit() {
   errorMessage.value = null;
   submitting.value = true;
   try {
-    await auth.login(username.value, password.value);
+    await auth.login(email.value, password.value);
     // Warm the downstream stores so the shell's first render has data.
     await Promise.all([auth.loadUser(), ctx.init(true)]);
     const next = typeof route.query.next === "string" ? route.query.next : "/";
     router.replace(next);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      errorMessage.value = "Incorrect username or password.";
+      errorMessage.value = "Incorrect email or password.";
     } else {
       errorMessage.value = "Unable to sign in. Please try again.";
     }
@@ -64,11 +64,11 @@ async function onSubmit() {
       <p class="mt-1 text-sm text-neutral-500">Your budget dashboard awaits.</p>
 
       <label class="mt-5 block text-sm font-medium text-neutral-700">
-        Username
+        Email
         <input
-          v-model="username"
-          type="text"
-          autocomplete="username"
+          v-model="email"
+          type="email"
+          autocomplete="email"
           required
           class="mt-1 w-full rounded-subcard border-neutral-200 bg-white text-sm focus:border-ocean-400 focus:ring-ocean-400"
         />
@@ -91,7 +91,7 @@ async function onSubmit() {
 
       <button
         type="submit"
-        :disabled="submitting || !username || !password"
+        :disabled="submitting || !email || !password"
         class="mt-5 w-full rounded-full bg-ocean-400 px-4 py-2 text-sm font-medium text-white hover:bg-ocean-600 disabled:cursor-not-allowed disabled:bg-neutral-300"
       >
         {{ submitting ? "Signing in…" : "Sign in" }}

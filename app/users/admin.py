@@ -34,9 +34,9 @@ class UserAdmin(auth_admin.UserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("username", "password1", "password2"),
+                "fields": ("username", "email", "password1", "password2"),
             },
         ),
     )
-    list_display = ["username", "name", "is_superuser"]
-    search_fields = ["name"]
+    list_display = ["username", "email", "name", "is_superuser"]
+    search_fields = ["username", "email", "name"]

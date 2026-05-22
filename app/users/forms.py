@@ -15,7 +15,9 @@ class UserCreationForm(admin_forms.UserCreationForm):
     # django-stubs does not expose inner Meta classes on form types -- revisit if stubs improve
     class Meta(admin_forms.UserCreationForm.Meta):  # type: ignore[name-defined]
         model = User
+        fields = ("username", "email")
 
         error_messages = {
-            "username": {"unique": _("This username has already been taken.")}
+            "username": {"unique": _("This username has already been taken.")},
+            "email": {"unique": _("This email address is already in use.")},
         }

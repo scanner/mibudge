@@ -131,6 +131,10 @@ if DEBUG:
 # AUTHENTICATION
 # ------------------------------------------------------------------------------
 AUTHENTICATION_BACKENDS = [
+    # Email+password for the SPA/JWT flow -- must come before ModelBackend
+    # so authenticate(email=...) is handled here; ModelBackend ignores it.
+    "users.backends.EmailBackend",
+    # Username+password for Django admin (AdminAuthenticationForm passes username=).
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
     "guardian.backends.ObjectPermissionBackend",
@@ -384,8 +388,9 @@ if DEBUG:
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env("DJANGO_ACCOUNT_ALLOW_REGISTRATION")
-ACCOUNT_LOGIN_METHODS = {"username"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"
 SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
@@ -466,6 +471,9 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
     "ALGORITHM": "HS256",
     "AUTH_HEADER_TYPES": ("Bearer",),
+    # Use email as the login field in the SPA/JWT flow (USERNAME_FIELD stays
+    # "username" so Django admin is unaffected).
+    "TOKEN_OBTAIN_SERIALIZER": "users.serializers.EmailTokenObtainPairSerializer",
 }
 
 # django-cors-headers

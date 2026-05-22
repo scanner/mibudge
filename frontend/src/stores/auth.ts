@@ -49,14 +49,14 @@ export const useAuthStore = defineStore("auth", () => {
 
   ////////////////////////////////////////////////////////////////////
   //
-  // Exchange username + password for an access token.  The backend
+  // Exchange email + password for an access token.  The backend
   // also sets the httpOnly refresh cookie on the response, so nothing
   // else is needed here.  Throws ApiError(401) on bad credentials.
   //
-  async function login(username: string, password: string): Promise<void> {
+  async function login(email: string, password: string): Promise<void> {
     const data = await authFetch<TokenResponse>("/token/", null, {
       method: "POST",
-      body: { username, password } as unknown as BodyInit,
+      body: { email, password } as unknown as BodyInit,
     });
     accessToken.value = data.access;
   }

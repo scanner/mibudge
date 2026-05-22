@@ -3,7 +3,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.db.models import SET_NULL, CharField, ForeignKey, UUIDField
+from django.db.models import (
+    SET_NULL,
+    CharField,
+    EmailField,
+    ForeignKey,
+    UUIDField,
+)
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -26,6 +32,12 @@ class User(AbstractUser):
     # field.
     #
     name = CharField(_("Name of User"), blank=True, max_length=255)
+
+    # Override AbstractUser's email to make it unique and required.
+    # This is the primary login credential for the SPA; username is kept for
+    # Django admin access only.
+    #
+    email = EmailField(_("email address"), unique=True)
 
     # AbstractUser declares first_name/last_name as CharField; we remove them in
     # favour of a single name field by setting to None -- django-stubs cannot
