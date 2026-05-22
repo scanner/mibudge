@@ -60,6 +60,14 @@ MANAGED_PERIODIC_TASKS: dict = {
         "task": "moneypools.tasks.schedule_funding_runs",
         "schedule": {"crontab": {"minute": "0,30"}},
     },
+    "Flush email digests": {
+        "task": "notifications.tasks.flush_email_digests",
+        "schedule": {"crontab": {"minute": "0,30"}},
+    },
+    "Purge old notifications": {
+        "task": "notifications.tasks.purge_old_notifications",
+        "schedule": {"crontab": {"minute": "0", "hour": "3"}},
+    },
 }
 
 

@@ -1,0 +1,5 @@
+Import completed -- {{ account_name }}
+
+{{ new_count }} new transaction{% if new_count != 1 %}s{% endif %} imported on {{ date }}.
+{% if pending_to_posted_count %}{{ pending_to_posted_count }} transaction{% if pending_to_posted_count != 1 %}s{% endif %} moved from pending to posted.
+{% endif %}

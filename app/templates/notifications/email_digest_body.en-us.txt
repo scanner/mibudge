@@ -1,0 +1,9 @@
+Hi{% if user.name %} {{ user.name }}{% endif %},
+
+Here's your mibudge digest:
+
+{% for item in items %}------------------------------------------------------------
+{{ item.text_body }}
+{% endfor %}
+------------------------------------------------------------
+You're receiving this because you have notifications enabled in your mibudge account.
