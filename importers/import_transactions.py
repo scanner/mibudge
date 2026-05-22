@@ -35,11 +35,11 @@ Typical usage::
 Configuration is resolved in this order (first wins):
 
     1. CLI flags
-    2. Environment variables (MIBUDGE_URL, MIBUDGE_USERNAME, etc.)
+    2. Environment variables (MIBUDGE_URL, MIBUDGE_EMAIL, etc.)
     3. .env file (loaded automatically via python-dotenv)
     4. Vault KV2 secret (if --vault-path / MIBUDGE_VAULT_PATH is set)
 
-The Vault secret is expected to contain keys: ``url``, ``username``,
+The Vault secret is expected to contain keys: ``url``, ``email``,
 ``password``.  Standard Vault env vars (VAULT_ADDR, VAULT_TOKEN) are
 used to connect to Vault.
 """
@@ -1504,7 +1504,7 @@ def _resolve_vault_secrets(vault_path: str) -> dict[str, str]:
 
     Uses standard Vault env vars (VAULT_ADDR, VAULT_TOKEN) for
     connection.  The secret at *vault_path* is expected to contain
-    keys: ``url``, ``username``, ``password``.
+    keys: ``url``, ``email``, ``password``.
 
     Args:
         vault_path: KV2 mount path, e.g. 'secret/data/mibudge/importer'
@@ -1553,7 +1553,7 @@ def _resolve_vault_secrets(vault_path: str) -> dict[str, str]:
 def _build_client(
     *,
     url: str | None,
-    username: str | None,
+    email: str | None,
     password: str | None,
     vault_path: str | None,
     ca_bundle: Path | None,
@@ -1569,7 +1569,7 @@ def _build_client(
     ``authenticate()`` called on it before use.
 
     Args:
-        url, username, password: From CLI/env.
+        url, email, password: From CLI/env.
         vault_path: Optional KV2 path; if present, fills in missing
             credentials.
         ca_bundle: Explicit CA bundle path (overrides system CAs).
@@ -1592,12 +1592,12 @@ def _build_client(
         vault_data = _resolve_vault_secrets(vault_path)
 
     url = url or vault_data.get("url") or "https://localhost:8000"
-    username = username or vault_data.get("username")
+    email = email or vault_data.get("email")
     password = password or vault_data.get("password")
 
-    if not username:
+    if not email:
         raise click.ClickException(
-            "Username is required. Set --username, MIBUDGE_USERNAME, "
+            "Email is required. Set --email, MIBUDGE_EMAIL, "
             "or provide it via Vault."
         )
     if not password:
@@ -1614,7 +1614,7 @@ def _build_client(
         if interactive:
             console.print(f"[dim]Trusting local CA bundle: {verify}[/dim]")
 
-    return MibudgeClient(url, username, password, verify=verify)
+    return MibudgeClient(url, email, password, verify=verify)
 
 
 ########################################################################
@@ -1739,7 +1739,7 @@ def _print_summary(
     default=None,
     help="Base URL of the mibudge API.  [default: https://localhost:8000]",
 )
-@click.option("--username", default=None, help="API username.")
+@click.option("--email", default=None, help="API login email.")
 @click.option(
     "--password",
     default=None,
@@ -1867,7 +1867,7 @@ def _print_summary(
 )
 def cli_cmd(
     url: str | None,
-    username: str | None,
+    email: str | None,
     password: str | None,
     vault_path: str | None,
     ca_bundle: Path | None,
@@ -1958,7 +1958,7 @@ def cli_cmd(
     try:
         with _build_client(
             url=url,
-            username=username,
+            email=email,
             password=password,
             vault_path=vault_path,
             ca_bundle=ca_bundle,

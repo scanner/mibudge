@@ -234,6 +234,7 @@ export interface Bank {
 //
 export interface User {
   username: string;
+  email: string;
   name: string;
   url: string;
   default_bank_account: string | null;

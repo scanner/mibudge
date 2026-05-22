@@ -103,13 +103,13 @@ async function save() {
           />
         </div>
 
-        <!-- Username — read-only -->
+        <!-- Email — read-only -->
         <div>
-          <div class="mb-1.5 text-sm font-medium text-neutral-700">Username</div>
+          <div class="mb-1.5 text-sm font-medium text-neutral-700">Email</div>
           <div
             class="rounded-subcard border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-500"
           >
-            {{ auth.user?.username }}
+            {{ auth.user?.email }}
           </div>
         </div>
 
