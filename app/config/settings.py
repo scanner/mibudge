@@ -120,6 +120,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "users.apps.UsersConfig",
     "moneypools.apps.MoneyPoolsConfig",
+    "notifications.apps.NotificationsConfig",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -589,3 +590,21 @@ CURRENCIES = [
 # Once all existing records have been re-saved with the new salt, remove
 # the old value from the list.
 SALT_KEY = env.list("SALT_KEY")
+
+# Notifications
+# ------------------------------------------------------------------------------
+
+# Locale tag used for notification templates when no user-specific locale is
+# set, and as the ultimate fallback when a locale-specific template is absent.
+# Uses BCP 47 format (matching Django's LANGUAGE_CODE), e.g. 'en-us', 'fr-ca'.
+# Template files are named accordingly: email_body.en-us.html, etc.
+# Override via env var only when the notification locale should differ from
+# the site language.
+NOTIFICATIONS_DEFAULT_LOCALE = env(
+    "NOTIFICATIONS_DEFAULT_LOCALE", default=LANGUAGE_CODE
+)
+# Number of days to retain Notification and NotificationLog rows.
+# The purge_old_notifications Celery task removes rows older than this.
+NOTIFICATIONS_RETENTION_DAYS = env.int(
+    "NOTIFICATIONS_RETENTION_DAYS", default=90
+)

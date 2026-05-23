@@ -23,10 +23,12 @@ from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
+from notifications.service import notify_for
 
 # Project imports
 from config import celery_app
 from moneypools.models import BankAccount, Transaction
+from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
 from moneypools.service.funding_strategy import EventKind
 from moneypools.service.linking import attempt_link
@@ -235,6 +237,18 @@ def _run_funding_task(
     )
     for warning in report.warnings:
         logger.warning("%s: %s: %s", label, account_id, warning)
+
+    if report.transfers > 0:
+        notify_for(
+            account,
+            FUNDING_COMPLETE,
+            {
+                "account_name": account.name,
+                "transfers": report.transfers,
+                "warnings": report.warnings,
+                "date": today.isoformat(),
+            },
+        )
 
 
 ####################################################################

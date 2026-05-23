@@ -1,0 +1,10 @@
+<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">Import completed</h2>
+<p style="margin:0 0 8px; color:#374151;"><strong>{{ account_name }}</strong></p>
+<p style="margin:0 0 4px; color:#374151;">
+  {{ new_count }} new transaction{% if new_count != 1 %}s{% endif %} imported on {{ date }}.
+</p>
+{% if pending_to_posted_count %}
+<p style="margin:0; color:#374151;">
+  {{ pending_to_posted_count }} transaction{% if pending_to_posted_count != 1 %}s{% endif %} moved from pending to posted.
+</p>
+{% endif %}

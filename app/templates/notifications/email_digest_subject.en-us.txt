@@ -1,0 +1,1 @@
+{% if item_count == 1 %}1 update from mibudge{% else %}{{ item_count }} updates from mibudge{% endif %}

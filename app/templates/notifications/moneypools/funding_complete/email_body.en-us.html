@@ -1,0 +1,10 @@
+<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">Funding cycle completed</h2>
+<p style="margin:0 0 8px; color:#374151;"><strong>{{ account_name }}</strong></p>
+<p style="margin:0 0 8px; color:#374151;">
+  {{ transfers }} budget{% if transfers != 1 %}s were{% else %} was{% endif %} funded on {{ date }}.
+</p>
+{% if warnings %}
+<ul style="margin:8px 0; padding-left:20px; color:#b45309;">
+  {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+</ul>
+{% endif %}

@@ -111,6 +111,7 @@ All resources except Banks and Users are scoped to bank account ownership -- onl
 
 - [`docs/importers.md`](docs/importers.md) -- REST API tools for importing bank statements and backfilling budget allocations (no server access required)
 - [`docs/management-commands.md`](docs/management-commands.md) -- Django management commands for service operations, backup/restore, and data correction (requires server access)
+- [`app/notifications/README.md`](app/notifications/README.md) -- pluggable notification service: kind registration, the notify() API, email digest mechanics, and how to add new kinds or channels
 
 ### Auth: JWT two-token pattern
 

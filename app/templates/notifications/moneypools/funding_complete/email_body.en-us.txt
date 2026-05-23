@@ -1,0 +1,7 @@
+Funding cycle completed -- {{ account_name }}
+
+{{ transfers }} budget{% if transfers != 1 %}s were{% else %} was{% endif %} funded on {{ date }}.
+{% if warnings %}
+Warnings:
+{% for w in warnings %}  - {{ w }}
+{% endfor %}{% endif %}
