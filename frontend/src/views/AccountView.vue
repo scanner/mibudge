@@ -11,7 +11,13 @@
 
 // 3rd party imports
 //
-import { IconBuildingBank, IconChevronRight, IconPlus, IconUser } from "@tabler/icons-vue";
+import {
+  IconBuildingBank,
+  IconChevronRight,
+  IconLock,
+  IconPlus,
+  IconUser,
+} from "@tabler/icons-vue";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -278,6 +284,19 @@ async function signOut() {
                 {{ a.name }}
               </option>
             </select>
+          </div>
+
+          <!-- Security & password -->
+          <div class="border-t border-neutral-100">
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-neutral-50"
+              @click="router.push('/account/settings/')"
+            >
+              <IconLock class="h-4 w-4 text-neutral-700" />
+              <span class="flex-1 text-sm text-neutral-700">Security</span>
+              <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
+            </button>
           </div>
 
           <!-- Sign out -->

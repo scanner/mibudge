@@ -55,6 +55,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "hvac>=2.4.0",
     "django-settings-export>=1.2.1",
+    "zxcvbn>=4.5.0",
 ]
 
 [build-system]
