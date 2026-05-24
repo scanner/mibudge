@@ -286,7 +286,7 @@ async function signOut() {
             </select>
           </div>
 
-          <!-- Security & password -->
+          <!-- Security & notifications -->
           <div class="border-t border-neutral-100">
             <button
               type="button"
@@ -294,7 +294,7 @@ async function signOut() {
               @click="router.push('/account/settings/')"
             >
               <IconLock class="h-4 w-4 text-neutral-700" />
-              <span class="flex-1 text-sm text-neutral-700">Security</span>
+              <span class="flex-1 text-sm text-neutral-700">Security &amp; Notifications</span>
               <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
             </button>
           </div>

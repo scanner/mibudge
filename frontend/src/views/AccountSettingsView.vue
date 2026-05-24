@@ -21,7 +21,12 @@ import {
   updateChannelPreference,
   updateNotificationPreference,
 } from "@/api/notifications";
+import { useAuthStore } from "@/stores/auth";
 import type { ChannelPreference, NotificationPreference } from "@/types/api";
+
+////////////////////////////////////////////////////////////////////////
+//
+const authStore = useAuthStore();
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -158,6 +163,7 @@ async function saveEmailDigest(): Promise<void> {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
+      <!-- ── Security ─────────────────────────────────────────────── -->
       <h1 class="mb-5 text-[22px] font-medium text-neutral-900">Security</h1>
 
       <!-- Password change card -->
@@ -280,12 +286,10 @@ async function saveEmailDigest(): Promise<void> {
         </div>
       </section>
 
-      <!-- Notification preferences -->
-      <section class="mt-8">
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
-          Notifications
-        </h2>
+      <!-- ── Notifications ────────────────────────────────────────── -->
+      <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">Notifications</h1>
 
+      <section>
         <!-- Error banner -->
         <div
           v-if="prefsError"
@@ -302,6 +306,14 @@ async function saveEmailDigest(): Promise<void> {
           </div>
 
           <template v-else>
+            <!-- Notification destination (email only for now) -->
+            <div class="border-b border-neutral-100 px-4 py-3">
+              <p class="text-xs text-secondary">Notifications are sent to</p>
+              <p class="mt-0.5 text-sm font-medium text-neutral-900">
+                {{ authStore.user?.email }}
+              </p>
+            </div>
+
             <!-- Email digest frequency (only email channel is active) -->
             <div class="flex items-center justify-between border-b border-neutral-100 px-4 py-4">
               <div>
