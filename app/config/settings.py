@@ -64,6 +64,8 @@ REPOSITORY_URL = env(
     "REPOSITORY_URL", default="https://github.com/scanner/mibudge"
 )
 ADMINISTRATIVE_EMAIL_ADDRESS = env("ADMINISTRATIVE_EMAIL_ADDRESS", default="")
+SITE_URL = env("SITE_URL", default="http://localhost:8000")
+SITE_NAME = env("SITE_NAME", default="mibudge")
 
 # Settings exported to the Django template context via django-settings-export.
 # Access in templates as {{ settings.VARIABLE_NAME }}.
@@ -134,8 +136,11 @@ if DEBUG:
 AUTHENTICATION_BACKENDS = [
     # Email+password for the SPA/JWT flow -- must come before ModelBackend
     # so authenticate(email=...) is handled here; ModelBackend ignores it.
+    #
     "users.backends.EmailBackend",
-    # Username+password for Django admin (AdminAuthenticationForm passes username=).
+    # Username+password for Django admin (AdminAuthenticationForm passes
+    # username=).
+    #
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
     "guardian.backends.ObjectPermissionBackend",

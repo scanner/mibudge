@@ -1,0 +1,8 @@
+<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">New transactions posted</h2>
+<p style="margin:0 0 8px; color:#374151;"><strong>{{ account_name }}</strong></p>
+<p style="margin:0 0 8px; color:#374151;">
+  {{ count }} new transaction{% if count != 1 %}s{% endif %} posted on {{ date }}.
+</p>
+<p style="margin:0; font-size:13px;">
+  <a href="{{ site_url }}/app/transactions/" style="color:#1d4ed8;">View transactions</a>
+</p>

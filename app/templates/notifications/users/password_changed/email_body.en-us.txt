@@ -2,4 +2,7 @@ Your mibudge password was changed on {{ changed_at }}.
 
 If you made this change, no action is needed.
 
-If you did not make this change, please reset your password immediately and contact support.
+If you did not make this change, reset your password immediately:
+{{ site_url }}/app/account/settings/
+
+Then contact {{ support_email }} to report the incident.

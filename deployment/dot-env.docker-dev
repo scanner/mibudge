@@ -12,6 +12,8 @@
 DEBUG=True
 TIME_ZONE=America/Los_Angeles
 ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
+SITE_URL=http://myhostname.local:8000
+SITE_NAME=mibudge
 
 # Host paths (for docker-compose volume mounts)
 # ------------------------------------------------------------------------------

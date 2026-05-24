@@ -19,6 +19,8 @@ DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
 DJANGO_ADMIN_URL=admin/
 ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
 TIME_ZONE=America/Los_Angeles
+SITE_URL=http://myhostname.local:8000
+SITE_NAME=mibudge
 
 # PostgreSQL
 # docker-compose publishes postgres on localhost:6432 (avoids the system port)

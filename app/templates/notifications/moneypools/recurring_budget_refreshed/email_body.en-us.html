@@ -1,0 +1,30 @@
+<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">Recurring budget refreshed</h2>
+<p style="margin:0 0 8px; color:#374151;"><strong>{{ account_name }}</strong> &mdash; {{ date }}</p>
+<p style="margin:0 0 12px; color:#374151; font-size:15px;">
+  <a href="{{ site_url }}/app/budgets/{{ budget_id }}/" style="color:#1d4ed8; text-decoration:none; font-weight:600;">{{ budget_name }}</a>
+</p>
+<table style="border-collapse:collapse; font-size:14px; margin:0 0 12px;">
+  <tr>
+    <td style="padding:3px 16px 3px 0; color:#6b7280;">Received this cycle</td>
+    <td style="padding:3px 0; color:#1a1a1a; font-weight:600;">{{ amount_received }}</td>
+  </tr>
+  <tr>
+    <td style="padding:3px 16px 3px 0; color:#6b7280;">Current balance</td>
+    <td style="padding:3px 0; color:#1a1a1a; font-weight:600;">{{ balance }}</td>
+  </tr>
+  <tr>
+    <td style="padding:3px 16px 3px 0; color:#6b7280;">Monthly target</td>
+    <td style="padding:3px 0; color:#1a1a1a; font-weight:600;">{{ target_balance }}</td>
+  </tr>
+</table>
+{% if goal_reached %}
+<p style="margin:0 0 12px; color:#16a34a; font-weight:600;">&#10003; Fully funded for this cycle.</p>
+{% else %}
+<p style="margin:0 0 12px; color:#b45309; font-size:13px;">Not yet fully funded &mdash; fill-up may still have pending deposits.</p>
+{% endif %}
+<p style="margin:0 0 4px; font-size:13px; color:#374151;">
+  <a href="{{ site_url }}/app/account/bank-accounts/{{ account_id }}/" style="color:#1d4ed8;">View account</a>
+</p>
+<p style="margin:4px 0 0; font-size:12px; color:#9ca3af;">
+  Questions? <a href="mailto:{{ support_email }}" style="color:#9ca3af;">{{ support_email }}</a>
+</p>

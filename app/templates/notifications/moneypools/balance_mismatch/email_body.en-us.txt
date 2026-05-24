@@ -1,0 +1,13 @@
+Balance mismatch detected -- {{ account_name }}
+
+The computed balance does not match the balance reported by your bank.
+
+  Computed balance : {{ computed_balance }}
+  Reported balance : {{ reported_balance }}
+  Difference       : {{ diff }}
+
+This may indicate missing transactions or a data import issue. Please review your account and contact support if the discrepancy persists.
+
+View account: {{ site_url }}/app/account/bank-accounts/{{ account_id }}/
+
+Contact {{ support_email }} if you need assistance.

@@ -1,0 +1,11 @@
+Import error -- {{ account_name }}
+
+An error occurred while importing transactions for {{ account_name }}.
+
+Error: {{ error }}
+
+No transactions were imported. The issue will need to be investigated and the import re-run.
+
+View account: {{ site_url }}/app/account/bank-accounts/{{ account_id }}/
+
+If you need assistance, contact {{ support_email }}

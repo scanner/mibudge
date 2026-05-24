@@ -1,0 +1,5 @@
+New transactions posted -- {{ account_name }}
+
+{{ count }} new transaction{% if count != 1 %}s{% endif %} posted on {{ date }}.
+
+View transactions: {{ site_url }}/app/transactions/

@@ -31,16 +31,22 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 # 3rd party imports
 #
 from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
 from djmoney.money import Money
+from notifications.service import notify_for
 
 # Project imports
 #
 from moneypools.models import BankAccount, Budget, InternalTransaction
+from moneypools.notification_kinds import (
+    FUNDING_COMPLETE,
+    RECURRING_BUDGET_REFRESHED,
+)
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
@@ -92,6 +98,10 @@ class FundingReport:
         transfers: Number of InternalTransaction rows created.
         warnings: Human-readable warning strings (cap events, etc.).
         skipped_budgets: Names of paused/archived budgets that were skipped.
+        funded_budgets: Per-budget funding details accumulated during the run,
+            used to build the FUNDING_COMPLETE notification.  Each entry is a
+            dict with keys: budget_id, budget_name, amount_funded,
+            total_funded, balance, target_balance, goal_reached, is_fillup.
     """
 
     account_id: str
@@ -99,6 +109,7 @@ class FundingReport:
     transfers: int = 0
     warnings: list[str] = field(default_factory=list)
     skipped_budgets: list[str] = field(default_factory=list)
+    funded_budgets: list[dict[str, Any]] = field(default_factory=list)
 
 
 ########################################################################
@@ -312,6 +323,19 @@ def fund_account(
             _process_fund_event(ev, account, unallocated, actor, report)
         else:
             _process_recur_event(ev, account, actor, report)
+
+    if report.funded_budgets:
+        notify_for(
+            account,
+            FUNDING_COMPLETE,
+            {
+                "account_name": account.name,
+                "account_id": str(account.id),
+                "date": today.isoformat(),
+                "funded_budgets": report.funded_budgets,
+                "warnings": report.warnings,
+            },
+        )
 
     return report
 
@@ -531,6 +555,26 @@ def _process_fund_event(
         )
 
     Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
+    target.refresh_from_db()
+    # For GOAL budgets, internal_transaction_svc latches complete=True once
+    # funded_amount >= target_balance; check the refreshed flag rather than
+    # comparing balance (which can be lower due to pre-spending).
+    goal_reached = bool(
+        target.budget_type == Budget.BudgetType.GOAL and target.complete
+    )
+    report.funded_budgets.append(
+        {
+            "budget_id": str(target.id),
+            "budget_name": target.name,
+            "amount_funded": str(amount),
+            "total_funded": str(target.funded_amount),
+            "balance": str(target.balance),
+            "target_balance": str(target.target_balance),
+            "goal_reached": goal_reached,
+            "is_fillup": target.budget_type
+            == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL,
+        }
+    )
     report.transfers += 1
 
     logger.debug(
@@ -604,6 +648,8 @@ def _process_recur_event(
     )
     net = max(Decimal("0"), intended.amount - already_moved)
 
+    amount_received = Money(Decimal("0"), budget.balance.currency)
+
     if net > Decimal("0"):
         fillup_available = fillup.balance.amount
         if fillup_available <= Decimal("0"):
@@ -619,6 +665,7 @@ def _process_recur_event(
                     f"{Money(net, budget.balance.currency)}; underfunded."
                 )
             amount = Money(transfer, budget.balance.currency)
+            amount_received = amount
             effective_date = datetime(
                 ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
             )
@@ -647,4 +694,20 @@ def _process_recur_event(
     Budget.objects.filter(pkid=budget.pkid).update(
         last_recurrence_on=ev.date,
         complete=newly_complete,
+    )
+
+    notify_for(
+        account,
+        RECURRING_BUDGET_REFRESHED,
+        {
+            "account_name": account.name,
+            "account_id": str(account.id),
+            "budget_id": str(budget.id),
+            "budget_name": budget.name,
+            "amount_received": str(amount_received),
+            "balance": str(budget.balance),
+            "target_balance": str(budget.target_balance),
+            "goal_reached": newly_complete,
+            "date": ev.date.isoformat(),
+        },
     )

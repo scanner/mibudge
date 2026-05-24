@@ -7,3 +7,4 @@ Here's your mibudge digest:
 {% endfor %}
 ------------------------------------------------------------
 You're receiving this because you have notifications enabled in your mibudge account.
+{{ site_url }}/app/  |  {{ support_email }}

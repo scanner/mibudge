@@ -1,0 +1,10 @@
+Email address changed
+
+Your mibudge email address was changed on {{ changed_at }}.
+
+Previous address: {{ from_email }}
+New address: {{ to_email }}
+
+If you made this change, no action is needed.
+
+If you did not make this change, contact {{ support_email }} immediately.

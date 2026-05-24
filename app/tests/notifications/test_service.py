@@ -3,7 +3,7 @@
 """Tests for notifications.service."""
 
 from collections.abc import Callable
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch  # patch used for registry isolation
 
 import pytest
 from notifications.models import (
@@ -138,7 +138,11 @@ class TestNotify:
 
     ####################################################################
     #
-    def test_critical_bypasses_preferences(self, user: User):
+    def test_critical_bypasses_preferences(
+        self,
+        user: User,
+        mock_send_notification_now: MagicMock,
+    ):
         """
         GIVEN: a kind with can_suppress=False and an explicit opt-out row
         WHEN:  notify() is called
@@ -148,8 +152,7 @@ class TestNotify:
             user=user, kind="test.critical", enabled=False
         )
 
-        with patch("notifications.tasks.send_notification_now"):
-            result = notify(user, "test.critical", {})
+        result = notify(user, "test.critical", {})
 
         assert result is not None
 
@@ -185,6 +188,7 @@ class TestNotify:
         priority_override: int | None,
         expect_immediate: bool,
         expected_priority: int,
+        mock_send_notification_now: MagicMock,
     ):
         """
         GIVEN: various kind/priority combinations
@@ -192,16 +196,17 @@ class TestNotify:
         THEN:  the stored priority is correct and the immediate Celery task
                is enqueued only for CRITICAL priority
         """
-        with patch("notifications.tasks.send_notification_now") as mock_task:
-            result = notify(user, kind, {}, priority=priority_override)
+        result = notify(user, kind, {}, priority=priority_override)
 
         assert result is not None
         assert result.priority == expected_priority
 
         if expect_immediate:
-            mock_task.delay.assert_called_once_with(str(result.id))
+            mock_send_notification_now.delay.assert_called_once_with(
+                str(result.id)
+            )
         else:
-            mock_task.delay.assert_not_called()
+            mock_send_notification_now.delay.assert_not_called()
 
 
 ########################################################################

@@ -1,6 +1,7 @@
 # system imports
 #
 from collections.abc import Generator
+from unittest.mock import MagicMock
 
 # 3rd party imports
 import py
@@ -128,6 +129,23 @@ def disable_ssl_redirect(settings: LazySettings) -> None:
         None
     """
     settings.SECURE_SSL_REDIRECT = False
+
+
+####################################################################
+#
+@pytest.fixture
+def mock_send_notification_now(mocker: MockerFixture) -> MagicMock:
+    """Patch send_notification_now to prevent Celery broker connections in tests.
+
+    Use this fixture in any test that triggers a CRITICAL notification.
+    Without it, notify() calls send_notification_now.delay() which tries to
+    connect to the real Celery broker and fails in the test environment.
+
+    Returns:
+        The MagicMock replacing send_notification_now, so callers can assert
+        .delay() was called with the expected notification ID.
+    """
+    return mocker.patch("notifications.tasks.send_notification_now")
 
 
 ####################################################################

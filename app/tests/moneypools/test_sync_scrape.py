@@ -15,6 +15,7 @@ the two validation paths (aggregate balance and posting-order chain).
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 # 3rd party imports
 #
@@ -560,7 +561,9 @@ class TestSyncScrape:
     ####################################################################
     #
     def test_balance_mismatch_reported(
-        self, empty_account: BankAccount
+        self,
+        empty_account: BankAccount,
+        mock_send_notification_now: MagicMock,
     ) -> None:
         """
         GIVEN: a scrape whose stated `ending_balance` does not match the

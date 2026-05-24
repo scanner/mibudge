@@ -34,6 +34,7 @@ new template files; no code changes are needed.
 # system imports
 #
 import logging
+from urllib.parse import urlparse
 
 # 3rd party imports
 #
@@ -63,6 +64,24 @@ _EVENING_WINDOW = (18, 19)
 
 def _fallback_locale() -> str:
     return settings.NOTIFICATIONS_DEFAULT_LOCALE
+
+
+########################################################################
+########################################################################
+#
+def _site_context() -> dict[str, str]:
+    """Return template context variables derived from SITE_URL.
+
+    Injected into every outgoing notification email so templates can
+    link back to the app and provide a support contact address.
+
+    Returns:
+        Dict with 'site_url' (trailing slash stripped) and
+        'support_email' (support@<hostname>).
+    """
+    url = settings.SITE_URL.rstrip("/")
+    hostname = urlparse(url).hostname or "localhost"
+    return {"site_url": url, "support_email": f"support@{hostname}"}
 
 
 ########################################################################
@@ -287,11 +306,14 @@ class EmailChannel(BaseChannel):
         user = first.user
         locale = first.locale
 
+        site_ctx = _site_context()
+
         # Build per-item context for digest rendering.
         items = []
         for n in notifications:
             ctx = dict(n.context)
             ctx["notification"] = n
+            ctx.update(site_ctx)
             items.append(
                 {
                     "notification": n,
@@ -309,6 +331,7 @@ class EmailChannel(BaseChannel):
                 "user": user,
                 "items": items,
                 "item_count": len(items),
+                **site_ctx,
             }
             subject = _render_shared_template(
                 "email_digest_subject", "txt", locale, digest_ctx
@@ -323,6 +346,7 @@ class EmailChannel(BaseChannel):
             n = notifications[0]
             ctx = dict(n.context)
             ctx["notification"] = n
+            ctx.update(site_ctx)
             subject = _render_with_fallback(
                 n.kind, "email_subject", locale, ctx
             ).strip()

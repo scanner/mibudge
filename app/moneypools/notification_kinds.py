@@ -21,7 +21,7 @@ from notifications.registry import registry
 #
 FUNDING_COMPLETE = "moneypools.funding_complete"
 IMPORT_COMPLETE = "moneypools.import_complete"
-BUDGET_GOAL_REACHED = "moneypools.budget_goal_reached"
+RECURRING_BUDGET_REFRESHED = "moneypools.recurring_budget_refreshed"
 TRANSACTION_POSTED = "moneypools.transaction_posted"
 BALANCE_MISMATCH = "moneypools.balance_mismatch"
 IMPORT_ERROR = "moneypools.import_error"
@@ -60,14 +60,6 @@ def register_all() -> None:
         recipients=_account_owners,
     )
     registry.register(
-        kind=BUDGET_GOAL_REACHED,
-        display_name="Budget goal reached",
-        default_priority=NotificationPriority.NORMAL,
-        can_suppress=True,
-        default_opt_in=True,
-        recipients=_account_owners,
-    )
-    registry.register(
         kind=TRANSACTION_POSTED,
         display_name="New transactions posted",
         default_priority=NotificationPriority.NORMAL,
@@ -78,7 +70,7 @@ def register_all() -> None:
     registry.register(
         kind=BALANCE_MISMATCH,
         display_name="Balance mismatch detected",
-        default_priority=NotificationPriority.HIGH,
+        default_priority=NotificationPriority.CRITICAL,
         can_suppress=False,
         default_opt_in=True,
         recipients=_account_owners,
@@ -86,8 +78,16 @@ def register_all() -> None:
     registry.register(
         kind=IMPORT_ERROR,
         display_name="Import error",
-        default_priority=NotificationPriority.HIGH,
+        default_priority=NotificationPriority.CRITICAL,
         can_suppress=False,
+        default_opt_in=True,
+        recipients=_account_owners,
+    )
+    registry.register(
+        kind=RECURRING_BUDGET_REFRESHED,
+        display_name="Recurring budget refreshed",
+        default_priority=NotificationPriority.NORMAL,
+        can_suppress=True,
         default_opt_in=True,
         recipients=_account_owners,
     )
