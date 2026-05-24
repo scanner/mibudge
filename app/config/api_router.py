@@ -13,6 +13,10 @@ The module path mirrors the URL -- each Django app owns an
 
 from django.conf import settings
 from django.urls import path
+from notifications.api.v1.views import (
+    ChannelPreferenceViewSet,
+    NotificationPreferenceViewSet,
+)
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
 from moneypools.api.v1.views import (
@@ -32,6 +36,16 @@ else:
     router = SimpleRouter()
 
 router.register("users", UserViewSet)
+router.register(
+    "notification-preferences",
+    NotificationPreferenceViewSet,
+    basename="notification-preference",
+)
+router.register(
+    "channel-preferences",
+    ChannelPreferenceViewSet,
+    basename="channel-preference",
+)
 router.register("banks", BankViewSet)
 router.register("bank-accounts", BankAccountViewSet)
 router.register("budgets", BudgetViewSet)

@@ -232,6 +232,21 @@ export interface Bank {
 
 ////////////////////////////////////////////////////////////////////////
 //
+export interface NotificationPreference {
+  kind: string;
+  display_name: string;
+  can_suppress: boolean;
+  enabled: boolean;
+}
+
+export interface ChannelPreference {
+  channel: string;
+  display_name: string;
+  digest_frequency: string;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 export interface User {
   username: string;
   email: string;

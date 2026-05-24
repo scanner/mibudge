@@ -1,13 +1,63 @@
 # Notifications
 
 The `notifications/` Django app is a general-purpose user notification
-service.  Any in-process caller fires a notification by calling
-`notify()` or `notify_for()`.  The service handles delivery — email
-today, extensible to push and in-app later.
+service.  Its core purpose is to notify users and to let users control
+what they receive.  It is designed to be consumed by multiple apps and
+services, not to impose any particular user-facing presentation.
 
 `notifications/` is a pluggable Django app.  That contract means it
-does not tie itself to any of the apps that consume it — each consumer
+does not tie itself to any of the apps that consume it -- each consumer
 owns its own kind constants and registers them at startup.
+
+---
+
+## Design philosophy
+
+**This service notifies users.  Consumers decide everything else.**
+
+Two distinct APIs serve two distinct concerns:
+
+- **REST API** -- preference management.  Users read and write what
+  they want to receive (`/api/v1/notification-preferences/`) and how
+  often to receive it (`/api/v1/channel-preferences/`).  Any caller
+  with HTTP access can use this -- a browser SPA, a mobile app, an
+  external service, or a CLI tool.  The service returns structured data;
+  it is up to the calling application to decide how to present that data
+  to the user.
+
+- **Python API** (`notify()` / `notify_for()`) -- notification sending.
+  In-process Django apps use this to trigger delivery.  Each sending app
+  owns its notification kind constants and, for the bundled email channel,
+  its own email templates.  Owning templates is appropriate here because
+  the sender knows what its notifications need to say.
+
+The key rule: the notification service handles delivery, queuing,
+preference enforcement, and channel dispatch.  It does not dictate how
+notifications look to the end user, and it does not dictate how
+preference controls are presented.  A SPA might show a toggle list; a
+CLI tool might use a config flag; a mobile app might use system
+notification settings.  The service is agnostic to all of these.
+
+**Channels** are the delivery mechanisms.  The service is designed to
+support any combination of: email (implemented), in-app notification
+bell, push (APNs / FCM), Slack, and arbitrary webhook integrations.
+Adding a new channel means implementing a `BaseChannel` subclass --
+the registry, kind strings, and the `notify()` / `notify_for()` API
+are unchanged.  Similarly, adding a REST send endpoint (for callers who
+want to trigger notifications over HTTP rather than via the Python API)
+would not change any existing contracts.
+
+**Access control and scope.**  The service is scoped to users with
+accounts.  "User" always means an authenticated account in the system,
+never a bare email address or anonymous identity.  Every preference
+read and write is tied to `request.user`; a user can only see and
+modify their own preferences, and anonymous access is rejected.  This
+boundary is also what prevents the service from being used as a channel
+for unsolicited messages: if there is no account, the service has
+nothing to address.  Any need to send transactional email to an address
+that is not yet a user account (invitations, pre-login password resets,
+contact replies) belongs in a direct call to the email provider, outside
+this service.
 
 ---
 
