@@ -19,3 +19,18 @@ export function updateCurrentUser(body: Partial<User>): Promise<User> {
     body: body as BodyInit,
   });
 }
+
+////////////////////////////////////////////////////////////////////////
+//
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+export function changePassword(payload: ChangePasswordPayload): Promise<void> {
+  return useAuthStore().request<void>("/users/me/change-password/", {
+    method: "POST",
+    body: payload as unknown as BodyInit,
+  });
+}

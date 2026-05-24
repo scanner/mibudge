@@ -1,9 +1,14 @@
 """Tests for the users DRF API views."""
 
+# system imports
+#
+from collections.abc import Callable
+
 # 3rd party imports
 #
 import pytest
 from django.test import RequestFactory
+from pytest_mock import MockerFixture
 from rest_framework.test import APIClient
 
 # app imports
@@ -158,4 +163,137 @@ class TestUserAPIPermissions:
         """
         client = APIClient()
         response = client.get("/api/v1/users/me/")
+        assert response.status_code == 401
+
+
+# Module-level constants so they can be referenced in @pytest.mark.parametrize
+# args, which are evaluated before the class body is complete.
+_CURRENT_PW = "OldP@ssword!SufficientlyStr0ng"
+_STRONG_PW = "correct-horse-battery-staple-42!"
+
+
+########################################################################
+########################################################################
+#
+class TestPasswordChange:
+    """Tests for POST /api/v1/users/me/change-password/."""
+
+    URL = "/api/v1/users/me/change-password/"
+
+    ####################################################################
+    #
+    def test_change_password_success(
+        self, user_factory: Callable[..., User], mocker: MockerFixture
+    ) -> None:
+        """
+        GIVEN: an authenticated user with a known current password
+        WHEN:  a valid change-password POST is submitted
+        THEN:  204 is returned, the password is updated, and a notification
+               was dispatched
+        """
+        mock_send = mocker.patch("notifications.tasks.send_notification_now")
+        user = user_factory(password=_CURRENT_PW)
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            self.URL,
+            {
+                "current_password": _CURRENT_PW,
+                "new_password": _STRONG_PW,
+                "confirm_password": _STRONG_PW,
+            },
+        )
+
+        assert response.status_code == 204
+        user.refresh_from_db()
+        assert user.check_password(_STRONG_PW)
+        mock_send.delay.assert_called_once()
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "payload_overrides,expected_error_field",
+        [
+            pytest.param(
+                {"current_password": "definitely-wrong"},
+                "current_password",
+                id="wrong-current-password",
+            ),
+            pytest.param(
+                {"new_password": "password", "confirm_password": "password"},
+                "new_password",
+                id="weak-password",
+            ),
+            pytest.param(
+                {"confirm_password": _STRONG_PW + "-mismatch"},
+                "confirm_password",
+                id="passwords-mismatch",
+            ),
+        ],
+    )
+    def test_invalid_payload_rejected(
+        self,
+        user_factory: Callable[..., User],
+        payload_overrides: dict,
+        expected_error_field: str,
+    ) -> None:
+        """
+        GIVEN: an authenticated user
+        WHEN:  change-password is called with an invalid payload
+        THEN:  400 is returned with an error on the relevant field
+        """
+        user = user_factory(password=_CURRENT_PW)
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        payload = {
+            "current_password": _CURRENT_PW,
+            "new_password": _STRONG_PW,
+            "confirm_password": _STRONG_PW,
+            **payload_overrides,
+        }
+        response = client.post(self.URL, payload)
+
+        assert response.status_code == 400
+        assert expected_error_field in response.data
+
+    ####################################################################
+    #
+    def test_no_usable_password_rejected(
+        self, user_factory: Callable[..., User]
+    ) -> None:
+        """
+        GIVEN: a user with no usable password (e.g. invitation flow)
+        WHEN:  change-password is called
+        THEN:  400 is returned with a 'detail' message
+        """
+        user = user_factory()
+        user.set_unusable_password()
+        user.save()
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            self.URL,
+            {
+                "current_password": "irrelevant",
+                "new_password": _STRONG_PW,
+                "confirm_password": _STRONG_PW,
+            },
+        )
+
+        assert response.status_code == 400
+        assert "detail" in response.data
+
+    ####################################################################
+    #
+    def test_requires_auth(self) -> None:
+        """
+        GIVEN: an unauthenticated client
+        WHEN:  change-password is called
+        THEN:  401 is returned
+        """
+        client = APIClient()
+        response = client.post(self.URL, {})
         assert response.status_code == 401

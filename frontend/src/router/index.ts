@@ -73,6 +73,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/UserProfileView.vue"),
   },
   {
+    path: "/account/settings/",
+    name: "account-settings",
+    component: () => import("@/views/AccountSettingsView.vue"),
+  },
+  {
     path: "/account/bank-accounts/create/",
     name: "bank-account-create",
     component: () => import("@/views/BankAccountCreateView.vue"),
