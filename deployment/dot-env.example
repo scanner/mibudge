@@ -12,7 +12,21 @@ DJANGO_SECURE_SSL_REDIRECT=True
 
 # Email
 # ------------------------------------------------------------------------------
+# DJANGO_EMAIL_BACKEND defaults to django.core.mail.backends.smtp.EmailBackend.
+# Supply an authenticated SMTP relay in production.  For local dev, point at
+# Mailpit instead (see dot-env.dev / dot-env.docker-dev).
+#
+# To switch to django-anymail (the package is already installed), set
+# DJANGO_EMAIL_BACKEND to the appropriate anymail backend, e.g.:
+#   DJANGO_EMAIL_BACKEND=anymail.backends.postmark.EmailBackend
+# and add anymail to INSTALLED_APPS and configure its provider settings.
+DJANGO_DEFAULT_FROM_EMAIL=My Budgets <noreply@example.com>
 DJANGO_SERVER_EMAIL=noreply@example.com
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=changeme
+EMAIL_HOST_PASSWORD=changeme
+EMAIL_USE_TLS=True
 
 # django-allauth
 # ------------------------------------------------------------------------------

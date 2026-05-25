@@ -1265,15 +1265,13 @@ class TestSyncScrapeNotifications:
     def test_import_error_notification(
         self,
         empty_account: BankAccount,
-        mock_send_notification_now: MagicMock,
         mocker: MockerFixture,
     ) -> None:
         """
         GIVEN: _sync_scrape_locked raises an unexpected exception
         WHEN:  sync_scrape runs
         THEN:  an IMPORT_ERROR notification is created with account_id
-               and error context, the exception is re-raised, and the
-               immediate send task is enqueued
+               and error context, and the exception is re-raised
         """
         mocker.patch(
             "moneypools.service.sync_scrape._sync_scrape_locked",
@@ -1291,4 +1289,4 @@ class TestSyncScrapeNotifications:
         n = Notification.objects.get(user=owner, kind=IMPORT_ERROR)
         assert n.context["account_id"] == str(empty_account.id)
         assert "error" in n.context
-        mock_send_notification_now.delay.assert_called_once_with(str(n.id))
+        assert n.log_entry is None  # queued for digest, not sent immediately

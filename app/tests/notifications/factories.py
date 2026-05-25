@@ -32,7 +32,6 @@ class NotificationFactory(DjangoModelFactory):
     locale = "en-us"
     channel = Channel.EMAIL
     log_entry = None
-    sender_id = ""
 
     class Meta:
         model = Notification

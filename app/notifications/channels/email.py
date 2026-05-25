@@ -39,7 +39,7 @@ from urllib.parse import urlparse
 # 3rd party imports
 #
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives, get_connection
+from django.core.mail import EmailMultiAlternatives
 from django.template import TemplateDoesNotExist
 from django.template.loader import get_template, render_to_string
 from django.utils import timezone
@@ -52,7 +52,6 @@ from notifications.models import (
     NotificationLog,
     NotificationStatus,
 )
-from notifications.senders import get_sender
 
 logger = logging.getLogger(__name__)
 
@@ -354,18 +353,6 @@ class EmailChannel(BaseChannel):
             text_body = items[0]["text_body"]
             html_body = items[0]["html_body"]
 
-        sender_config = get_sender(notifications[0].sender_id or None)
-        connection = None
-        if not settings.DEBUG and sender_config.smtp_user:
-            connection = get_connection(
-                backend=settings.EMAIL_BACKEND,
-                host=settings.EMAIL_HOST,
-                port=settings.EMAIL_PORT,
-                username=sender_config.smtp_user,
-                password=sender_config.smtp_password,
-                use_tls=getattr(settings, "EMAIL_USE_TLS", True),
-            )
-
         log_entry = NotificationLog.objects.create(
             user=user,
             channel="email",
@@ -375,9 +362,7 @@ class EmailChannel(BaseChannel):
             msg = EmailMultiAlternatives(
                 subject=subject,
                 body=text_body,
-                from_email=sender_config.from_email,
                 to=[user.email],
-                connection=connection,
             )
             msg.attach_alternative(html_body, "text/html")
             msg.send()
