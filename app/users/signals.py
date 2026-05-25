@@ -8,7 +8,11 @@ import logging
 
 # 3rd party imports
 #
-from allauth.account.signals import password_changed, password_reset
+from allauth.account.signals import (
+    email_changed,
+    password_changed,
+    password_reset,
+)
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -16,7 +20,7 @@ from django.utils import timezone
 #
 from notifications.service import notify
 
-from users.notification_kinds import PASSWORD_CHANGED
+from users.notification_kinds import EMAIL_CHANGED, PASSWORD_CHANGED
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,26 @@ def on_password_changed(sender, request, user, **kwargs) -> None:
         {"changed_at": timezone.now().strftime("%Y-%m-%d %H:%M %Z")},
     )
     logger.debug("password_changed notification queued for user %s", user.pk)
+
+
+########################################################################
+########################################################################
+#
+@receiver(email_changed)
+def on_email_changed(
+    sender, request, user, from_email_address, to_email_address, **kwargs
+) -> None:
+    """Fire a CRITICAL notification when a user changes their email address."""
+    notify(
+        user,
+        EMAIL_CHANGED,
+        {
+            "changed_at": timezone.now().strftime("%Y-%m-%d %H:%M %Z"),
+            "from_email": from_email_address.email,
+            "to_email": to_email_address.email,
+        },
+    )
+    logger.debug("email_changed notification queued for user %s", user.pk)
 
 
 ########################################################################

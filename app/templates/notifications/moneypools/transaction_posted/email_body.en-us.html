@@ -1,0 +1,30 @@
+<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">New transactions posted</h2>
+<p style="margin:0 0 12px; color:#374151;"><strong>{{ account_name }}</strong> &mdash; {{ date }}</p>
+<table style="width:100%; border-collapse:collapse; font-size:14px; margin:0 0 12px;">
+  <thead>
+    <tr style="border-bottom:2px solid #e5e7eb;">
+      <th style="text-align:left; padding:4px 8px 6px 0; color:#6b7280; font-weight:600;">Date</th>
+      <th style="text-align:left; padding:4px 8px 6px; color:#6b7280; font-weight:600;">Description</th>
+      <th style="text-align:right; padding:4px 8px 6px; color:#6b7280; font-weight:600;">Amount</th>
+      <th style="text-align:left; padding:4px 0 6px 8px; color:#6b7280; font-weight:600;">Budget</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for tx in transactions %}
+    <tr style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:6px 8px 6px 0; color:#6b7280; white-space:nowrap; font-size:13px;">{{ tx.date }}</td>
+      <td style="padding:6px 8px; color:#1a1a1a;">{{ tx.description }}</td>
+      <td style="text-align:right; padding:6px 8px; white-space:nowrap; color:{% if '-' in tx.amount %}#dc2626{% else %}#16a34a{% endif %};">{{ tx.amount }}</td>
+      <td style="padding:6px 0 6px 8px; color:#6b7280; font-size:13px;">{{ tx.budgets|join:", " }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if truncated %}
+<p style="margin:0 0 12px; font-size:13px; color:#6b7280;">
+  &hellip;and {{ remaining_count }} more transaction{% if remaining_count != 1 %}s{% endif %} not shown.
+</p>
+{% endif %}
+<p style="margin:0; font-size:13px;">
+  <a href="{{ site_url }}/app/transactions/" style="color:#1d4ed8;">View all transactions</a>
+</p>

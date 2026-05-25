@@ -18,6 +18,7 @@ from notifications.models import (
     NotificationLog,
     NotificationStatus,
 )
+from pytest_mock import MockerFixture
 
 pytestmark = pytest.mark.django_db
 
@@ -219,3 +220,84 @@ class TestEmailChannelSend:
 
         notification.refresh_from_db()
         assert notification.log_entry is None
+
+    ####################################################################
+    #
+    def test_from_email_uses_sender_config(
+        self,
+        notification_factory: Callable,
+        mailoutbox,
+        settings,
+    ) -> None:
+        """
+        GIVEN: a Notification with a sender_id whose from_email differs from DEFAULT_FROM_EMAIL
+        WHEN:  EmailChannel.send() is called
+        THEN:  the outbound email uses the sender's from_email, not DEFAULT_FROM_EMAIL
+        """
+        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
+        settings.NOTIFICATION_SENDERS = [
+            ("notifications", "Test", "custom-sender@example.com", "", ""),
+        ]
+        settings.NOTIFICATION_DEFAULT_SENDER = "notifications"
+        notification = notification_factory(log_entry=None, sender_id="")
+
+        EmailChannel().send(notification)
+
+        assert mailoutbox[0].from_email == "custom-sender@example.com"
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "debug,expect_connection",
+        [
+            pytest.param(
+                False, True, id="non-debug-opens-per-sender-connection"
+            ),
+            pytest.param(True, False, id="debug-skips-per-sender-connection"),
+        ],
+    )
+    def test_per_sender_smtp_connection(
+        self,
+        notification_factory: Callable,
+        settings,
+        mocker: MockerFixture,
+        debug: bool,
+        expect_connection: bool,
+    ) -> None:
+        """
+        GIVEN: a sender configured with smtp_user/smtp_password
+        WHEN:  EmailChannel.send() is called
+        THEN:  get_connection() is called with per-sender credentials when not
+               in DEBUG mode, and skipped entirely when DEBUG=True
+        """
+        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
+        settings.DEBUG = debug
+        settings.NOTIFICATION_SENDERS = [
+            (
+                "smtp-sender",
+                "SMTP",
+                "smtp@example.com",
+                "smtp@example.com",
+                "pw",
+            ),
+        ]
+        settings.NOTIFICATION_DEFAULT_SENDER = "smtp-sender"
+        notification = notification_factory(
+            log_entry=None, sender_id="smtp-sender"
+        )
+
+        mock_conn = mocker.MagicMock()
+        mock_get_conn = mocker.patch(
+            "notifications.channels.email.get_connection",
+            return_value=mock_conn,
+        )
+
+        EmailChannel().send(notification)
+
+        if expect_connection:
+            mock_get_conn.assert_called_once()
+            kwargs = mock_get_conn.call_args.kwargs
+            assert kwargs["username"] == "smtp@example.com"
+            assert kwargs["password"] == "pw"
+        else:
+            mock_get_conn.assert_not_called()

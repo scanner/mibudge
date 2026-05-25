@@ -1,7 +1,15 @@
-Funding cycle completed -- {{ account_name }}
+Funding cycle completed -- {{ account_name }} -- {{ date }}
 
-{{ transfers }} budget{% if transfers != 1 %}s were{% else %} was{% endif %} funded on {{ date }}.
-{% if warnings %}
-Warnings:
+{% for b in funded_budgets %}{{ b.budget_name }}{% if b.is_fillup %} (fill-up){% endif %}{% if b.goal_reached %} -- GOAL REACHED{% endif %}
+
+  Funded this cycle : {{ b.amount_funded }}
+  Total funded      : {{ b.total_funded }}
+  Current balance   : {{ b.balance }}{% if b.balance != b.total_funded %} (pre-spending differs){% endif %}
+  Goal              : {{ b.target_balance }}
+
+{% endfor %}{% if warnings %}Warnings:
 {% for w in warnings %}  - {{ w }}
-{% endfor %}{% endif %}
+{% endfor %}
+{% endif %}View your account: {{ site_url }}/app/account/bank-accounts/{{ account_id }}/
+
+Questions? Contact {{ support_email }}

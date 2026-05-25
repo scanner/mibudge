@@ -3,12 +3,12 @@
 # system imports
 #
 from collections.abc import Callable
+from unittest.mock import MagicMock
 
 # 3rd party imports
 #
 import pytest
 from django.test import RequestFactory
-from pytest_mock import MockerFixture
 from rest_framework.test import APIClient
 
 # app imports
@@ -183,7 +183,9 @@ class TestPasswordChange:
     ####################################################################
     #
     def test_change_password_success(
-        self, user_factory: Callable[..., User], mocker: MockerFixture
+        self,
+        user_factory: Callable[..., User],
+        mock_send_notification_now: MagicMock,
     ) -> None:
         """
         GIVEN: an authenticated user with a known current password
@@ -191,7 +193,6 @@ class TestPasswordChange:
         THEN:  204 is returned, the password is updated, and a notification
                was dispatched
         """
-        mock_send = mocker.patch("notifications.tasks.send_notification_now")
         user = user_factory(password=_CURRENT_PW)
         client = APIClient()
         client.force_authenticate(user=user)
@@ -208,7 +209,7 @@ class TestPasswordChange:
         assert response.status_code == 204
         user.refresh_from_db()
         assert user.check_password(_STRONG_PW)
-        mock_send.delay.assert_called_once()
+        mock_send_notification_now.delay.assert_called_once()
 
     ####################################################################
     #

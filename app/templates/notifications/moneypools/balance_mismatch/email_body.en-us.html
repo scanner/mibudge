@@ -1,0 +1,25 @@
+<h2 style="margin:0 0 8px; font-size:16px; color:#b45309;">Balance mismatch detected</h2>
+<p style="margin:0 0 12px; color:#374151;"><strong>{{ account_name }}</strong></p>
+<table style="border-collapse:collapse; font-size:14px; margin:0 0 12px;">
+  <tr>
+    <td style="padding:3px 24px 3px 0; color:#6b7280;">Computed balance</td>
+    <td style="padding:3px 0; color:#1a1a1a; font-weight:600;">{{ computed_balance }}</td>
+  </tr>
+  <tr>
+    <td style="padding:3px 24px 3px 0; color:#6b7280;">Reported balance</td>
+    <td style="padding:3px 0; color:#1a1a1a; font-weight:600;">{{ reported_balance }}</td>
+  </tr>
+  <tr>
+    <td style="padding:3px 24px 3px 0; color:#6b7280;">Difference</td>
+    <td style="padding:3px 0; color:#b45309; font-weight:600;">{{ diff }}</td>
+  </tr>
+</table>
+<p style="margin:0 0 12px; color:#374151; font-size:13px;">
+  This may indicate missing transactions or a data import issue. Please review your account and contact support if the discrepancy persists.
+</p>
+<p style="margin:0 0 4px; font-size:13px; color:#374151;">
+  <a href="{{ site_url }}/app/account/bank-accounts/{{ account_id }}/" style="color:#1d4ed8;">View account</a>
+</p>
+<p style="margin:4px 0 0; font-size:12px; color:#9ca3af;">
+  Need assistance? <a href="mailto:{{ support_email }}" style="color:#9ca3af;">{{ support_email }}</a>
+</p>

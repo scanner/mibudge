@@ -1,0 +1,16 @@
+Recurring budget refreshed -- {{ account_name }} -- {{ date }}
+
+{{ budget_name }}
+
+  Received this cycle : {{ amount_received }}
+  Current balance     : {{ balance }}
+  Monthly target      : {{ target_balance }}
+{% if goal_reached %}
+  Fully funded for this cycle.
+{% else %}
+  Not yet fully funded -- fill-up may still have pending deposits.
+{% endif %}
+
+View budget: {{ site_url }}/app/budgets/{{ budget_id }}/
+
+Questions? Contact {{ support_email }}

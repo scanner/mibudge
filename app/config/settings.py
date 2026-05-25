@@ -10,6 +10,7 @@ development.
 import logging
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 # 3rd party imports
 import environ
@@ -64,6 +65,8 @@ REPOSITORY_URL = env(
     "REPOSITORY_URL", default="https://github.com/scanner/mibudge"
 )
 ADMINISTRATIVE_EMAIL_ADDRESS = env("ADMINISTRATIVE_EMAIL_ADDRESS", default="")
+SITE_URL = env("SITE_URL", default="http://localhost:8000")
+SITE_NAME = env("SITE_NAME", default="mibudge")
 
 # Settings exported to the Django template context via django-settings-export.
 # Access in templates as {{ settings.VARIABLE_NAME }}.
@@ -134,8 +137,11 @@ if DEBUG:
 AUTHENTICATION_BACKENDS = [
     # Email+password for the SPA/JWT flow -- must come before ModelBackend
     # so authenticate(email=...) is handled here; ModelBackend ignores it.
+    #
     "users.backends.EmailBackend",
-    # Username+password for Django admin (AdminAuthenticationForm passes username=).
+    # Username+password for Django admin (AdminAuthenticationForm passes
+    # username=).
+    #
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
     "guardian.backends.ObjectPermissionBackend",
@@ -608,3 +614,59 @@ NOTIFICATIONS_DEFAULT_LOCALE = env(
 NOTIFICATIONS_RETENTION_DAYS = env.int(
     "NOTIFICATIONS_RETENTION_DAYS", default=90
 )
+
+# Notification senders
+# Each tuple is (id, display_name, from_email, smtp_user, smtp_password).
+#
+# smtp_user/smtp_password -- two usage patterns:
+#
+#   Leave smtp_user empty (Case 1 below) when using an API-based email
+#   provider (Postmark, Mailgun, etc.).  Django's global EMAIL_BACKEND
+#   handles authentication; no per-sender SMTP connection is opened.
+#
+#   Set smtp_user/smtp_password (Case 2 below) when a sender must
+#   authenticate to a dedicated SMTP relay with its own credentials --
+#   for example a second address at a transactional mail provider that
+#   requires per-user login.  The per-sender connection is never opened
+#   in DEBUG mode; all mail routes through the configured EMAIL_HOST
+#   (typically Mailpit) regardless.
+#
+# Example with two senders:
+#
+#   NOTIFICATION_SENDERS = [
+#       # Case 1 -- API provider; global backend handles auth.
+#       (
+#           "notifications",
+#           "mibudge Notifications",
+#           "notifications@example.com",
+#           "",   # smtp_user  -- empty: use global backend
+#           "",   # smtp_password
+#       ),
+#       # Case 2 -- dedicated SMTP relay with per-sender credentials.
+#       (
+#           "admin",
+#           "mibudge Admin",
+#           "admin@example.com",
+#           "admin@example.com",   # smtp_user
+#           "s3cr3t",              # smtp_password
+#       ),
+#   ]
+#   NOTIFICATION_DEFAULT_SENDER = "notifications"
+#
+# The live config below reads each field from environment variables so
+# secrets never appear in source code.  Add a second sender by appending
+# another tuple that reads from its own env vars.
+_site_hostname = urlparse(SITE_URL).hostname or "localhost"
+NOTIFICATION_SENDERS: list[tuple[str, str, str, str, str]] = [
+    (
+        "notifications",
+        f"{SITE_NAME} Notifications",
+        env(
+            "NOTIFICATIONS_FROM_EMAIL",
+            default=f"notifications@{_site_hostname}",
+        ),
+        env("NOTIFICATIONS_SMTP_USER", default=""),
+        env("NOTIFICATIONS_SMTP_PASSWORD", default=""),
+    ),
+]
+NOTIFICATION_DEFAULT_SENDER = "notifications"

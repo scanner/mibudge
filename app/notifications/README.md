@@ -1,13 +1,63 @@
 # Notifications
 
 The `notifications/` Django app is a general-purpose user notification
-service.  Any in-process caller fires a notification by calling
-`notify()` or `notify_for()`.  The service handles delivery — email
-today, extensible to push and in-app later.
+service.  Its core purpose is to notify users and to let users control
+what they receive.  It is designed to be consumed by multiple apps and
+services, not to impose any particular user-facing presentation.
 
 `notifications/` is a pluggable Django app.  That contract means it
-does not tie itself to any of the apps that consume it — each consumer
+does not tie itself to any of the apps that consume it -- each consumer
 owns its own kind constants and registers them at startup.
+
+---
+
+## Design philosophy
+
+**This service notifies users.  Consumers decide everything else.**
+
+Two distinct APIs serve two distinct concerns:
+
+- **REST API** -- preference management.  Users read and write what
+  they want to receive (`/api/v1/notification-preferences/`) and how
+  often to receive it (`/api/v1/channel-preferences/`).  Any caller
+  with HTTP access can use this -- a browser SPA, a mobile app, an
+  external service, or a CLI tool.  The service returns structured data;
+  it is up to the calling application to decide how to present that data
+  to the user.
+
+- **Python API** (`notify()` / `notify_for()`) -- notification sending.
+  In-process Django apps use this to trigger delivery.  Each sending app
+  owns its notification kind constants and, for the bundled email channel,
+  its own email templates.  Owning templates is appropriate here because
+  the sender knows what its notifications need to say.
+
+The key rule: the notification service handles delivery, queuing,
+preference enforcement, and channel dispatch.  It does not dictate how
+notifications look to the end user, and it does not dictate how
+preference controls are presented.  A SPA might show a toggle list; a
+CLI tool might use a config flag; a mobile app might use system
+notification settings.  The service is agnostic to all of these.
+
+**Channels** are the delivery mechanisms.  The service is designed to
+support any combination of: email (implemented), in-app notification
+bell, push (APNs / FCM), Slack, and arbitrary webhook integrations.
+Adding a new channel means implementing a `BaseChannel` subclass --
+the registry, kind strings, and the `notify()` / `notify_for()` API
+are unchanged.  Similarly, adding a REST send endpoint (for callers who
+want to trigger notifications over HTTP rather than via the Python API)
+would not change any existing contracts.
+
+**Access control and scope.**  The service is scoped to users with
+accounts.  "User" always means an authenticated account in the system,
+never a bare email address or anonymous identity.  Every preference
+read and write is tied to `request.user`; a user can only see and
+modify their own preferences, and anonymous access is rejected.  This
+boundary is also what prevents the service from being used as a channel
+for unsolicited messages: if there is no account, the service has
+nothing to address.  Any need to send transactional email to an address
+that is not yet a user account (invitations, pre-login password resets,
+contact replies) belongs in a direct call to the email provider, outside
+this service.
 
 ---
 
@@ -146,6 +196,7 @@ notify(
     context,       # dict -- rendered into templates
     priority=None, # Optional[int] -- NotificationPriority constant; defaults to kind's registry value
     locale=None,   # Optional[str] -- BCP 47 tag, e.g. "fr-ca"; defaults to NOTIFICATIONS_DEFAULT_LOCALE
+    sender=None,   # Optional[str] -- sender ID from NOTIFICATION_SENDERS; defaults to NOTIFICATION_DEFAULT_SENDER
 ) -> Notification | None
 ```
 
@@ -175,6 +226,7 @@ notify_for(
     kind,          # str
     context,       # dict
     priority=None, # Optional[int]
+    sender=None,   # Optional[str] -- forwarded to notify() for each recipient
 ) -> list[Notification]
 ```
 
@@ -269,11 +321,14 @@ email.
 
 **Built-in kind context variables**:
 
-| Kind                          | Variables                                                                               |
-|-------------------------------|-----------------------------------------------------------------------------------------|
-| `moneypools.funding_complete` | `account_name`, `transfers` (int), `warnings` (list[str]), `date` (ISO string)          |
-| `moneypools.import_complete`  | `account_name`, `new_count` (int), `pending_to_posted_count` (int), `date` (ISO string) |
-| `users.password_changed`      | `changed_at` (datetime string)                                                          |
+| Kind                               | Variables                                                                                                                                                                                                        |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `moneypools.funding_complete`      | `account_name`, `transfers` (int), `warnings` (list[str]), `date` (ISO string)                                                                                                                                   |
+| `moneypools.import_complete`       | `account_name`, `new_count` (int), `pending_to_posted_count` (int), `date` (ISO string)                                                                                                                         |
+| `moneypools.transaction_posted`    | `account_name`, `count` (int), `date` (ISO string), `transactions` (list of dicts -- see below), `truncated` (bool), `remaining_count` (int, 0 when not truncated)                                              |
+| `users.password_changed`           | `changed_at` (datetime string)                                                                                                                                                                                   |
+
+Each entry in `transactions` has: `date` (YYYY-MM-DD), `description` (str), `amount` (Money string, e.g. `-25.00 USD`), `budgets` (list[str] of budget names -- usually one entry, multiple for split transactions).  At most 15 entries are included; if the import contained more, `truncated=True` and `remaining_count` carries the overflow count.
 
 **Digest wrapper context variables**:
 
@@ -307,10 +362,105 @@ timezones fall back to UTC.
 
 ### Settings (`app/config/settings.py`)
 
-| Setting                        | Default         | Description                                                                                                                                                   |
-|--------------------------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NOTIFICATIONS_DEFAULT_LOCALE` | `LANGUAGE_CODE` | BCP 47 locale used when no locale is supplied to `notify()` and as the final fallback in the template loader. Set via `NOTIFICATIONS_DEFAULT_LOCALE` env var. |
-| `NOTIFICATIONS_RETENTION_DAYS` | `90`            | Notification and log rows older than this many days are deleted by the `purge_old_notifications` task. Set via `NOTIFICATIONS_RETENTION_DAYS` env var.        |
+| Setting                        | Default                        | Description                                                                                                                                                   |
+|--------------------------------|--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NOTIFICATIONS_DEFAULT_LOCALE` | `LANGUAGE_CODE`                | BCP 47 locale used when no locale is supplied to `notify()` and as the final fallback in the template loader. Set via `NOTIFICATIONS_DEFAULT_LOCALE` env var. |
+| `NOTIFICATIONS_RETENTION_DAYS` | `90`                           | Notification and log rows older than this many days are deleted by the `purge_old_notifications` task. Set via `NOTIFICATIONS_RETENTION_DAYS` env var.        |
+| `NOTIFICATION_SENDERS`         | one "notifications" entry      | List of sender tuples -- see [Notification senders](#notification-senders) below.                                                                             |
+| `NOTIFICATION_DEFAULT_SENDER`  | `"notifications"`              | ID of the sender used when `notify()` is called without an explicit `sender` argument.                                                                        |
+
+### Notification senders
+
+A *sender* is the outbound identity that appears in the `From:` header of
+a notification email.  Multiple senders let different notification types
+originate from distinct addresses (e.g. `notifications@` vs `support@`)
+with independent SMTP credentials when required.
+
+Each sender is a 5-tuple in `NOTIFICATION_SENDERS`:
+
+```
+(id, display_name, from_email, smtp_user, smtp_password)
+```
+
+| Field          | Type  | Description                                                           |
+|----------------|-------|-----------------------------------------------------------------------|
+| `id`           | `str` | Unique identifier -- passed to `notify(sender=...)` and stored on the `Notification` row for auditing. |
+| `display_name` | `str` | Human-readable name (used in logs; may appear in `From:` header).    |
+| `from_email`   | `str` | Full RFC 5321 address, e.g. `"Name <addr@example.com>"`.             |
+| `smtp_user`    | `str` | SMTP username for per-sender auth.  **Empty string = use global Django `EMAIL_BACKEND`** (the right choice for API-based providers). |
+| `smtp_password`| `str` | SMTP password paired with `smtp_user`.  Ignored when `smtp_user` is empty. |
+
+**Two configuration patterns**
+
+*Case 1 -- API-based provider (Postmark, Mailgun, etc.)*
+
+Leave `smtp_user` and `smtp_password` empty.  The global Django
+`EMAIL_BACKEND` handles authentication; no per-sender SMTP connection is
+opened.  This is the default for the bundled `"notifications"` sender.
+
+*Case 2 -- per-sender SMTP credentials*
+
+Set `smtp_user` and `smtp_password` when a sender must authenticate to a
+dedicated SMTP relay with its own username and password.  A separate
+`get_connection()` call is made for that sender at dispatch time.
+
+> **DEBUG mode**: per-sender SMTP credentials are always ignored when
+> `DEBUG=True`.  All mail routes through the configured `EMAIL_HOST`
+> (typically Mailpit) regardless of `smtp_user`.
+
+**Example with two senders**
+
+```python
+# settings.py
+
+NOTIFICATION_SENDERS = [
+    # "notifications" -- API-based provider; global backend handles auth.
+    (
+        "notifications",
+        "mibudge Notifications",
+        env("NOTIFICATIONS_FROM_EMAIL", default="notifications@example.com"),
+        env("NOTIFICATIONS_SMTP_USER", default=""),      # empty: use global backend
+        env("NOTIFICATIONS_SMTP_PASSWORD", default=""),
+    ),
+    # "admin" -- dedicated SMTP relay with per-sender credentials.
+    (
+        "admin",
+        "mibudge Admin",
+        env("ADMIN_NOTIFICATIONS_FROM_EMAIL", default="admin@example.com"),
+        env("ADMIN_NOTIFICATIONS_SMTP_USER", default=""),
+        env("ADMIN_NOTIFICATIONS_SMTP_PASSWORD", default=""),
+    ),
+]
+NOTIFICATION_DEFAULT_SENDER = "notifications"
+```
+
+**Sending with a non-default sender**
+
+Pass the sender ID to `notify()` or `notify_for()`:
+
+```python
+from notifications.service import notify
+
+notify(user, kind, context, sender="admin")
+```
+
+When `sender` is omitted (or `None`/empty string), the call resolves to
+`NOTIFICATION_DEFAULT_SENDER`.
+
+**Startup validation**
+
+`NotificationsConfig.ready()` asserts that `NOTIFICATION_DEFAULT_SENDER`
+resolves to a real entry in `NOTIFICATION_SENDERS`.  A misconfigured
+default raises `ImproperlyConfigured` at startup rather than silently
+failing at send time.
+
+**Audit trail**
+
+The resolved sender ID is stored on the `Notification` row as
+`sender_id`.  An empty `sender_id` means the default sender was used.
+This makes it possible to inspect which sender was responsible for any
+given notification, and to regenerate or replay notifications with the
+correct sender if needed.
 
 ### Celery periodic tasks
 

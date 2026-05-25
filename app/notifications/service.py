@@ -80,6 +80,7 @@ def notify(
     context: dict[str, Any],
     priority: int | None = None,
     locale: str | None = None,
+    sender: str | None = None,
 ) -> Notification | None:
     """
     Queue a notification for delivery to a single user.
@@ -98,6 +99,8 @@ def notify(
             default.
         locale: Override the user's BCP 47 locale (e.g. 'fr-ca').
             Defaults to NOTIFICATIONS_DEFAULT_LOCALE from settings.
+        sender: Sender ID from NOTIFICATION_SENDERS.  None or '' resolves
+            to NOTIFICATION_DEFAULT_SENDER at dispatch time.
 
     Returns:
         The created Notification, or None if the user has opted out.
@@ -134,6 +137,7 @@ def notify(
         context=context,
         locale=resolved_locale,
         channel=Channel.EMAIL,
+        sender_id=sender or "",
     )
 
     if resolved_priority == NotificationPriority.CRITICAL:
@@ -160,6 +164,7 @@ def notify_for(
     kind: str,
     context: dict[str, Any],
     priority: int | None = None,
+    sender: str | None = None,
 ) -> list[Notification]:
     """
     Fan out notifications to all recipients registered for this kind.
@@ -174,6 +179,7 @@ def notify_for(
         kind: Dotted kind string.
         context: Template context dict.
         priority: Optional priority override.
+        sender: Sender ID forwarded to notify() for each recipient.
 
     Returns:
         List of created Notification instances (may be shorter than the
@@ -197,7 +203,9 @@ def notify_for(
 
     results = []
     for user in kind_info.recipients(obj):
-        notification = notify(user, kind, context, priority=priority)
+        notification = notify(
+            user, kind, context, priority=priority, sender=sender
+        )
         if notification is not None:
             results.append(notification)
     return results

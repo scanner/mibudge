@@ -15,15 +15,24 @@ the two validation paths (aggregate balance and posting-order chain).
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 # 3rd party imports
 #
 import pytest
 from djmoney.money import Money
+from notifications.models import Notification, NotificationPreference
+from pytest_mock import MockerFixture
 
 # Project imports
 #
 from moneypools.models import BankAccount, Budget, Transaction
+from moneypools.notification_kinds import (
+    BALANCE_MISMATCH,
+    IMPORT_COMPLETE,
+    IMPORT_ERROR,
+    TRANSACTION_POSTED,
+)
 from moneypools.service import sync_scrape as sync_scrape_svc
 from users.models import User
 
@@ -560,7 +569,9 @@ class TestSyncScrape:
     ####################################################################
     #
     def test_balance_mismatch_reported(
-        self, empty_account: BankAccount
+        self,
+        empty_account: BankAccount,
+        mock_send_notification_now: MagicMock,
     ) -> None:
         """
         GIVEN: a scrape whose stated `ending_balance` does not match the
@@ -586,6 +597,19 @@ class TestSyncScrape:
         assert report.inserted_posted == 1
         empty_account.refresh_from_db()
         assert empty_account.available_balance == Money(-25, "USD")
+
+        owner = empty_account.owners.first()
+        n = Notification.objects.get(user=owner, kind=BALANCE_MISMATCH)
+        for key in (
+            "account_name",
+            "account_id",
+            "computed_balance",
+            "reported_balance",
+            "diff",
+        ):
+            assert key in n.context
+        assert n.context["account_id"] == str(empty_account.id)
+        mock_send_notification_now.delay.assert_called_once_with(str(n.id))
 
     ####################################################################
     #
@@ -1044,3 +1068,227 @@ class TestSyncScrapeTruncatedDedup:
         assert (
             Transaction.objects.filter(bank_account=empty_account).count() == 1
         )
+
+
+########################################################################
+########################################################################
+#
+class TestSyncScrapeNotifications:
+    """Tests that sync_scrape fires the expected notification kinds."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "kind,required_ctx_keys,needs_opt_in",
+        [
+            pytest.param(
+                IMPORT_COMPLETE,
+                [
+                    "account_name",
+                    "account_id",
+                    "new_count",
+                    "pending_to_posted_count",
+                    "date",
+                ],
+                True,
+                id="import_complete",
+            ),
+            pytest.param(
+                TRANSACTION_POSTED,
+                [
+                    "account_name",
+                    "account_id",
+                    "count",
+                    "date",
+                    "transactions",
+                    "truncated",
+                    "remaining_count",
+                ],
+                False,
+                id="transaction_posted",
+            ),
+        ],
+    )
+    def test_notification_context_on_new_posted(
+        self,
+        empty_account: BankAccount,
+        kind: str,
+        required_ctx_keys: list[str],
+        needs_opt_in: bool,
+    ) -> None:
+        """
+        GIVEN: a scrape that inserts one new posted transaction
+        WHEN:  sync_scrape runs
+        THEN:  an IMPORT_COMPLETE (opt-in required) and TRANSACTION_POSTED
+               notification are created with all expected context keys
+        """
+        owner = empty_account.owners.first()
+        assert owner is not None
+        if needs_opt_in:
+            NotificationPreference.objects.create(
+                user=owner, kind=kind, enabled=True
+            )
+
+        payload = _payload(
+            ending_balance=Decimal("-25.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, 0, 0, tzinfo=UTC),
+                    raw_description="POSTED TX",
+                    amount=Decimal("-25.00"),
+                ),
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        n = Notification.objects.get(user=owner, kind=kind)
+        for key in required_ctx_keys:
+            assert key in n.context
+        assert n.context["account_id"] == str(empty_account.id)
+        if kind == TRANSACTION_POSTED:
+            txns = n.context["transactions"]
+            assert len(txns) == 1
+            assert txns[0]["description"] == "POSTED TX"
+            for field in ("date", "amount", "budgets"):
+                assert field in txns[0]
+            assert n.context["truncated"] is False
+            assert n.context["remaining_count"] == 0
+
+    ####################################################################
+    #
+    def test_transaction_posted_truncates_at_15(
+        self,
+        empty_account: BankAccount,
+        mock_send_notification_now: MagicMock,
+    ) -> None:
+        """
+        GIVEN: a scrape that inserts 16 new posted transactions
+        WHEN:  sync_scrape runs
+        THEN:  the TRANSACTION_POSTED notification lists only the first 15,
+               truncated=True, and remaining_count=1
+        """
+        payload = _payload(
+            ending_balance=Decimal("-400.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, 0, 0, tzinfo=UTC),
+                    raw_description=f"TX {i:02d}",
+                    amount=Decimal("-25.00"),
+                )
+                for i in range(16)
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        owner = empty_account.owners.first()
+        assert owner is not None
+        n = Notification.objects.get(user=owner, kind=TRANSACTION_POSTED)
+        assert len(n.context["transactions"]) == 15
+        assert n.context["truncated"] is True
+        assert n.context["remaining_count"] == 1
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "scenario,expect_transaction_posted",
+        [
+            pytest.param(
+                "only_pending_deleted", False, id="only_pending_deleted"
+            ),
+            pytest.param("new_posted_inserted", True, id="new_posted_inserted"),
+        ],
+    )
+    def test_transaction_posted_fires_only_on_new_posted(
+        self,
+        empty_account: BankAccount,
+        scenario: str,
+        expect_transaction_posted: bool,
+    ) -> None:
+        """
+        GIVEN: a scrape that either deletes a pending tx or inserts a posted tx
+        WHEN:  sync_scrape runs
+        THEN:  IMPORT_COMPLETE always fires (opted-in); TRANSACTION_POSTED
+               fires only when inserted_posted > 0
+        """
+        owner = empty_account.owners.first()
+        assert owner is not None
+        NotificationPreference.objects.create(
+            user=owner, kind=IMPORT_COMPLETE, enabled=True
+        )
+
+        if scenario == "only_pending_deleted":
+            seed = _payload(
+                ending_balance=Decimal("-10.00"),
+                transactions=[
+                    _stx(
+                        pending=True,
+                        posted_date=datetime(2026, 5, 19, 12, 0, tzinfo=UTC),
+                        raw_description="PENDING TX",
+                        amount=Decimal("-10.00"),
+                    ),
+                ],
+            )
+            sync_scrape_svc.sync_scrape(empty_account, seed)
+            payload = _payload(
+                ending_balance=Decimal("0.00"),
+                transactions=[],
+            )
+        else:
+            payload = _payload(
+                ending_balance=Decimal("-25.00"),
+                transactions=[
+                    _stx(
+                        pending=False,
+                        posted_date=datetime(2026, 5, 18, 0, 0, tzinfo=UTC),
+                        raw_description="POSTED TX",
+                        amount=Decimal("-25.00"),
+                    ),
+                ],
+            )
+
+        sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        assert Notification.objects.filter(
+            user=owner, kind=IMPORT_COMPLETE
+        ).exists()
+        assert (
+            Notification.objects.filter(
+                user=owner, kind=TRANSACTION_POSTED
+            ).exists()
+            == expect_transaction_posted
+        )
+
+    ####################################################################
+    #
+    def test_import_error_notification(
+        self,
+        empty_account: BankAccount,
+        mock_send_notification_now: MagicMock,
+        mocker: MockerFixture,
+    ) -> None:
+        """
+        GIVEN: _sync_scrape_locked raises an unexpected exception
+        WHEN:  sync_scrape runs
+        THEN:  an IMPORT_ERROR notification is created with account_id
+               and error context, the exception is re-raised, and the
+               immediate send task is enqueued
+        """
+        mocker.patch(
+            "moneypools.service.sync_scrape._sync_scrape_locked",
+            side_effect=RuntimeError("scraper failed"),
+        )
+        payload = _payload(
+            ending_balance=Decimal("0.00"),
+            transactions=[],
+        )
+
+        with pytest.raises(RuntimeError):
+            sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        owner = empty_account.owners.first()
+        n = Notification.objects.get(user=owner, kind=IMPORT_ERROR)
+        assert n.context["account_id"] == str(empty_account.id)
+        assert "error" in n.context
+        mock_send_notification_now.delay.assert_called_once_with(str(n.id))

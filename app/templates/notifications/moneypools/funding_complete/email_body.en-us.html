@@ -1,10 +1,38 @@
 <h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">Funding cycle completed</h2>
-<p style="margin:0 0 8px; color:#374151;"><strong>{{ account_name }}</strong></p>
-<p style="margin:0 0 8px; color:#374151;">
-  {{ transfers }} budget{% if transfers != 1 %}s were{% else %} was{% endif %} funded on {{ date }}.
-</p>
+<p style="margin:0 0 12px; color:#374151;"><strong>{{ account_name }}</strong> &mdash; {{ date }}</p>
+<table style="width:100%; border-collapse:collapse; font-size:14px; margin:0 0 12px;">
+  <thead>
+    <tr style="border-bottom:2px solid #e5e7eb;">
+      <th style="text-align:left; padding:4px 8px 6px 0; color:#6b7280; font-weight:600;">Budget</th>
+      <th style="text-align:right; padding:4px 8px 6px; color:#6b7280; font-weight:600;">Funded this cycle</th>
+      <th style="text-align:right; padding:4px 8px 6px; color:#6b7280; font-weight:600;">Total funded</th>
+      <th style="text-align:right; padding:4px 8px 6px; color:#6b7280; font-weight:600;">Balance</th>
+      <th style="text-align:right; padding:4px 0 6px 8px; color:#6b7280; font-weight:600;">Goal</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in funded_budgets %}
+    <tr style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:6px 8px 6px 0; color:#1a1a1a;">
+        <a href="{{ site_url }}/app/budgets/{{ b.budget_id }}/" style="color:#1d4ed8; text-decoration:none;">{{ b.budget_name }}</a>{% if b.is_fillup %} <span style="font-size:12px; color:#9ca3af;">(fill-up)</span>{% endif %}
+        {% if b.goal_reached %}<br><span style="color:#16a34a; font-size:12px; font-weight:600;">&#10003; Goal reached</span>{% endif %}
+      </td>
+      <td style="text-align:right; padding:6px 8px; color:#374151; white-space:nowrap;">{{ b.amount_funded }}</td>
+      <td style="text-align:right; padding:6px 8px; color:#374151; white-space:nowrap;">{{ b.total_funded }}</td>
+      <td style="text-align:right; padding:6px 8px; color:{% if b.balance != b.total_funded %}#b45309{% else %}#374151{% endif %}; white-space:nowrap;">{{ b.balance }}</td>
+      <td style="text-align:right; padding:6px 0 6px 8px; color:#374151; white-space:nowrap;">{{ b.target_balance }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% if warnings %}
-<ul style="margin:8px 0; padding-left:20px; color:#b45309;">
+<ul style="margin:0 0 12px; padding-left:20px; color:#b45309; font-size:13px;">
   {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
 </ul>
 {% endif %}
+<p style="margin:0 0 4px; font-size:13px; color:#374151;">
+  <a href="{{ site_url }}/app/account/bank-accounts/{{ account_id }}/" style="color:#1d4ed8;">View account</a>
+</p>
+<p style="margin:4px 0 0; font-size:12px; color:#9ca3af;">
+  Questions? <a href="mailto:{{ support_email }}" style="color:#9ca3af;">{{ support_email }}</a>
+</p>

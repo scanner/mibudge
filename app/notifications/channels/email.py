@@ -34,11 +34,12 @@ new template files; no code changes are needed.
 # system imports
 #
 import logging
+from urllib.parse import urlparse
 
 # 3rd party imports
 #
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.template import TemplateDoesNotExist
 from django.template.loader import get_template, render_to_string
 from django.utils import timezone
@@ -51,6 +52,7 @@ from notifications.models import (
     NotificationLog,
     NotificationStatus,
 )
+from notifications.senders import get_sender
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,24 @@ _EVENING_WINDOW = (18, 19)
 
 def _fallback_locale() -> str:
     return settings.NOTIFICATIONS_DEFAULT_LOCALE
+
+
+########################################################################
+########################################################################
+#
+def _site_context() -> dict[str, str]:
+    """Return template context variables derived from SITE_URL.
+
+    Injected into every outgoing notification email so templates can
+    link back to the app and provide a support contact address.
+
+    Returns:
+        Dict with 'site_url' (trailing slash stripped) and
+        'support_email' (support@<hostname>).
+    """
+    url = settings.SITE_URL.rstrip("/")
+    hostname = urlparse(url).hostname or "localhost"
+    return {"site_url": url, "support_email": f"support@{hostname}"}
 
 
 ########################################################################
@@ -287,11 +307,14 @@ class EmailChannel(BaseChannel):
         user = first.user
         locale = first.locale
 
+        site_ctx = _site_context()
+
         # Build per-item context for digest rendering.
         items = []
         for n in notifications:
             ctx = dict(n.context)
             ctx["notification"] = n
+            ctx.update(site_ctx)
             items.append(
                 {
                     "notification": n,
@@ -309,6 +332,7 @@ class EmailChannel(BaseChannel):
                 "user": user,
                 "items": items,
                 "item_count": len(items),
+                **site_ctx,
             }
             subject = _render_shared_template(
                 "email_digest_subject", "txt", locale, digest_ctx
@@ -323,11 +347,24 @@ class EmailChannel(BaseChannel):
             n = notifications[0]
             ctx = dict(n.context)
             ctx["notification"] = n
+            ctx.update(site_ctx)
             subject = _render_with_fallback(
                 n.kind, "email_subject", locale, ctx
             ).strip()
             text_body = items[0]["text_body"]
             html_body = items[0]["html_body"]
+
+        sender_config = get_sender(notifications[0].sender_id or None)
+        connection = None
+        if not settings.DEBUG and sender_config.smtp_user:
+            connection = get_connection(
+                backend=settings.EMAIL_BACKEND,
+                host=settings.EMAIL_HOST,
+                port=settings.EMAIL_PORT,
+                username=sender_config.smtp_user,
+                password=sender_config.smtp_password,
+                use_tls=getattr(settings, "EMAIL_USE_TLS", True),
+            )
 
         log_entry = NotificationLog.objects.create(
             user=user,
@@ -338,8 +375,9 @@ class EmailChannel(BaseChannel):
             msg = EmailMultiAlternatives(
                 subject=subject,
                 body=text_body,
-                from_email=settings.DEFAULT_FROM_EMAIL,
+                from_email=sender_config.from_email,
                 to=[user.email],
+                connection=connection,
             )
             msg.attach_alternative(html_body, "text/html")
             msg.send()

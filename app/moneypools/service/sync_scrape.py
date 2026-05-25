@@ -82,6 +82,7 @@ from django.db import transaction as db_transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from notifications.service import notify_for
 
 from moneypools.description_utils import parse_transaction_date
 from moneypools.models import (
@@ -89,6 +90,12 @@ from moneypools.models import (
     Budget,
     Transaction,
     TransactionAllocation,
+)
+from moneypools.notification_kinds import (
+    BALANCE_MISMATCH,
+    IMPORT_COMPLETE,
+    IMPORT_ERROR,
+    TRANSACTION_POSTED,
 )
 from moneypools.service import transaction as transaction_svc
 from moneypools.service import (
@@ -240,13 +247,86 @@ def sync_scrape(
             f"currency {account_currency!r}."
         )
 
-    with acquire_lock(bank_account.lock_key):
-        with acquire_lock(unalloc.lock_key):
-            with db_transaction.atomic():
-                report = _sync_scrape_locked(
-                    bank_account, unalloc, payload, account_currency
-                )
+    try:
+        with acquire_lock(bank_account.lock_key):
+            with acquire_lock(unalloc.lock_key):
+                with db_transaction.atomic():
+                    report = _sync_scrape_locked(
+                        bank_account, unalloc, payload, account_currency
+                    )
+    except Exception as exc:
+        notify_for(
+            bank_account,
+            IMPORT_ERROR,
+            {
+                "account_name": bank_account.name,
+                "account_id": str(bank_account.id),
+                "error": str(exc),
+            },
+        )
+        raise
 
+    if report.inserted_posted > 0 or report.deleted_pending > 0:
+        notify_for(
+            bank_account,
+            IMPORT_COMPLETE,
+            {
+                "account_name": bank_account.name,
+                "account_id": str(bank_account.id),
+                "new_count": report.inserted_posted,
+                "pending_to_posted_count": report.deleted_pending,
+                "date": payload.scraped_at.strftime("%Y-%m-%d"),
+            },
+        )
+    if report.inserted_posted > 0:
+        _TRANSACTION_DISPLAY_LIMIT = 15
+        _new_txns = list(
+            Transaction.objects.filter(id__in=report.new_transaction_ids)
+            .prefetch_related("allocations__budget")
+            .order_by("transaction_date")[: _TRANSACTION_DISPLAY_LIMIT + 1]
+        )
+        truncated = len(_new_txns) > _TRANSACTION_DISPLAY_LIMIT
+        transactions_ctx = [
+            {
+                "date": tx.transaction_date.strftime("%Y-%m-%d"),
+                "description": tx.description,
+                "amount": str(tx.amount),
+                "budgets": [
+                    a.budget.name
+                    for a in tx.allocations.all()
+                    if a.budget is not None
+                ],
+            }
+            for tx in _new_txns[:_TRANSACTION_DISPLAY_LIMIT]
+        ]
+        notify_for(
+            bank_account,
+            TRANSACTION_POSTED,
+            {
+                "account_name": bank_account.name,
+                "account_id": str(bank_account.id),
+                "count": report.inserted_posted,
+                "date": payload.scraped_at.strftime("%Y-%m-%d"),
+                "transactions": transactions_ctx,
+                "truncated": truncated,
+                "remaining_count": report.inserted_posted
+                - _TRANSACTION_DISPLAY_LIMIT
+                if truncated
+                else 0,
+            },
+        )
+    if report.balance_mismatch is not None:
+        notify_for(
+            bank_account,
+            BALANCE_MISMATCH,
+            {
+                "account_name": bank_account.name,
+                "account_id": str(bank_account.id),
+                "computed_balance": str(bank_account.available_balance.amount),
+                "reported_balance": str(payload.ending_balance.amount),
+                "diff": f"{report.balance_mismatch:+.2f}",
+            },
+        )
     return report
 
 

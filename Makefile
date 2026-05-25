@@ -45,7 +45,7 @@ up: build dirs certs	## Build backend stack, bring it up, then run Vite in the f
 	@docker compose up --remove-orphans --detach
 	@echo "Backend stack running in the background. Starting Vite dev server..."
 	@echo "(Ctrl-C stops Vite; backend containers keep running -- use 'make down' to stop them.)"
-	@cd $(ROOT_DIR)/frontend && pnpm dev
+	@cd $(ROOT_DIR)/frontend && pnpm dev || (echo "\nVite failed to start -- is the dev server already running on port 5173?" && exit 1)
 
 down:	## docker compose down
 	@docker compose down --remove-orphans

@@ -21,10 +21,15 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from djmoney.money import Money
+from notifications.models import Notification
 
 # Project imports
 #
 from moneypools.models import BankAccount, Budget, InternalTransaction
+from moneypools.notification_kinds import (
+    FUNDING_COMPLETE,
+    RECURRING_BUDGET_REFRESHED,
+)
 from moneypools.service import budget as budget_svc
 from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
@@ -2554,3 +2559,129 @@ class TestRecurringTargetDateProration:
         assert report.transfers == 1
         fillup.refresh_from_db()
         assert fillup.balance == expected_balance
+
+
+########################################################################
+########################################################################
+#
+class TestFundingNotifications:
+    """Tests that fund_account fires the expected notification kinds."""
+
+    ####################################################################
+    #
+    def test_funding_complete_notification_context(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: a GOAL budget funded $50/month, unallocated=$200, today=Mar 1
+        WHEN:  fund_account runs and transfers $50
+        THEN:  a FUNDING_COMPLETE notification is created for each account
+               owner with account_id, date, funded_budgets, and warnings in
+               context; funded_budgets contains all expected keys
+        """
+        today = date(2026, 3, 1)
+        account = make_account(posted_through=today)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New High-tech Overpriced Sneakers",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(300, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 2, 28)
+        )
+
+        funding_svc.fund_account(account, today, system_user)
+
+        owner = account.owners.first()
+        n = Notification.objects.get(user=owner, kind=FUNDING_COMPLETE)
+        assert n.context["account_id"] == str(account.id)
+        for key in ("account_name", "date", "funded_budgets", "warnings"):
+            assert key in n.context
+        fb_list = n.context["funded_budgets"]
+        assert len(fb_list) == 1
+        fb = fb_list[0]
+        for key in (
+            "budget_id",
+            "budget_name",
+            "amount_funded",
+            "total_funded",
+            "balance",
+            "target_balance",
+            "goal_reached",
+            "is_fillup",
+        ):
+            assert key in fb
+        assert fb["goal_reached"] is False
+        assert fb["is_fillup"] is False
+
+    ####################################################################
+    #
+    def test_recurring_budget_refreshed_notification_context(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,  # type: ignore[valid-type]
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget with $80 in fillup, unallocated=$0,
+               recur fires Feb 1 (last_recurrence_on=Jan 31)
+        WHEN:  fund_account runs
+        THEN:  a RECURRING_BUDGET_REFRESHED notification is created with all
+               expected context keys; FUNDING_COMPLETE is not created because
+               the FUND event was skipped (empty unallocated)
+        """
+        today = date(2026, 2, 1)
+        account = make_account(posted_through=today)
+
+        recurring = budget_svc.create(
+            bank_account=account,
+            name="Monthly Bills",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY,
+        )
+        recurring.refresh_from_db()
+        fillup = recurring.fillup_goal
+        assert fillup is not None
+
+        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(80, "USD"))
+        Budget.objects.filter(pkid=recurring.pkid).update(
+            last_funded_on=today,
+            last_recurrence_on=date(2026, 1, 31),
+        )
+
+        funding_svc.fund_account(account, today, system_user)
+
+        owner = account.owners.first()
+        n = Notification.objects.get(
+            user=owner, kind=RECURRING_BUDGET_REFRESHED
+        )
+        assert n.context["account_id"] == str(account.id)
+        assert n.context["budget_id"] == str(recurring.id)
+        for key in (
+            "account_name",
+            "budget_name",
+            "amount_received",
+            "balance",
+            "target_balance",
+            "goal_reached",
+            "date",
+        ):
+            assert key in n.context
+        assert n.context["goal_reached"] is False
+        assert not Notification.objects.filter(
+            user=owner, kind=FUNDING_COMPLETE
+        ).exists()

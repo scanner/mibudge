@@ -1,0 +1,6 @@
+New transactions posted -- {{ account_name }} -- {{ date }}
+
+{% for tx in transactions %}{{ tx.date }}  {{ tx.description }}  {{ tx.amount }}{% if tx.budgets %}  [{{ tx.budgets|join:", " }}]{% endif %}
+{% endfor %}{% if truncated %}...and {{ remaining_count }} more transaction{% if remaining_count != 1 %}s{% endif %} not shown.
+{% endif %}
+View all transactions: {{ site_url }}/app/transactions/
