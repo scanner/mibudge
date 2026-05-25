@@ -10,7 +10,6 @@ development.
 import logging
 from datetime import timedelta
 from pathlib import Path
-from urllib.parse import urlparse
 
 # 3rd party imports
 import environ
@@ -299,33 +298,28 @@ EMAIL_SUBJECT_PREFIX = env(
     "DJANGO_EMAIL_SUBJECT_PREFIX", default="[My Budgets]"
 )
 
-if DEBUG:
-    # Route through the local mailpit container (no auth needed).
-    EMAIL_HOST = env("EMAIL_HOST", default="mailpit")
-    EMAIL_PORT = env.int("EMAIL_PORT", default=1025)
-else:
-    # SMTP settings -- used when EMAIL_BACKEND is anymail.backends.smtp.
-    # For API-based providers (Postmark, Mailgun, etc.) set EMAIL_BACKEND to
-    # the appropriate anymail backend and supply the provider token below.
-    EMAIL_HOST = env("EMAIL_HOST", default="")
-    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
-    EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
-    EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
-    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+# SMTP settings -- used when EMAIL_BACKEND is anymail.backends.smtp.
+# For API-based providers (Postmark, Mailgun, etc.) set EMAIL_BACKEND to
+# the appropriate anymail backend and supply the provider token below.
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 
-    # Anymail provider tokens -- only the key matching the active backend is
-    # used; the rest are ignored.
-    ANYMAIL = {
-        k: v
-        for k, v in {
-            "POSTMARK_SERVER_TOKEN": env("POSTMARK_SERVER_TOKEN", default=""),
-            "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=""),
-            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=""),
-            "SENDGRID_API_KEY": env("SENDGRID_API_KEY", default=""),
-            "SPARKPOST_API_KEY": env("SPARKPOST_API_KEY", default=""),
-        }.items()
-        if v
-    }
+# Anymail provider tokens -- only the key matching the active backend is
+# used; the rest are ignored.
+ANYMAIL = {
+    k: v
+    for k, v in {
+        "POSTMARK_SERVER_TOKEN": env("POSTMARK_SERVER_TOKEN", default=""),
+        "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=""),
+        "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=""),
+        "SENDGRID_API_KEY": env("SENDGRID_API_KEY", default=""),
+        "SPARKPOST_API_KEY": env("SPARKPOST_API_KEY", default=""),
+    }.items()
+    if v
+}
 
 # ADMIN
 # ------------------------------------------------------------------------------
@@ -614,59 +608,3 @@ NOTIFICATIONS_DEFAULT_LOCALE = env(
 NOTIFICATIONS_RETENTION_DAYS = env.int(
     "NOTIFICATIONS_RETENTION_DAYS", default=90
 )
-
-# Notification senders
-# Each tuple is (id, display_name, from_email, smtp_user, smtp_password).
-#
-# smtp_user/smtp_password -- two usage patterns:
-#
-#   Leave smtp_user empty (Case 1 below) when using an API-based email
-#   provider (Postmark, Mailgun, etc.).  Django's global EMAIL_BACKEND
-#   handles authentication; no per-sender SMTP connection is opened.
-#
-#   Set smtp_user/smtp_password (Case 2 below) when a sender must
-#   authenticate to a dedicated SMTP relay with its own credentials --
-#   for example a second address at a transactional mail provider that
-#   requires per-user login.  The per-sender connection is never opened
-#   in DEBUG mode; all mail routes through the configured EMAIL_HOST
-#   (typically Mailpit) regardless.
-#
-# Example with two senders:
-#
-#   NOTIFICATION_SENDERS = [
-#       # Case 1 -- API provider; global backend handles auth.
-#       (
-#           "notifications",
-#           "mibudge Notifications",
-#           "notifications@example.com",
-#           "",   # smtp_user  -- empty: use global backend
-#           "",   # smtp_password
-#       ),
-#       # Case 2 -- dedicated SMTP relay with per-sender credentials.
-#       (
-#           "admin",
-#           "mibudge Admin",
-#           "admin@example.com",
-#           "admin@example.com",   # smtp_user
-#           "s3cr3t",              # smtp_password
-#       ),
-#   ]
-#   NOTIFICATION_DEFAULT_SENDER = "notifications"
-#
-# The live config below reads each field from environment variables so
-# secrets never appear in source code.  Add a second sender by appending
-# another tuple that reads from its own env vars.
-_site_hostname = urlparse(SITE_URL).hostname or "localhost"
-NOTIFICATION_SENDERS: list[tuple[str, str, str, str, str]] = [
-    (
-        "notifications",
-        f"{SITE_NAME} Notifications",
-        env(
-            "NOTIFICATIONS_FROM_EMAIL",
-            default=f"notifications@{_site_hostname}",
-        ),
-        env("NOTIFICATIONS_SMTP_USER", default=""),
-        env("NOTIFICATIONS_SMTP_PASSWORD", default=""),
-    ),
-]
-NOTIFICATION_DEFAULT_SENDER = "notifications"

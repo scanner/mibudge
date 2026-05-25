@@ -46,21 +46,6 @@ DATABASE_URL=postgres://debug:debug@postgres:5432/mibudge
 EMAIL_HOST=mailpit
 EMAIL_PORT=1025
 
-# Notification senders
-# ------------------------------------------------------------------------------
-# See deployment/dot-env.dev for full documentation of both usage patterns
-# (API-based provider vs. per-sender SMTP credentials).
-#
-# Case 1 -- API-based provider: leave SMTP vars empty, global backend handles auth.
-#   NOTIFICATIONS_FROM_EMAIL=mibudge Notifications <notifications@example.com>
-#   NOTIFICATIONS_SMTP_USER=
-#   NOTIFICATIONS_SMTP_PASSWORD=
-#
-# Case 2 -- per-sender SMTP credentials:
-#   NOTIFICATIONS_FROM_EMAIL=mibudge Notifications <notifications@example.com>
-#   NOTIFICATIONS_SMTP_USER=notifications@example.com
-#   NOTIFICATIONS_SMTP_PASSWORD=s3cr3t
-
 # django-fernet-encrypted-fields
 # ------------------------------------------------------------------------------
 # Generate a real value with: python -c "import secrets; print(secrets.token_hex(32))"

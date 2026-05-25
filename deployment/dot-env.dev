@@ -59,31 +59,6 @@ EMAIL_PORT=1025
 # In production use a strong random value and NEVER commit it.
 SALT_KEY=local-dev-salt-key-change-in-production
 
-# Notification senders
-# ------------------------------------------------------------------------------
-# NOTIFICATION_SENDERS is a Python list defined in settings.py.  The default
-# list contains one sender ("notifications") whose fields are read from the
-# env vars below.
-#
-# Case 1 -- API-based provider (Postmark, Mailgun, etc.)
-#   Leave NOTIFICATIONS_SMTP_USER empty.  The global Django EMAIL_BACKEND
-#   handles authentication; no per-sender SMTP connection is opened.
-#
-#   NOTIFICATIONS_FROM_EMAIL=mibudge Notifications <notifications@example.com>
-#   NOTIFICATIONS_SMTP_USER=
-#   NOTIFICATIONS_SMTP_PASSWORD=
-#
-# Case 2 -- per-sender SMTP credentials (e.g. a dedicated SMTP relay or a
-#   second address that authenticates with its own username/password)
-#
-#   NOTIFICATIONS_FROM_EMAIL=mibudge Notifications <notifications@example.com>
-#   NOTIFICATIONS_SMTP_USER=notifications@example.com
-#   NOTIFICATIONS_SMTP_PASSWORD=s3cr3t
-#
-# To add a second sender (e.g. "support"), add another tuple to
-# NOTIFICATION_SENDERS in settings.py and read its fields from new env vars,
-# following the same pattern as the "notifications" entry.
-
 # Sentry (disabled by default)
 # ------------------------------------------------------------------------------
 # SENTRY_DSN=

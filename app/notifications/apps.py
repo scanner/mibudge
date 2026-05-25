@@ -11,12 +11,7 @@ from urllib.parse import urlparse
 #
 from django.apps import AppConfig
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.db.models.signals import post_migrate
-
-# Project imports
-#
-from notifications.senders import get_sender
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +58,3 @@ class NotificationsConfig(AppConfig):
     #
     def ready(self) -> None:
         post_migrate.connect(_sync_site, sender=self)
-        self._validate_sender_config()
-
-    ####################################################################
-    #
-    def _validate_sender_config(self) -> None:
-        """Assert the default sender resolves at startup.
-
-        Raises ImproperlyConfigured rather than letting the first
-        notification dispatch fail at send time.
-        """
-        try:
-            get_sender(None)
-        except ValueError as exc:
-            raise ImproperlyConfigured(str(exc)) from exc

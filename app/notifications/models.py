@@ -143,10 +143,6 @@ class Notification(models.Model):
     # NOTIFICATIONS_DEFAULT_LOCALE when a locale-specific template is absent.
     locale = models.CharField(max_length=20, default=get_default_locale)
     channel = models.CharField(max_length=20, choices=Channel)
-    # ID of the sender from NOTIFICATION_SENDERS used to dispatch this
-    # notification.  Empty string means the default sender was used.
-    # Stored for audit -- lets us reconstruct which address sent what.
-    sender_id = models.CharField(max_length=100, blank=True, default="")
 
     log_entry = models.ForeignKey(
         NotificationLog,
