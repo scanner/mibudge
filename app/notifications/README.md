@@ -321,11 +321,14 @@ email.
 
 **Built-in kind context variables**:
 
-| Kind                          | Variables                                                                               |
-|-------------------------------|-----------------------------------------------------------------------------------------|
-| `moneypools.funding_complete` | `account_name`, `transfers` (int), `warnings` (list[str]), `date` (ISO string)          |
-| `moneypools.import_complete`  | `account_name`, `new_count` (int), `pending_to_posted_count` (int), `date` (ISO string) |
-| `users.password_changed`      | `changed_at` (datetime string)                                                          |
+| Kind                               | Variables                                                                                                                                                                                                        |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `moneypools.funding_complete`      | `account_name`, `transfers` (int), `warnings` (list[str]), `date` (ISO string)                                                                                                                                   |
+| `moneypools.import_complete`       | `account_name`, `new_count` (int), `pending_to_posted_count` (int), `date` (ISO string)                                                                                                                         |
+| `moneypools.transaction_posted`    | `account_name`, `count` (int), `date` (ISO string), `transactions` (list of dicts -- see below), `truncated` (bool), `remaining_count` (int, 0 when not truncated)                                              |
+| `users.password_changed`           | `changed_at` (datetime string)                                                                                                                                                                                   |
+
+Each entry in `transactions` has: `date` (YYYY-MM-DD), `description` (str), `amount` (Money string, e.g. `-25.00 USD`), `budgets` (list[str] of budget names -- usually one entry, multiple for split transactions).  At most 15 entries are included; if the import contained more, `truncated=True` and `remaining_count` carries the overflow count.
 
 **Digest wrapper context variables**:
 

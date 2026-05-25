@@ -1095,7 +1095,15 @@ class TestSyncScrapeNotifications:
             ),
             pytest.param(
                 TRANSACTION_POSTED,
-                ["account_name", "account_id", "count", "date"],
+                [
+                    "account_name",
+                    "account_id",
+                    "count",
+                    "date",
+                    "transactions",
+                    "truncated",
+                    "remaining_count",
+                ],
                 False,
                 id="transaction_posted",
             ),
@@ -1138,6 +1146,48 @@ class TestSyncScrapeNotifications:
         for key in required_ctx_keys:
             assert key in n.context
         assert n.context["account_id"] == str(empty_account.id)
+        if kind == TRANSACTION_POSTED:
+            txns = n.context["transactions"]
+            assert len(txns) == 1
+            assert txns[0]["description"] == "POSTED TX"
+            for field in ("date", "amount", "budgets"):
+                assert field in txns[0]
+            assert n.context["truncated"] is False
+            assert n.context["remaining_count"] == 0
+
+    ####################################################################
+    #
+    def test_transaction_posted_truncates_at_15(
+        self,
+        empty_account: BankAccount,
+        mock_send_notification_now: MagicMock,
+    ) -> None:
+        """
+        GIVEN: a scrape that inserts 16 new posted transactions
+        WHEN:  sync_scrape runs
+        THEN:  the TRANSACTION_POSTED notification lists only the first 15,
+               truncated=True, and remaining_count=1
+        """
+        payload = _payload(
+            ending_balance=Decimal("-400.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, 0, 0, tzinfo=UTC),
+                    raw_description=f"TX {i:02d}",
+                    amount=Decimal("-25.00"),
+                )
+                for i in range(16)
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        owner = empty_account.owners.first()
+        assert owner is not None
+        n = Notification.objects.get(user=owner, kind=TRANSACTION_POSTED)
+        assert len(n.context["transactions"]) == 15
+        assert n.context["truncated"] is True
+        assert n.context["remaining_count"] == 1
 
     ####################################################################
     #

@@ -279,6 +279,26 @@ def sync_scrape(
             },
         )
     if report.inserted_posted > 0:
+        _TRANSACTION_DISPLAY_LIMIT = 15
+        _new_txns = list(
+            Transaction.objects.filter(id__in=report.new_transaction_ids)
+            .prefetch_related("allocations__budget")
+            .order_by("transaction_date")[: _TRANSACTION_DISPLAY_LIMIT + 1]
+        )
+        truncated = len(_new_txns) > _TRANSACTION_DISPLAY_LIMIT
+        transactions_ctx = [
+            {
+                "date": tx.transaction_date.strftime("%Y-%m-%d"),
+                "description": tx.description,
+                "amount": str(tx.amount),
+                "budgets": [
+                    a.budget.name
+                    for a in tx.allocations.all()
+                    if a.budget is not None
+                ],
+            }
+            for tx in _new_txns[:_TRANSACTION_DISPLAY_LIMIT]
+        ]
         notify_for(
             bank_account,
             TRANSACTION_POSTED,
@@ -287,6 +307,12 @@ def sync_scrape(
                 "account_id": str(bank_account.id),
                 "count": report.inserted_posted,
                 "date": payload.scraped_at.strftime("%Y-%m-%d"),
+                "transactions": transactions_ctx,
+                "truncated": truncated,
+                "remaining_count": report.inserted_posted
+                - _TRANSACTION_DISPLAY_LIMIT
+                if truncated
+                else 0,
             },
         )
     if report.balance_mismatch is not None:
