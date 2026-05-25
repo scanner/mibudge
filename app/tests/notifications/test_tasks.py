@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import celery.exceptions
 import pytest
+from django.core.cache import cache
 from freezegun import freeze_time
 from notifications.models import (
     Channel,
@@ -17,6 +19,8 @@ from notifications.models import (
     NotificationLog,
 )
 from notifications.tasks import (
+    _DIGEST_FAILURE_KEY,
+    _DIGEST_MAX_FAILURES,
     _is_digest_due,
     flush_email_digests,
     purge_old_notifications,
@@ -199,6 +203,98 @@ class TestSendNotificationNow:
         else:
             mock_cls.return_value.send.assert_not_called()
 
+    ####################################################################
+    #
+    def test_retries_on_transient_failure(
+        self,
+        notification_factory: Callable,
+        settings,
+    ) -> None:
+        """
+        GIVEN: EmailChannel.send raises and retries remain
+        WHEN:  send_notification_now() is called for the first time
+        THEN:  self.retry() is called with exponential backoff countdown
+        """
+        settings.NOTIFICATIONS_SEND_MAX_RETRIES = 4
+        settings.NOTIFICATIONS_SEND_RETRY_BASE_DELAY = 300
+
+        notification = notification_factory(log_entry=None)
+
+        with patch("notifications.channels.email.EmailChannel") as mock_cls:
+            mock_cls.return_value.send.side_effect = OSError("SMTP refused")
+            with patch.object(
+                send_notification_now,
+                "retry",
+                side_effect=celery.exceptions.Retry(),
+            ) as mock_retry:
+                with pytest.raises(celery.exceptions.Retry):
+                    send_notification_now(str(notification.id))
+
+        mock_retry.assert_called_once()
+        _, kwargs = mock_retry.call_args
+        assert kwargs["countdown"] == 300  # base delay, retries=0 -> 300 * 2^0
+        assert kwargs["max_retries"] == 4
+
+    ####################################################################
+    #
+    def test_backoff_doubles_each_retry(
+        self,
+        notification_factory: Callable,
+        settings,
+    ) -> None:
+        """
+        GIVEN: EmailChannel.send raises and this is the second retry attempt
+        WHEN:  send_notification_now() is called with retries=1 in the request
+        THEN:  countdown is base_delay * 2 (second step of exponential backoff)
+        """
+        settings.NOTIFICATIONS_SEND_MAX_RETRIES = 4
+        settings.NOTIFICATIONS_SEND_RETRY_BASE_DELAY = 300
+
+        notification = notification_factory(log_entry=None)
+
+        send_notification_now.push_request(retries=1)
+        try:
+            with patch("notifications.channels.email.EmailChannel") as mock_cls:
+                mock_cls.return_value.send.side_effect = OSError("SMTP refused")
+                with patch.object(
+                    send_notification_now,
+                    "retry",
+                    side_effect=celery.exceptions.Retry(),
+                ) as mock_retry:
+                    with pytest.raises(celery.exceptions.Retry):
+                        send_notification_now(str(notification.id))
+
+            _, kwargs = mock_retry.call_args
+            assert kwargs["countdown"] == 600  # 300 * 2^1
+        finally:
+            send_notification_now.pop_request()
+
+    ####################################################################
+    #
+    def test_permanent_failure_after_max_retries(
+        self,
+        notification_factory: Callable,
+        settings,
+    ) -> None:
+        """
+        GIVEN: EmailChannel.send raises and all retries are exhausted
+        WHEN:  send_notification_now() is called with retries == max_retries
+        THEN:  the original exception propagates (no further Retry raised)
+        """
+        settings.NOTIFICATIONS_SEND_MAX_RETRIES = 4
+        settings.NOTIFICATIONS_SEND_RETRY_BASE_DELAY = 300
+
+        notification = notification_factory(log_entry=None)
+
+        send_notification_now.push_request(retries=4)
+        try:
+            with patch("notifications.channels.email.EmailChannel") as mock_cls:
+                mock_cls.return_value.send.side_effect = OSError("SMTP refused")
+                with pytest.raises(OSError, match="SMTP refused"):
+                    send_notification_now(str(notification.id))
+        finally:
+            send_notification_now.pop_request()
+
 
 ########################################################################
 ########################################################################
@@ -259,6 +355,79 @@ class TestFlushEmailDigests:
             assert pref.last_digest_sent_at is not None
         else:
             mock_cls.return_value.send_batch.assert_not_called()
+
+    ####################################################################
+    #
+    def test_increments_failure_counter_on_send_error(
+        self,
+        notification_factory: Callable,
+        user_factory: Callable,
+    ) -> None:
+        """
+        GIVEN: send_batch raises on the first attempt
+        WHEN:  flush_email_digests() is called
+        THEN:  the failure counter for that user is incremented to 1
+        """
+        user = user_factory(timezone="UTC")
+        notification_factory(user=user, log_entry=None)
+
+        with (
+            patch("notifications.tasks._is_digest_due", return_value=True),
+            patch("notifications.channels.email.EmailChannel") as mock_cls,
+        ):
+            mock_cls.return_value.send_batch.side_effect = OSError("SMTP down")
+            flush_email_digests()
+
+        assert cache.get(_DIGEST_FAILURE_KEY.format(pk=user.pk)) == 1
+
+    ####################################################################
+    #
+    def test_suspends_delivery_after_max_failures(
+        self,
+        notification_factory: Callable,
+        user_factory: Callable,
+    ) -> None:
+        """
+        GIVEN: the user's failure counter is already at _DIGEST_MAX_FAILURES
+        WHEN:  flush_email_digests() is called
+        THEN:  send_batch is not called for that user
+        """
+        user = user_factory(timezone="UTC")
+        notification_factory(user=user, log_entry=None)
+        cache.set(_DIGEST_FAILURE_KEY.format(pk=user.pk), _DIGEST_MAX_FAILURES)
+
+        with (
+            patch("notifications.tasks._is_digest_due", return_value=True),
+            patch("notifications.channels.email.EmailChannel") as mock_cls,
+        ):
+            flush_email_digests()
+
+        mock_cls.return_value.send_batch.assert_not_called()
+
+    ####################################################################
+    #
+    def test_clears_failure_counter_on_success(
+        self,
+        notification_factory: Callable,
+        user_factory: Callable,
+    ) -> None:
+        """
+        GIVEN: the user has a non-zero failure counter and send_batch succeeds
+        WHEN:  flush_email_digests() is called
+        THEN:  the failure counter is removed from cache
+        """
+        user = user_factory(timezone="UTC")
+        notification_factory(user=user, log_entry=None)
+        failure_key = _DIGEST_FAILURE_KEY.format(pk=user.pk)
+        cache.set(failure_key, 2)
+
+        with (
+            patch("notifications.tasks._is_digest_due", return_value=True),
+            patch("notifications.channels.email.EmailChannel"),
+        ):
+            flush_email_digests()
+
+        assert cache.get(failure_key) is None
 
 
 ########################################################################

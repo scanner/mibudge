@@ -590,3 +590,12 @@ NOTIFICATIONS_DEFAULT_LOCALE = env(
 NOTIFICATIONS_RETENTION_DAYS = env.int(
     "NOTIFICATIONS_RETENTION_DAYS", default=90
 )
+# Retry config for send_notification_now (immediate CRITICAL dispatch).
+# Max retries after the initial attempt; base delay in seconds doubles
+# each retry: default schedule is 5m, 10m, 20m, 40m.
+NOTIFICATIONS_SEND_MAX_RETRIES = env.int(
+    "NOTIFICATIONS_SEND_MAX_RETRIES", default=4
+)
+NOTIFICATIONS_SEND_RETRY_BASE_DELAY = env.int(
+    "NOTIFICATIONS_SEND_RETRY_BASE_DELAY", default=300
+)

@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 #
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 
 # Project imports
 #
@@ -36,6 +37,16 @@ from notifications.models import (
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
+
+# Consecutive-failure tracking for flush_email_digests.
+# After _DIGEST_MAX_FAILURES failures the user is skipped until the
+# Redis key expires.  On a successful send the key is deleted immediately.
+# If Redis is unavailable the counter is inert (cache returns 0) and
+# delivery continues -- acceptable degradation.
+#
+_DIGEST_MAX_FAILURES = 3
+_DIGEST_FAILURE_TTL = 3 * 24 * 60 * 60  # 3 days
+_DIGEST_FAILURE_KEY = "notif:email_failures:{pk}"
 
 
 class _HasTimezone(Protocol):
@@ -63,14 +74,22 @@ _SUNDAY = 6
 ########################################################################
 ########################################################################
 #
-@celery_app.task(ignore_result=True)
-def send_notification_now(notification_id: str) -> None:
+@celery_app.task(bind=True, ignore_result=True)
+def send_notification_now(self, notification_id: str) -> None:
     """
     Immediately dispatch a single notification via its channel.
 
     Called for CRITICAL-priority notifications that bypass the digest
     queue.  Silently returns if the notification no longer exists or
     has already been sent.
+
+    On SMTP failure the task retries with exponential backoff up to
+    NOTIFICATIONS_SEND_MAX_RETRIES times (default schedule: 5m, 10m,
+    20m, 40m).  After all retries are exhausted a hard error is logged
+    and the exception propagates.  Because the notification's log_entry
+    link is only written on success, a notification that exhausts retries
+    here remains pending and will be picked up by the next digest window
+    as a fallback.
 
     Args:
         notification_id: UUID string of the Notification to send.
@@ -95,7 +114,35 @@ def send_notification_now(notification_id: str) -> None:
         )
         return
 
-    EmailChannel().send(notification)
+    max_retries = settings.NOTIFICATIONS_SEND_MAX_RETRIES
+    base_delay = settings.NOTIFICATIONS_SEND_RETRY_BASE_DELAY
+
+    try:
+        EmailChannel().send(notification)
+    except Exception as exc:
+        attempt = self.request.retries + 1
+        if self.request.retries < max_retries:
+            delay = base_delay * (2**self.request.retries)
+            logger.warning(
+                "send_notification_now: attempt %d/%d failed for %s, "
+                "retrying in %ds: %r",
+                attempt,
+                max_retries + 1,
+                notification_id,
+                delay,
+                exc,
+            )
+            raise self.retry(
+                exc=exc, countdown=delay, max_retries=max_retries
+            ) from exc
+        logger.error(
+            "send_notification_now: permanent failure for notification %s "
+            "after %d attempts: %r",
+            notification_id,
+            attempt,
+            exc,
+        )
+        raise exc
 
 
 ########################################################################
@@ -110,6 +157,12 @@ def flush_email_digests() -> None:
     each user with pending email notifications, checks their
     ChannelPreference digest_frequency against their local time and
     sends a batched digest when the window matches.
+
+    Consecutive send failures are tracked in Redis (via Django's cache).
+    After _DIGEST_MAX_FAILURES consecutive failures for a user, that user
+    is skipped and a hard error is logged.  The counter resets on a
+    successful send, or expires automatically after _DIGEST_FAILURE_TTL
+    seconds.
     """
     now_utc = datetime.now(tz=UTC)
 
@@ -130,6 +183,19 @@ def flush_email_digests() -> None:
     channel = EmailChannel()
 
     for user in User.objects.filter(pk__in=pending_user_ids):
+        failure_key = _DIGEST_FAILURE_KEY.format(pk=user.pk)
+        failure_count = cache.get(failure_key, 0)
+
+        if failure_count >= _DIGEST_MAX_FAILURES:
+            logger.error(
+                "flush_email_digests: skipping %s -- %d consecutive "
+                "failures; delivery suspended for %.0fh",
+                user.email,
+                failure_count,
+                _DIGEST_FAILURE_TTL / 3600,
+            )
+            continue
+
         pref, _ = ChannelPreference.objects.get_or_create(
             user=user,
             channel=Channel.EMAIL,
@@ -152,14 +218,30 @@ def flush_email_digests() -> None:
 
         try:
             channel.send_batch(notifications)
+            cache.delete(failure_key)
             pref.last_digest_sent_at = now_utc
             pref.save(update_fields=["last_digest_sent_at"])
         except Exception as exc:
-            logger.error(
-                "flush_email_digests: failed to send digest to %s: %r",
-                user.email,
-                exc,
-            )
+            new_count = failure_count + 1
+            cache.set(failure_key, new_count, timeout=_DIGEST_FAILURE_TTL)
+            if new_count >= _DIGEST_MAX_FAILURES:
+                logger.error(
+                    "flush_email_digests: %d consecutive failures for %s; "
+                    "suspending delivery for %.0fh: %r",
+                    new_count,
+                    user.email,
+                    _DIGEST_FAILURE_TTL / 3600,
+                    exc,
+                )
+            else:
+                logger.warning(
+                    "flush_email_digests: failed to send digest to %s "
+                    "(%d/%d consecutive): %r",
+                    user.email,
+                    new_count,
+                    _DIGEST_MAX_FAILURES,
+                    exc,
+                )
 
 
 ########################################################################
