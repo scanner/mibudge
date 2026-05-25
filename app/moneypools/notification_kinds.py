@@ -78,8 +78,8 @@ def register_all() -> None:
     registry.register(
         kind=IMPORT_ERROR,
         display_name="Import error",
-        default_priority=NotificationPriority.CRITICAL,
-        can_suppress=False,
+        default_priority=NotificationPriority.NORMAL,
+        can_suppress=True,
         default_opt_in=True,
         recipients=_account_owners,
     )
