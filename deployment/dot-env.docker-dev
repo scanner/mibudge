@@ -40,11 +40,11 @@ POSTGRES_USER=debug
 POSTGRES_PASSWORD=debug
 DATABASE_URL=postgres://debug:debug@postgres:5432/mibudge
 
-# Email (Mailpit -- docker-internal hostname, SMTP port)
-# DJANGO_EMAIL_BACKEND defaults to anymail.backends.smtp.EmailBackend -> Mailpit
+# Email -- Mailpit (docker-internal hostname; no auth needed)
 # ------------------------------------------------------------------------------
 EMAIL_HOST=mailpit
 EMAIL_PORT=1025
+EMAIL_USE_TLS=False
 
 # django-fernet-encrypted-fields
 # ------------------------------------------------------------------------------
