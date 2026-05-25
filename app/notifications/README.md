@@ -196,6 +196,7 @@ notify(
     context,       # dict -- rendered into templates
     priority=None, # Optional[int] -- NotificationPriority constant; defaults to kind's registry value
     locale=None,   # Optional[str] -- BCP 47 tag, e.g. "fr-ca"; defaults to NOTIFICATIONS_DEFAULT_LOCALE
+    sender=None,   # Optional[str] -- sender ID from NOTIFICATION_SENDERS; defaults to NOTIFICATION_DEFAULT_SENDER
 ) -> Notification | None
 ```
 
@@ -225,6 +226,7 @@ notify_for(
     kind,          # str
     context,       # dict
     priority=None, # Optional[int]
+    sender=None,   # Optional[str] -- forwarded to notify() for each recipient
 ) -> list[Notification]
 ```
 
@@ -357,10 +359,105 @@ timezones fall back to UTC.
 
 ### Settings (`app/config/settings.py`)
 
-| Setting                        | Default         | Description                                                                                                                                                   |
-|--------------------------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NOTIFICATIONS_DEFAULT_LOCALE` | `LANGUAGE_CODE` | BCP 47 locale used when no locale is supplied to `notify()` and as the final fallback in the template loader. Set via `NOTIFICATIONS_DEFAULT_LOCALE` env var. |
-| `NOTIFICATIONS_RETENTION_DAYS` | `90`            | Notification and log rows older than this many days are deleted by the `purge_old_notifications` task. Set via `NOTIFICATIONS_RETENTION_DAYS` env var.        |
+| Setting                        | Default                        | Description                                                                                                                                                   |
+|--------------------------------|--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NOTIFICATIONS_DEFAULT_LOCALE` | `LANGUAGE_CODE`                | BCP 47 locale used when no locale is supplied to `notify()` and as the final fallback in the template loader. Set via `NOTIFICATIONS_DEFAULT_LOCALE` env var. |
+| `NOTIFICATIONS_RETENTION_DAYS` | `90`                           | Notification and log rows older than this many days are deleted by the `purge_old_notifications` task. Set via `NOTIFICATIONS_RETENTION_DAYS` env var.        |
+| `NOTIFICATION_SENDERS`         | one "notifications" entry      | List of sender tuples -- see [Notification senders](#notification-senders) below.                                                                             |
+| `NOTIFICATION_DEFAULT_SENDER`  | `"notifications"`              | ID of the sender used when `notify()` is called without an explicit `sender` argument.                                                                        |
+
+### Notification senders
+
+A *sender* is the outbound identity that appears in the `From:` header of
+a notification email.  Multiple senders let different notification types
+originate from distinct addresses (e.g. `notifications@` vs `support@`)
+with independent SMTP credentials when required.
+
+Each sender is a 5-tuple in `NOTIFICATION_SENDERS`:
+
+```
+(id, display_name, from_email, smtp_user, smtp_password)
+```
+
+| Field          | Type  | Description                                                           |
+|----------------|-------|-----------------------------------------------------------------------|
+| `id`           | `str` | Unique identifier -- passed to `notify(sender=...)` and stored on the `Notification` row for auditing. |
+| `display_name` | `str` | Human-readable name (used in logs; may appear in `From:` header).    |
+| `from_email`   | `str` | Full RFC 5321 address, e.g. `"Name <addr@example.com>"`.             |
+| `smtp_user`    | `str` | SMTP username for per-sender auth.  **Empty string = use global Django `EMAIL_BACKEND`** (the right choice for API-based providers). |
+| `smtp_password`| `str` | SMTP password paired with `smtp_user`.  Ignored when `smtp_user` is empty. |
+
+**Two configuration patterns**
+
+*Case 1 -- API-based provider (Postmark, Mailgun, etc.)*
+
+Leave `smtp_user` and `smtp_password` empty.  The global Django
+`EMAIL_BACKEND` handles authentication; no per-sender SMTP connection is
+opened.  This is the default for the bundled `"notifications"` sender.
+
+*Case 2 -- per-sender SMTP credentials*
+
+Set `smtp_user` and `smtp_password` when a sender must authenticate to a
+dedicated SMTP relay with its own username and password.  A separate
+`get_connection()` call is made for that sender at dispatch time.
+
+> **DEBUG mode**: per-sender SMTP credentials are always ignored when
+> `DEBUG=True`.  All mail routes through the configured `EMAIL_HOST`
+> (typically Mailpit) regardless of `smtp_user`.
+
+**Example with two senders**
+
+```python
+# settings.py
+
+NOTIFICATION_SENDERS = [
+    # "notifications" -- API-based provider; global backend handles auth.
+    (
+        "notifications",
+        "mibudge Notifications",
+        env("NOTIFICATIONS_FROM_EMAIL", default="notifications@example.com"),
+        env("NOTIFICATIONS_SMTP_USER", default=""),      # empty: use global backend
+        env("NOTIFICATIONS_SMTP_PASSWORD", default=""),
+    ),
+    # "admin" -- dedicated SMTP relay with per-sender credentials.
+    (
+        "admin",
+        "mibudge Admin",
+        env("ADMIN_NOTIFICATIONS_FROM_EMAIL", default="admin@example.com"),
+        env("ADMIN_NOTIFICATIONS_SMTP_USER", default=""),
+        env("ADMIN_NOTIFICATIONS_SMTP_PASSWORD", default=""),
+    ),
+]
+NOTIFICATION_DEFAULT_SENDER = "notifications"
+```
+
+**Sending with a non-default sender**
+
+Pass the sender ID to `notify()` or `notify_for()`:
+
+```python
+from notifications.service import notify
+
+notify(user, kind, context, sender="admin")
+```
+
+When `sender` is omitted (or `None`/empty string), the call resolves to
+`NOTIFICATION_DEFAULT_SENDER`.
+
+**Startup validation**
+
+`NotificationsConfig.ready()` asserts that `NOTIFICATION_DEFAULT_SENDER`
+resolves to a real entry in `NOTIFICATION_SENDERS`.  A misconfigured
+default raises `ImproperlyConfigured` at startup rather than silently
+failing at send time.
+
+**Audit trail**
+
+The resolved sender ID is stored on the `Notification` row as
+`sender_id`.  An empty `sender_id` means the default sender was used.
+This makes it possible to inspect which sender was responsible for any
+given notification, and to regenerate or replay notifications with the
+correct sender if needed.
 
 ### Celery periodic tasks
 

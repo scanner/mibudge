@@ -208,6 +208,34 @@ class TestNotify:
         else:
             mock_send_notification_now.delay.assert_not_called()
 
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "sender_kwarg,expected_sender_id",
+        [
+            pytest.param(None, "", id="none-stores-empty"),
+            pytest.param("", "", id="empty-string-stores-empty"),
+            pytest.param(
+                "notifications", "notifications", id="explicit-id-stored"
+            ),
+        ],
+    )
+    def test_sender_id_stored(
+        self,
+        user: User,
+        sender_kwarg: str | None,
+        expected_sender_id: str,
+    ) -> None:
+        """
+        GIVEN: notify() is called with various sender argument values
+        WHEN:  the Notification row is created
+        THEN:  sender_id is stored verbatim, or '' when None/empty is passed
+        """
+        result = notify(user, "test.normal", {}, sender=sender_kwarg)
+
+        assert result is not None
+        assert result.sender_id == expected_sender_id
+
 
 ########################################################################
 ########################################################################
