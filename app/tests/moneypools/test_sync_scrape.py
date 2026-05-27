@@ -13,7 +13,7 @@ the two validation paths (aggregate balance and posting-order chain).
 # system imports
 #
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -494,6 +494,60 @@ class TestSyncScrape:
         assert newer.bank_account_posted_balance == Money(-75, "USD")
         assert older.bank_account_available_balance == Money(-50, "USD")
         assert older.bank_account_posted_balance == Money(-50, "USD")
+
+    ####################################################################
+    #
+    def test_dedup_window_floor_uses_transaction_date_not_posted_date(
+        self, empty_account: BankAccount
+    ) -> None:
+        """
+        GIVEN: an existing posted row with posted_date 01/26 but
+               transaction_date 01/24 (parsed from the MM/DD in the
+               description), and it is the OLDEST row in the next scrape
+        WHEN:  the next scrape lists the identical row
+        THEN:  the dedup query finds the existing row and the scrape is
+               skipped instead of inserting a duplicate.
+
+        Regression: the dedup window used to derive its bounds from
+        scrape posted_dates while the filter ran against
+        transaction_date.  When the oldest scraped row had a
+        transaction_date earlier than (oldest_posted_date - pad), its
+        existing duplicate fell below the window floor and was missed,
+        producing one new duplicate per scrape.
+        """
+        # Use a description with embedded "01/24" so the parsed
+        # transaction_date lands two days before posted_date 01/26.
+        # This is the exact shape that broke joint-checking imports.
+        seed = _payload(
+            ending_balance=Decimal("-234.28"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 1, 26, 8, 0, tzinfo=UTC),
+                    raw_description=(
+                        "COSTCO WHSE #1 01/24 MOBILE PURCHASE REDWOOD CITY CA"
+                    ),
+                    amount=Decimal("-234.28"),
+                ),
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, seed)
+
+        # Sanity: the seed row is present with transaction_date < posted_date.
+        seeded = Transaction.objects.get(bank_account=empty_account)
+        assert seeded.transaction_date.date() == date(2026, 1, 24)
+        assert seeded.posted_date.date() == date(2026, 1, 26)
+
+        # Resync with the same row as the OLDEST in the scrape (the only
+        # row whose posted_date defines `min`).  The pre-fix code would
+        # set min_date = 2026-01-26 - 1 day = 2026-01-25, excluding the
+        # existing transaction_date 2026-01-24 from the dedup map.
+        report = sync_scrape_svc.sync_scrape(empty_account, seed)
+        assert report.inserted_posted == 0
+        assert report.skipped_posted == 1
+        assert (
+            Transaction.objects.filter(bank_account=empty_account).count() == 1
+        )
 
     ####################################################################
     #

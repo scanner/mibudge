@@ -392,6 +392,18 @@ def _sync_scrape_locked(
     scraped_posted = [t for t in payload.transactions if not t.is_pending]
     scraped_pending = [t for t in payload.transactions if t.is_pending]
 
+    # Normalize dates once per scraped posted row.  The parsed
+    # `transaction_date` (from the MM/DD embedded in raw_description)
+    # is what the dedup query and per-row key both match on, so the
+    # window bounds must come from `txn_dt` -- not `posted_date`.
+    # A row posted 01/26 with "01/24" in its description parses to
+    # transaction_date 01/24; using posted_date 01/26 - pad as the
+    # floor would push 01/24 outside the window and miss the existing
+    # duplicate.
+    posted_normalized: list[tuple[ScrapedTransaction, datetime, datetime]] = [
+        (stx, *_normalize_dates(stx)) for stx in scraped_posted
+    ]
+
     # Strict-equality dedup map plus a secondary index keyed by
     # (date, amount) so we can rescue rows whose `raw_description` was
     # truncated by the bank's web UI with a trailing '...'.  BofA
@@ -401,13 +413,13 @@ def _sync_scrape_locked(
     # an OFX or CSV import).
     existing_keys: set[tuple[date, Decimal, str]] = set()
     existing_by_date_amount: dict[tuple[date, Decimal], list[str]] = {}
-    if scraped_posted:
+    if posted_normalized:
         min_date = (
-            min(t.posted_date.date() for t in scraped_posted)
+            min(txn_dt.date() for _, _, txn_dt in posted_normalized)
             - _DEDUP_WINDOW_PAD
         )
         max_date = (
-            max(t.posted_date.date() for t in scraped_posted)
+            max(txn_dt.date() for _, _, txn_dt in posted_normalized)
             + _DEDUP_WINDOW_PAD
         )
         for row in Transaction.objects.filter(
@@ -440,8 +452,7 @@ def _sync_scrape_locked(
     # Pending never touched posted_balance, so no posted_delta adjustment
     # from the wipe.
 
-    for stx in reversed(scraped_posted):
-        posted_dt, txn_dt = _normalize_dates(stx)
+    for stx, posted_dt, txn_dt in reversed(posted_normalized):
         key = (txn_dt.date(), stx.amount.amount, stx.raw_description)
         if key in existing_keys:
             skipped_posted += 1
