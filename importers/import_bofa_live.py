@@ -14,7 +14,10 @@ Requires the importers-bofa optional dependency group::
     uv run --group importers-bofa python -m importers.import_bofa_live
 
 BofA credentials are read from BOFA_ID and BOFA_PASSCODE environment
-variables or the --bofa-id / --bofa-passcode flags.  mibudge
+variables or the --bofa-id / --bofa-passcode flags.  Alternatively,
+set ONEPASSWORD_URL (or --onepassword-url) to an ``op://`` item URL
+and credentials are fetched via `op read` -- useful in automated
+contexts where plaintext env vars are undesirable.  mibudge
 credentials follow the same resolution order as the CSV importer (CLI
 flags > env vars > .env > Vault).
 
@@ -38,6 +41,7 @@ Scraper-output notes (verified against all four accounts via
 import json
 import logging
 import re
+import subprocess
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -65,6 +69,53 @@ from importers.theme import get_theme, theme_option
 logger = logging.getLogger(__name__)
 
 SCRAPE_FORMAT_VERSION = 2
+
+
+########################################################################
+########################################################################
+#
+def _read_from_1password(base_url: str) -> tuple[str, str]:
+    """Fetch BofA credentials from the 1Password CLI.
+
+    Strips any trailing slash from `base_url` before appending the
+    field names, so both ``op://vault/item`` and ``op://vault/item/``
+    work correctly.
+
+    Args:
+        base_url: 1Password item URL (e.g. ``op://Personal/BofA``).
+
+    Returns:
+        A ``(username, password)`` tuple.
+
+    Raises:
+        click.ClickException: If the ``op`` CLI is not found or returns
+            a non-zero exit code.
+    """
+    url = base_url.rstrip("/")
+    try:
+        username = subprocess.run(
+            ["op", "read", f"{url}/username"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        password = subprocess.run(
+            ["op", "read", f"{url}/password"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except FileNotFoundError as e:
+        raise click.ClickException(
+            "1Password CLI (op) not found in PATH. "
+            "Install it from https://1password.com/downloads/command-line/"
+        ) from e
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"Failed to read credentials from 1Password "
+            f"({url!r}): {e.stderr.strip()}"
+        ) from e
+    return username, password
 
 
 ########################################################################
@@ -548,16 +599,25 @@ def _setup_logging(
     "--bofa-id",
     envvar="BOFA_ID",
     default=None,
-    prompt="BofA Online ID",
     help="BofA online ID (env var: BOFA_ID).",
 )
 @click.option(
     "--bofa-passcode",
     envvar="BOFA_PASSCODE",
     default=None,
-    prompt="BofA Passcode",
-    hide_input=True,
     help="BofA passcode (env var: BOFA_PASSCODE; prefer env over CLI flag).",
+)
+@click.option(
+    "--onepassword-url",
+    envvar="ONEPASSWORD_URL",
+    default=None,
+    help=(
+        "1Password item URL to source BofA credentials from "
+        "(e.g. 'op://Personal/BofA').  When set, the CLI calls "
+        "`op read <url>/username` and `op read <url>/password` "
+        "instead of reading BOFA_ID / BOFA_PASSCODE.  "
+        "Env var: ONEPASSWORD_URL."
+    ),
 )
 @click.option(
     "--url",
@@ -661,8 +721,9 @@ def _setup_logging(
 )
 @theme_option
 def cli_cmd(
-    bofa_id: str,
-    bofa_passcode: str,
+    bofa_id: str | None,
+    bofa_passcode: str | None,
+    onepassword_url: str | None,
     url: str | None,
     email: str | None,
     password: str | None,
@@ -683,6 +744,14 @@ def cli_cmd(
     """CLI entry point for the live BofA importer."""
     if save_only and save_dir is None:
         raise click.UsageError("--save-only requires --save-dir.")
+
+    if onepassword_url is not None:
+        bofa_id, bofa_passcode = _read_from_1password(onepassword_url)
+    else:
+        if bofa_id is None:
+            bofa_id = click.prompt("BofA Online ID")
+        if bofa_passcode is None:
+            bofa_passcode = click.prompt("BofA Passcode", hide_input=True)
 
     console = Console(theme=get_theme(theme_name).rich, stderr=True)
     interactive = console.is_terminal and not plain
