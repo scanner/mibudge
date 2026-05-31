@@ -36,6 +36,11 @@ class ParsedTransaction:
             it by walking forward from the derived beginning balance.
         transaction_type: One of ``Transaction.TransactionType`` values, or
             "" (NOT_SET) if the source couldn't disambiguate.
+        fitid:            Financial Institution Transaction ID from OFX
+            ``<FITID>``. Unique per transaction per account; used as the
+            intra-run dedup key for OFX imports (running_balance is
+            derived per-file and is not stable across overlapping files).
+            None for formats that don't carry a transaction ID (BofA CSV).
         pending:          True if the source marks the transaction as pending.
             Most statement exports contain only settled transactions.
     """
@@ -45,6 +50,7 @@ class ParsedTransaction:
     amount: Decimal
     running_balance: Decimal
     transaction_type: str
+    fitid: str | None = None
     pending: bool = False
 
 

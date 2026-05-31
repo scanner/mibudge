@@ -47,7 +47,7 @@ used to connect to Vault.
 # system imports
 import logging
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -58,6 +58,7 @@ import click
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.markup import escape as markup_escape
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -740,6 +741,30 @@ def _parse_and_validate(file_path: Path) -> ParsedStatement:
 
 ####################################################################
 #
+def _short_name(source_path: str | None, max_len: int = 50) -> str:
+    """
+    Return a display-safe, length-capped basename for a source path.
+
+    Strips the directory, caps at *max_len* characters, and escapes
+    Rich markup so spaces do not break colour spans.
+
+    Args:
+        source_path: Full filesystem path, or None.
+        max_len:     Maximum characters before truncation with '...'.
+
+    Returns:
+        Escaped, possibly-truncated filename string safe for Rich.
+    """
+    if not source_path:
+        return "(unknown)"
+    name = Path(source_path).name
+    if len(name) > max_len:
+        name = name[: max_len - 3] + "..."
+    return markup_escape(name)
+
+
+####################################################################
+#
 def _parse_all(
     file_paths: list[Path],
     console: Console,
@@ -834,18 +859,43 @@ def _parse_all(
         # statements can end and begin on the same day or one apart.
         delta = (curr.beginning_date - prev.ending_date).days
         if delta > 1:
-            msg = (
-                f"Gap of {delta} days between {prev.source_path} "
-                f"(ends {prev.ending_date}) and {curr.source_path} "
-                f"(starts {curr.beginning_date}). Any transactions in "
-                f"that window will be missed unless you import the "
-                f"covering file(s); re-runs with added files dedup "
-                f"cleanly."
-            )
+            gap_start = prev.ending_date + timedelta(days=1)
+            gap_end = curr.beginning_date - timedelta(days=1)
+            prev_name = _short_name(prev.source_path)
+            curr_name = _short_name(curr.source_path)
             if interactive:
-                console.print(f"[warning]Warning:[/warning] {msg}")
+                console.print(
+                    f"[warning]Warning:[/warning]"
+                    f" {delta}-day gap:"
+                    f" [accent]{gap_start}[/accent]"
+                    f" to [accent]{gap_end}[/accent]"
+                )
+                console.print(
+                    f"  before  [accent]{prev.ending_date}[/accent]  {prev_name}"
+                )
+                console.print(
+                    f"  after   [accent]{curr.beginning_date}"
+                    f"[/accent]  {curr_name}"
+                )
+                console.print(
+                    "  Import a file covering this range;"
+                    " re-runs dedup cleanly."
+                )
             else:
-                logger.warning(msg)
+                logger.warning(
+                    "%d-day gap: %s to %s\n"
+                    "  before  %s  %s\n"
+                    "  after   %s  %s\n"
+                    "  Import a file covering this range;"
+                    " re-runs dedup cleanly.",
+                    delta,
+                    gap_start,
+                    gap_end,
+                    prev.ending_date,
+                    prev_name,
+                    curr.beginning_date,
+                    curr_name,
+                )
 
     return statements
 
@@ -916,31 +966,40 @@ def _combine_statements(statements: list[ParsedStatement]) -> ParsedStatement:
     #      overlap -- downloading "Jan 1 -> Jun 30" and "Apr 1 ->
     #      today" is easier than being precise about seams, and
     #      the importer should tolerate that.
-    # The intra-run key is (date, amount, raw_description,
-    # running_balance). Including the running balance eliminates
-    # false positives on same-day, same-amount, same-merchant
-    # transactions (e.g. two $4.99 Apple charges): each has a
-    # different running balance in the source file.  Two files
-    # covering the same date range will carry the same running
-    # balance for the same transaction, so true duplicates are
-    # still caught.
     #
-    # NOTE: this 4-tuple key is intentionally different from the
-    # 3-tuple used for server-side dedup.  Within BofA's CSV
-    # exports the running balance is consistent across downloads,
-    # but the server's ``bank_account_posted_balance`` diverges
-    # because it is computed at import time.
+    # Key strategy depends on the source format:
+    #
+    # OFX: use the FITID (Financial Institution Transaction ID).
+    #   FITIDs are stable and unique per transaction per account,
+    #   so the same transaction in two overlapping files always
+    #   carries the same FITID.  The 4-tuple key below cannot be
+    #   used for OFX because running_balance is derived per-file
+    #   (ending_balance - sum(txns)), so the same transaction has
+    #   a different running_balance in each overlapping file.
+    #
+    # BofA CSV: use (date, amount, raw_description, running_balance).
+    #   Running balance is a column in the file and is stable across
+    #   re-downloads of the same period.  It distinguishes genuinely
+    #   separate same-day/same-amount/same-merchant charges (e.g.
+    #   two $4.99 Apple charges with different running balances).
+    #
+    # NOTE: the server-side dedup key is a 3-tuple without running
+    #   balance because the server's posted_balance diverges from
+    #   the file's running_balance once the account has history.
     transactions: list[ParsedTransaction] = []
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[str | tuple[str, str, str, str]] = set()
     duplicates = 0
     for s in statements:
         for tx in s.transactions:
-            key = _intra_run_dedup_key(
-                tx.transaction_date,
-                tx.amount,
-                tx.raw_description,
-                tx.running_balance,
-            )
+            if tx.fitid is not None:
+                key: str | tuple[str, str, str, str] = tx.fitid
+            else:
+                key = _intra_run_dedup_key(
+                    tx.transaction_date,
+                    tx.amount,
+                    tx.raw_description,
+                    tx.running_balance,
+                )
             if key in seen:
                 duplicates += 1
                 continue
@@ -1770,8 +1829,10 @@ def _print_summary(
     is_flag=True,
     help=(
         "Show what would be imported without making any changes. "
-        "Parses files, authenticates, and checks for duplicates, "
-        "but does not POST or PATCH any transactions."
+        "With --create-account, no server connection is made at "
+        "all -- files are parsed and gaps are reported locally. "
+        "Without --create-account, authenticates and checks for "
+        "duplicates but does not POST or PATCH any transactions."
     ),
 )
 @click.option(
@@ -1821,8 +1882,9 @@ def _print_summary(
         "Create the target bank account before importing. For OFX the "
         "account type and account number are taken from the file; for "
         "CSV they must be supplied via --account-type and optionally "
-        "--account-number. Always requires --name and --bank. Refused "
-        "if an account already matches the OFX ACCTID."
+        "--account-number. Requires --name and --bank (unless combined "
+        "with --dry-run, which needs no server connection). Refused if "
+        "an account already matches the OFX ACCTID."
     ),
 )
 @click.option(
@@ -1899,15 +1961,13 @@ def cli_cmd(
             "positionally (e.g. '*.ofx') or with -f."
         )
 
-    if dry_run and create_account:
-        raise click.UsageError(
-            "--dry-run and --create-account are mutually exclusive."
-        )
     if create_account and account:
         raise click.UsageError(
             "--create-account and --account are mutually exclusive."
         )
-    if create_account:
+    if create_account and not dry_run:
+        # --name and --bank are only needed for the actual account
+        # creation POST; a dry run is purely local.
         missing = [
             flag
             for flag, val in [("--name", name), ("--bank", bank)]
@@ -1917,9 +1977,9 @@ def cli_cmd(
             raise click.UsageError(
                 f"--create-account requires: {', '.join(missing)}."
             )
-    else:
-        # Not creating: reject create-only flags so the user notices
-        # rather than silently having them ignored.
+    if not create_account:
+        # Reject create-only flags so the user notices rather than
+        # silently having them ignored.
         stray = [
             flag
             for flag, val in [
@@ -1948,6 +2008,19 @@ def cli_cmd(
         console.print(
             "[bold warning]DRY RUN[/bold warning] — no changes will be made."
         )
+
+    # --dry-run + --create-account: local-only validation.  All
+    # transactions are new by definition (the account doesn't exist
+    # yet), so there is nothing to fetch from the server.  Parse,
+    # gap-check, and report -- no credentials needed.
+    if dry_run and create_account:
+        result = ImportResult()
+        for tx in statement.transactions:
+            if tx.transaction_type == "":
+                result.unrecognized.append(tx.raw_description)
+        result.imported = len(statement.transactions)
+        _print_summary(console, result, interactive, dry_run=True)
+        return
 
     bank_id_str: str | None = bank
     account_type_code: str | None = (
