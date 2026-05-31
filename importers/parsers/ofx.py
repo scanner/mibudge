@@ -271,6 +271,7 @@ def parse(source: str | Path) -> ParsedStatement:
                 amount=amount,
                 running_balance=running,
                 transaction_type=transaction_type,
+                fitid=(t.id or None),
             )
         )
 

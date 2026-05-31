@@ -296,6 +296,37 @@ class TestImportCmd:
 
     ####################################################################
     #
+    def test_dry_run_create_account_no_server_connection(
+        self,
+        mocker: MockerFixture,
+        ofx_file_factory: Callable[..., tuple[Path, list[OFXTxnSpec]]],
+    ) -> None:
+        """
+        GIVEN: OFX files and --dry-run --create-account without
+               --name, --bank, or any credentials
+        WHEN:  the import command runs
+        THEN:  _build_client is never called (no server connection),
+               exit code is 0, and the summary counts all parsed
+               transactions as "would import"
+        """
+        mock_build = mocker.patch.object(it, "_build_client")
+        ofx_path, specs = ofx_file_factory(
+            num_transactions=4, acct_id="9999000011"
+        )
+
+        result = _invoke(
+            "-f",
+            str(ofx_path),
+            "--dry-run",
+            "--create-account",
+        )
+
+        assert result.exit_code == 0, result.output
+        mock_build.assert_not_called()
+        assert str(len(specs)) in result.output
+
+    ####################################################################
+    #
     def test_ofx_acctid_automatch_existing_account(
         self,
         fake_client: FakeClient,
