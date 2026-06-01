@@ -435,7 +435,9 @@ class BudgetSerializer(serializers.ModelSerializer):
         Returns:
             Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
         """
-        info = funding_svc.next_funding_info(obj)
+        request = self.context.get("request")
+        tz = request.user.timezone if request is not None else None
+        info = funding_svc.next_funding_info(obj, tz=tz)
         if info is None:
             return None
         return {

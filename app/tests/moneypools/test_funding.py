@@ -18,7 +18,6 @@ from unittest.mock import patch
 import pytest
 import recurrence
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.urls import reverse
 from djmoney.money import Money
 from notifications.models import Notification
@@ -40,8 +39,7 @@ from moneypools.tasks import (
     schedule_funding_runs,
 )
 from tests.users.factories import UserFactory
-
-User = get_user_model()
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 
@@ -93,7 +91,7 @@ _YEARLY_SEP_15 = recurrence.Recurrence(
 ########################################################################
 #
 @pytest.fixture
-def system_user() -> User:  # type: ignore[valid-type]
+def system_user() -> User:
     """Return the funding-system user seeded by migration 0024."""
     return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
 
@@ -104,10 +102,16 @@ def system_user() -> User:  # type: ignore[valid-type]
 def make_account(
     bank_account_factory: Callable[..., BankAccount],
 ) -> Callable[..., BankAccount]:
-    """Return a factory that creates a BankAccount with optional last_posted_through."""
+    """Return a factory that creates a BankAccount with optional freshness fields."""
 
-    def _make(posted_through: date | None = None) -> BankAccount:
-        return bank_account_factory(last_posted_through=posted_through)
+    def _make(
+        posted_through: date | None = None,
+        imported_at: datetime | None = None,
+    ) -> BankAccount:
+        return bank_account_factory(
+            last_posted_through=posted_through,
+            last_imported_at=imported_at,
+        )
 
     return _make
 
@@ -123,7 +127,7 @@ class TestFundingEngineSingleEvent:
     def test_fixed_amount_transfers_from_unallocated_to_budget(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: a GOAL budget with FIXED_AMOUNT $50/month, unallocated=$200,
@@ -170,7 +174,7 @@ class TestFundingEngineSingleEvent:
     def test_target_date_spreads_gap_over_remaining_occurrences(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: a GOAL budget with TARGET_DATE, gap=$300, 3 monthly events left
@@ -217,7 +221,7 @@ class TestFundingEngineRecurringWithFillup:
     def test_fund_event_goes_into_fillup_goal(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: RECURRING budget, funding schedule monthly
@@ -262,7 +266,7 @@ class TestFundingEngineRecurringWithFillup:
     def test_recur_event_drains_fillup_into_recurring(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: fillup has $80, recurring target=$100, balance=$0, recur fires
@@ -313,7 +317,7 @@ class TestFundingEngineRecurringWithFillup:
     def test_same_date_fund_before_recur_ordering(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: RECURRING budget; fund and recur both on
@@ -370,7 +374,7 @@ class TestFundingEngineMultiPeriodCatchup:
     def test_three_missed_cycles_processed_in_order(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: GOAL budget missed 3 monthly funding events
@@ -419,7 +423,7 @@ class TestImportFreshnessGate:
     def test_deferred_when_last_posted_through_is_behind(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: due event on 2026-03-01, last_posted_through=2026-02-28
@@ -461,7 +465,7 @@ class TestImportFreshnessGate:
     def test_advance_posted_through_unblocks_backlog(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: account deferred; then last_posted_through advanced to cover gate
@@ -508,7 +512,7 @@ class TestImportFreshnessGate:
     def test_deferred_when_last_posted_through_is_none(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: brand-new account with no imports (last_posted_through=None)
@@ -539,6 +543,154 @@ class TestImportFreshnessGate:
         report = funding_svc.fund_account(account, today, system_user)
         assert report.deferred is True
 
+    ####################################################################
+    #
+    def test_passes_gate_via_last_imported_at(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+    ) -> None:
+        """
+        GIVEN: last_posted_through=None; last_imported_at is on gate_date in
+               the user's local timezone (America/Los_Angeles)
+        WHEN:  fund_account runs with tz=user.timezone
+        THEN:  report.deferred=False -- import data is fresh enough to fund
+
+        A same-day import with no posted transactions should pass the gate.
+        """
+        today = date(2026, 5, 31)
+        # 8am PDT (UTC-7) on May 31 = 15:00 UTC on May 31 -- same local date
+        imported_at = datetime(2026, 5, 31, 15, 0, tzinfo=UTC)
+        account = make_account(posted_through=None, imported_at=imported_at)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New High-tech Overpriced Sneakers",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(300, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+        )
+        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 5, 15)
+        )
+
+        report = funding_svc.fund_account(
+            account, today, system_user, tz=system_user.timezone
+        )
+
+        assert report.deferred is False
+        assert report.transfers == 1
+
+    ####################################################################
+    #
+    def test_deferred_when_import_was_yesterday_in_local_tz(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+    ) -> None:
+        """
+        GIVEN: last_posted_through=None; last_imported_at is 11pm PDT on
+               May 30 -- which is 6am UTC on May 31. The UTC date (May 31)
+               equals gate_date, but the local PDT date (May 30) does not.
+        WHEN:  fund_account runs with tz=America/Los_Angeles
+        THEN:  report.deferred=True
+
+        Regression: the old UTC .date() check would have passed this gate
+        because 2026-05-31 UTC >= 2026-05-31 gate_date.
+
+        An import from yesterday (local time) must not unlock funding for today,
+        even if the UTC date of that import happens to equal the gate date.
+        """
+        today = date(2026, 5, 31)
+        # 11pm PDT on May 30 = 06:00 UTC on May 31
+        # UTC date = May 31 (old gate passes), PDT date = May 30 (new gate fails)
+        imported_at = datetime(2026, 5, 31, 6, 0, tzinfo=UTC)
+        account = make_account(posted_through=None, imported_at=imported_at)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New High-tech Overpriced Sneakers",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(300, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+        )
+        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 5, 15)
+        )
+
+        report = funding_svc.fund_account(
+            account, today, system_user, tz=system_user.timezone
+        )
+
+        assert report.deferred is True
+        assert report.transfers == 0
+
+    ####################################################################
+    #
+    def test_import_unblocks_when_posted_through_is_behind(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+    ) -> None:
+        """
+        GIVEN: last_posted_through is behind gate_date (all txns still pending);
+               last_imported_at covers gate_date in the user's local timezone
+        WHEN:  fund_account runs with tz=user.timezone
+        THEN:  report.deferred=False -- import path takes over from posted path
+
+        This is the real-world scenario: end-of-month sync returned only
+        pending transactions so last_posted_through didn't advance, but
+        last_imported_at did.
+
+        last_imported_at should act as a fallback that allows funding to
+        proceed when the bank hasn't posted all transactions yet.
+        """
+        today = date(2026, 5, 31)
+        # 2pm PDT on May 31 = 21:00 UTC on May 31
+        imported_at = datetime(2026, 5, 31, 21, 0, tzinfo=UTC)
+        account = make_account(
+            posted_through=date(2026, 5, 30), imported_at=imported_at
+        )
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New High-tech Overpriced Sneakers",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(300, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+        )
+        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 5, 15)
+        )
+
+        report = funding_svc.fund_account(
+            account, today, system_user, tz=system_user.timezone
+        )
+
+        assert report.deferred is False
+        assert report.transfers == 1
+
 
 ########################################################################
 ########################################################################
@@ -551,7 +703,7 @@ class TestCapAndWarn:
     def test_insufficient_unallocated_caps_and_warns(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: unallocated=$20, budget wants $50
@@ -594,7 +746,7 @@ class TestCapAndWarn:
     def test_empty_unallocated_skips_and_advances_pointer(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: unallocated=$0
@@ -637,7 +789,7 @@ class TestCapAndWarn:
     def test_empty_fillup_advances_recur_pointer_and_warns(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: fillup=$0, recurring recur event fires
@@ -685,7 +837,7 @@ class TestCapAndWarn:
     def test_insufficient_fillup_caps_and_warns_on_recur(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: fillup=$30, recurring target=$100, recur event fires
@@ -738,7 +890,7 @@ class TestGoalCompletion:
     def test_goal_marked_complete_when_target_reached(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: GOAL budget balance=$250, target=$300, funding=$50
@@ -779,7 +931,7 @@ class TestGoalCompletion:
     def test_complete_goal_skipped_on_subsequent_runs(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: GOAL budget complete=True
@@ -820,7 +972,7 @@ class TestGoalCompletion:
     def test_complete_stays_sticky_after_spending_below_target(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: GOAL budget complete=True, balance=$300 (target); user spends
@@ -872,7 +1024,7 @@ class TestPausedAndArchived:
     def test_paused_budget_skipped(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
         paused: bool,
     ) -> None:
         """
@@ -930,7 +1082,7 @@ class TestPausedAndArchived:
     def test_archived_budget_skipped(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: an archived budget with a due funding event
@@ -977,7 +1129,7 @@ class TestIdempotency:
     def test_same_day_rerun_is_idempotent(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: fund_account ran successfully today (last_funded_on=today)
@@ -1073,7 +1225,7 @@ class TestSameDayRerun:
     def test_fund_event_partial_topup_rerun(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
         budget_type: str,
         initial_balance: int,
         initial_funded: int,
@@ -1137,8 +1289,8 @@ class TestSameDayRerun:
     def test_recur_event_partial_topup_rerun(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
-        user_factory: Callable[..., User],  # type: ignore[valid-type]
+        system_user: User,
+        user_factory: Callable[..., User],
     ) -> None:
         """
         GIVEN: recur event fires; fill-up ($120) is below target ($200);
@@ -1232,7 +1384,7 @@ class TestSameDayRerun:
     def test_fund_event_noop_after_full_run(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
         budget_type: str,
         initial_balance: int,
         target: int,
@@ -1284,8 +1436,8 @@ class TestSameDayRerun:
     def test_manual_itx_not_counted_in_already_moved(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
-        user_factory: Callable[..., User],  # type: ignore[valid-type]
+        system_user: User,
+        user_factory: Callable[..., User],
     ) -> None:
         """
         GIVEN: first run transfers $60 of an intended $100 (Unallocated capped);
@@ -1381,7 +1533,7 @@ class TestGoalScenarios:
     def test_allocation_spending_does_not_affect_funded_amount(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: Goal TARGET_DATE budget; target=$300; target_date=2026-03-01;
@@ -1431,7 +1583,7 @@ class TestGoalScenarios:
     def test_itx_out_increases_subsequent_fund_amount(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: Goal TARGET_DATE budget; target=$200; target_date=2026-03-01;
@@ -1487,7 +1639,7 @@ class TestCappedScenarios:
     def test_fund_spend_refund_cycle(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: Capped budget; target=$100; funding_amount=$50; balance=$70;
@@ -1563,7 +1715,7 @@ class TestRecurringScenarios:
     def test_recur_shortfall_no_retry_next_day(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: RECURRING budget; target=$100; fill-up balance=$30;
@@ -1628,7 +1780,7 @@ class TestRecurringScenarios:
     def test_unpause_resets_pointer_and_next_event_fires(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
         budget_type: str,
         paused_budget_type: str,
     ) -> None:
@@ -1829,7 +1981,7 @@ class TestScheduleFundingRuns:
     def test_fund_one_account_calls_fund_account_with_fund_kind(
         self,
         bank_account_factory: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: a valid account and a funding-system user
@@ -1858,7 +2010,7 @@ class TestScheduleFundingRuns:
     def test_recur_one_account_calls_fund_account_with_recur_kind(
         self,
         bank_account_factory: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: a valid account and a funding-system user
@@ -2370,6 +2522,66 @@ class TestNextFundingInfo:
         # $3400 / 8 = $425.00
         assert info.amount == Money("425.00", "USD")
 
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "imported_at,tz,expected_deferred",
+        [
+            pytest.param(
+                datetime(2026, 5, 31, 15, 0, tzinfo=UTC),  # 8am PDT May 31
+                "America/Los_Angeles",
+                False,
+                id="imported-today-local",
+            ),
+            pytest.param(
+                datetime(
+                    2026, 5, 31, 6, 0, tzinfo=UTC
+                ),  # 11pm PDT May 30 -- UTC date is May 31
+                "America/Los_Angeles",
+                True,
+                id="imported-yesterday-local-but-today-utc",
+            ),
+        ],
+    )
+    def test_import_freshness_gate_respects_local_timezone(
+        self,
+        make_account: Callable[..., BankAccount],
+        imported_at: datetime,
+        tz: str,
+        expected_deferred: bool,
+    ) -> None:
+        """
+        GIVEN: last_posted_through=None; last_imported_at varies relative to
+               gate_date in the user's local timezone
+        WHEN:  next_funding_info called with tz=user_timezone
+        THEN:  deferred reflects whether the import was on gate_date locally
+
+        Gate evaluation must use the local date of the import, not the UTC
+        date.  An import at 11pm PDT on May 30 (= 6am UTC May 31) must not
+        pass a gate_date of May 31 -- the data is from yesterday locally.
+        """
+        today = date(2026, 5, 31)
+        account = make_account(posted_through=None, imported_at=imported_at)
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Laptop Fund",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(1000, "USD"),
+            funding_amount=Money(100, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+        )
+        # last_funded_on=May 15 → next event is May 31 → gate checks May 31
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 5, 15)
+        )
+        budget.refresh_from_db()
+
+        info = funding_svc.next_funding_info(budget, today=today, tz=tz)
+
+        assert info is not None
+        assert info.deferred is expected_deferred
+
 
 ########################################################################
 ########################################################################
@@ -2519,7 +2731,7 @@ class TestRecurringTargetDateProration:
     def test_fund_account_prorates_into_fillup(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
         today: date,
         last_funded_on: date,
         initial_balance: Money,
@@ -2572,7 +2784,7 @@ class TestFundingNotifications:
     def test_funding_complete_notification_context(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: a GOAL budget funded $50/month, unallocated=$200, today=Mar 1
@@ -2631,7 +2843,7 @@ class TestFundingNotifications:
     def test_recurring_budget_refreshed_notification_context(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        system_user: User,
     ) -> None:
         """
         GIVEN: a RECURRING budget with $80 in fillup, unallocated=$0,

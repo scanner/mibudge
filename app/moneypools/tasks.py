@@ -104,8 +104,12 @@ def schedule_funding_runs() -> None:
     """
     now_utc = datetime.now(tz=UTC)
 
-    fund_accounts: list[tuple[str, str]] = []
-    recur_accounts: list[tuple[str, str]] = []
+    # Each tuple: (account_id, local_date_str, owner_tz)
+    #   account_id:      BankAccount UUID string
+    #   local_date_str:  ISO date in the owner's local timezone (YYYY-MM-DD)
+    #   owner_tz:        IANA timezone name of the first account owner
+    fund_accounts: list[tuple[str, str, str]] = []
+    recur_accounts: list[tuple[str, str, str]] = []
 
     for account in BankAccount.objects.prefetch_related("owners").order_by(
         "pk"
@@ -135,13 +139,13 @@ def schedule_funding_runs() -> None:
         account_id = str(account.id)
 
         if _FUND_WINDOW_START <= local_time < _FUND_WINDOW_END:
-            fund_accounts.append((account_id, local_date_str))
+            fund_accounts.append((account_id, local_date_str, owner.timezone))
         elif _RECUR_WINDOW_START <= local_time < _RECUR_WINDOW_END:
-            recur_accounts.append((account_id, local_date_str))
+            recur_accounts.append((account_id, local_date_str, owner.timezone))
 
     def _dispatch(
         task,
-        pairs: list[tuple[str, str]],
+        pairs: list[tuple[str, str, str]],
         label: str,
     ) -> None:
         n = len(pairs)
@@ -151,10 +155,13 @@ def schedule_funding_runs() -> None:
             "schedule_funding_runs: enqueueing %d %s account(s).", n, label
         )
         interval = min(30.0, _SPREAD_SECONDS / n)
-        for i, (account_id, local_date_str) in enumerate(pairs):
+        for i, (account_id, local_date_str, owner_tz) in enumerate(pairs):
             task.apply_async(
                 args=[account_id],
-                kwargs={"local_date_str": local_date_str},
+                kwargs={
+                    "local_date_str": local_date_str,
+                    "owner_tz": owner_tz,
+                },
                 countdown=int(i * interval),
             )
 
@@ -170,6 +177,7 @@ def _run_funding_task(
     local_date_str: str | None,
     kinds: set[EventKind],
     label: str,
+    owner_tz: str | None = None,
 ) -> None:
     """
     Shared implementation for fund_one_account and recur_one_account.
@@ -181,6 +189,9 @@ def _run_funding_task(
             when None (manual invocation or legacy callers).
         kinds: EventKind set passed through to fund_account().
         label: Task name used in log messages.
+        owner_tz: IANA timezone name of the account owner, used to
+            localize last_imported_at in the import-freshness gate.
+            Falls back to UTC when None.
     """
     try:
         account = BankAccount.objects.select_related(
@@ -217,7 +228,9 @@ def _run_funding_task(
     else:
         today = date.today()
 
-    report = funding_svc.fund_account(account, today, actor, kinds=kinds)
+    report = funding_svc.fund_account(
+        account, today, actor, kinds=kinds, tz=owner_tz
+    )
 
     if report.deferred:
         logger.info(
@@ -255,7 +268,9 @@ def _run_funding_task(
 #
 @celery_app.task(ignore_result=True)
 def fund_one_account(
-    account_id: str, local_date_str: str | None = None
+    account_id: str,
+    local_date_str: str | None = None,
+    owner_tz: str | None = None,
 ) -> None:
     """
     Process due FUND events for one BankAccount.
@@ -268,12 +283,14 @@ def fund_one_account(
         account_id: UUID string of the BankAccount to fund.
         local_date_str: ISO date string ('YYYY-MM-DD') from the scheduler.
             Defaults to UTC today when called manually or from tests.
+        owner_tz: IANA timezone name passed through to the freshness gate.
     """
     _run_funding_task(
         account_id,
         local_date_str,
         kinds={EventKind.FUND},
         label="fund_one_account",
+        owner_tz=owner_tz,
     )
 
 
@@ -281,7 +298,9 @@ def fund_one_account(
 #
 @celery_app.task(ignore_result=True)
 def recur_one_account(
-    account_id: str, local_date_str: str | None = None
+    account_id: str,
+    local_date_str: str | None = None,
+    owner_tz: str | None = None,
 ) -> None:
     """
     Process due RECUR events for one BankAccount.
@@ -293,10 +312,12 @@ def recur_one_account(
         account_id: UUID string of the BankAccount to process.
         local_date_str: ISO date string ('YYYY-MM-DD') from the scheduler.
             Defaults to UTC today when called manually or from tests.
+        owner_tz: IANA timezone name passed through to the freshness gate.
     """
     _run_funding_task(
         account_id,
         local_date_str,
         kinds={EventKind.RECUR},
         label="recur_one_account",
+        owner_tz=owner_tz,
     )

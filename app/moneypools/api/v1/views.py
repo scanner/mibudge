@@ -504,7 +504,9 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         currency = account.currency
 
         for budget in budgets:
-            info = funding_svc.next_funding_info(budget, today=today)
+            info = funding_svc.next_funding_info(
+                budget, today=today, tz=request.user.timezone
+            )
             if info is None:
                 continue
 

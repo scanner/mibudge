@@ -16,7 +16,8 @@ Usage:
 
 # system imports
 #
-from datetime import date
+import zoneinfo
+from datetime import UTC, date
 from typing import Any
 
 # 3rd party imports
@@ -89,9 +90,9 @@ class Command(BaseCommand):
             accounts = [resolve_account(pattern)]
         else:
             accounts = list(
-                BankAccount.objects.select_related(
-                    "bank", "unallocated_budget"
-                ).all()
+                BankAccount.objects.select_related("bank", "unallocated_budget")
+                .prefetch_related("owners")
+                .all()
             )
 
         if not accounts:
@@ -105,10 +106,14 @@ class Command(BaseCommand):
         total_warnings = 0
 
         for account in accounts:
+            first_owner = account.owners.order_by("pk").first()
+            owner_tz = first_owner.timezone if first_owner else None
             if dry_run:
-                report = _dry_run_report(account, today)
+                report = _dry_run_report(account, today, owner_tz)
             else:
-                report = funding_svc.fund_account(account, today, actor)
+                report = funding_svc.fund_account(
+                    account, today, actor, tz=owner_tz
+                )
 
             if report.deferred:
                 total_deferred += 1
@@ -169,7 +174,7 @@ def _parse_date(value: str) -> date:
 ####################################################################
 #
 def _dry_run_report(
-    account: BankAccount, today: date
+    account: BankAccount, today: date, owner_tz: str | None = None
 ) -> funding_svc.FundingReport:
     """Return a FundingReport describing what would be funded without
     making any changes.
@@ -177,6 +182,8 @@ def _dry_run_report(
     Args:
         account: The BankAccount to inspect.
         today: The reference date.
+        owner_tz: IANA timezone name used to localize last_imported_at
+            in the import-freshness gate. Falls back to UTC when None.
 
     Returns:
         A FundingReport with transfers=0 but deferred/warnings populated.
@@ -193,10 +200,16 @@ def _dry_run_report(
         return report
 
     gate_date = max(ev.date for ev in events)
-    if (
-        account.last_posted_through is None
-        or account.last_posted_through < gate_date
-    ):
+    _tz = zoneinfo.ZoneInfo(owner_tz) if owner_tz else UTC
+    posted_is_current = (
+        account.last_posted_through is not None
+        and account.last_posted_through >= gate_date
+    )
+    import_is_current = (
+        account.last_imported_at is not None
+        and account.last_imported_at.astimezone(_tz).date() >= gate_date
+    )
+    if not (posted_is_current or import_is_current):
         report.deferred = True
         return report
 
