@@ -95,15 +95,15 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 
 All resources are under `/api/v1/`. Full endpoint docs: [`docs/api.md`](docs/api.md) · OpenAPI schema: [`docs/openapi.yaml`](docs/openapi.yaml) (regenerate with `make api-docs`).
 
-| Resource | Endpoint | Notes |
-|----------|----------|-------|
-| Users | `/api/v1/users/` | List/update restricted to staff; `/me/` available to all |
-| Banks | `/api/v1/banks/` | Read-only reference data |
-| Bank Accounts | `/api/v1/bank-accounts/` | Scoped to account owners; `sync-scrape` action reconciles a full bank-side snapshot atomically |
-| Budgets | `/api/v1/budgets/` | Scoped to account owners |
-| Transactions | `/api/v1/transactions/` | Scoped to account owners |
-| Allocations | `/api/v1/allocations/` | Budget assignments for transactions |
-| Internal Transactions | `/api/v1/internal-transactions/` | Budget-to-budget transfers |
+| Resource              | Endpoint                         | Notes                                                                                          |
+|-----------------------|----------------------------------|------------------------------------------------------------------------------------------------|
+| Users                 | `/api/v1/users/`                 | List/update restricted to staff; `/me/` available to all                                       |
+| Banks                 | `/api/v1/banks/`                 | Read-only reference data                                                                       |
+| Bank Accounts         | `/api/v1/bank-accounts/`         | Scoped to account owners; `sync-scrape` action reconciles a full bank-side snapshot atomically |
+| Budgets               | `/api/v1/budgets/`               | Scoped to account owners                                                                       |
+| Transactions          | `/api/v1/transactions/`          | Scoped to account owners                                                                       |
+| Allocations           | `/api/v1/allocations/`           | Budget assignments for transactions                                                            |
+| Internal Transactions | `/api/v1/internal-transactions/` | Budget-to-budget transfers                                                                     |
 
 All resources except Banks and Users are scoped to bank account ownership -- only members of an account's `owners` M2M can access that account's data. Staff and superuser status does **not** bypass ownership checks in the REST API.
 
@@ -281,12 +281,12 @@ EMAIL_USE_TLS=True             # default
 
 Set `DJANGO_EMAIL_BACKEND` to the anymail backend for your provider, then supply the corresponding token:
 
-| Provider | `DJANGO_EMAIL_BACKEND` | Token env var |
-|----------|------------------------|---------------|
-| Postmark | `anymail.backends.postmark.EmailBackend` | `POSTMARK_SERVER_TOKEN` |
-| Mailgun | `anymail.backends.mailgun.EmailBackend` | `MAILGUN_API_KEY`, `MAILGUN_SENDER_DOMAIN` |
-| SendGrid | `anymail.backends.sendgrid.EmailBackend` | `SENDGRID_API_KEY` |
-| SparkPost | `anymail.backends.sparkpost.EmailBackend` | `SPARKPOST_API_KEY` |
+| Provider  | `DJANGO_EMAIL_BACKEND`                    | Token env var                              |
+|-----------|-------------------------------------------|--------------------------------------------|
+| Postmark  | `anymail.backends.postmark.EmailBackend`  | `POSTMARK_SERVER_TOKEN`                    |
+| Mailgun   | `anymail.backends.mailgun.EmailBackend`   | `MAILGUN_API_KEY`, `MAILGUN_SENDER_DOMAIN` |
+| SendGrid  | `anymail.backends.sendgrid.EmailBackend`  | `SENDGRID_API_KEY`                         |
+| SparkPost | `anymail.backends.sparkpost.EmailBackend` | `SPARKPOST_API_KEY`                        |
 
 The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backend.
 

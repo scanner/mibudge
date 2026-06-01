@@ -1,6 +1,4 @@
-Email address changed
-
-Your mibudge email address was changed on {{ changed_at }}.
+{% load tz %}Your mibudge email address was changed on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
 
 Previous address: {{ from_email }}
 New address: {{ to_email }}

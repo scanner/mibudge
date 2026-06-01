@@ -45,7 +45,7 @@ class TestPasswordChangedSignal:
             user=user, kind=PASSWORD_CHANGED
         )
         assert notification.priority == NotificationPriority.CRITICAL
-        assert "changed_at" in notification.context
+        assert notification.context == {}
         mock_send_notification_now.delay.assert_called_once_with(
             str(notification.id)
         )
@@ -92,8 +92,8 @@ class TestEmailChangedSignal:
         GIVEN: the email_changed allauth signal is sent
         WHEN:  the handler runs
         THEN:  a CRITICAL Notification row is created for the user with
-               from_email, to_email, and changed_at in context, and the
-               immediate send task is enqueued
+               from_email and to_email in context, and the immediate
+               send task is enqueued
         """
         user = user_factory()
         from_addr = MagicMock()
@@ -113,7 +113,7 @@ class TestEmailChangedSignal:
         assert notification.priority == NotificationPriority.CRITICAL
         assert notification.context["from_email"] == "old@example.com"
         assert notification.context["to_email"] == "new@example.com"
-        assert "changed_at" in notification.context
+        assert "changed_at" not in notification.context
         mock_send_notification_now.delay.assert_called_once_with(
             str(notification.id)
         )
