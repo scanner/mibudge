@@ -2835,7 +2835,7 @@ class TestRecurringTargetDateProration:
 ########################################################################
 #
 class TestFundingNotifications:
-    """Tests that fund_account fires the expected notification kinds."""
+    """Tests that the funding pipeline fires the expected notification kinds."""
 
     ####################################################################
     #
@@ -2846,7 +2846,7 @@ class TestFundingNotifications:
     ) -> None:
         """
         GIVEN: a GOAL budget funded $50/month, unallocated=$200, today=Mar 1
-        WHEN:  fund_account runs and transfers $50
+        WHEN:  fund_one_account runs and transfers $50
         THEN:  a FUNDING_COMPLETE notification is created for each account
                owner with account_id, date, funded_budgets, and warnings in
                context; funded_budgets contains all expected keys
@@ -2872,9 +2872,14 @@ class TestFundingNotifications:
             last_funded_on=date(2026, 2, 28)
         )
 
-        funding_svc.fund_account(account, today, system_user)
-
         owner = account.owners.first()
+        assert owner is not None
+        fund_one_account(
+            str(account.id),
+            local_date_str=today.isoformat(),
+            owner_tz=owner.timezone,
+        )
+
         n = Notification.objects.get(user=owner, kind=FUNDING_COMPLETE)
         assert n.context["account_id"] == str(account.id)
         for key in ("account_name", "date", "funded_budgets", "warnings"):

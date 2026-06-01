@@ -259,15 +259,16 @@ def _run_funding_task(
     for warning in report.warnings:
         logger.warning("%s: %s: %s", label, account_id, warning)
 
-    if report.transfers > 0:
+    if report.funded_budgets:
         notify_for(
             account,
             FUNDING_COMPLETE,
             {
                 "account_name": account.name,
-                "transfers": report.transfers,
-                "warnings": report.warnings,
+                "account_id": str(account.id),
                 "date": today.isoformat(),
+                "funded_budgets": report.funded_budgets,
+                "warnings": report.warnings,
             },
         )
 

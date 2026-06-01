@@ -45,10 +45,7 @@ from notifications.service import notify_for
 # Project imports
 #
 from moneypools.models import BankAccount, Budget, InternalTransaction
-from moneypools.notification_kinds import (
-    FUNDING_COMPLETE,
-    RECURRING_BUDGET_REFRESHED,
-)
+from moneypools.notification_kinds import RECURRING_BUDGET_REFRESHED
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
@@ -359,19 +356,6 @@ def fund_account(
             _process_fund_event(ev, account, unallocated, actor, report)
         else:
             _process_recur_event(ev, account, actor, report)
-
-    if report.funded_budgets:
-        notify_for(
-            account,
-            FUNDING_COMPLETE,
-            {
-                "account_name": account.name,
-                "account_id": str(account.id),
-                "date": today.isoformat(),
-                "funded_budgets": report.funded_budgets,
-                "warnings": report.warnings,
-            },
-        )
 
     return report
 

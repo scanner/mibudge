@@ -24,11 +24,13 @@ from typing import Any
 #
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+from notifications.service import notify_for
 
 # Project imports
 #
 from moneypools.management.commands._budget_admin import resolve_account
 from moneypools.models import BankAccount, Budget
+from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
 from moneypools.service.shared import funding_system_user
 
@@ -125,6 +127,19 @@ class Command(BaseCommand):
 
             total_transfers += report.transfers
             total_warnings += len(report.warnings)
+
+            if not dry_run and report.funded_budgets:
+                notify_for(
+                    account,
+                    FUNDING_COMPLETE,
+                    {
+                        "account_name": account.name,
+                        "account_id": str(account.id),
+                        "date": today.isoformat(),
+                        "funded_budgets": report.funded_budgets,
+                        "warnings": report.warnings,
+                    },
+                )
 
             status = (
                 self.style.SUCCESS(f"  OK        {account.name}")
