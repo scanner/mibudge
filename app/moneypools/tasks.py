@@ -36,11 +36,19 @@ from moneypools.service.shared import funding_system_user
 
 logger = logging.getLogger(__name__)
 
-# Local-time windows (inclusive start, exclusive end) that trigger each
-# funding pass.  Both are checked on every scheduler tick (every 30 min).
+# FUND tasks are enqueued on every scheduler tick (every 30 min).
+# Whether funding actually runs is determined inside fund_account by two rules:
+#   1. Import-freshness gate: account must have a posted or imported date
+#      on or after the latest due event date.  Example: a May 31 event
+#      requires last_posted_through >= 2026-05-31 OR
+#      last_imported_at (local) >= 2026-05-31.  If no import has happened
+#      by the due date, funding is deferred at each tick until one does;
+#      once an import arrives the next tick picks up all past-due events.
+#   2. Idempotency: last_funded_on prevents the same event from firing twice.
 #
-_FUND_WINDOW_START = time(23, 0)
-_FUND_WINDOW_END = time(23, 30)
+# RECUR tasks still use a fixed window (after midnight, local time) so they
+# only fire after FUND has had a chance to run and fill the fillup_goal.
+#
 _RECUR_WINDOW_START = time(3, 0)
 _RECUR_WINDOW_END = time(3, 30)
 
@@ -95,9 +103,10 @@ def schedule_funding_runs() -> None:
     IANA timezone.  Accounts whose owner has an unknown timezone are
     skipped with a warning.
 
-    Windows (local time, inclusive start / exclusive end):
-      [23:00, 23:30)  ->  fund_one_account   (EventKind.FUND)
-      [03:00, 03:30)  ->  recur_one_account  (EventKind.RECUR)
+    fund_one_account is enqueued on every tick; the import-freshness gate
+    inside fund_account determines whether execution actually proceeds.
+    recur_one_account is enqueued only in the [03:00, 03:30) local window
+    so it fires after FUND has had a chance to fill the fillup_goal.
 
     Tasks are spread evenly across up to 30 minutes so a large number
     of accounts does not stampede the database.
@@ -138,9 +147,8 @@ def schedule_funding_runs() -> None:
         local_date_str = local_now.date().isoformat()
         account_id = str(account.id)
 
-        if _FUND_WINDOW_START <= local_time < _FUND_WINDOW_END:
-            fund_accounts.append((account_id, local_date_str, owner.timezone))
-        elif _RECUR_WINDOW_START <= local_time < _RECUR_WINDOW_END:
+        fund_accounts.append((account_id, local_date_str, owner.timezone))
+        if _RECUR_WINDOW_START <= local_time < _RECUR_WINDOW_END:
             recur_accounts.append((account_id, local_date_str, owner.timezone))
 
     def _dispatch(

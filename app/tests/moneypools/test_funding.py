@@ -509,6 +509,68 @@ class TestImportFreshnessGate:
 
     ####################################################################
     #
+    def test_import_unblocks_deferred_funding(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+    ) -> None:
+        """
+        GIVEN: account with a due funding event and no import data at all
+               (last_posted_through=None, last_imported_at=None)
+        WHEN:  fund_account runs -- gate fails, no funding
+               then an import happens (last_imported_at set to today, local)
+               then fund_account runs again
+        THEN:  first run: deferred=True, no transfers, no InternalTransactions
+               second run: deferred=False, transfer executes
+
+        This is the core scenario for Option A scheduling: because fund tasks
+        run on every tick, the second run happens automatically once an import
+        lands rather than waiting until the next day's 11pm window.
+        """
+        today = date(2026, 5, 31)
+        tz = "America/Los_Angeles"
+        account = make_account(posted_through=None, imported_at=None)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+        budget = budget_svc.create(
+            bank_account=account,
+            name="New High-tech Overpriced Sneakers",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(300, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
+        )
+        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=date(2026, 5, 15)
+        )
+
+        # First run: gate fails -- no import data at all
+        report = funding_svc.fund_account(account, today, system_user, tz=tz)
+        assert report.deferred is True
+        assert report.transfers == 0
+        assert (
+            InternalTransaction.objects.filter(bank_account=account).count()
+            == 0
+        )
+
+        # Import arrives: 2pm PDT May 31 = 21:00 UTC May 31
+        BankAccount.objects.filter(pkid=account.pkid).update(
+            last_imported_at=datetime(2026, 5, 31, 21, 0, tzinfo=UTC)
+        )
+        account.refresh_from_db()
+
+        # Second run (next tick): gate passes via last_imported_at
+        report = funding_svc.fund_account(account, today, system_user, tz=tz)
+        assert report.deferred is False
+        assert report.transfers == 1
+
+    ####################################################################
+    #
     def test_deferred_when_last_posted_through_is_none(
         self,
         make_account: Callable[..., BankAccount],
@@ -1879,21 +1941,19 @@ class TestScheduleFundingRuns:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "utc_hour,utc_minute,tz,expect_fund,expect_recur",
+        "utc_hour,utc_minute,tz,expect_recur",
         [
             pytest.param(
                 3,
                 10,
                 _TZ_NY,
-                True,
                 False,
-                id="fund-window: 03:10 UTC = 23:10 EDT",
+                id="outside-recur-window: 03:10 UTC = 23:10 EDT",
             ),
             pytest.param(
                 7,
                 10,
                 _TZ_NY,
-                False,
                 True,
                 id="recur-window: 07:10 UTC = 03:10 EDT",
             ),
@@ -1902,8 +1962,7 @@ class TestScheduleFundingRuns:
                 0,
                 _TZ_NY,
                 False,
-                False,
-                id="no-window: 12:00 UTC = 08:00 EDT",
+                id="outside-recur-window: 12:00 UTC = 08:00 EDT",
             ),
         ],
     )
@@ -1913,13 +1972,12 @@ class TestScheduleFundingRuns:
         utc_hour: int,
         utc_minute: int,
         tz: str,
-        expect_fund: bool,
         expect_recur: bool,
     ) -> None:
         """
         GIVEN: one account whose owner is in a known timezone
         WHEN:  schedule_funding_runs fires at a specific UTC time
-        THEN:  fund_one_account is enqueued iff local time is in [23:00, 23:30)
+        THEN:  fund_one_account is always enqueued
                recur_one_account is enqueued iff local time is in [03:00, 03:30)
         """
         account = bank_account_factory()
@@ -1940,7 +1998,7 @@ class TestScheduleFundingRuns:
             mock_dt.now.return_value = fake_now
             schedule_funding_runs()
 
-        assert mock_fund.called == expect_fund
+        assert mock_fund.called is True
         assert mock_recur.called == expect_recur
 
     ####################################################################
