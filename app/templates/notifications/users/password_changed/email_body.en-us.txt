@@ -1,4 +1,4 @@
-Your mibudge password was changed on {{ changed_at }}.
+{% load tz %}Your mibudge password was changed on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
 
 If you made this change, no action is needed.
 

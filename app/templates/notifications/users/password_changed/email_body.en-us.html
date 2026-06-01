@@ -1,14 +1,17 @@
-<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">Password changed</h2>
-<p style="margin:0 0 8px; color:#374151;">
-  Your mibudge password was changed on {{ changed_at }}.
+{% load tz %}
+<h2 style="margin:0;margin-bottom:12px;font-size:16px;color:#1a1a1a;">Your password was changed</h2>
+<p style="margin:0;margin-bottom:12px;color:#374151;">
+  Your mibudge password was changed on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
 </p>
-<p style="margin:0 0 8px; color:#374151;">
+<p style="margin:0;margin-bottom:20px;color:#374151;">
   If you made this change, no action is needed.
 </p>
-<p style="margin:0 0 8px; color:#b91c1c; font-weight:500;">
+<p style="margin:0;margin-bottom:8px;color:#b91c1c;font-weight:bold;">
   If you did not make this change, reset your password immediately:
-  <a href="{{ site_url }}/app/account/settings/" style="color:#b91c1c;">account settings</a>
 </p>
-<p style="margin:0; font-size:13px; color:#374151;">
+<p style="margin:0;margin-bottom:20px;">
+  <a href="{{ site_url }}/app/account/settings/" style="color:#1d4ed8;">{{ site_url }}/app/account/settings/</a>
+</p>
+<p style="margin:0;font-size:13px;color:#374151;">
   Then contact <a href="mailto:{{ support_email }}" style="color:#1d4ed8;">{{ support_email }}</a> to report the incident.
 </p>

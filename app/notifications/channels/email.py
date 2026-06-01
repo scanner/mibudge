@@ -351,7 +351,18 @@ class EmailChannel(BaseChannel):
                 n.kind, "email_subject", locale, ctx
             ).strip()
             text_body = items[0]["text_body"]
-            html_body = items[0]["html_body"]
+            html_body = _render_shared_template(
+                "email_standalone_body",
+                "html",
+                locale,
+                {
+                    "user": user,
+                    "notification": n,
+                    "subject": subject,
+                    "html_body": items[0]["html_body"],
+                    **site_ctx,
+                },
+            )
 
         log_entry = NotificationLog.objects.create(
             user=user,
