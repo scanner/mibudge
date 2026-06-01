@@ -20,14 +20,17 @@ Events are sorted in (date asc, fund-before-recur) order so that a
 multi-period catch-up reproduces the sequence that would have occurred
 with no delay.
 
-The import-freshness gate defers the entire account if
-account.last_posted_through is behind the latest due event date,
-ensuring the engine never runs ahead of confirmed transaction data.
+The import-freshness gate defers the entire account when neither
+account.last_posted_through nor account.last_imported_at is current
+through the latest due event date.  Either signal is sufficient: a
+fully-pending import (all transactions still pending, so last_posted_through
+does not advance) still passes the gate when last_imported_at is recent.
 """
 
 # system imports
 #
 import logging
+import zoneinfo
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -35,7 +38,6 @@ from typing import Any
 
 # 3rd party imports
 #
-from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
 from djmoney.money import Money
 from notifications.service import notify_for
@@ -43,10 +45,7 @@ from notifications.service import notify_for
 # Project imports
 #
 from moneypools.models import BankAccount, Budget, InternalTransaction
-from moneypools.notification_kinds import (
-    FUNDING_COMPLETE,
-    RECURRING_BUDGET_REFRESHED,
-)
+from moneypools.notification_kinds import RECURRING_BUDGET_REFRESHED
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
@@ -56,10 +55,9 @@ from moneypools.service.schedules import (
     enumerate_schedule,
     prev_recurrence_boundary,
 )
+from users.models import User
 
 logger = logging.getLogger(__name__)
-
-User = get_user_model()
 
 _KIND_ORDER = {EventKind.FUND: 0, EventKind.RECUR: 1}
 
@@ -136,6 +134,7 @@ class NextFundingInfo:
 def next_funding_info(
     budget: Budget,
     today: date | None = None,
+    tz: str | None = None,
 ) -> NextFundingInfo | None:
     """Return the next scheduled funding event for a budget, or None.
 
@@ -152,6 +151,10 @@ def next_funding_info(
     Args:
         budget: The Budget to inspect.
         today: Reference date for event enumeration (defaults to date.today()).
+        tz: IANA timezone name used to localize last_imported_at when
+            evaluating the import-freshness gate. When None, UTC is used
+            (slightly permissive for users west of UTC, acceptable for
+            display contexts where an exact timezone is unavailable).
 
     Returns:
         NextFundingInfo with the next event's date, amount, and deferred flag,
@@ -220,11 +223,26 @@ def next_funding_info(
 
     # Deferred when there is no import data at all (the account has never
     # been imported so any funding amount could be wrong), or when the event
-    # date is today/past-due but the account data hasn't caught up to it yet.
+    # date is today/past-due and the account data hasn't caught up yet.
     # A future event on a regularly-imported account is NOT deferred -- data
     # will be refreshed before the event date arrives.
-    deferred = account.last_posted_through is None or (
-        next_date <= today and account.last_posted_through < next_date
+    # The gate passes if either (a) it has posted transactions as of next_date,
+    # or (b) it had an import on or after next_date -- meaning we have the
+    # freshest data from the bank even if all recent transactions are pending.
+    _tz = zoneinfo.ZoneInfo(tz) if tz else UTC
+    posted_is_current = (
+        account.last_posted_through is not None
+        and account.last_posted_through >= next_date
+    )
+    import_is_current = (
+        account.last_imported_at is not None
+        and account.last_imported_at.astimezone(_tz).date() >= next_date
+    )
+    never_synced = (
+        account.last_posted_through is None and account.last_imported_at is None
+    )
+    deferred = never_synced or (
+        next_date <= today and not (posted_is_current or import_is_current)
     )
 
     return NextFundingInfo(date=next_date, amount=amount, deferred=deferred)
@@ -235,8 +253,9 @@ def next_funding_info(
 def fund_account(
     account: BankAccount,
     today: date,
-    actor: User,  # type: ignore[valid-type]
+    actor: User,
     kinds: set[EventKind] | None = None,
+    tz: str | None = None,
 ) -> FundingReport:
     """Process due funding and recurrence events for one account.
 
@@ -258,6 +277,9 @@ def fund_account(
         actor: The User recorded as actor on generated InternalTransactions.
         kinds: If given, restrict processing to these EventKind values.
             Pass None (the default) to process all event types together.
+        tz: IANA timezone name used to localize last_imported_at when
+            evaluating the import-freshness gate. Should match the
+            timezone used to compute 'today'. When None, UTC is used.
 
     Returns:
         A FundingReport describing what was done (or why it was deferred).
@@ -277,17 +299,28 @@ def fund_account(
     if not events:
         return report
 
+    # Import-freshness gate: fund this account if either (a) it has posted
+    # transactions as of gate_date, or (b) it had an import on or after
+    # gate_date -- meaning we have the freshest data from the bank even if
+    # all recent transactions are still pending.
     gate_date = max(ev.date for ev in events)
-    if (
-        account.last_posted_through is None
-        or account.last_posted_through < gate_date
-    ):
+    _tz = zoneinfo.ZoneInfo(tz) if tz else UTC
+    posted_is_current = (
+        account.last_posted_through is not None
+        and account.last_posted_through >= gate_date
+    )
+    import_is_current = (
+        account.last_imported_at is not None
+        and account.last_imported_at.astimezone(_tz).date() >= gate_date
+    )
+    if not (posted_is_current or import_is_current):
         report.deferred = True
         logger.info(
             "fund_account: account %s deferred -- last_posted_through=%s, "
-            "gate_date=%s",
+            "last_imported_at=%s, gate_date=%s",
             account.id,
             account.last_posted_through,
+            account.last_imported_at,
             gate_date,
         )
         return report
@@ -323,19 +356,6 @@ def fund_account(
             _process_fund_event(ev, account, unallocated, actor, report)
         else:
             _process_recur_event(ev, account, actor, report)
-
-    if report.funded_budgets:
-        notify_for(
-            account,
-            FUNDING_COMPLETE,
-            {
-                "account_name": account.name,
-                "account_id": str(account.id),
-                "date": today.isoformat(),
-                "funded_budgets": report.funded_budgets,
-                "warnings": report.warnings,
-            },
-        )
 
     return report
 
@@ -463,7 +483,7 @@ def _process_fund_event(
     ev: FundingEvent,
     account: BankAccount,
     unallocated: Budget,
-    actor: User,  # type: ignore[valid-type]
+    actor: User,
     report: FundingReport,
 ) -> None:
     """
@@ -591,7 +611,7 @@ def _process_fund_event(
 def _process_recur_event(
     ev: FundingEvent,
     account: BankAccount,
-    actor: User,  # type: ignore[valid-type]
+    actor: User,
     report: FundingReport,
 ) -> None:
     """Transfer from fillup_goal into the recurring budget up to target.
