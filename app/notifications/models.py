@@ -218,7 +218,7 @@ class ChannelPreference(models.Model):
     digest_frequency = models.CharField(
         max_length=20,
         choices=DigestFrequency,
-        default=DigestFrequency.DAILY_EVENING,
+        default=DigestFrequency.DAILY_MORNING,
     )
     # Tracks the last digest send time so the flush task avoids
     # double-sending within the same window.

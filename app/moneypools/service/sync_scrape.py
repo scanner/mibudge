@@ -266,18 +266,24 @@ def sync_scrape(
         )
         raise
 
-    if report.inserted_posted > 0 or report.deleted_pending > 0:
-        notify_for(
-            bank_account,
-            IMPORT_COMPLETE,
-            {
-                "account_name": bank_account.name,
-                "account_id": str(bank_account.id),
-                "new_count": report.inserted_posted,
-                "pending_to_posted_count": report.deleted_pending,
-                "date": payload.scraped_at.strftime("%Y-%m-%d"),
-            },
-        )
+    # Pending transactions that are no longer pending after this sync.
+    # deleted_pending counts all old pending rows wiped; inserted_pending
+    # counts those that re-appeared in the new scrape as still-pending.
+    # The difference is the net count that actually resolved (posted or
+    # cancelled by the bank).
+    cleared_pending = max(0, report.deleted_pending - report.inserted_pending)
+
+    notify_for(
+        bank_account,
+        IMPORT_COMPLETE,
+        {
+            "account_name": bank_account.name,
+            "account_id": str(bank_account.id),
+            "new_count": report.inserted_posted,
+            "cleared_pending_count": cleared_pending,
+            "date": payload.scraped_at.strftime("%Y-%m-%d"),
+        },
+    )
     if report.inserted_posted > 0:
         _TRANSACTION_DISPLAY_LIMIT = 15
         _new_txns = list(

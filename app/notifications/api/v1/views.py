@@ -117,7 +117,7 @@ class NotificationPreferenceViewSet(GenericViewSet):
         description=(
             "Return all notification channels with the authenticated "
             "user's delivery preferences. Channels without a stored "
-            "preference fall back to DAILY_EVENING."
+            "preference fall back to DAILY_MORNING."
         ),
         responses={200: ChannelPreferenceSerializer(many=True)},
     ),
@@ -152,7 +152,7 @@ class ChannelPreferenceViewSet(GenericViewSet):
                 "channel": ch.value,
                 "display_name": ch.label,
                 "digest_frequency": prefs.get(
-                    ch.value, DigestFrequency.DAILY_EVENING
+                    ch.value, DigestFrequency.DAILY_MORNING
                 ),
             }
             for ch in Channel

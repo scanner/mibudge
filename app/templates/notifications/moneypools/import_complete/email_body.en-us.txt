@@ -1,6 +1,6 @@
 Import completed -- {{ account_name }}
 
-{{ new_count }} new transaction{% if new_count != 1 %}s{% endif %} imported on {{ date }}.
-{% if pending_to_posted_count %}{{ pending_to_posted_count }} transaction{% if pending_to_posted_count != 1 %}s{% endif %} moved from pending to posted.
+{% if new_count %}{{ new_count }} new transaction{% if new_count != 1 %}s{% endif %} imported on {{ date }}.{% else %}No new transactions on {{ date }}.{% endif %}
+{% if cleared_pending_count %}{{ cleared_pending_count }} pending transaction{% if cleared_pending_count != 1 %}s{% endif %} cleared.
 {% endif %}
 View account: {{ site_url }}/app/account/bank-accounts/{{ account_id }}/

@@ -54,8 +54,8 @@ class NotificationLogAdmin(admin.ModelAdmin):
 #
 @admin.register(NotificationPreference)
 class NotificationPreferenceAdmin(admin.ModelAdmin):
-    list_display = ["user", "kind", "enabled"]
-    list_filter = ["enabled", "kind"]
+    list_display = ["user", "kind", "delivery_mode"]
+    list_filter = ["delivery_mode", "kind"]
     search_fields = ["user__email", "user__username", "kind"]
 
 

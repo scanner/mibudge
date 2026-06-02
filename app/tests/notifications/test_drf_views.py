@@ -78,7 +78,7 @@ def test_endpoints_require_auth(url: str) -> None:
             "channel",
             "email",
             "digest_frequency",
-            DigestFrequency.DAILY_EVENING,
+            DigestFrequency.DAILY_MORNING,
             id="channel-preferences",
         ),
     ],
@@ -286,8 +286,8 @@ class TestChannelPreferenceAPI:
         [
             pytest.param(
                 None,
-                DigestFrequency.DAILY_EVENING,
-                id="no-row-defaults-to-daily-evening",
+                DigestFrequency.DAILY_MORNING,
+                id="no-row-defaults-to-daily-morning",
             ),
             pytest.param(
                 DigestFrequency.WEEKLY_FRIDAY,
@@ -306,7 +306,7 @@ class TestChannelPreferenceAPI:
         """
         GIVEN: an authenticated user with or without a stored channel preference
         WHEN:  the list endpoint is called
-        THEN:  the email channel shows the stored frequency or DAILY_EVENING
+        THEN:  the email channel shows the stored frequency or DAILY_MORNING
                when no row exists
         """
         user = user_factory()

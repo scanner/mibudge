@@ -1189,7 +1189,7 @@ class TestSyncScrapeNotifications:
                     "account_name",
                     "account_id",
                     "new_count",
-                    "pending_to_posted_count",
+                    "cleared_pending_count",
                     "date",
                 ],
                 True,
@@ -1361,6 +1361,33 @@ class TestSyncScrapeNotifications:
             ).exists()
             == expect_transaction_posted
         )
+
+    ####################################################################
+    #
+    def test_import_complete_fires_when_nothing_changed(
+        self,
+        empty_account: BankAccount,
+    ) -> None:
+        """
+        GIVEN: a scrape that returns no transactions at all
+        WHEN:  sync_scrape runs
+        THEN:  IMPORT_COMPLETE still fires so the user knows an import ran
+        """
+        owner = empty_account.owners.first()
+        assert owner is not None
+        NotificationPreference.objects.create(
+            user=owner, kind=IMPORT_COMPLETE, delivery_mode=DeliveryMode.DIGEST
+        )
+
+        payload = _payload(
+            ending_balance=Decimal("0.00"),
+            transactions=[],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        n = Notification.objects.get(user=owner, kind=IMPORT_COMPLETE)
+        assert n.context["new_count"] == 0
+        assert n.context["cleared_pending_count"] == 0
 
     ####################################################################
     #
