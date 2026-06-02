@@ -236,7 +236,7 @@ export interface NotificationPreference {
   kind: string;
   display_name: string;
   can_suppress: boolean;
-  enabled: boolean;
+  delivery_mode: "digest" | "immediate" | "off";
 }
 
 export interface ChannelPreference {

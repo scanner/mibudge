@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 # Project imports
 #
-from notifications.models import DigestFrequency
+from notifications.models import DeliveryMode, DigestFrequency
 
 
 ########################################################################
@@ -13,14 +13,14 @@ from notifications.models import DigestFrequency
 class NotificationPreferenceSerializer(serializers.Serializer):
     """Notification kind preference.
 
-    Read: kind, display_name, can_suppress, enabled.
-    Write (PATCH): enabled only.
+    Read: kind, display_name, can_suppress, delivery_mode.
+    Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
     """
 
     kind = serializers.CharField(read_only=True)
     display_name = serializers.CharField(read_only=True)
     can_suppress = serializers.BooleanField(read_only=True)
-    enabled = serializers.BooleanField()
+    delivery_mode = serializers.ChoiceField(choices=DeliveryMode.choices)
 
 
 ########################################################################

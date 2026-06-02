@@ -199,7 +199,7 @@ def flush_email_digests() -> None:
         pref, _ = ChannelPreference.objects.get_or_create(
             user=user,
             channel=Channel.EMAIL,
-            defaults={"digest_frequency": DigestFrequency.DAILY_EVENING},
+            defaults={"digest_frequency": DigestFrequency.DAILY_MORNING},
         )
 
         if not _is_digest_due(user, pref, now_utc):

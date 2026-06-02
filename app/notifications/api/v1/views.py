@@ -31,14 +31,15 @@ from .serializers import (
         description=(
             "Return all registered notification kinds merged with the "
             "authenticated user's preferences. Kinds without a stored "
-            "preference fall back to the registry default_opt_in value."
+            "preference fall back to the registry default_delivery_mode."
         ),
         responses={200: NotificationPreferenceSerializer(many=True)},
     ),
     partial_update=extend_schema(
         summary="Update a notification preference",
         description=(
-            "Set enabled/disabled for a single notification kind. "
+            "Set delivery_mode ('digest', 'immediate', or 'off') for a "
+            "single notification kind. "
             "Returns 400 if the kind has can_suppress=False. "
             "Returns 404 if the kind is not registered."
         ),
@@ -61,7 +62,7 @@ class NotificationPreferenceViewSet(GenericViewSet):
         """Return all registered kinds with user preference state."""
         user = request.user
         prefs = {
-            p.kind: p.enabled
+            p.kind: p.delivery_mode
             for p in NotificationPreference.objects.filter(user=user)
         }
         data = [
@@ -69,7 +70,7 @@ class NotificationPreferenceViewSet(GenericViewSet):
                 "kind": ki.kind,
                 "display_name": ki.display_name,
                 "can_suppress": ki.can_suppress,
-                "enabled": prefs.get(ki.kind, ki.default_opt_in),
+                "delivery_mode": prefs.get(ki.kind, ki.default_delivery_mode),
             }
             for ki in registry.all()
         ]
@@ -79,13 +80,13 @@ class NotificationPreferenceViewSet(GenericViewSet):
     ####################################################################
     #
     def partial_update(self, request, kind=None):
-        """Upsert the user's preference for a single notification kind."""
+        """Upsert the user's delivery mode for a single notification kind."""
         kind_info = registry.get(kind)
         if kind_info is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         if not kind_info.can_suppress:
             return Response(
-                {"detail": "This notification kind cannot be disabled."},
+                {"detail": "This notification kind cannot be changed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         serializer = NotificationPreferenceSerializer(data=request.data)
@@ -93,14 +94,16 @@ class NotificationPreferenceViewSet(GenericViewSet):
         NotificationPreference.objects.update_or_create(
             user=request.user,
             kind=kind,
-            defaults={"enabled": serializer.validated_data["enabled"]},
+            defaults={
+                "delivery_mode": serializer.validated_data["delivery_mode"]
+            },
         )
         return Response(
             {
                 "kind": kind,
                 "display_name": kind_info.display_name,
                 "can_suppress": kind_info.can_suppress,
-                "enabled": serializer.validated_data["enabled"],
+                "delivery_mode": serializer.validated_data["delivery_mode"],
             }
         )
 
@@ -114,7 +117,7 @@ class NotificationPreferenceViewSet(GenericViewSet):
         description=(
             "Return all notification channels with the authenticated "
             "user's delivery preferences. Channels without a stored "
-            "preference fall back to DAILY_EVENING."
+            "preference fall back to DAILY_MORNING."
         ),
         responses={200: ChannelPreferenceSerializer(many=True)},
     ),
@@ -149,7 +152,7 @@ class ChannelPreferenceViewSet(GenericViewSet):
                 "channel": ch.value,
                 "display_name": ch.label,
                 "digest_frequency": prefs.get(
-                    ch.value, DigestFrequency.DAILY_EVENING
+                    ch.value, DigestFrequency.DAILY_MORNING
                 ),
             }
             for ch in Channel

@@ -9,7 +9,7 @@ available to the notification service.
 
 # 3rd party imports
 #
-from notifications.models import NotificationPriority
+from notifications.models import DeliveryMode, NotificationPriority
 from notifications.registry import registry
 
 # Dotted kind strings.
@@ -31,12 +31,12 @@ def register_all() -> None:
         display_name="Password changed",
         default_priority=NotificationPriority.CRITICAL,
         can_suppress=False,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
     )
     registry.register(
         kind=EMAIL_CHANGED,
         display_name="Email address changed",
         default_priority=NotificationPriority.CRITICAL,
         can_suppress=False,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
     )
