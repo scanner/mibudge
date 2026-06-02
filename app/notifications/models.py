@@ -167,8 +167,25 @@ class Notification(models.Model):
 ########################################################################
 ########################################################################
 #
+class DeliveryMode(models.TextChoices):
+    """
+    How a user wants a suppressible notification kind delivered.
+
+    DIGEST    -- queue for the periodic digest email (current default behavior).
+    IMMEDIATE -- send a dedicated email right away.
+    OFF       -- suppress entirely; no email is created or sent.
+    """
+
+    DIGEST = "digest", "Digest"
+    IMMEDIATE = "immediate", "Immediate"
+    OFF = "off", "Off"
+
+
+########################################################################
+########################################################################
+#
 class NotificationPreference(models.Model):
-    """Per-user opt-in/out for a specific notification kind."""
+    """Per-user delivery mode for a specific notification kind."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -176,7 +193,11 @@ class NotificationPreference(models.Model):
         related_name="notification_preferences",
     )
     kind = models.CharField(max_length=200)
-    enabled = models.BooleanField(default=True)
+    delivery_mode = models.CharField(
+        max_length=20,
+        choices=DeliveryMode,
+        default=DeliveryMode.DIGEST,
+    )
 
     class Meta:
         unique_together = [("user", "kind")]

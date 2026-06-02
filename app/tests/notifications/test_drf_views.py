@@ -12,6 +12,7 @@ import pytest
 #
 from notifications.models import (
     ChannelPreference,
+    DeliveryMode,
     DigestFrequency,
     NotificationPreference,
 )
@@ -51,23 +52,20 @@ def test_endpoints_require_auth(url: str) -> None:
 ########################################################################
 ########################################################################
 #
-# Lambdas supply the user-a setup for each endpoint's isolation test.
-# Direct objects.create() is used because the factories produce a new
-# user by default and we need to anchor the preference to a specific
-# user_a we control.
-#
 @pytest.mark.parametrize(
     "list_url,create_pref,lookup_key,lookup_val,value_field,expected_default",
     [
         pytest.param(
             "/api/v1/notification-preferences/",
             lambda user: NotificationPreference.objects.create(
-                user=user, kind=_SUPPRESSIBLE_KIND, enabled=False
+                user=user,
+                kind=_SUPPRESSIBLE_KIND,
+                delivery_mode=DeliveryMode.OFF,
             ),
             "kind",
             _SUPPRESSIBLE_KIND,
-            "enabled",
-            True,
+            "delivery_mode",
+            DeliveryMode.DIGEST,
             id="notification-preferences",
         ),
         pytest.param(
@@ -121,42 +119,54 @@ class TestNotificationPreferenceAPI:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "kind,stored_enabled,expected_enabled",
+        "kind,stored_mode,expected_mode",
         [
-            # No DB row -- falls through to registry default_opt_in.
+            # No DB row -- falls through to registry default_delivery_mode.
             pytest.param(
-                _SUPPRESSIBLE_KIND, None, True, id="no-row-default-true"
+                _SUPPRESSIBLE_KIND,
+                None,
+                DeliveryMode.DIGEST,
+                id="no-row-default-digest",
             ),
             pytest.param(
                 "moneypools.import_complete",
                 None,
-                False,
-                id="no-row-default-false",
+                DeliveryMode.OFF,
+                id="no-row-default-off",
             ),
             # Stored preference overrides the registry default.
             pytest.param(
-                _SUPPRESSIBLE_KIND, False, False, id="db-row-overrides-default"
+                _SUPPRESSIBLE_KIND,
+                DeliveryMode.OFF,
+                DeliveryMode.OFF,
+                id="db-row-off-overrides-default",
+            ),
+            pytest.param(
+                _SUPPRESSIBLE_KIND,
+                DeliveryMode.IMMEDIATE,
+                DeliveryMode.IMMEDIATE,
+                id="db-row-immediate",
             ),
         ],
     )
-    def test_list_enabled_state(
+    def test_list_delivery_mode(
         self,
         user_factory: Callable[..., User],
         notification_preference_factory: Callable[..., NotificationPreference],
         kind: str,
-        stored_enabled: bool | None,
-        expected_enabled: bool,
+        stored_mode: str | None,
+        expected_mode: str,
     ) -> None:
         """
         GIVEN: an authenticated user with or without a stored preference
         WHEN:  the list endpoint is called
-        THEN:  the kind's enabled field matches the stored value or the
-               registry default_opt_in when no row exists
+        THEN:  the kind's delivery_mode matches the stored value or the
+               registry default_delivery_mode when no row exists
         """
         user = user_factory()
-        if stored_enabled is not None:
+        if stored_mode is not None:
             notification_preference_factory(
-                user=user, kind=kind, enabled=stored_enabled
+                user=user, kind=kind, delivery_mode=stored_mode
             )
         client = APIClient()
         client.force_authenticate(user=user)
@@ -164,16 +174,26 @@ class TestNotificationPreferenceAPI:
 
         assert response.status_code == 200
         pref = next(p for p in response.data if p["kind"] == kind)
-        assert pref["enabled"] is expected_enabled
+        assert pref["delivery_mode"] == expected_mode
 
     ####################################################################
     #
+    @pytest.mark.parametrize(
+        "delivery_mode",
+        [
+            pytest.param(DeliveryMode.OFF, id="off"),
+            pytest.param(DeliveryMode.IMMEDIATE, id="immediate"),
+            pytest.param(DeliveryMode.DIGEST, id="digest"),
+        ],
+    )
     def test_patch_suppressible_kind(
-        self, user_factory: Callable[..., User]
+        self,
+        user_factory: Callable[..., User],
+        delivery_mode: str,
     ) -> None:
         """
         GIVEN: an authenticated user
-        WHEN:  a PATCH with enabled=False is sent for a suppressible kind
+        WHEN:  a PATCH with a valid delivery_mode is sent for a suppressible kind
         THEN:  200 is returned, the DB row is upserted, and the response
                reflects the new value
         """
@@ -183,17 +203,17 @@ class TestNotificationPreferenceAPI:
 
         response = client.patch(
             f"{self.LIST_URL}{_SUPPRESSIBLE_KIND}/",
-            {"enabled": False},
+            {"delivery_mode": delivery_mode},
             format="json",
         )
 
         assert response.status_code == 200
-        assert response.data["enabled"] is False
+        assert response.data["delivery_mode"] == delivery_mode
         assert (
             NotificationPreference.objects.get(
                 user=user, kind=_SUPPRESSIBLE_KIND
-            ).enabled
-            is False
+            ).delivery_mode
+            == delivery_mode
         )
 
     ####################################################################
@@ -223,7 +243,9 @@ class TestNotificationPreferenceAPI:
         client = APIClient()
         client.force_authenticate(user=user)
         response = client.patch(
-            f"{self.LIST_URL}{kind}/", {"enabled": False}, format="json"
+            f"{self.LIST_URL}{kind}/",
+            {"delivery_mode": DeliveryMode.OFF},
+            format="json",
         )
 
         assert response.status_code == expected_status

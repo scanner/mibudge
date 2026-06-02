@@ -8,9 +8,16 @@ Public API::
     notify(user, kind, context, priority=None, locale=None)
     notify_for(obj, kind, context, priority=None)
 
-Both functions are fire-and-forget -- they write a Notification row and,
-for CRITICAL priority, enqueue a Celery task.  Non-critical notifications
-are picked up by the periodic flush_email_digests task.
+Both functions are fire-and-forget -- they write a Notification row and
+dispatch based on delivery mode.  Delivery modes:
+
+    'digest'    -- notification is queued for the periodic digest flush.
+    'immediate' -- notification is sent right away.
+    'off'       -- notification is suppressed entirely (no row created).
+
+Non-suppressible kinds (can_suppress=False) always use 'immediate'.
+CRITICAL priority additionally forces immediate dispatch regardless of
+the stored delivery mode.
 """
 
 # system imports
@@ -27,6 +34,7 @@ from django.contrib.auth import get_user_model
 #
 from notifications.models import (
     Channel,
+    DeliveryMode,
     Notification,
     NotificationPreference,
     NotificationPriority,
@@ -44,31 +52,33 @@ User = get_user_model()
 ########################################################################
 ########################################################################
 #
-def _get_preference(
+def _effective_delivery_mode(
     user: "UserType",
     kind: str,
-) -> bool:
+) -> str:
     """
-    Return True if the user has this notification kind enabled.
+    Return the effective DeliveryMode for this user and kind.
 
-    Checks NotificationPreference rows first; falls back to the kind's
-    default_opt_in from the registry.
+    Non-suppressible kinds always return DeliveryMode.IMMEDIATE.
+    For suppressible kinds, the stored NotificationPreference takes
+    precedence over the registry default_delivery_mode.
 
     Args:
         user: The recipient user.
         kind: Dotted kind string.
 
     Returns:
-        True if the notification should be sent.
+        A DeliveryMode value string ('digest', 'immediate', or 'off').
     """
     kind_info = registry.get(kind)
-    default = kind_info.default_opt_in if kind_info is not None else True
+    if kind_info is None or not kind_info.can_suppress:
+        return DeliveryMode.IMMEDIATE
 
     try:
         pref = NotificationPreference.objects.get(user=user, kind=kind)
-        return pref.enabled
+        return pref.delivery_mode
     except NotificationPreference.DoesNotExist:
-        return default
+        return kind_info.default_delivery_mode
 
 
 ########################################################################
@@ -84,10 +94,11 @@ def notify(
     """
     Queue a notification for delivery to a single user.
 
-    Checks the kind registry and user preferences before creating the
-    Notification row.  CRITICAL notifications bypass preferences entirely
-    and are enqueued for immediate dispatch.  All others are left pending
-    for the digest flush task.
+    Checks the kind registry and the user's delivery mode preference before
+    creating the Notification row.  If the effective delivery mode is 'off',
+    no row is created and None is returned.  If the mode is 'immediate', or
+    if the resolved priority is CRITICAL, the notification is sent right away.
+    Otherwise it is left pending for the digest flush task.
 
     Args:
         user: Recipient user instance.
@@ -100,7 +111,7 @@ def notify(
             Defaults to NOTIFICATIONS_DEFAULT_LOCALE from settings.
 
     Returns:
-        The created Notification, or None if the user has opted out.
+        The created Notification, or None if the delivery mode is 'off'.
 
     Raises:
         ValueError: If the kind is not registered.
@@ -117,15 +128,14 @@ def notify(
     )
     resolved_locale = locale or settings.NOTIFICATIONS_DEFAULT_LOCALE
 
-    # Non-suppressible kinds always go through regardless of preferences.
-    if kind_info.can_suppress:
-        if not _get_preference(user, kind):
-            logger.debug(
-                "notify: user %s has opted out of kind %r; skipping.",
-                user.pk,
-                kind,
-            )
-            return None
+    delivery_mode = _effective_delivery_mode(user, kind)
+    if delivery_mode == DeliveryMode.OFF:
+        logger.debug(
+            "notify: user %s has delivery_mode=off for kind %r; skipping.",
+            user.pk,
+            kind,
+        )
+        return None
 
     notification = Notification.objects.create(
         user=user,
@@ -136,16 +146,20 @@ def notify(
         channel=Channel.EMAIL,
     )
 
-    if resolved_priority == NotificationPriority.CRITICAL:
-        # Bypass the digest queue -- send immediately via Celery.
+    if (
+        delivery_mode == DeliveryMode.IMMEDIATE
+        or resolved_priority == NotificationPriority.CRITICAL
+    ):
         from notifications.tasks import send_notification_now
 
         send_notification_now.delay(str(notification.id))
         logger.debug(
-            "notify: enqueued immediate send for CRITICAL notification %s "
-            "(kind=%r, user=%s)",
+            "notify: enqueued immediate send for notification %s "
+            "(kind=%r, delivery_mode=%r, priority=%s, user=%s)",
             notification.id,
             kind,
+            delivery_mode,
+            resolved_priority,
             user.pk,
         )
 

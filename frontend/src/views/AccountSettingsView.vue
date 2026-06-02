@@ -113,6 +113,12 @@ const DIGEST_OPTIONS: { value: string; label: string }[] = [
   { value: "weekly_sunday", label: "Weekly on Sunday" },
 ];
 
+const DELIVERY_MODE_OPTIONS: { value: NotificationPreference["delivery_mode"]; label: string }[] = [
+  { value: "digest", label: "Digest" },
+  { value: "immediate", label: "Immediate" },
+  { value: "off", label: "Off" },
+];
+
 ////////////////////////////////////////////////////////////////////////
 //
 onMounted(async () => {
@@ -133,14 +139,16 @@ onMounted(async () => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-async function togglePref(pref: NotificationPreference): Promise<void> {
-  const newEnabled = !pref.enabled;
+async function setDeliveryMode(
+  pref: NotificationPreference,
+  mode: NotificationPreference["delivery_mode"],
+): Promise<void> {
   const idx = notifPrefs.value.findIndex((p) => p.kind === pref.kind);
   if (idx === -1) return;
   // Optimistic update.
-  notifPrefs.value[idx] = { ...pref, enabled: newEnabled };
+  notifPrefs.value[idx] = { ...pref, delivery_mode: mode };
   try {
-    await updateNotificationPreference(pref.kind, newEnabled);
+    await updateNotificationPreference(pref.kind, mode);
   } catch {
     // Revert on failure.
     notifPrefs.value[idx] = pref;
@@ -339,21 +347,23 @@ async function saveEmailDigest(): Promise<void> {
             >
               <span class="text-sm text-neutral-700">{{ pref.display_name }}</span>
 
-              <!-- Suppressible: interactive toggle -->
-              <label
+              <!-- Suppressible: 3-way delivery mode selector -->
+              <select
                 v-if="pref.can_suppress"
-                class="relative inline-flex cursor-pointer items-center"
+                :value="pref.delivery_mode"
+                class="rounded-subcard border border-neutral-200 bg-white py-1.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+                @change="
+                  setDeliveryMode(
+                    pref,
+                    ($event.target as HTMLSelectElement)
+                      .value as NotificationPreference['delivery_mode'],
+                  )
+                "
               >
-                <input
-                  type="checkbox"
-                  class="peer sr-only"
-                  :checked="pref.enabled"
-                  @change="togglePref(pref)"
-                />
-                <div
-                  class="peer h-5 w-9 rounded-full bg-neutral-200 transition-colors after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-ocean-400 peer-checked:after:translate-x-4"
-                ></div>
-              </label>
+                <option v-for="opt in DELIVERY_MODE_OPTIONS" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
 
               <!-- Non-suppressible: locked indicator -->
               <span v-else class="text-xs text-secondary">Always on</span>

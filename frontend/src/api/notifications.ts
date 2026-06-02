@@ -13,11 +13,11 @@ export function getNotificationPreferences(): Promise<NotificationPreference[]> 
 
 export function updateNotificationPreference(
   kind: string,
-  enabled: boolean,
+  delivery_mode: NotificationPreference["delivery_mode"],
 ): Promise<NotificationPreference> {
   return useAuthStore().request<NotificationPreference>(
     `/notification-preferences/${encodeURIComponent(kind)}/`,
-    { method: "PATCH", body: { enabled } as unknown as BodyInit },
+    { method: "PATCH", body: { delivery_mode } as unknown as BodyInit },
   );
 }
 

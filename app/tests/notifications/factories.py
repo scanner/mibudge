@@ -4,6 +4,7 @@ from factory.django import DjangoModelFactory
 from notifications.models import (
     Channel,
     ChannelPreference,
+    DeliveryMode,
     DigestFrequency,
     Notification,
     NotificationLog,
@@ -40,7 +41,7 @@ class NotificationFactory(DjangoModelFactory):
 class NotificationPreferenceFactory(DjangoModelFactory):
     user = factory.SubFactory("tests.users.factories.UserFactory")
     kind = "moneypools.funding_complete"
-    enabled = True
+    delivery_mode = DeliveryMode.DIGEST
 
     class Meta:
         model = NotificationPreference

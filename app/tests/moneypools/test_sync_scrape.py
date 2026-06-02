@@ -21,7 +21,11 @@ from unittest.mock import MagicMock
 #
 import pytest
 from djmoney.money import Money
-from notifications.models import Notification, NotificationPreference
+from notifications.models import (
+    DeliveryMode,
+    Notification,
+    NotificationPreference,
+)
 from pytest_mock import MockerFixture
 
 # Project imports
@@ -102,6 +106,17 @@ def empty_account(
 #
 class TestSyncScrape:
     """End-to-end tests for `sync_scrape`."""
+
+    ####################################################################
+    #
+    @pytest.fixture(autouse=True)
+    def _mock_notifications(self, mock_send_notification_now):
+        """
+        Bring in mock_send_notification_now so notifications don't attempt
+        a real Celery dispatch.  Returned so individual tests can assert on
+        which notifications were sent.
+        """
+        return mock_send_notification_now
 
     ####################################################################
     #
@@ -663,7 +678,7 @@ class TestSyncScrape:
         ):
             assert key in n.context
         assert n.context["account_id"] == str(empty_account.id)
-        mock_send_notification_now.delay.assert_called_once_with(str(n.id))
+        mock_send_notification_now.delay.assert_any_call(str(n.id))
 
     ####################################################################
     #
@@ -804,6 +819,17 @@ class TestMatchesTruncated:
 
     ####################################################################
     #
+    @pytest.fixture(autouse=True)
+    def _mock_notifications(self, mock_send_notification_now):
+        """
+        Bring in mock_send_notification_now so notifications don't attempt
+        a real Celery dispatch.  Returned so individual tests can assert on
+        which notifications were sent.
+        """
+        return mock_send_notification_now
+
+    ####################################################################
+    #
     @pytest.mark.parametrize(
         "scraped,candidates,expected,reason",
         [
@@ -903,6 +929,17 @@ class TestSyncScrapeTruncatedDedup:
     """End-to-end: truncated scraped descriptions dedup against full
     stored descriptions inside `sync_scrape`.
     """
+
+    ####################################################################
+    #
+    @pytest.fixture(autouse=True)
+    def _mock_notifications(self, mock_send_notification_now):
+        """
+        Bring in mock_send_notification_now so notifications don't attempt
+        a real Celery dispatch.  Returned so individual tests can assert on
+        which notifications were sent.
+        """
+        return mock_send_notification_now
 
     ####################################################################
     #
@@ -1132,6 +1169,17 @@ class TestSyncScrapeNotifications:
 
     ####################################################################
     #
+    @pytest.fixture(autouse=True)
+    def _mock_notifications(self, mock_send_notification_now):
+        """
+        Bring in mock_send_notification_now so notifications don't attempt
+        a real Celery dispatch.  Returned so individual tests can assert on
+        which notifications were sent.
+        """
+        return mock_send_notification_now
+
+    ####################################################################
+    #
     @pytest.mark.parametrize(
         "kind,required_ctx_keys,needs_opt_in",
         [
@@ -1180,7 +1228,7 @@ class TestSyncScrapeNotifications:
         assert owner is not None
         if needs_opt_in:
             NotificationPreference.objects.create(
-                user=owner, kind=kind, enabled=True
+                user=owner, kind=kind, delivery_mode=DeliveryMode.DIGEST
             )
 
         payload = _payload(
@@ -1269,7 +1317,7 @@ class TestSyncScrapeNotifications:
         owner = empty_account.owners.first()
         assert owner is not None
         NotificationPreference.objects.create(
-            user=owner, kind=IMPORT_COMPLETE, enabled=True
+            user=owner, kind=IMPORT_COMPLETE, delivery_mode=DeliveryMode.DIGEST
         )
 
         if scenario == "only_pending_deleted":

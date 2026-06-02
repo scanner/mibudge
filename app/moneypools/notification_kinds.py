@@ -13,7 +13,7 @@ from typing import Any
 
 # 3rd party imports
 #
-from notifications.models import NotificationPriority
+from notifications.models import DeliveryMode, NotificationPriority
 from notifications.registry import registry
 
 # Dotted kind strings.  Import these in call sites rather than
@@ -48,7 +48,7 @@ def register_all() -> None:
         display_name="Funding cycle completed",
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.DIGEST,
         recipients=_account_owners,
     )
     registry.register(
@@ -56,7 +56,7 @@ def register_all() -> None:
         display_name="Account import completed",
         default_priority=NotificationPriority.LOW,
         can_suppress=True,
-        default_opt_in=False,
+        default_delivery_mode=DeliveryMode.OFF,
         recipients=_account_owners,
     )
     registry.register(
@@ -64,7 +64,7 @@ def register_all() -> None:
         display_name="New transactions posted",
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
         recipients=_account_owners,
     )
     registry.register(
@@ -72,7 +72,7 @@ def register_all() -> None:
         display_name="Balance mismatch detected",
         default_priority=NotificationPriority.CRITICAL,
         can_suppress=False,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
         recipients=_account_owners,
     )
     registry.register(
@@ -80,7 +80,7 @@ def register_all() -> None:
         display_name="Import error",
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.DIGEST,
         recipients=_account_owners,
     )
     registry.register(
@@ -88,6 +88,6 @@ def register_all() -> None:
         display_name="Recurring budget refreshed",
         default_priority=NotificationPriority.NORMAL,
         can_suppress=True,
-        default_opt_in=True,
+        default_delivery_mode=DeliveryMode.DIGEST,
         recipients=_account_owners,
     )
