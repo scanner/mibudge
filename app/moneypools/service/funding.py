@@ -44,13 +44,15 @@ from notifications.service import notify_for
 
 # Project imports
 #
-from moneypools.models import BankAccount, Budget, InternalTransaction
+from moneypools.models import (
+    BankAccount,
+    Budget,
+    EventKind,
+    InternalTransaction,
+)
 from moneypools.notification_kinds import RECURRING_BUDGET_REFRESHED
 from moneypools.service import internal_transaction as internal_transaction_svc
-from moneypools.service.funding_strategy import (
-    BUDGET_TYPE_TO_STRATEGY,
-    EventKind,
-)
+from moneypools.service.funding_strategy import BUDGET_TYPE_TO_STRATEGY
 from moneypools.service.schedules import (
     enumerate_schedule,
     prev_recurrence_boundary,

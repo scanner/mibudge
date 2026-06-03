@@ -27,10 +27,9 @@ from notifications.service import notify_for
 
 # Project imports
 from config import celery_app
-from moneypools.models import BankAccount, Transaction
+from moneypools.models import BankAccount, EventKind, Transaction
 from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
-from moneypools.service.funding_strategy import EventKind
 from moneypools.service.linking import attempt_link
 from moneypools.service.shared import funding_system_user
 

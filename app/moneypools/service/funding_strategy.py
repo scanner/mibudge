@@ -6,18 +6,19 @@ funding or recurrence event, given the current state of the budget (and its
 fill-up sibling for Recurring budgets).
 
 Public API:
-    EventKind            -- StrEnum: FUND / RECUR
     FundingStrategy      -- abstract base
     GoalStrategy         -- GOAL budgets
     CappedStrategy       -- CAPPED budgets
     RecurringStrategy    -- RECURRING budgets (both event kinds)
     BUDGET_TYPE_TO_STRATEGY -- BudgetType -> FundingStrategy instance
     state_at_start_of_D  -- roll back system ITXs to get state at start of D
+
+EventKind lives on moneypools.models so that FundingEventOccurrence.kind
+and the service-layer event discriminator share a single declaration.
 """
 
 # system imports
 #
-import enum
 import logging
 from abc import ABC, abstractmethod
 from datetime import date, datetime, timedelta
@@ -31,7 +32,7 @@ from djmoney.money import Money
 
 # Project imports
 #
-from moneypools.models import Budget, InternalTransaction
+from moneypools.models import Budget, EventKind, InternalTransaction
 from moneypools.service.schedules import (
     count_occurrences,
     enumerate_schedule,
@@ -91,16 +92,6 @@ def state_at_start_of_D(
     balance_0 = Money(budget.balance.amount - net_signed, currency)
     funded_amount_0 = Money(budget.funded_amount.amount - net_signed, currency)
     return balance_0, funded_amount_0
-
-
-########################################################################
-########################################################################
-#
-class EventKind(enum.StrEnum):
-    """Discriminator for the two funding event types."""
-
-    FUND = "fund"
-    RECUR = "recur"
 
 
 ########################################################################

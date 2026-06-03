@@ -24,7 +24,12 @@ from notifications.models import Notification
 
 # Project imports
 #
-from moneypools.models import BankAccount, Budget, InternalTransaction
+from moneypools.models import (
+    BankAccount,
+    Budget,
+    EventKind,
+    InternalTransaction,
+)
 from moneypools.notification_kinds import (
     FUNDING_COMPLETE,
     RECURRING_BUDGET_REFRESHED,
@@ -2047,8 +2052,6 @@ class TestScheduleFundingRuns:
         THEN:  funding_svc.fund_account is called with kinds={EventKind.FUND}
                and the parsed local date
         """
-        from moneypools.service.funding_strategy import EventKind
-
         account = bank_account_factory()
 
         with patch("moneypools.tasks.funding_svc.fund_account") as mock_fund:
@@ -2076,8 +2079,6 @@ class TestScheduleFundingRuns:
         THEN:  funding_svc.fund_account is called with kinds={EventKind.RECUR}
                and the parsed local date
         """
-        from moneypools.service.funding_strategy import EventKind
-
         account = bank_account_factory()
 
         with patch("moneypools.tasks.funding_svc.fund_account") as mock_fund:
