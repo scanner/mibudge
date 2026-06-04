@@ -678,12 +678,6 @@ async function submitMove() {
               />
               <span v-else class="text-sm text-secondary">—</span>
             </div>
-            <div class="flex items-center justify-between gap-3 px-4 py-3">
-              <span class="text-sm text-neutral-700">Fill-up goal</span>
-              <span class="rounded-full bg-mint-50 px-2 py-0.5 text-xs font-medium text-mint-600">
-                Enabled
-              </span>
-            </div>
           </template>
 
           <!-- Next funding row — shown for any budget that has an upcoming event -->

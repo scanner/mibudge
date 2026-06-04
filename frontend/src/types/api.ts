@@ -37,6 +37,7 @@ export interface BankAccount {
   available_balance: string;
   available_balance_currency: string;
   unallocated_budget: string;
+  auto_funding_enabled: boolean;
   last_imported_at: string | null;
   last_posted_through: string | null;
   created_at: string;
