@@ -554,7 +554,6 @@ class TestBudgetNextFundingField:
             assert date.fromisoformat(nf["date"]) > date(2026, 4, 1)
             assert Decimal(nf["amount"]) == Decimal("100.00")
             assert nf["amount_currency"] == "USD"
-            assert isinstance(nf["deferred"], bool)
 
 
 ########################################################################

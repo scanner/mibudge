@@ -450,9 +450,12 @@ class TestCapAndWarn:
         """
         GIVEN: unallocated=$20, budget wants $50
         WHEN:  fund event fires
-        THEN:  $20 transferred; warning logged; last_funded_on advances
+        THEN:  $20 transferred; warning logged; the occurrence is left
+               PARTIAL and last_funded_on does NOT advance, so a later
+               run can top it up once Unallocated is replenished.
         """
         today = date(2026, 3, 1)
+        prior = date(2026, 2, 28)
         account = make_account(posted_through=today)
         unallocated = account.unallocated_budget
         assert unallocated is not None
@@ -469,23 +472,30 @@ class TestCapAndWarn:
             funding_amount=Money(50, "USD"),
             funding_schedule=_MONTHLY,
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 2, 28)
-        )
+        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=prior)
 
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
+        assert report.occurrences_partial == 1
+        assert report.occurrences_completed == 0
         assert len(report.warnings) == 1
         assert "capped" in report.warnings[0]
 
         budget.refresh_from_db()
         assert budget.balance == Money(20, "USD")
-        assert budget.last_funded_on == today
+        assert budget.last_funded_on == prior
+
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
 
     ####################################################################
     #
-    def test_empty_unallocated_skips_and_advances_pointer(
+    def test_empty_unallocated_leaves_event_partial(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,
@@ -493,9 +503,9 @@ class TestCapAndWarn:
         """
         GIVEN: unallocated=$0
         WHEN:  fund event fires
-        THEN:  no transfer; warning logged; last_funded_on advances to today
-               (pointer advances unconditionally -- no retry on subsequent days;
-               same-day re-runs will retry via the today-always-fires rule)
+        THEN:  no transfer; warning logged; the occurrence is left
+               PARTIAL and last_funded_on does NOT advance, so the next
+               run picks the event up after Unallocated is replenished.
         """
         today = date(2026, 3, 1)
         prior = date(2026, 2, 28)
@@ -520,11 +530,19 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 0
+        assert report.occurrences_partial == 1
         assert len(report.warnings) == 1
         assert "transfer skipped" in report.warnings[0]
 
         budget.refresh_from_db()
-        assert budget.last_funded_on == today
+        assert budget.last_funded_on == prior
+
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
 
     ####################################################################
     #
@@ -773,10 +791,13 @@ class TestPausedAndArchived:
         GIVEN: one paused budget, one active budget (parametrized)
         WHEN:  fund_account runs
         THEN:  paused budget gets no transfer; active budget is funded;
-               paused name appears in report.skipped_budgets when paused=True;
-               paused budget's last_funded_on advances (start-fresh on unpause)
+               paused name appears in report.skipped_budgets when
+               paused=True; the paused budget's occurrence is SKIPPED
+               and last_funded_on stays at its prior value (so the
+               event is recorded as missed, not consumed).
         """
         today = date(2026, 3, 1)
+        prior = date(2026, 2, 28)
         account = make_account(posted_through=today)
         unallocated = account.unallocated_budget
         assert unallocated is not None
@@ -805,7 +826,7 @@ class TestPausedAndArchived:
         )
         Budget.objects.filter(
             pkid__in=[active.pkid, paused_budget.pkid]
-        ).update(last_funded_on=date(2026, 2, 28))
+        ).update(last_funded_on=prior)
 
         report = funding_svc.fund_account(account, today, system_user)
 
@@ -814,7 +835,14 @@ class TestPausedAndArchived:
             assert "Paused" in report.skipped_budgets
             paused_budget.refresh_from_db()
             assert paused_budget.balance == Money(0, "USD")
-            assert paused_budget.last_funded_on == today
+            assert paused_budget.last_funded_on == prior
+
+            occurrence = FundingEventOccurrence.objects.get(
+                budget=paused_budget,
+                kind=EventKind.FUND.value,
+                scheduled_date=today,
+            )
+            assert occurrence.status == FundingEventOccurrence.Status.SKIPPED
         else:
             assert report.transfers == 2
             assert not report.skipped_budgets
@@ -1050,7 +1078,7 @@ class TestSameDayRerun:
 
     ####################################################################
     #
-    def test_recur_event_partial_topup_rerun(
+    def test_recur_event_is_one_shot_even_when_underfunded(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,
@@ -1058,15 +1086,13 @@ class TestSameDayRerun:
     ) -> None:
         """
         GIVEN: recur event fires; fill-up ($120) is below target ($200);
-               user adds $80 to fill-up via a manual (non-system) ITX;
-               fund_account re-runs on the same day
-        WHEN:  second run processes the same recur event
-        THEN:  second run transfers $80 (already_moved=$120 from first run);
-               Recurring is fully funded at $200
-
-        This is the spec section 14.2 worked example.  The manual ITX from
-        the user is not counted in already_moved because it lacks
-        system_event_kind/system_event_date.
+               first run sweeps fill-up into Recurring leaving it short
+        WHEN:  fund_account re-runs on the same day after the user
+               manually tops up the fill-up
+        THEN:  the occurrence is already COMPLETE -- RECUR is one-shot --
+               so the second run is a no-op and the extra $80 stays in
+               the fill-up.  Money that lands after the recur boundary
+               waits for the next cycle.
         """
         today = date(2026, 2, 1)
         account = make_account(posted_through=today)
@@ -1105,9 +1131,18 @@ class TestSameDayRerun:
         assert fillup.balance == Money(0, "USD")
         assert recurring.last_recurrence_on == today
 
-        # User moves $80 into the fill-up from a savings budget (manual ITX,
-        # no system_event_kind).  state_at_start_of_D rolls back the engine's
-        # ITX but not this one, so fill_B_0 for the second run = $200.
+        # Even after a partial sweep the occurrence is COMPLETE -- the
+        # design treats the cycle boundary as a hard break.
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=recurring,
+            kind=EventKind.RECUR.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.COMPLETE
+
+        # User moves $80 into the fill-up from a savings budget after
+        # the boundary has passed.  We re-run the engine; nothing should
+        # move because the RECUR occurrence has been settled.
         savings = budget_svc.create(
             bank_account=account,
             name="Savings",
@@ -1130,11 +1165,11 @@ class TestSameDayRerun:
 
         report2 = funding_svc.fund_account(account, today, system_user)
 
-        assert report2.transfers == 1
+        assert report2.transfers == 0
         recurring.refresh_from_db()
-        assert recurring.balance == Money(200, "USD")
         fillup.refresh_from_db()
-        assert fillup.balance == Money(0, "USD")
+        assert recurring.balance == Money(120, "USD")
+        assert fillup.balance == Money(80, "USD")
 
     ####################################################################
     #
@@ -1551,17 +1586,23 @@ class TestRecurringScenarios:
         """
         GIVEN: (budget_type) budget; paused=True; last_funded_on=2026-02-28;
                fund_account ran on 2026-03-01 while paused
-               (pointer advanced to Mar 1; 0 transfers; budget skipped)
+               (occurrence created as SKIPPED; 0 transfers; pointer
+               stays at Feb 28 because nothing reached COMPLETE)
         WHEN:  budget unpaused via budget_svc.update on 2026-03-15
-               (budget_svc.update resets last_funded_on to Mar 14 = today-1)
+               (budget_svc.update resets last_funded_on to Mar 14 = today-1
+               so events that fell during the pause are dropped without
+               replay)
         AND    fund_account runs on 2026-04-01
         THEN:  Apr 1 fund event fires; money transferred; last_funded_on=Apr 1
         """
         account = make_account(posted_through=date(2026, 4, 1))
         unallocated = account.unallocated_budget
         assert unallocated is not None
+        # Enough to cover both parametrize cases: the GOAL wants $50 and
+        # the RECURRING (TARGET_DATE) prorates to up to $300 per event,
+        # which must fully clear so last_funded_on actually advances.
         Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
+            balance=Money(500, "USD")
         )
 
         # Recurring budgets require TARGET_DATE; Goals use FIXED_AMOUNT.
@@ -1604,7 +1645,10 @@ class TestRecurringScenarios:
         assert "Savings" in report_while_paused.skipped_budgets
 
         budget.refresh_from_db()
-        assert budget.last_funded_on == date(2026, 3, 1)
+        # Pointer does NOT advance for a skipped (paused) event under
+        # the new occurrence semantics -- the SKIPPED row records the
+        # event so it is not replayed.
+        assert budget.last_funded_on == date(2026, 2, 28)
 
         # User unpauses: budget_svc.update resets pointer to today-1.
         unpause_date = date(2026, 3, 15)
@@ -2471,7 +2515,6 @@ class TestFundingNotifications:
         fund_one_account(
             str(account.id),
             local_date_str=today.isoformat(),
-            owner_tz=owner.timezone,
         )
 
         n = Notification.objects.get(user=owner, kind=FUNDING_COMPLETE)
