@@ -14,40 +14,54 @@ The engine processes two event types per budget:
   Recur events  -- fire on budget.recurrence_schedule.
                    Only for Recurring budgets.
                    Transfer from fillup_goal into the recurring budget
-                   up to its target_balance; set complete if funded.
+                   up to its target_balance; mark complete one-shot.
 
 Events are sorted in (date asc, fund-before-recur) order so that a
 multi-period catch-up reproduces the sequence that would have occurred
 with no delay.
 
-The import-freshness gate defers the entire account when neither
-account.last_posted_through nor account.last_imported_at is current
-through the latest due event date.  Either signal is sufficient: a
-fully-pending import (all transactions still pending, so last_posted_through
-does not advance) still passes the gate when last_imported_at is recent.
+Each due event has a FundingEventOccurrence row whose status tracks
+progress:
+
+  PENDING  -- created, no transfer attempted yet.
+  PARTIAL  -- transferred less than the strategy's intended amount;
+              eligible for retry on subsequent runs until superseded.
+  COMPLETE -- intended amount fully covered; Budget.last_funded_on /
+              last_recurrence_on advance to this date.
+  SKIPPED  -- closed without completion (budget paused at processing
+              time, or superseded by a newer occurrence of the same
+              (budget, kind)).
+
+Concurrency: a non-blocking Redis lock on ``account.lock_key`` guards
+the whole run.  A second concurrent caller (scheduled task vs.
+"Run funding now" button) returns ``FundingReport(busy=True)`` rather
+than wait or duplicate work.
 """
 
 # system imports
 #
 import logging
-import zoneinfo
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+# Project imports
+#
+from common.locks import acquire_lock
+
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
+from django.utils import timezone
 from djmoney.money import Money
 from notifications.service import notify_for
 
-# Project imports
-#
 from moneypools.models import (
     BankAccount,
     Budget,
     EventKind,
+    FundingEventOccurrence,
     InternalTransaction,
 )
 from moneypools.notification_kinds import RECURRING_BUDGET_REFRESHED
@@ -94,7 +108,8 @@ class FundingReport:
 
     Attributes:
         account_id: UUID string of the processed account.
-        deferred: True when the import-freshness gate blocked processing.
+        busy: True when another worker held the account lock and this
+            call returned without doing any work.
         transfers: Number of InternalTransaction rows created.
         warnings: Human-readable warning strings (cap events, etc.).
         skipped_budgets: Names of paused/archived budgets that were skipped.
@@ -102,14 +117,20 @@ class FundingReport:
             used to build the FUNDING_COMPLETE notification.  Each entry is a
             dict with keys: budget_id, budget_name, amount_funded,
             total_funded, balance, target_balance, goal_reached, is_fillup.
+        occurrences_completed: FundingEventOccurrence rows that reached
+            COMPLETE during this run.
+        occurrences_partial: FundingEventOccurrence rows left in PARTIAL
+            (still owed money) at the end of this run.
     """
 
     account_id: str
-    deferred: bool = False
+    busy: bool = False
     transfers: int = 0
     warnings: list[str] = field(default_factory=list)
     skipped_budgets: list[str] = field(default_factory=list)
     funded_budgets: list[dict[str, Any]] = field(default_factory=list)
+    occurrences_completed: int = 0
+    occurrences_partial: int = 0
 
 
 ########################################################################
@@ -122,12 +143,10 @@ class NextFundingInfo:
     Attributes:
         date: Calendar date of the next funding event.
         amount: Money amount that will be transferred.
-        deferred: True when the import-freshness gate would delay this event.
     """
 
     date: date
     amount: Money
-    deferred: bool = False
 
 
 ########################################################################
@@ -136,7 +155,6 @@ class NextFundingInfo:
 def next_funding_info(
     budget: Budget,
     today: date | None = None,
-    tz: str | None = None,
 ) -> NextFundingInfo | None:
     """Return the next scheduled funding event for a budget, or None.
 
@@ -153,14 +171,10 @@ def next_funding_info(
     Args:
         budget: The Budget to inspect.
         today: Reference date for event enumeration (defaults to date.today()).
-        tz: IANA timezone name used to localize last_imported_at when
-            evaluating the import-freshness gate. When None, UTC is used
-            (slightly permissive for users west of UTC, acceptable for
-            display contexts where an exact timezone is unavailable).
 
     Returns:
-        NextFundingInfo with the next event's date, amount, and deferred flag,
-        or None if no event is due or applicable.
+        NextFundingInfo with the next event's date and amount, or None
+        if no event is due or applicable.
     """
     if today is None:
         today = date.today()
@@ -189,8 +203,6 @@ def next_funding_info(
         scheduling_budget = parent
     else:
         scheduling_budget = budget
-
-    account = scheduling_budget.bank_account
 
     if scheduling_budget.last_funded_on is not None:
         after = scheduling_budget.last_funded_on
@@ -223,31 +235,7 @@ def next_funding_info(
     if amount.amount <= Decimal("0"):
         return None
 
-    # Deferred when there is no import data at all (the account has never
-    # been imported so any funding amount could be wrong), or when the event
-    # date is today/past-due and the account data hasn't caught up yet.
-    # A future event on a regularly-imported account is NOT deferred -- data
-    # will be refreshed before the event date arrives.
-    # The gate passes if either (a) it has posted transactions as of next_date,
-    # or (b) it had an import on or after next_date -- meaning we have the
-    # freshest data from the bank even if all recent transactions are pending.
-    _tz = zoneinfo.ZoneInfo(tz) if tz else UTC
-    posted_is_current = (
-        account.last_posted_through is not None
-        and account.last_posted_through >= next_date
-    )
-    import_is_current = (
-        account.last_imported_at is not None
-        and account.last_imported_at.astimezone(_tz).date() >= next_date
-    )
-    never_synced = (
-        account.last_posted_through is None and account.last_imported_at is None
-    )
-    deferred = never_synced or (
-        next_date <= today and not (posted_is_current or import_is_current)
-    )
-
-    return NextFundingInfo(date=next_date, amount=amount, deferred=deferred)
+    return NextFundingInfo(date=next_date, amount=amount)
 
 
 ####################################################################
@@ -257,21 +245,24 @@ def fund_account(
     today: date,
     actor: User,
     kinds: set[EventKind] | None = None,
-    tz: str | None = None,
 ) -> FundingReport:
     """Process due funding and recurrence events for one account.
 
-    Applies the import-freshness gate, collects due events, sorts them
-    in date-grouped order (fund before recur per date, budget.id
-    tiebreak), and dispatches each event via its budget-type strategy.
-    All balance changes flow through internal_transaction_svc so the
-    budget-balance invariant is maintained.
+    Acquires a non-blocking Redis lock on ``account.lock_key``.  If
+    another worker holds the lock, returns immediately with
+    ``report.busy = True``.
+
+    Collects due events, sorts them in date-grouped order (fund before
+    recur per date, budget.id tiebreak), ensures a
+    FundingEventOccurrence instance exists per (budget, kind,
+    scheduled_date), and dispatches each pending or partial event via
+    its budget-type strategy.  All balance changes flow through
+    internal_transaction_svc so the budget-balance invariant is
+    maintained.
 
     When 'kinds' is given, only events of those types are processed.
     This lets the scheduler run FUND and RECUR events in separate passes
-    at different times of day.  The import-freshness gate is computed
-    from the filtered set only, so the FUND pass is not gated on RECUR
-    event dates and vice versa.
+    at different times of day.
 
     Args:
         account: The BankAccount to fund.
@@ -279,87 +270,209 @@ def fund_account(
         actor: The User recorded as actor on generated InternalTransactions.
         kinds: If given, restrict processing to these EventKind values.
             Pass None (the default) to process all event types together.
-        tz: IANA timezone name used to localize last_imported_at when
-            evaluating the import-freshness gate. Should match the
-            timezone used to compute 'today'. When None, UTC is used.
 
     Returns:
-        A FundingReport describing what was done (or why it was deferred).
+        A FundingReport describing what was done.  ``busy=True`` means
+        another worker was already processing this account.
     """
     report = FundingReport(account_id=str(account.id))
 
-    budgets = list(
-        Budget.objects.filter(
-            bank_account=account,
-            archived=False,
-        ).select_related("fillup_goal")
-    )
+    # Single-flight per account.  A second concurrent caller (scheduled
+    # task vs. "Run funding now" button) bails out here rather than
+    # interleave transfers with the in-flight run.
+    #
+    with acquire_lock(account.lock_key, blocking=False) as got_lock:
+        if not got_lock:
+            report.busy = True
+            logger.info(
+                "fund_account: account %s busy -- another worker holds "
+                "the lock; skipping.",
+                account.id,
+            )
+            return report
 
-    events = _collect_events(budgets, today)
-    if kinds is not None:
-        events = [ev for ev in events if ev.kind in kinds]
-    if not events:
-        return report
-
-    # Import-freshness gate: fund this account if either (a) it has posted
-    # transactions as of gate_date, or (b) it had an import on or after
-    # gate_date -- meaning we have the freshest data from the bank even if
-    # all recent transactions are still pending.
-    gate_date = max(ev.date for ev in events)
-    _tz = zoneinfo.ZoneInfo(tz) if tz else UTC
-    posted_is_current = (
-        account.last_posted_through is not None
-        and account.last_posted_through >= gate_date
-    )
-    import_is_current = (
-        account.last_imported_at is not None
-        and account.last_imported_at.astimezone(_tz).date() >= gate_date
-    )
-    if not (posted_is_current or import_is_current):
-        report.deferred = True
-        logger.info(
-            "fund_account: account %s deferred -- last_posted_through=%s, "
-            "last_imported_at=%s, gate_date=%s",
-            account.id,
-            account.last_posted_through,
-            account.last_imported_at,
-            gate_date,
+        # Active (non-archived) budgets on this account.  Archived budgets
+        # never receive funding so they are filtered out at the source.
+        #
+        budgets = list(
+            Budget.objects.filter(
+                bank_account=account,
+                archived=False,
+            ).select_related("fillup_goal")
         )
-        return report
 
-    events.sort(key=lambda ev: ev.sort_key())
+        # Enumerate every due (budget, kind, date) tuple, optionally
+        # restricted to the kinds the caller asked for (scheduled FUND
+        # vs. scheduled RECUR run in separate passes).  Sort so that on
+        # any given date FUND fires before RECUR -- the fill-up goal
+        # must accumulate before the recurring budget sweeps it.
+        #
+        events = _collect_events(budgets, today)
+        if kinds is not None:
+            events = [ev for ev in events if ev.kind in kinds]
+        if not events:
+            return report
 
-    unallocated = account.unallocated_budget
-    if unallocated is None:
-        logger.warning(
-            "fund_account: account %s has no unallocated budget; skipping.",
-            account.id,
-        )
-        return report
+        events.sort(key=lambda ev: ev.sort_key())
 
-    for ev in events:
-        budget = ev.budget
-        if budget.paused:
-            if budget.name not in report.skipped_budgets:
-                report.skipped_budgets.append(budget.name)
-            # Advance the pointer so accumulated events are consumed; when
-            # unpaused, only future events fire rather than a backlog.
+        # Every fund event moves money out of the account's Unallocated
+        # budget; without it there is no source to draw from.
+        #
+        unallocated = account.unallocated_budget
+        if unallocated is None:
+            logger.warning(
+                "fund_account: account %s has no unallocated budget; skipping.",
+                account.id,
+            )
+            return report
+
+        # Ensure a FundingEventOccurrence instance exists for every
+        # enumerated (budget, kind, scheduled_date); reuse existing rows
+        # so a PARTIAL from a prior run carries its state into this one.
+        #
+        occurrence_for = _instantiate_occurrences(events)
+
+        # Invariant: at most one occurrence per (budget, kind) is
+        # active (PENDING or PARTIAL) at any time.  Process events in
+        # date-sorted order; just before running event N, mark every
+        # earlier-dated active occurrence for the same (budget, kind)
+        # as SKIPPED -- their retry windows have closed now that a
+        # newer event is taking over.  Occurrences already in a
+        # terminal state are no-ops, which makes "Run funding now"
+        # idempotent.  Paused budgets are checked here rather than at
+        # instantiation so that flipping paused mid-run is consistent
+        # regardless of the budget's pause state when the event date
+        # passed.
+        #
+        for ev in events:
+            key = (str(ev.budget.id), ev.kind.value, ev.date)
+            occ = occurrence_for[key]
+            if occ.status in (
+                FundingEventOccurrence.Status.COMPLETE,
+                FundingEventOccurrence.Status.SKIPPED,
+            ):
+                continue
+
+            _close_prior_incomplete(ev.budget, ev.kind, ev.date)
+
+            budget = ev.budget
+            if budget.paused:
+                if budget.name not in report.skipped_budgets:
+                    report.skipped_budgets.append(budget.name)
+                FundingEventOccurrence.objects.filter(pkid=occ.pkid).update(
+                    status=FundingEventOccurrence.Status.SKIPPED,
+                )
+                continue
+
             if ev.kind == EventKind.FUND:
-                Budget.objects.filter(pkid=budget.pkid).update(
-                    last_funded_on=ev.date
+                _process_fund_event(
+                    ev, occ, account, unallocated, actor, report
                 )
             else:
-                Budget.objects.filter(pkid=budget.pkid).update(
-                    last_recurrence_on=ev.date
-                )
-            continue
-
-        if ev.kind == EventKind.FUND:
-            _process_fund_event(ev, account, unallocated, actor, report)
-        else:
-            _process_recur_event(ev, account, actor, report)
+                _process_recur_event(ev, occ, account, actor, report)
 
     return report
+
+
+####################################################################
+#
+def _instantiate_occurrences(
+    events: list["FundingEvent"],
+) -> dict[tuple[str, str, date], FundingEventOccurrence]:
+    """get_or_create a FundingEventOccurrence per enumerated event.
+
+    Pure get_or_create.  A new row is created with status PENDING; an
+    existing row (e.g. PARTIAL from a prior run) is returned unchanged
+    so its state carries forward.
+
+    Args:
+        events: Enumerated funding/recurrence events for this run.
+
+    Returns:
+        Mapping of (budget_id_str, kind_value, scheduled_date) to the
+        FundingEventOccurrence instance, so the processing loop can
+        look up each event's occurrence without re-querying.
+    """
+    occurrence_for: dict[tuple[str, str, date], FundingEventOccurrence] = {}
+    for ev in events:
+        occ, _ = FundingEventOccurrence.objects.get_or_create(
+            budget=ev.budget,
+            kind=ev.kind.value,
+            scheduled_date=ev.date,
+            defaults={"status": FundingEventOccurrence.Status.PENDING},
+        )
+        occurrence_for[(str(ev.budget.id), ev.kind.value, ev.date)] = occ
+    return occurrence_for
+
+
+####################################################################
+#
+def _close_prior_incomplete(
+    budget: Budget,
+    kind: EventKind,
+    before_date: date,
+) -> None:
+    """Enforce one-active-occurrence-per-(budget, kind).
+
+    Marks every earlier-dated PENDING/PARTIAL occurrence of this
+    (budget, kind) as SKIPPED so that ``before_date`` becomes the sole
+    in-flight event.  No-op when there is nothing earlier to close.
+    """
+    FundingEventOccurrence.objects.filter(
+        budget=budget,
+        kind=kind.value,
+        scheduled_date__lt=before_date,
+        status__in=(
+            FundingEventOccurrence.Status.PENDING,
+            FundingEventOccurrence.Status.PARTIAL,
+        ),
+    ).update(status=FundingEventOccurrence.Status.SKIPPED)
+
+
+####################################################################
+#
+def _mark_occurrence_complete(
+    occurrence: FundingEventOccurrence,
+    budget: Budget,
+    kind: EventKind,
+    scheduled_date: date,
+    report: FundingReport,
+) -> None:
+    """Persist COMPLETE status and advance the matching Budget pointer.
+
+    ``Budget.last_funded_on`` and ``Budget.last_recurrence_on`` are kept
+    as denormalized caches of the most recent COMPLETE occurrence date
+    for each kind, preserving the existing readers in ``_collect_events``
+    and ``next_funding_info`` without needing a join against the
+    occurrence table.
+    """
+    FundingEventOccurrence.objects.filter(pkid=occurrence.pkid).update(
+        status=FundingEventOccurrence.Status.COMPLETE,
+        completed_at=timezone.now(),
+    )
+    if kind == EventKind.FUND:
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_funded_on=scheduled_date
+        )
+    else:
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_recurrence_on=scheduled_date
+        )
+    report.occurrences_completed += 1
+
+
+####################################################################
+#
+def _mark_occurrence_partial(
+    occurrence: FundingEventOccurrence,
+    report: FundingReport,
+) -> None:
+    """Persist PARTIAL status (idempotent) for an under-funded event."""
+    if occurrence.status != FundingEventOccurrence.Status.PARTIAL:
+        FundingEventOccurrence.objects.filter(pkid=occurrence.pkid).update(
+            status=FundingEventOccurrence.Status.PARTIAL,
+        )
+    report.occurrences_partial += 1
 
 
 ########################################################################
@@ -483,6 +596,7 @@ def _collect_events(budgets: list[Budget], today: date) -> list[FundingEvent]:
 #
 def _process_fund_event(
     ev: FundingEvent,
+    occurrence: FundingEventOccurrence,
     account: BankAccount,
     unallocated: Budget,
     actor: User,
@@ -491,16 +605,19 @@ def _process_fund_event(
     """
     Transfer funds from unallocated into the target budget.
 
-    For Recurring budgets, the target is the fillup_goal.
-    Otherwise the target is the budget itself.
+    For Recurring budgets, the target is the fillup_goal.  Otherwise
+    the target is the budget itself.
 
-    Computes already_moved (existing system fund ITXs for this event date)
-    and transfers only the remainder of intended.  Pointer advances
-    unconditionally -- under-funded events are not retried on subsequent
-    days; same-day re-runs are handled via the already_moved formula.
+    Computes already_moved (sum of prior system FUND ITXs for this
+    event date) and transfers only the remainder of intended.  The
+    occurrence row is updated to COMPLETE when the cumulative transfer
+    covers the intended amount and to PARTIAL otherwise -- the latter
+    leaves the event eligible for retry on a later run once funds become
+    available.  ``Budget.last_funded_on`` is advanced only on COMPLETE.
 
     Args:
         ev: The funding event to process.
+        occurrence: The FundingEventOccurrence row for this event.
         account: The parent BankAccount.
         unallocated: The account's unallocated budget.
         actor: User for the InternalTransaction actor field.
@@ -537,26 +654,41 @@ def _process_fund_event(
     )
     net = max(Decimal("0"), intended.amount - already_moved)
 
+    # Nothing left to move (intended already covered by prior runs, or
+    # intended was zero to begin with -- e.g. a Capped budget already at
+    # target).  The event has done its job; mark it complete and advance.
+    #
     if net <= Decimal("0"):
-        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
+        _mark_occurrence_complete(
+            occurrence, budget, EventKind.FUND, ev.date, report
+        )
         return
 
+    # No source funds available -- leave the occurrence PARTIAL so the
+    # next run can top it up once Unallocated is replenished.
+    #
     available = unallocated.balance.amount
     if available <= Decimal("0"):
         report.warnings.append(
             f"[{ev.date}] {budget.name}: unallocated is empty; transfer skipped."
         )
-        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
+        _mark_occurrence_partial(occurrence, report)
         return
 
-    if net > available:
+    # Partial coverage: transfer what we have and remember we still owe
+    # the difference; the COMPLETE/PARTIAL decision below is driven by
+    # the actual transferred amount, not the original intent.
+    #
+    capped = net > available
+    transferred = min(net, available)
+    if capped:
         report.warnings.append(
-            f"[{ev.date}] {budget.name}: wanted {Money(net, intended.currency)}, "
-            f"only {unallocated.balance} available; capped."
+            f"[{ev.date}] {budget.name}: wanted "
+            f"{Money(net, intended.currency)}, only {unallocated.balance} "
+            "available; capped."
         )
-        net = available
 
-    amount = Money(net, intended.currency)
+    amount = Money(transferred, intended.currency)
     # Use the event date as effective_date so the InternalTransaction
     # slots into the correct position in the historical timeline when
     # running a backfill for past periods.
@@ -576,7 +708,6 @@ def _process_fund_event(
             system_event_date=ev.date,
         )
 
-    Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=ev.date)
     target.refresh_from_db()
     # For GOAL budgets, internal_transaction_svc latches complete=True once
     # funded_amount >= target_balance; check the refreshed flag rather than
@@ -607,34 +738,42 @@ def _process_fund_event(
         ev.date,
     )
 
+    # COMPLETE if cumulative transfers now meet the intended amount;
+    # otherwise PARTIAL and we will revisit on the next run.
+    #
+    if already_moved + transferred >= intended.amount:
+        _mark_occurrence_complete(
+            occurrence, budget, EventKind.FUND, ev.date, report
+        )
+    else:
+        _mark_occurrence_partial(occurrence, report)
+
 
 ####################################################################
 #
 def _process_recur_event(
     ev: FundingEvent,
+    occurrence: FundingEventOccurrence,
     account: BankAccount,
     actor: User,
     report: FundingReport,
 ) -> None:
     """Transfer from fillup_goal into the recurring budget up to target.
 
-    Computes already_moved (existing system recur ITXs for this event date)
-    and transfers only the remainder of intended -- never more.  This makes
-    the function safe to call multiple times on the same calendar day:
+    The transfer is capped at the smaller of (a) the strategy's
+    intended-amount (the gap from the recurring budget's current balance
+    to its target) and (b) whatever the fill-up actually has on hand.
+    Idempotent across same-day re-runs via the already_moved subtraction.
 
-    - If the fill-up lacked sufficient funds on the first run (partial or
-      zero transfer), a subsequent run on the same day will top up the
-      remainder provided the fill-up has since been replenished (e.g. the
-      user manually moved money into it, or a fund event ran and filled it).
-    - If the event was fully satisfied on the first run, already_moved equals
-      intended, net is zero, and the second run is a no-op.
-
-    Pointer (last_recurrence_on) and complete flag are written
-    unconditionally at the end so the state is consistent regardless of
-    whether a transfer occurred.
+    RECUR is one-shot.  Regardless of whether the fill-up had enough to
+    bring the recurring budget all the way to its target, the occurrence
+    is marked COMPLETE at the end and ``Budget.last_recurrence_on`` is
+    advanced.  Per the design, missed money does not get retried after
+    the cycle boundary -- the next cycle starts fresh.
 
     Args:
         ev: The recurrence event to process.
+        occurrence: The FundingEventOccurrence row for this event.
         account: The parent BankAccount.
         actor: User for the InternalTransaction actor field.
         report: Mutable FundingReport to update.
@@ -642,12 +781,21 @@ def _process_recur_event(
     budget = ev.budget
     fillup = budget.fillup_goal
     if fillup is None:
+        # Defensive: a RECUR event for a budget without a fill-up should
+        # never have been enumerated.  Mark the occurrence COMPLETE so it
+        # does not keep getting re-processed.
+        #
+        _mark_occurrence_complete(
+            occurrence, budget, EventKind.RECUR, ev.date, report
+        )
         return
 
     budget.refresh_from_db()
     fillup.refresh_from_db()
 
-    # Reset complete at the start of each new cycle.
+    # New cycle: clear the "complete" latch so the recurring budget can
+    # be re-evaluated against its target as money sweeps in.
+    #
     if budget.complete:
         Budget.objects.filter(pkid=budget.pkid).update(complete=False)
         budget.complete = False
@@ -672,11 +820,16 @@ def _process_recur_event(
 
     amount_received = Money(Decimal("0"), budget.balance.currency)
 
+    # Sweep from fill-up to recurring, capped at min(gap-to-target,
+    # fill-up balance).  If the fill-up is empty, we still mark the
+    # occurrence COMPLETE below -- "clean break" semantics.
+    #
     if net > Decimal("0"):
         fillup_available = fillup.balance.amount
         if fillup_available <= Decimal("0"):
             report.warnings.append(
-                f"[{ev.date}] {budget.name}: fill-up goal is empty; transfer skipped."
+                f"[{ev.date}] {budget.name}: fill-up goal is empty; "
+                "transfer skipped."
             )
         else:
             transfer = min(net, fillup_available)
@@ -712,10 +865,17 @@ def _process_recur_event(
                 ev.date,
             )
 
+    # Latch Budget.complete based on whether the recurring budget hit
+    # its target this cycle; this is independent of occurrence status.
+    #
     newly_complete = budget.balance.amount >= budget.target_balance.amount
-    Budget.objects.filter(pkid=budget.pkid).update(
-        last_recurrence_on=ev.date,
-        complete=newly_complete,
+    Budget.objects.filter(pkid=budget.pkid).update(complete=newly_complete)
+
+    # One-shot: occurrence is COMPLETE after a single pass, hit-or-miss
+    # on the target.  This also advances Budget.last_recurrence_on.
+    #
+    _mark_occurrence_complete(
+        occurrence, budget, EventKind.RECUR, ev.date, report
     )
 
     notify_for(

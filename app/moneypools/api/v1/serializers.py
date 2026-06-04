@@ -193,6 +193,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "available_balance",
             "available_balance_currency",
             "unallocated_budget",
+            "auto_funding_enabled",
             "last_imported_at",
             "last_posted_through",
             "created_at",
@@ -433,18 +434,15 @@ class BudgetSerializer(serializers.ModelSerializer):
             obj: The Budget instance being serialized.
 
         Returns:
-            Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+            Dict with 'date', 'amount', 'amount_currency', or None.
         """
-        request = self.context.get("request")
-        tz = request.user.timezone if request is not None else None
-        info = funding_svc.next_funding_info(obj, tz=tz)
+        info = funding_svc.next_funding_info(obj)
         if info is None:
             return None
         return {
             "date": info.date.isoformat(),
             "amount": str(info.amount.amount),
             "amount_currency": str(info.amount.currency),
-            "deferred": info.deferred,
         }
 
     ####################################################################

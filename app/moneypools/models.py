@@ -228,9 +228,22 @@ class BankAccount(MoneyPoolBaseClass):
         ),
     )
 
+    # When False, scheduled funding/recurrence runs skip this account.
+    # The "Run funding now" REST endpoint ignores this flag -- the user
+    # can always trigger funding manually.
+    #
+    auto_funding_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            "When enabled (the default), scheduled funding and recurrence "
+            "events run automatically for this account.  Disable to opt out "
+            "of automation and drive funding entirely from the 'Run funding "
+            "now' button."
+        ),
+    )
+
     # Import-freshness tracking.  Set by the mark-imported endpoint after
-    # each successful import run.  The funding engine gates on these values
-    # to ensure it never processes events that lack backing transaction data.
+    # each successful import run.
     #
     last_imported_at = models.DateTimeField(
         null=True,

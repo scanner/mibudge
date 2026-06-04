@@ -1,10 +1,10 @@
 """
 Run the budget funding engine for one or all bank accounts.
 
-Collects due funding and recurrence events (since the last run), applies
-the import-freshness gate, and transfers money between budgets via
-InternalTransactions.  Safe to re-run; already-processed events are
-skipped via the last_funded_on / last_recurrence_on pointers.
+Collects due funding and recurrence events (since the last run) and
+transfers money between budgets via InternalTransactions.  Safe to
+re-run: each event has a FundingEventOccurrence row whose status
+prevents double-processing.
 
 Usage:
 
@@ -16,8 +16,7 @@ Usage:
 
 # system imports
 #
-import zoneinfo
-from datetime import UTC, date
+from datetime import date
 from typing import Any
 
 # 3rd party imports
@@ -104,24 +103,20 @@ class Command(BaseCommand):
         actor = funding_system_user()
 
         total_transfers = 0
-        total_deferred = 0
+        total_busy = 0
         total_warnings = 0
 
         for account in accounts:
-            first_owner = account.owners.order_by("pk").first()
-            owner_tz = first_owner.timezone if first_owner else None
             if dry_run:
-                report = _dry_run_report(account, today, owner_tz)
+                report = _dry_run_report(account, today)
             else:
-                report = funding_svc.fund_account(
-                    account, today, actor, tz=owner_tz
-                )
+                report = funding_svc.fund_account(account, today, actor)
 
-            if report.deferred:
-                total_deferred += 1
+            if report.busy:
+                total_busy += 1
                 self.stdout.write(
-                    f"  DEFERRED  {account.name}  "
-                    f"(last_posted_through={account.last_posted_through})"
+                    f"  BUSY      {account.name}  "
+                    "(another worker holds the lock)"
                 )
                 continue
 
@@ -159,7 +154,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(
             f"Done -- {total_transfers} transfer(s), "
-            f"{total_deferred} account(s) deferred, "
+            f"{total_busy} account(s) busy, "
             f"{total_warnings} warning(s)."
         )
 
@@ -189,7 +184,7 @@ def _parse_date(value: str) -> date:
 ####################################################################
 #
 def _dry_run_report(
-    account: BankAccount, today: date, owner_tz: str | None = None
+    account: BankAccount, today: date
 ) -> funding_svc.FundingReport:
     """Return a FundingReport describing what would be funded without
     making any changes.
@@ -197,11 +192,11 @@ def _dry_run_report(
     Args:
         account: The BankAccount to inspect.
         today: The reference date.
-        owner_tz: IANA timezone name used to localize last_imported_at
-            in the import-freshness gate. Falls back to UTC when None.
 
     Returns:
-        A FundingReport with transfers=0 but deferred/warnings populated.
+        A FundingReport with would-be transfer count and skipped-budget
+        names populated.  Occurrence counters are left at zero -- this
+        path does not touch the FundingEventOccurrence table.
     """
     report = funding_svc.FundingReport(account_id=str(account.id))
 
@@ -214,23 +209,10 @@ def _dry_run_report(
     if not events:
         return report
 
-    gate_date = max(ev.date for ev in events)
-    _tz = zoneinfo.ZoneInfo(owner_tz) if owner_tz else UTC
-    posted_is_current = (
-        account.last_posted_through is not None
-        and account.last_posted_through >= gate_date
-    )
-    import_is_current = (
-        account.last_imported_at is not None
-        and account.last_imported_at.astimezone(_tz).date() >= gate_date
-    )
-    if not (posted_is_current or import_is_current):
-        report.deferred = True
-        return report
-
     for ev in events:
         if ev.budget.paused:
-            report.skipped_budgets.append(ev.budget.name)
+            if ev.budget.name not in report.skipped_budgets:
+                report.skipped_budgets.append(ev.budget.name)
         else:
             report.transfers += 1  # would-be transfer count
 

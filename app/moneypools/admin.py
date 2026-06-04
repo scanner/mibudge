@@ -77,6 +77,7 @@ class BankAccountForm(forms.ModelForm):
             "owners",
             "group",
             "link_aliases",
+            "auto_funding_enabled",
         )
 
     # editable=False model fields declared explicitly so the creation
@@ -213,6 +214,7 @@ class BankAccountAdmin(admin.ModelAdmin):
         "available_balance",
         "unallocated_budget",
         "link_aliases",
+        "auto_funding_enabled",
         "last_imported_at",
         "last_posted_through",
         "created_at",
@@ -239,6 +241,7 @@ class BankAccountAdmin(admin.ModelAdmin):
             "owners",
             "group",
             "link_aliases",
+            "auto_funding_enabled",
         )
         return super().get_form(request, obj, change=change, **kwargs)
 
