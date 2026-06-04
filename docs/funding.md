@@ -15,8 +15,14 @@ funding is reallocation inside the virtual accounting layer.
 
 The engine's entry point is `fund_account()` in
 `app/moneypools/service/funding.py`.  It runs **idempotently** per bank
-account: re-running it any number of times on the same day is safe and
-self-correcting.
+account: re-running it any number of times is safe because each
+scheduled event has a `FundingEventOccurrence` row whose terminal status
+(`COMPLETE` or `SKIPPED`) prevents double-processing.
+
+Concurrency across workers is handled by a non-blocking Redis lock on
+`account.lock_key`.  A second concurrent caller returns
+`FundingReport(busy=True)` immediately rather than wait or duplicate
+transfers.
 
 The engine is invoked from three places:
 
@@ -57,7 +63,8 @@ is never funded by the engine.
 
 ## 3. Event model
 
-The engine recognises two event kinds:
+The engine recognises two event kinds, defined as `EventKind` in
+`app/moneypools/models.py`:
 
 - **Fund event** — fires on `budget.funding_schedule`.  For Goal and
   Capped, the destination is the budget itself.  For Recurring, the
@@ -74,6 +81,52 @@ The sort key is `(date asc, FUND before RECUR, budget.id asc)`.
 Implemented at `funding.py:FundingEvent.sort_key()`.
 
 
+### 3.1 FundingEventOccurrence
+
+**File:** `app/moneypools/models.py:FundingEventOccurrence`
+
+Each (budget, kind, scheduled_date) tuple that the engine enumerates
+has a corresponding `FundingEventOccurrence` row.  The row is created on
+the first run that touches that event and carries forward across re-runs.
+
+```
+PENDING  → PARTIAL  (transfer attempted; intended not fully covered)
+PENDING  → COMPLETE (intended amount fully covered on first attempt)
+PENDING  → SKIPPED  (budget was paused, or a newer event superseded this one)
+PARTIAL  → COMPLETE (remainder covered on a later run)
+PARTIAL  → SKIPPED  (superseded before completion)
+```
+
+Terminal states (`COMPLETE`, `SKIPPED`) are never re-opened.  The
+processing loop skips them immediately, making "Run funding now" safe to
+click repeatedly.
+
+**FUND vs. RECUR semantics differ:**
+
+- **FUND** — can be PARTIAL.  A PARTIAL FUND occurrence is retried on
+  every subsequent tick until the next FUND event for the same budget is
+  processed.  At that point `_close_prior_incomplete` marks the older
+  occurrence SKIPPED, closing its retry window.  Between weekly fund
+  dates the window can be up to one full week.
+- **RECUR** — is always COMPLETE after one pass, even when the fill-up
+  lacked sufficient funds.  There is no retry: the cycle has ended and
+  the next cycle starts fresh.
+
+`FundingEventOccurrence.Status` is a `TextChoices` inner class with
+values `PENDING`, `PARTIAL`, `COMPLETE`, `SKIPPED`.
+
+A unique constraint on `(budget, kind, scheduled_date)` prevents
+duplicate rows for the same event.  A partial index on `(budget,
+scheduled_date)` where `status IN ('PENDING', 'PARTIAL')` keeps the
+"what's outstanding?" query cheap as COMPLETE rows accumulate.
+
+`Budget.last_funded_on` and `Budget.last_recurrence_on` are
+denormalized caches of the most recent COMPLETE occurrence date for
+each kind.  They are kept by `_mark_occurrence_complete` so that
+`_collect_events` and `next_funding_info` can use them without joining
+the occurrence table.
+
+
 ---
 
 ## 4. Per-event amount formulas
@@ -81,7 +134,7 @@ Implemented at `funding.py:FundingEvent.sort_key()`.
 Each budget type has a strategy class in
 `app/moneypools/service/funding_strategy.py` that computes the intended
 transfer amount for a single event.  All formulas operate on
-**state at the start of the event date** — defined in §6.
+**state at the start of the event date** — defined in §7.
 
 The following notation is used:
 
@@ -157,38 +210,53 @@ cap externally.
 `app/config/celery_app.py:MANAGED_PERIODIC_TASKS` with crontab
 `{"minute": "0,30"}` — it fires every 30 minutes, all day.
 
-On each tick it:
+Accounts with `auto_funding_enabled=False` are skipped by the scheduler.
+The owner has opted out of automatic funding and will drive funding
+manually via the "Run funding now" REST endpoint.
 
-1. Iterates all `BankAccount` rows (prefetching owners).
-2. Reads the first owner's IANA timezone (`owner.timezone`).
-3. **Unconditionally** appends `(account_id, local_date_str, owner_tz)` to
-   `fund_accounts`.
-4. Appends to `recur_accounts` only when local time is in
+On each tick, for each remaining account it:
+
+1. Reads the first owner's IANA timezone (`owner.timezone`).
+2. Appends `(account_id, local_date_str)` to `fund_accounts`
+   unconditionally.
+3. Appends to `recur_accounts` only when local time is in
    `[03:00, 03:30)`.
-5. Spreads tasks evenly across up to 30 minutes to avoid a DB stampede.
+4. Spreads tasks evenly across up to 30 minutes to avoid a DB stampede.
+
+`fund_one_account` fires every tick — not just once per day — for two
+reasons: **partial retry** (a FUND event left PARTIAL because Unallocated
+was empty earlier in the day is retried on each subsequent tick once
+funds become available) and **downtime recovery** (a PENDING occurrence
+created during the scheduled window is processed on the next available
+tick after a worker outage, rather than waiting another full day).  The
+no-op cost for an idle account is a single non-blocking Redis lock attempt.
+
+`recur_one_account` fires only in the `[03:00, 03:30)` local window.
+RECUR is one-shot (always COMPLETE on first pass), so a single fire per
+day is correct.  The 03:00 placement gives the FUND pass the prior
+evening to fill the fill-up goal before the sweep into the recurring
+budget.
 
 Two Celery tasks are dispatched:
 
 ```
 schedule_funding_runs
-├── fund_one_account(account_id, local_date_str, owner_tz)
+├── fund_one_account(account_id, local_date_str)         # every tick
 │     └── _run_funding_task(..., kinds={EventKind.FUND}, ...)
-│           └── fund_account(account, today, actor, kinds={FUND}, tz=owner_tz)
+│           └── fund_account(account, today, actor, kinds={FUND})
 │                 [returns FundingReport]
+│           if report.busy: log and return
 │           if report.funded_budgets:
 │               notify_for(account, FUNDING_COMPLETE, {...})
 │
-└── recur_one_account(account_id, local_date_str, owner_tz)   # 03:00–03:30 only
+└── recur_one_account(account_id, local_date_str)   # 03:00–03:30 only
       └── _run_funding_task(..., kinds={EventKind.RECUR}, ...)
-            └── fund_account(account, today, actor, kinds={RECUR}, tz=owner_tz)
+            └── fund_account(account, today, actor, kinds={RECUR})
                   [returns FundingReport]
+            if report.busy: log and return
             if report.funded_budgets:
                 notify_for(account, FUNDING_COMPLETE, {...})
 ```
-
-Because `kinds` is a filter, the import-freshness gate is evaluated only
-against the filtered event set.  The FUND pass is not gated on RECUR event
-dates and vice versa.
 
 `_run_funding_task` handles account lookup, system-user lookup, and
 `local_date_str` parsing before calling `fund_account`.
@@ -199,19 +267,25 @@ dates and vice versa.
 
 `POST /api/v1/bank-accounts/<id>/run-funding/`
 
+`auto_funding_enabled` is **not** checked here — users can always trigger
+funding manually regardless of the account's automation setting.
+
 ```
 run_funding(request, pk)
 ├── parse optional "as_of" date from request body
 └── fund_account(account, as_of, system_user)   # kinds=None → all events
       [returns FundingReport]
-    return {deferred, transfers, warnings, skipped_budgets}
+    if report.busy:
+        return 409 {"detail": "Funding is already running..."}
+    if nothing happened (transfers=0, no occurrence transitions, no skips):
+        return 409 {"detail": "No funding events are due..."}
+    return 200 {transfers, occurrences_completed, occurrences_partial,
+                warnings, skipped_budgets}
 ```
 
-The view itself does not call `notify_for`, so `FUNDING_COMPLETE` is never
-sent for API-triggered runs.  However, `RECURRING_BUDGET_REFRESHED` is
-still emitted from inside `_process_recur_event` for every recur event
-that runs through this path.  It also processes all event kinds together
-(no `kinds` filter).
+`FUNDING_COMPLETE` is never sent for API-triggered runs.  However,
+`RECURRING_BUDGET_REFRESHED` is still emitted from inside
+`_process_recur_event` for every recur event that runs through this path.
 
 ### 5.3 Management command
 
@@ -229,12 +303,12 @@ Command.handle
         [returns FundingReport]
       if not dry_run and report.funded_budgets:
           notify_for(account, FUNDING_COMPLETE, {...})
-      print per-account summary line
+      print per-account summary line (BUSY / OK / skipped counts)
 ```
 
 `--dry-run` calls `_dry_run_report()` instead of `fund_account`.  It
-replicates the import-freshness gate and event collection without writing
-any rows.
+replicates event collection and paused-budget detection without writing
+any rows or touching the `FundingEventOccurrence` table.
 
 
 ---
@@ -249,34 +323,40 @@ def fund_account(
     today: date,
     actor: User,
     kinds: set[EventKind] | None = None,
-    tz: str | None = None,
 ) -> FundingReport:
 ```
 
 Steps in order:
 
-1. **Load budgets.** `Budget.objects.filter(bank_account=account, archived=False).select_related("fillup_goal")`.
+1. **Acquire lock.**  `acquire_lock(account.lock_key, blocking=False)` —
+   if another worker holds the lock, sets `report.busy = True` and
+   returns immediately.
 
-2. **Collect events.** `_collect_events(budgets, today)` — returns an
+2. **Load budgets.** `Budget.objects.filter(bank_account=account, archived=False).select_related("fillup_goal")`.
+
+3. **Collect events.** `_collect_events(budgets, today)` — returns an
    unsorted list of `FundingEvent` objects.
 
-3. **Filter by kinds** (if `kinds` is given).
-
-4. **Import-freshness gate.**  Computes `gate_date = max(ev.date)` across
-   filtered events.  Checks whether `account.last_posted_through >= gate_date`
-   OR `account.last_imported_at (localized) >= gate_date`.  If neither
-   passes, sets `report.deferred = True` and returns immediately — no
-   transfers, no pointer advances.
+4. **Filter by kinds** (if `kinds` is given).  Return early if no events.
 
 5. **Sort events** by `sort_key()`: `(date asc, FUND before RECUR, budget.id asc)`.
 
-6. **Dispatch per event.**  For each event:
-   - If `budget.paused`: advance the relevant pointer to `ev.date`,
-     append name to `report.skipped_budgets`, skip.
-   - If `FUND`: call `_process_fund_event(ev, account, unallocated, actor, report)`.
-   - If `RECUR`: call `_process_recur_event(ev, account, actor, report)`.
+6. **Load Unallocated budget.**  Return early with a warning if missing.
 
-7. **Return** the `FundingReport`.
+7. **Instantiate occurrences.**  `_instantiate_occurrences(events)` —
+   `get_or_create` a `FundingEventOccurrence` per event.  Existing PARTIAL
+   rows carry forward; new events start as PENDING.
+
+8. **Dispatch per event.**  For each event:
+   - If the occurrence is already COMPLETE or SKIPPED: skip (no-op).
+   - `_close_prior_incomplete(budget, kind, ev.date)` — mark any earlier
+     PENDING/PARTIAL occurrences of the same (budget, kind) as SKIPPED.
+   - If `budget.paused`: mark occurrence SKIPPED, append name to
+     `report.skipped_budgets`, skip.
+   - If `FUND`: call `_process_fund_event(ev, occ, account, unallocated, actor, report)`.
+   - If `RECUR`: call `_process_recur_event(ev, occ, account, actor, report)`.
+
+9. **Return** the `FundingReport`.
 
 
 ### 6.1 `_collect_events`
@@ -310,21 +390,30 @@ For each non-archived budget:
 4. `already_moved` = sum of amounts on existing system FUND ITXs where
    `dst_budget=target` and `system_event_date=ev.date`.
 5. `net = max(0, intended - already_moved)`.
-6. If `net <= 0`: advance `last_funded_on`, return (no-op).
-7. If unallocated balance ≤ 0: warn, advance pointer, return.
-8. If `net > available`: warn, cap `net` to available balance.
+6. If `net <= 0`: mark occurrence COMPLETE (intended already covered),
+   advance `last_funded_on`, return.
+7. If unallocated balance ≤ 0: warn, mark occurrence PARTIAL, return.
+8. If `net > available`: warn, cap `transferred` to available balance.
 9. `internal_transaction_svc.create(...)` in an atomic block —
    `system_event_kind=FUND`, `system_event_date=ev.date`,
-   `effective_date=ev.date` (for correct timeline placement on backfill).
-10. Advance `last_funded_on` unconditionally.
+   `effective_date=ev.date`.
+10. If `already_moved + transferred >= intended`: mark occurrence COMPLETE,
+    advance `last_funded_on`.  Else: mark occurrence PARTIAL (retry on
+    next run).
 11. Append a budget entry to `report.funded_budgets`.
+
+**Key change from the prior design:** `last_funded_on` only advances when
+the occurrence reaches COMPLETE.  An underfunded FUND event stays PARTIAL
+and is eligible for retry on every subsequent tick until the next FUND
+event for the same budget supersedes it (see §3.1).
 
 
 ### 6.3 `_process_recur_event`
 
 **File:** `funding.py:_process_recur_event`
 
-1. Get `fillup = budget.fillup_goal`.
+1. Get `fillup = budget.fillup_goal`.  If missing: mark occurrence COMPLETE
+   and return (defensive; should not occur).
 2. `refresh_from_db()` on budget and fillup.
 3. **Reset `complete=False`** at cycle start (the new cycle begins on the
    recur date, so the prior cycle's completion latch is cleared).
@@ -337,10 +426,11 @@ For each non-archived budget:
    - Else: `transfer = min(net, fillup_available)`, warn if capped.
    - `internal_transaction_svc.create(...)` in atomic block —
      `system_event_kind=RECUR`, `system_event_date=ev.date`.
-8. Write `last_recurrence_on=ev.date` and
-   `complete=(budget.balance >= target_balance)` **unconditionally** — even
-   when the transfer was zero.
-9. **Always** call `notify_for(account, RECURRING_BUDGET_REFRESHED, {...})`.
+8. Write `complete=(budget.balance >= target_balance)`.
+9. Mark occurrence COMPLETE and advance `last_recurrence_on`
+   **unconditionally** — even when no transfer occurred.  RECUR is
+   one-shot: the cycle ends regardless of how much the fill-up had.
+10. **Always** call `notify_for(account, RECURRING_BUDGET_REFRESHED, {...})`.
 
 
 ### 6.4 `internal_transaction_svc.create`
@@ -361,6 +451,42 @@ invariants:
    `dst_budget_balance` snapshots.
 6. Post-commit: call `alloc_svc.recalculate_from_dt` on both budgets and
    `alloc_svc.recalculate_itx_snapshots_from_dt` for both.
+
+
+### 6.5 `_instantiate_occurrences`
+
+**File:** `funding.py:_instantiate_occurrences`
+
+`get_or_create` a `FundingEventOccurrence` for every event in the
+enumerated list.  New rows are created with `status=PENDING`; existing
+rows (e.g. PARTIAL from a prior run) are returned unchanged so their
+state carries forward.
+
+Returns a `dict[(budget_id_str, kind_value, scheduled_date)]` →
+`FundingEventOccurrence` so the processing loop can look up each event's
+occurrence without re-querying.
+
+
+### 6.6 `_close_prior_incomplete`
+
+**File:** `funding.py:_close_prior_incomplete`
+
+Bulk-updates all PENDING/PARTIAL occurrences of the given `(budget, kind)`
+with `scheduled_date < before_date` to SKIPPED.  Called just before each
+event is dispatched so that at most one occurrence per `(budget, kind)` is
+active at any time.
+
+
+### 6.7 `_mark_occurrence_complete` / `_mark_occurrence_partial`
+
+**File:** `funding.py`
+
+`_mark_occurrence_complete` — sets `status=COMPLETE`, `completed_at=now()`,
+and advances `Budget.last_funded_on` (FUND) or `Budget.last_recurrence_on`
+(RECUR).  Increments `report.occurrences_completed`.
+
+`_mark_occurrence_partial` — sets `status=PARTIAL` (idempotent; no-op if
+already PARTIAL).  Increments `report.occurrences_partial`.
 
 
 ---
@@ -414,15 +540,18 @@ net = max(0, intended_for_D - already_moved)
 
 `net` is capped by the source budget's available balance.
 
-- **No-op re-run**: `already_moved == intended` → `net = 0` → no new ITX.
-- **Partial re-run** (source was empty): `already_moved < intended` → `net`
-  fills the remainder.
-- **Pointer semantics**: the pointer (`last_funded_on` / `last_recurrence_on`)
-  advances unconditionally after each event, whether or not a transfer
-  occurred.  **Under-funded events are not retried** on subsequent days.
-  The same-day re-run window is the user's only opportunity to top up.
-  Paused budgets consume their events (pointer advances) so they do not
-  accumulate a backlog during the pause.
+- **No-op re-run**: occurrence is COMPLETE → loop skips it immediately.
+- **PARTIAL FUND re-run**: `already_moved < intended` → `net` fills
+  the remainder.  The occurrence is retried on every subsequent tick until
+  COMPLETE or until the next FUND event for the same budget supersedes
+  it with `_close_prior_incomplete` (see §3.1).
+- **RECUR is one-shot**: once COMPLETE (always after first pass),
+  the occurrence is terminal and is never retried, even if the fill-up
+  was short.  The next cycle starts fresh.
+- **Pointer semantics**: `last_funded_on` / `last_recurrence_on` advance
+  only when `_mark_occurrence_complete` is called.  A PARTIAL FUND event
+  does **not** advance the pointer — the same event date remains in scope
+  for subsequent retry runs.
 
 
 ---
@@ -430,16 +559,20 @@ net = max(0, intended_for_D - already_moved)
 ## 9. Pointer semantics
 
 `Budget.last_funded_on` and `Budget.last_recurrence_on` track the last
-date the engine processed each event type.
+date the engine marked each event type COMPLETE.
 
 **Initial state** (`budget_svc.create`): both pointers are set to
 `created_at.date() - 1`.  This ensures the first scheduled event fires on
 its scheduled date.
 
-**Pause-unpause** (`budget_svc.update`): when a budget is unpaused, both
+**Pause**: paused budgets have their occurrences marked SKIPPED.  Pointers
+do **not** advance while the budget is paused.
+
+**Unpause** (`budget_svc.update`): when a budget is unpaused, both
 pointers are reset to `today - 1`.  This drops any events that fell during
-the pause without replay.  The service emits a warning per missed
-recurrence boundary.
+the pause without replay (the SKIPPED occurrences from the pause period
+remain in the DB but are terminal and will not be re-processed).  The
+service emits a warning per missed recurrence boundary.
 
 **Archive** (`budget_svc.archive`): drains any balance in the fill-up back
 to Unallocated via a system ITX with `system_event_kind=None`, then marks
@@ -452,31 +585,7 @@ catch-up events for missed days.
 
 ---
 
-## 10. Import-freshness gate
-
-Before processing any events, `fund_account` checks whether the account's
-bank data is current:
-
-```
-gate_date = max(ev.date for ev in events)
-
-passes if:
-    account.last_posted_through >= gate_date
-  OR
-    account.last_imported_at (localized to owner_tz) >= gate_date
-```
-
-If neither condition holds, `report.deferred = True` is returned with no
-transfers and no pointer advances.  This prevents funding against a stale
-view of the account.
-
-The gate is evaluated against the filtered event set, so the FUND pass (all
-ticks) is not gated on RECUR event dates, and vice versa.
-
-
----
-
-## 11. Goal completion latch
+## 10. Goal completion latch
 
 Goal budgets track `funded_amount` — the running net of all ITXs touching
 the budget (credits minus debits).  Spending via `TransactionAllocation`
@@ -497,7 +606,7 @@ mark semantic).
 
 ---
 
-## 12. Notification flow
+## 11. Notification flow
 
 Two notification kinds are defined in
 `app/moneypools/notification_kinds.py` and registered in
@@ -525,7 +634,7 @@ immediately via a Celery task; others are queued for the digest.
 
 ---
 
-## 13. Helper modules
+## 12. Helper modules
 
 ### `app/moneypools/service/schedules.py`
 
@@ -550,12 +659,29 @@ on all engine-issued InternalTransactions.
 unpause logic, fill-up sibling lifecycle.  The funding engine does not
 call these directly; they are invoked by the API views.
 
+### `app/moneypools/service/funding.py:next_funding_info`
+
+```python
+def next_funding_info(budget: Budget, today: date | None = None) -> NextFundingInfo | None:
+```
+
+Returns a `NextFundingInfo(date, amount)` for the next scheduled event, or
+`None` if none is due.  No import-freshness check; the caller supplies
+context for display purposes only.
+
+### `app/moneypools/models.py`
+
+`EventKind` (StrEnum: `FUND` / `RECUR`) lives in `models.py` so that
+`FundingEventOccurrence.kind` and the service-layer event discriminator
+share a single declaration.  Both `models.py` and `funding_strategy.py`
+define or import it from there; all other modules import from `models`.
+
 
 ---
 
-## 14. Worked examples
+## 13. Worked examples
 
-### 14.1 Capped under-funded, user fixes, re-runs
+### 13.1 Capped under-funded, user fixes, re-runs
 
 Setup: Capped budget `C` with `T=$50`, `A=$20`, `B=$10`.
 Fund event fires today.  `Unallocated` has only `$5`.
@@ -565,28 +691,34 @@ Fund event fires today.  `Unallocated` has only `$5`.
 - `B_0 = 10 - 0 = 10` (no system ITXs on today yet).
 - `intended = min(20, max(0, 50 - 10)) = 20`.
 - `already_moved = 0`.
-- `transfer = max(0, 20 - 0) = 20`; capped by `Unallocated = $5` → `$5`.
+- `net = 20`; capped by `Unallocated = $5` → `transferred = $5`.
 - System ITX: `Unallocated -> C, $5, FUND, today`.
-- `last_funded_on = today`.
 - Warning: "wanted $20, only $5 available; capped."
+- `already_moved + transferred = $5 < intended $20` → occurrence **PARTIAL**.
+- `last_funded_on` is **not** advanced.
 
 **Later: user moves $40 from another budget to `Unallocated`.**
 
 **User clicks "Run funding now"** (hits the API endpoint):
 
-- `B_0 = current($15) - Σ(signed for FUND ITXs with date >= today) = 15 - 5 = $10`.
-- `intended = min(20, max(0, 50 - 10)) = 20`.
-- `already_moved = $5`.
-- `transfer = max(0, 20 - 5) = 15`; available = $40, so $15.
-- System ITX: `Unallocated -> C, $15, FUND, today`.
-- `last_funded_on` remains at today.
+- `_collect_events` uses `last_funded_on` (still yesterday) → today's event
+  is enumerated again.
+- `_instantiate_occurrences` returns the existing **PARTIAL** occurrence.
+- `_process_fund_event`:
+  - `B_0 = current($15) - Σ(system FUND ITXs date >= today) = 15 - 5 = $10`.
+  - `intended = min(20, max(0, 50 - 10)) = 20`.
+  - `already_moved = $5`.
+  - `net = 15`; available = $40, so `transferred = $15`.
+  - System ITX: `Unallocated -> C, $15, FUND, today`.
+  - `already_moved + transferred = $20 >= intended $20` → occurrence **COMPLETE**.
+  - `last_funded_on = today`.
 
 Result: `C.balance = $30`.  Total system deposits today = $20 = `A`.
 
-**Next engine run:** `last_funded_on = today`; tomorrow's events are the
-next in range.  Yesterday's event is not revisited.
+**Next engine run:** `last_funded_on = today`; today's event is re-enumerated
+via the clamp but the occurrence is COMPLETE → immediate no-op.
 
-### 14.2 Recurring recur event shortfall, user moves money to fill-up
+### 13.2 Recurring recur event shortfall
 
 Setup: Recurring `R` with `T=$200`, `B=$0`.  Fill-up `F` with `Fill_B=$120`.
 Today is the recurrence date.
@@ -598,31 +730,25 @@ Today is the recurrence date.
 - `already_moved = 0`.
 - `transfer = min(200, 120) = 120`.
 - System ITX: `F -> R, $120, RECUR, today`.
-- `last_recurrence_on = today`, `complete = False` (120 < 200).
+- `complete = False` (120 < 200).
 - Warning: "fill-up only had $120; needed $200; underfunded."
+- Occurrence → **COMPLETE** (RECUR is one-shot regardless of fill-up shortfall).
+- `last_recurrence_on = today`.
 - `notify_for(RECURRING_BUDGET_REFRESHED, ...)` fires.
 
-**User moves $80 from other budgets into the fill-up (manual ITX).**
-After: `Fill_B = $80`, `R.balance = $120`.
+**User moves $80 from other budgets into the fill-up.**
 
 **User clicks "Run funding now":**
 
-- `B_0(R) = current($120) - Σ(RECUR ITXs with date >= today) = 120 - 120 = 0`.
-- `Fill_B_0 = current($80) - Σ(RECUR src ITXs with date >= today) = 80 - (-120) = 200`.
-  (The sign: F was src, so signed_amount for F = -120; rolling back subtracts that.)
-- `intended = max(0, 200 - 0) = 200`.
-- `already_moved = $120`.
-- `net = 200 - 120 = 80`; capped by current `Fill_B = $80` → $80.
-- System ITX: `F -> R, $80, RECUR, today`.
-- `complete = True` (200 >= 200).
-- `notify_for(RECURRING_BUDGET_REFRESHED, ...)` fires again.
+- `_collect_events` re-enumerates today's RECUR event (via clamp).
+- `_instantiate_occurrences` returns the existing **COMPLETE** occurrence.
+- Main loop: status is COMPLETE → **no-op**.  No additional transfer.
 
-Post-transfer: `R.balance = $200`, `Fill_B = $0`.
+Post-run: `R.balance = $120`.  The remaining $80 in the fill-up carries
+into the next cycle; it will reduce the prorated fund-event amounts for
+the period leading up to the next recurrence date.
 
-**Next engine run:** yesterday's recur is not revisited.  Fund events
-continue accumulating into the fill-up for the next cycle.
-
-### 14.3 Engine misses Tuesday; Wednesday catches up
+### 13.3 Engine misses Tuesday; Wednesday catches up
 
 Setup: Goal `G`, `T=$100`, funded_amount=0, `TARGET_DATE`, weekly funding,
 target next Friday.  `last_funded_on = Sunday`.
@@ -633,24 +759,30 @@ Wednesday engine run — events in `(Sunday, Wednesday]`: Mon, Tue, Wed.
 
 - **Monday** (`N_to_target` Mon→Fri = 5):
   `F_0(Mon) = 0 - 0 = 0`, `intended = 100 / 5 = 20`.
-  ITX $20, `last_funded_on = Monday`.
+  transferred=$20, COMPLETE, `last_funded_on = Monday`.
 
 - **Tuesday** (`N_to_target` Tue→Fri = 4):
   `F_0(Tue) = current(20) - Σ(system ITXs date >= Tue) = 20 - 0 = 20`.
   `intended = (100 - 20) / 4 = 20`.
-  ITX $20, `last_funded_on = Tuesday`.
+  transferred=$20, COMPLETE, `last_funded_on = Tuesday`.
 
 - **Wednesday** (`N_to_target` Wed→Fri = 3):
   `F_0(Wed) = current(40) - Σ(system ITXs date >= Wed) = 40 - 0 = 40`.
   `intended = (100 - 40) / 3 = 20`.
-  ITX $20, `last_funded_on = Wednesday`.
+  transferred=$20, COMPLETE, `last_funded_on = Wednesday`.
 
 Three equal transfers; target stays on track.  No double-counting.
 
-### 14.4 Pause across recurrence boundary
+### 13.4 Pause across recurrence boundary
 
 Setup: Recurring `R`, funding twice monthly (15th and last day), recur on
 1st of month.  User pauses on Jan 16.  User unpauses on Apr 3.
+
+During pause (each engine run):
+
+- Events for `R` in range are enumerated; occurrences are created as
+  PENDING on first encounter and then marked **SKIPPED**.
+- `last_funded_on` and `last_recurrence_on` do **not** advance.
 
 On unpause (`budget_svc.update`):
 
@@ -669,17 +801,16 @@ Apr 15 fund event:
 
 ---
 
-## 15. Implementation notes
+## 14. Implementation notes
 
 ### Stale module docstring in `tasks.py`
 
-The module-level docstring of `app/moneypools/tasks.py` (lines 9–18)
-states that `fund_one_account` is enqueued only in the `[23:00, 23:30)`
-local-time window.  **This is incorrect.**  The current code in
-`schedule_funding_runs` unconditionally appends every account to
-`fund_accounts` on every tick; the `[23:00, 23:30)` window restriction
-was removed when the scheduler was redesigned.  The docstring should be
-updated to match.
+The module-level docstring of `app/moneypools/tasks.py` (lines 9–13)
+states that `fund_one_account` is enqueued "in the [23:00, 23:30) window."
+**This is incorrect.**  `fund_one_account` is enqueued on **every tick**
+(every 30 minutes, all day) for all accounts with `auto_funding_enabled=True`.
+Only `recur_one_account` is gated on the `[03:00, 03:30)` local window.
+The module docstring should be updated to match.
 
 ### Dead `is_complete()` methods in `funding_strategy.py`
 

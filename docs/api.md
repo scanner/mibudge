@@ -40,23 +40,20 @@ and that the browser sends automatically to /api/token/refresh/.
 
 **Request Body** (`application/json`):
 
-- **`username`** (`string`) *(required)*
+- **`email`** (`string`) *(required)*
 - **`password`** (`string`) *(required)*
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
-- **`username`** (`string`) *(required)*
+- **`email`** (`string`) *(required)*
 - **`password`** (`string`) *(required)*
 
 **Request Body** (`multipart/form-data`):
 
-- **`username`** (`string`) *(required)*
+- **`email`** (`string`) *(required)*
 - **`password`** (`string`) *(required)*
 
-**Response 200:** 
-
-- **`access`** (`string`) *(required, read-only)*
-- **`refresh`** (`string`) *(required, read-only)*
+**Response 200:** No response body
 
 #### `POST /api/token/refresh/`
 
@@ -326,6 +323,7 @@ Create a new bank account. The authenticated user is automatically added as an o
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -338,6 +336,7 @@ Create a new bank account. The authenticated user is automatically added as an o
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Request Body** (`multipart/form-data`):
 
@@ -350,6 +349,7 @@ Create a new bank account. The authenticated user is automatically added as an o
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Response 201:** 
 
@@ -367,6 +367,7 @@ Create a new bank account. The authenticated user is automatically added as an o
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
@@ -398,6 +399,7 @@ Return a single bank account by UUID.
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
@@ -424,6 +426,7 @@ Full update of a bank account. Only 'name' is mutable after creation -- bank, ac
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -436,6 +439,7 @@ Full update of a bank account. Only 'name' is mutable after creation -- bank, ac
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Request Body** (`multipart/form-data`):
 
@@ -448,6 +452,7 @@ Full update of a bank account. Only 'name' is mutable after creation -- bank, ac
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Response 200:** 
 
@@ -465,6 +470,7 @@ Full update of a bank account. Only 'name' is mutable after creation -- bank, ac
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
@@ -491,6 +497,7 @@ Partial update of a bank account. Only 'name' is mutable after creation.
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -503,6 +510,7 @@ Partial update of a bank account. Only 'name' is mutable after creation.
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Request Body** (`multipart/form-data`):
 
@@ -515,6 +523,7 @@ Partial update of a bank account. Only 'name' is mutable after creation.
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 **Response 200:** 
 
@@ -532,6 +541,7 @@ Partial update of a bank account. Only 'name' is mutable after creation.
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
@@ -609,6 +619,7 @@ Record that a transaction import has been completed for this account.  Sets last
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
@@ -630,10 +641,13 @@ Run the funding engine for this account immediately.  Processes all due fund and
 
 **Response 200:** Funding run result.
 
-- **`deferred`** (`boolean`)
 - **`transfers`** (`integer`)
+- **`occurrences_completed`** (`integer`)
+- **`occurrences_partial`** (`integer`)
 - **`warnings`** (`array`)
 - **`skipped_budgets`** (`array`)
+
+**Response 409:** Either another worker is currently processing this account (lock held), or there is nothing due or outstanding to run as of the supplied date.
 
 #### `POST /api/v1/bank-accounts/{id}/sync-scrape/`
 
@@ -842,7 +856,7 @@ Args:
     obj: The Budget instance being serialized.
 
 Returns:
-    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+    Dict with 'date', 'amount', 'amount_currency', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -889,7 +903,7 @@ Args:
     obj: The Budget instance being serialized.
 
 Returns:
-    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+    Dict with 'date', 'amount', 'amount_currency', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -996,7 +1010,7 @@ Args:
     obj: The Budget instance being serialized.
 
 Returns:
-    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+    Dict with 'date', 'amount', 'amount_currency', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1103,7 +1117,7 @@ Args:
     obj: The Budget instance being serialized.
 
 Returns:
-    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+    Dict with 'date', 'amount', 'amount_currency', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1222,9 +1236,77 @@ Args:
     obj: The Budget instance being serialized.
 
 Returns:
-    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+    Dict with 'date', 'amount', 'amount_currency', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### channel-preferences
+
+#### `GET /api/v1/channel-preferences/`
+
+**Operation:** `channel_preferences_list`
+
+Return all notification channels with the authenticated user's delivery preferences. Channels without a stored preference fall back to DAILY_MORNING.
+
+**Parameters:**
+
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `PATCH /api/v1/channel-preferences/{channel}/`
+
+**Operation:** `channel_preferences_partial_update`
+
+Set the digest_frequency for a notification channel. Returns 404 if the channel value is not valid.
+
+**Parameters:**
+
+- `channel` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+
+**Request Body** (`multipart/form-data`):
+
+- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+
+**Response 200:** 
+
+- **`channel`** (`string`) *(required, read-only)*
+- **`display_name`** (`string`) *(required, read-only)*
+- **`digest_frequency`** (`string`) *(required)* — * `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
 
 ### currencies
 
@@ -1336,6 +1418,63 @@ Return a single internal transaction by UUID.
 - **`dst_budget_balance_currency`** (`string`) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### notification-preferences
+
+#### `GET /api/v1/notification-preferences/`
+
+**Operation:** `notification_preferences_list`
+
+Return all registered notification kinds merged with the authenticated user's preferences. Kinds without a stored preference fall back to the registry default_delivery_mode.
+
+**Parameters:**
+
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `PATCH /api/v1/notification-preferences/{kind}/`
+
+**Operation:** `notification_preferences_partial_update`
+
+Set delivery_mode ('digest', 'immediate', or 'off') for a single notification kind. Returns 400 if the kind has can_suppress=False. Returns 404 if the kind is not registered.
+
+**Parameters:**
+
+- `kind` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`delivery_mode`** (`string`) — * `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off Enum: ['digest', 'immediate', 'off']
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`delivery_mode`** (`string`) — * `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off Enum: ['digest', 'immediate', 'off']
+
+**Request Body** (`multipart/form-data`):
+
+- **`delivery_mode`** (`string`) — * `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off Enum: ['digest', 'immediate', 'off']
+
+**Response 200:** 
+
+- **`kind`** (`string`) *(required, read-only)*
+- **`display_name`** (`string`) *(required, read-only)*
+- **`can_suppress`** (`boolean`) *(required, read-only)*
+- **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off Enum: ['digest', 'immediate', 'off']
 
 ### transactions
 
@@ -1819,6 +1958,7 @@ Return a single user by username. Restricted to staff/admin users.
 **Response 200:** 
 
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
@@ -1855,6 +1995,7 @@ Full update of a user profile. Restricted to staff/admin users.
 **Response 200:** 
 
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
@@ -1891,6 +2032,7 @@ Partial update of a user profile. Restricted to staff/admin users.
 **Response 200:** 
 
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
@@ -1905,6 +2047,7 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 **Response 200:** 
 
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
@@ -1937,10 +2080,37 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 **Response 200:** 
 
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+
+#### `POST /api/v1/users/me/change-password/`
+
+**Operation:** `users_me_change_password_create`
+
+Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale. Existing JWT tokens remain valid; the caller may silently refresh as normal -- no forced re-login is imposed.
+
+**Request Body** (`application/json`):
+
+- **`current_password`** (`string`) *(required)*
+- **`new_password`** (`string`) *(required)*
+- **`confirm_password`** (`string`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`current_password`** (`string`) *(required)*
+- **`new_password`** (`string`) *(required)*
+- **`confirm_password`** (`string`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`current_password`** (`string`) *(required)*
+- **`new_password`** (`string`) *(required)*
+- **`confirm_password`** (`string`) *(required)*
+
+**Response 204:** No response body
 
 ## Schemas
 
@@ -1993,6 +2163,7 @@ Group assignment is not yet supported via the API.
 - **`available_balance`** (`string`)
 - **`available_balance_currency`** (`string`) *(required, read-only)*
 - **`unallocated_budget`** (`string`) *(required, read-only)*
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
@@ -2022,6 +2193,7 @@ Group assignment is not yet supported via the API.
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 ### BlankEnum
 
@@ -2069,7 +2241,7 @@ Args:
     obj: The Budget instance being serialized.
 
 Returns:
-    Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+    Dict with 'date', 'amount', 'amount_currency', or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -2266,6 +2438,63 @@ signal and is not accepted from the client.
 * `Utilities:Water & Sewer` - Water & Sewer
 
 
+### ChangePasswordRequest
+
+Validate a password-change request.
+
+Checks that the new password is strong enough (zxcvbn score >= 2)
+and that the two new-password fields match.  Current-password
+verification and the actual password update are handled in the view.
+
+- **`current_password`** (`string`) *(required)*
+- **`new_password`** (`string`) *(required)*
+- **`confirm_password`** (`string`) *(required)*
+
+### ChannelPreference
+
+Channel delivery preference.
+
+Read: channel, display_name, digest_frequency.
+Write (PATCH): digest_frequency only.
+
+- **`channel`** (`string`) *(required, read-only)*
+- **`display_name`** (`string`) *(required, read-only)*
+- **`digest_frequency`** (`string`) *(required)* — * `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+
+### DeliveryModeEnum
+
+* `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off
+
+
+### DigestFrequencyEnum
+
+* `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday
+
+
+### EmailTokenObtainPairRequest
+
+TokenObtainPairSerializer variant that uses ``email`` as the login
+field instead of ``username``.
+
+USERNAME_FIELD is kept as "username" so Django admin is unaffected;
+we override ``username_field`` here so simplejwt presents an ``email``
+field in the login payload and passes it to EmailBackend.authenticate().
+
+- **`email`** (`string`) *(required)*
+- **`password`** (`string`) *(required)*
+
 ### FundingTypeEnum
 
 * `D` - Target Date
@@ -2323,6 +2552,20 @@ field declaration is needed.
 - **`dst_budget`** (`string`) *(required)*
 - **`effective_date`** (`string`)
 
+### NotificationPreference
+
+Notification kind preference.
+
+Read: kind, display_name, can_suppress, delivery_mode.
+Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
+
+- **`kind`** (`string`) *(required, read-only)*
+- **`display_name`** (`string`) *(required, read-only)*
+- **`can_suppress`** (`boolean`) *(required, read-only)*
+- **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off Enum: ['digest', 'immediate', 'off']
+
 ### PaginatedBankAccountList
 
 - **`count`** (`integer`) *(required)*
@@ -2344,7 +2587,21 @@ field declaration is needed.
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+### PaginatedChannelPreferenceList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
 ### PaginatedInternalTransactionList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+### PaginatedNotificationPreferenceList
 
 - **`count`** (`integer`) *(required)*
 - **`next`** (`string`)
@@ -2396,6 +2653,7 @@ Group assignment is not yet supported via the API.
 - **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`posted_balance`** (`string`)
 - **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 
 ### PatchedBudgetRequest
 
@@ -2426,6 +2684,31 @@ signal and is not accepted from the client.
 - **`recurrence_schedule`** (`string`)
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
+
+### PatchedChannelPreferenceRequest
+
+Channel delivery preference.
+
+Read: channel, display_name, digest_frequency.
+Write (PATCH): digest_frequency only.
+
+- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
+* `daily_evening` - Once daily (evening, ~6 pm)
+* `twice_daily` - Twice daily (morning + evening)
+* `weekly_friday` - Weekly on Friday
+* `weekly_saturday` - Weekly on Saturday
+* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+
+### PatchedNotificationPreferenceRequest
+
+Notification kind preference.
+
+Read: kind, display_name, can_suppress, delivery_mode.
+Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
+
+- **`delivery_mode`** (`string`) — * `digest` - Digest
+* `immediate` - Immediate
+* `off` - Off Enum: ['digest', 'immediate', 'off']
 
 ### PatchedTransactionRequest
 
@@ -2528,16 +2811,6 @@ sanity walk; never persisted.
 - **`amount`** (`string`) *(required)*
 - **`transaction_type`** (`string`)
 - **`running_balance`** (`string`)
-
-### TokenObtainPair
-
-- **`access`** (`string`) *(required, read-only)*
-- **`refresh`** (`string`) *(required, read-only)*
-
-### TokenObtainPairRequest
-
-- **`username`** (`string`) *(required)*
-- **`password`** (`string`) *(required)*
 
 ### TokenRefresh
 
@@ -2851,6 +3124,7 @@ the bank account must be owned by the user being updated.  On
 output it returns the UUID string (or null).
 
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+- **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
