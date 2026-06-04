@@ -18,6 +18,8 @@ from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
+    EventKind,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -2066,3 +2068,270 @@ class TestPermissions:
             reverse(detail_url_name, kwargs={"id": obj.id}),
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+########################################################################
+########################################################################
+#
+# Dataset layout used by TestFundingEventOccurrenceAPI:
+#
+#   a1 (owned) ─┬─ b1 ─── occ1  FUND   2026-01-01  PENDING
+#               │          occ2  RECUR  2026-02-01  PARTIAL
+#               └─ b2 ─── occ3  FUND   2026-02-01  COMPLETE
+#   a2 (owned) ─── b3 ─── occ4  RECUR  2026-03-01  SKIPPED
+#
+_FILTER_CASES = [
+    pytest.param({"budget": "b1"}, {"occ1", "occ2"}, id="budget"),
+    pytest.param({"bank_account": "a2"}, {"occ4"}, id="bank-account"),
+    pytest.param({"kind": "fund"}, {"occ1", "occ3"}, id="kind-fund"),
+    pytest.param({"kind": "recur"}, {"occ2", "occ4"}, id="kind-recur"),
+    pytest.param({"status": "PENDING"}, {"occ1"}, id="status-single"),
+    pytest.param(
+        {"status": ["PENDING", "PARTIAL"]}, {"occ1", "occ2"}, id="status-multi"
+    ),
+    pytest.param(
+        {"date_from": "2026-01-15", "date_to": "2026-02-28"},
+        {"occ2", "occ3"},
+        id="date-range",
+    ),
+]
+
+
+class TestFundingEventOccurrenceAPI:
+    """Tests for the /api/v1/funding-occurrences/ endpoint."""
+
+    ####################################################################
+    #
+    def test_non_owner_excluded_from_list(
+        self,
+        auth_client: APIClient,
+        user_factory: Callable[..., User],
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        funding_event_occurrence_factory: Callable[..., FundingEventOccurrence],
+    ) -> None:
+        """
+        GIVEN: a funding occurrence on another user's account
+        WHEN:  GET /api/v1/funding-occurrences/
+        THEN:  the occurrence does not appear in the results
+        """
+        other_account = bank_account_factory(owners=[user_factory()])
+        occ = funding_event_occurrence_factory(
+            budget=budget_factory(bank_account=other_account)
+        )
+        response = auth_client.get(reverse("api_v1:funding-occurrence-list"))
+        assert response.status_code == status.HTTP_200_OK
+        assert str(occ.id) not in {r["id"] for r in response.data["results"]}
+
+    ####################################################################
+    #
+    def test_non_owner_retrieve_returns_404(
+        self,
+        auth_client: APIClient,
+        user_factory: Callable[..., User],
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        funding_event_occurrence_factory: Callable[..., FundingEventOccurrence],
+    ) -> None:
+        """
+        GIVEN: a funding occurrence on another user's account
+        WHEN:  GET /api/v1/funding-occurrences/<uuid>/
+        THEN:  404 Not Found
+        """
+        other_account = bank_account_factory(owners=[user_factory()])
+        occ = funding_event_occurrence_factory(
+            budget=budget_factory(bank_account=other_account)
+        )
+        response = auth_client.get(
+            reverse("api_v1:funding-occurrence-detail", kwargs={"id": occ.id})
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    ####################################################################
+    #
+    def test_retrieve_own_occurrence(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        funding_event_occurrence_factory: Callable[..., FundingEventOccurrence],
+    ) -> None:
+        """
+        GIVEN: a funding occurrence on an owned budget
+        WHEN:  GET /api/v1/funding-occurrences/<uuid>/
+        THEN:  200 OK with all expected fields
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account)
+        occ = funding_event_occurrence_factory(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=date(2026, 3, 15),
+            status=FundingEventOccurrence.Status.PARTIAL,
+        )
+        response = auth_client.get(
+            reverse("api_v1:funding-occurrence-detail", kwargs={"id": occ.id})
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == str(occ.id)
+        assert response.data["budget"] == str(budget.id)
+        assert response.data["kind"] == EventKind.FUND.value
+        assert response.data["scheduled_date"] == "2026-03-15"
+        assert response.data["status"] == FundingEventOccurrence.Status.PARTIAL
+        assert response.data["completed_at"] is None
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "method,use_detail",
+        [
+            ("post", False),
+            ("put", True),
+            ("patch", True),
+            ("delete", True),
+        ],
+        ids=["post", "put", "patch", "delete"],
+    )
+    def test_mutation_methods_not_allowed(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        funding_event_occurrence_factory: Callable[..., FundingEventOccurrence],
+        method: str,
+        use_detail: bool,
+    ) -> None:
+        """
+        GIVEN: an existing funding occurrence
+        WHEN:  POST, PUT, PATCH, or DELETE is sent to the endpoint
+        THEN:  405 Method Not Allowed
+        """
+        account = bank_account_factory(owners=[user])
+        occ = funding_event_occurrence_factory(
+            budget=budget_factory(bank_account=account)
+        )
+        url = (
+            reverse("api_v1:funding-occurrence-detail", kwargs={"id": occ.id})
+            if use_detail
+            else reverse("api_v1:funding-occurrence-list")
+        )
+        assert (
+            getattr(auth_client, method)(url, {}).status_code
+            == status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize("raw_params,expected_names", _FILTER_CASES)
+    def test_filter(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        funding_event_occurrence_factory: Callable[..., FundingEventOccurrence],
+        raw_params: dict,
+        expected_names: set[str],
+    ) -> None:
+        """
+        GIVEN: four occurrences spread across two accounts and three budgets
+        WHEN:  GET /api/v1/funding-occurrences/ with a filter parameter
+        THEN:  only the matching occurrences are returned
+        """
+        a1 = bank_account_factory(owners=[user])
+        a2 = bank_account_factory(owners=[user])
+        b1 = budget_factory(bank_account=a1)
+        b2 = budget_factory(bank_account=a1)
+        b3 = budget_factory(bank_account=a2)
+        occ1 = funding_event_occurrence_factory(
+            budget=b1,
+            kind=EventKind.FUND.value,
+            scheduled_date=date(2026, 1, 1),
+            status=FundingEventOccurrence.Status.PENDING,
+        )
+        occ2 = funding_event_occurrence_factory(
+            budget=b1,
+            kind=EventKind.RECUR.value,
+            scheduled_date=date(2026, 2, 1),
+            status=FundingEventOccurrence.Status.PARTIAL,
+        )
+        occ3 = funding_event_occurrence_factory(
+            budget=b2,
+            kind=EventKind.FUND.value,
+            scheduled_date=date(2026, 2, 1),
+            status=FundingEventOccurrence.Status.COMPLETE,
+        )
+        occ4 = funding_event_occurrence_factory(
+            budget=b3,
+            kind=EventKind.RECUR.value,
+            scheduled_date=date(2026, 3, 1),
+            status=FundingEventOccurrence.Status.SKIPPED,
+        )
+        name_to_obj = {
+            "a1": a1,
+            "a2": a2,
+            "b1": b1,
+            "b2": b2,
+            "b3": b3,
+            "occ1": occ1,
+            "occ2": occ2,
+            "occ3": occ3,
+            "occ4": occ4,
+        }
+
+        def resolve(v: object) -> object:
+            if isinstance(v, str) and v in name_to_obj:
+                return str(name_to_obj[v].id)
+            if isinstance(v, list):
+                return [
+                    str(name_to_obj[x].id) if x in name_to_obj else x for x in v
+                ]
+            return v
+
+        params = {k: resolve(v) for k, v in raw_params.items()}
+        expected_ids = {str(name_to_obj[n].id) for n in expected_names}
+
+        response = auth_client.get(
+            reverse("api_v1:funding-occurrence-list"), params
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert {r["id"] for r in response.data["results"]} == expected_ids
+
+    ####################################################################
+    #
+    def test_default_ordering_newest_first(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+        budget_factory: Callable[..., Budget],
+        funding_event_occurrence_factory: Callable[..., FundingEventOccurrence],
+    ) -> None:
+        """
+        GIVEN: occurrences with different scheduled dates
+        WHEN:  GET /api/v1/funding-occurrences/ with no ordering param
+        THEN:  results are ordered newest scheduled_date first
+        """
+        account = bank_account_factory(owners=[user])
+        budget = budget_factory(bank_account=account)
+        early = funding_event_occurrence_factory(
+            budget=budget, scheduled_date=date(2026, 1, 1)
+        )
+        middle = funding_event_occurrence_factory(
+            budget=budget,
+            kind=EventKind.RECUR.value,
+            scheduled_date=date(2026, 2, 1),
+        )
+        late = funding_event_occurrence_factory(
+            budget=budget_factory(bank_account=account),
+            scheduled_date=date(2026, 3, 1),
+        )
+        response = auth_client.get(reverse("api_v1:funding-occurrence-list"))
+        assert response.status_code == status.HTTP_200_OK
+        returned_ids = [r["id"] for r in response.data["results"]]
+        late_idx = returned_ids.index(str(late.id))
+        mid_idx = returned_ids.index(str(middle.id))
+        early_idx = returned_ids.index(str(early.id))
+        assert late_idx < mid_idx < early_idx

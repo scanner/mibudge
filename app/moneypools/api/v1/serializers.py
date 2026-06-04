@@ -39,6 +39,7 @@ from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -1272,3 +1273,30 @@ class ScrapeSyncReportSerializer(serializers.Serializer):
     )
     last_posted_through = serializers.DateField(allow_null=True)
     new_transaction_ids = serializers.ListField(child=serializers.UUIDField())
+
+
+########################################################################
+########################################################################
+#
+class FundingEventOccurrenceSerializer(serializers.ModelSerializer):
+    """Read-only serializer for FundingEventOccurrence rows.
+
+    Exposes the budget UUID as 'budget' rather than the internal pkid so
+    callers can cross-reference with the Budget endpoint.
+    """
+
+    budget = serializers.UUIDField(source="budget.id", read_only=True)
+
+    class Meta:
+        model = FundingEventOccurrence
+        fields = [
+            "id",
+            "budget",
+            "kind",
+            "scheduled_date",
+            "status",
+            "completed_at",
+            "created_at",
+            "modified_at",
+        ]
+        read_only_fields = fields

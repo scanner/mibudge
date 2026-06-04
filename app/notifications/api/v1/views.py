@@ -1,6 +1,10 @@
 # 3rd party imports
 #
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -127,6 +131,14 @@ class NotificationPreferenceViewSet(GenericViewSet):
             "Set the digest_frequency for a notification channel. "
             "Returns 404 if the channel value is not valid."
         ),
+        parameters=[
+            OpenApiParameter(
+                "channel",
+                str,
+                OpenApiParameter.PATH,
+                description="Channel identifier (e.g. 'email').",
+            )
+        ],
         request=ChannelPreferenceSerializer,
         responses={200: ChannelPreferenceSerializer},
     ),

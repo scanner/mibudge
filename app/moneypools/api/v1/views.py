@@ -38,6 +38,7 @@ from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -53,6 +54,7 @@ from moneypools.service.shared import funding_system_user
 
 from .filters import (
     BudgetFilter,
+    FundingEventOccurrenceFilter,
     InternalTransactionFilter,
     TransactionAllocationFilter,
     TransactionFilter,
@@ -61,6 +63,7 @@ from .serializers import (
     BankAccountSerializer,
     BankSerializer,
     BudgetSerializer,
+    FundingEventOccurrenceSerializer,
     InternalTransactionSerializer,
     ResolvePendingSerializer,
     ScrapeSyncReportSerializer,
@@ -1088,6 +1091,47 @@ class InternalTransactionViewSet(
             actor=self.request.user,
             effective_date=data.get("effective_date"),
         )
+
+
+########################################################################
+########################################################################
+#
+@extend_schema_view(
+    list=extend_schema(
+        summary="List funding event occurrences",
+        description=(
+            "Return funding event occurrences for budgets on accounts "
+            "owned by the authenticated user.  Filterable by bank_account, "
+            "budget, kind, status (multi-value), and scheduled_date range.  "
+            "Orderable by scheduled_date or created_at."
+        ),
+    ),
+    retrieve=extend_schema(
+        summary="Get a funding event occurrence",
+        description="Return a single funding event occurrence by UUID.",
+    ),
+)
+class FundingEventOccurrenceViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only access to FundingEventOccurrence rows for owned accounts."""
+
+    serializer_class = FundingEventOccurrenceSerializer
+    queryset = FundingEventOccurrence.objects.select_related(
+        "budget__bank_account"
+    ).all()
+    lookup_field = "id"
+    permission_classes = [IsAuthenticated, IsAccountOwner]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = FundingEventOccurrenceFilter
+    ordering_fields = ["scheduled_date", "created_at"]
+    ordering = ["-scheduled_date"]
+
+    ####################################################################
+    #
+    def get_queryset(self):
+        """Restrict to occurrences on accounts the requesting user owns."""
+        return FundingEventOccurrence.objects.select_related(
+            "budget__bank_account"
+        ).filter(budget__bank_account__owners=self.request.user)
 
 
 ########################################################################

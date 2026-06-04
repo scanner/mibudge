@@ -6,6 +6,7 @@ from .factories import (
     BankAccountFactory,
     BankFactory,
     BudgetFactory,
+    FundingEventOccurrenceFactory,
     InternalTransactionFactory,
     TransactionAllocationFactory,
     TransactionFactory,
@@ -21,6 +22,9 @@ register(
 register(
     InternalTransactionFactory
 )  # InternalTransactionFactory -> internal_transaction_factory
+register(
+    FundingEventOccurrenceFactory
+)  # FundingEventOccurrenceFactory -> funding_event_occurrence_factory
 
 
 @pytest.fixture

@@ -16,7 +16,14 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 # Project imports
-from .models import BankAccount
+from .models import (
+    BankAccount,
+    Budget,
+    FundingEventOccurrence,
+    InternalTransaction,
+    Transaction,
+    TransactionAllocation,
+)
 
 
 ####################################################################
@@ -24,23 +31,23 @@ from .models import BankAccount
 def get_bank_account(obj: object) -> BankAccount | None:
     """Resolve the BankAccount from any moneypools domain object.
 
-    Handles BankAccount directly, Budget/Transaction/InternalTransaction
-    (all have a direct 'bank_account' FK), and TransactionAllocation
-    (which goes through 'transaction.bank_account').
-
     Args:
         obj: A moneypools model instance.
 
     Returns:
         The related BankAccount, or None if it cannot be resolved.
     """
-    if isinstance(obj, BankAccount):
-        return obj
-    if hasattr(obj, "bank_account"):
-        return obj.bank_account
-    if hasattr(obj, "transaction"):
-        return obj.transaction.bank_account
-    return None
+    match obj:
+        case BankAccount():
+            return obj
+        case Budget() | Transaction() | InternalTransaction():
+            return obj.bank_account
+        case TransactionAllocation():
+            return obj.transaction.bank_account
+        case FundingEventOccurrence():
+            return obj.budget.bank_account
+        case _:
+            return None
 
 
 ########################################################################

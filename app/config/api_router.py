@@ -23,6 +23,7 @@ from moneypools.api.v1.views import (
     BankAccountViewSet,
     BankViewSet,
     BudgetViewSet,
+    FundingEventOccurrenceViewSet,
     InternalTransactionViewSet,
     TransactionAllocationViewSet,
     TransactionViewSet,
@@ -52,6 +53,11 @@ router.register("budgets", BudgetViewSet)
 router.register("transactions", TransactionViewSet)
 router.register("allocations", TransactionAllocationViewSet)
 router.register("internal-transactions", InternalTransactionViewSet)
+router.register(
+    "funding-occurrences",
+    FundingEventOccurrenceViewSet,
+    basename="funding-occurrence",
+)
 
 
 app_name = "api_v1"

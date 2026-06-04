@@ -1268,7 +1268,7 @@ Set the digest_frequency for a notification channel. Returns 404 if the channel 
 
 **Parameters:**
 
-- `channel` (path, required)
+- `channel` (path, required) — Channel identifier (e.g. 'email').
 
 **Request Body** (`application/json`):
 
@@ -1317,6 +1317,60 @@ Set the digest_frequency for a notification channel. Returns 404 if the channel 
 Return all ISO 4217 currency codes supported by the system, sorted by code. Each entry includes the code, English name, and numeric ISO 4217 code. Requires authentication.
 
 **Response 200:** List of supported currencies.
+
+### funding-occurrences
+
+#### `GET /api/v1/funding-occurrences/`
+
+**Operation:** `funding_occurrences_list`
+
+Return funding event occurrences for budgets on accounts owned by the authenticated user.  Filterable by bank_account, budget, kind, status (multi-value), and scheduled_date range.  Orderable by scheduled_date or created_at.
+
+**Parameters:**
+
+- `bank_account` (query, optional)
+- `budget` (query, optional)
+- `date_from` (query, optional)
+- `date_to` (query, optional)
+- `kind` (query, optional) — Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
+
+* `fund` - fund
+* `recur` - recur
+- `ordering` (query, optional) — Which field to use when ordering the results.
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+- `status` (query, optional) — * `PENDING` - Pending
+* `PARTIAL` - Partial
+* `COMPLETE` - Complete
+* `SKIPPED` - Skipped
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `GET /api/v1/funding-occurrences/{id}/`
+
+**Operation:** `funding_occurrences_retrieve`
+
+Return a single funding event occurrence by UUID.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`budget`** (`string`) *(required, read-only)*
+- **`kind`** (`string`) *(required, read-only)* — Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
+- **`scheduled_date`** (`string`) *(required, read-only)* — Calendar date the event was scheduled to fire.
+- **`status`** (``) *(required, read-only)*
+- **`completed_at`** (`string`) *(required, read-only)* — Wall-clock time the occurrence reached COMPLETE.  Null while PENDING/PARTIAL/SKIPPED.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
 
 ### internal-transactions
 
@@ -2495,6 +2549,22 @@ field in the login payload and passes it to EmailBackend.authenticate().
 - **`email`** (`string`) *(required)*
 - **`password`** (`string`) *(required)*
 
+### FundingEventOccurrence
+
+Read-only serializer for FundingEventOccurrence rows.
+
+Exposes the budget UUID as 'budget' rather than the internal pkid so
+callers can cross-reference with the Budget endpoint.
+
+- **`id`** (`string`) *(required, read-only)*
+- **`budget`** (`string`) *(required, read-only)*
+- **`kind`** (`string`) *(required, read-only)* — Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
+- **`scheduled_date`** (`string`) *(required, read-only)* — Calendar date the event was scheduled to fire.
+- **`status`** (``) *(required, read-only)*
+- **`completed_at`** (`string`) *(required, read-only)* — Wall-clock time the occurrence reached COMPLETE.  Null while PENDING/PARTIAL/SKIPPED.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
 ### FundingTypeEnum
 
 * `D` - Target Date
@@ -2588,6 +2658,13 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 - **`results`** (`array`) *(required)*
 
 ### PaginatedChannelPreferenceList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+### PaginatedFundingEventOccurrenceList
 
 - **`count`** (`integer`) *(required)*
 - **`next`** (`string`)
@@ -2811,6 +2888,14 @@ sanity walk; never persisted.
 - **`amount`** (`string`) *(required)*
 - **`transaction_type`** (`string`)
 - **`running_balance`** (`string`)
+
+### StatusEnum
+
+* `PENDING` - Pending
+* `PARTIAL` - Partial
+* `COMPLETE` - Complete
+* `SKIPPED` - Skipped
+
 
 ### TokenRefresh
 
