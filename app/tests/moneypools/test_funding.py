@@ -891,6 +891,92 @@ class TestPausedAndArchived:
 ########################################################################
 ########################################################################
 #
+class TestOccurrenceSupersession:
+    """Newer occurrence closes prior PENDING/PARTIAL as SKIPPED.
+
+    When fund_account processes a new event date, _close_prior_incomplete
+    marks any earlier-dated PENDING or PARTIAL occurrence for the same
+    (budget, kind) as SKIPPED before the newer event is processed.
+    """
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "initial_status",
+        [
+            pytest.param(
+                FundingEventOccurrence.Status.PENDING,
+                id="pending-superseded",
+            ),
+            pytest.param(
+                FundingEventOccurrence.Status.PARTIAL,
+                id="partial-superseded",
+            ),
+        ],
+    )
+    def test_newer_occurrence_closes_prior_incomplete_as_skipped(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+        initial_status: str,
+    ) -> None:
+        """
+        GIVEN: a stale PENDING or PARTIAL occurrence for Jan 1 in the DB,
+               and last_funded_on set to Jan 1 so _collect_events only
+               sees Feb 1 as due
+        WHEN:  fund_account runs for Feb 1 with sufficient funds
+        THEN:  _close_prior_incomplete marks Jan 1 as SKIPPED;
+               Feb 1 occurrence is COMPLETE; one transfer is made
+        """
+        jan_1 = date(2026, 1, 1)
+        today = date(2026, 2, 1)
+        account = make_account(posted_through=today)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Vacation",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(1000, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        # Advance the pointer past Jan 1 so _collect_events only sees
+        # Feb 1.  The stale occurrence below simulates a run that
+        # created the occurrence but never advanced the pointer (e.g.
+        # a crash between writing the occurrence and committing the
+        # pointer update -- or an explicit partial-run that left the
+        # occurrence in a non-terminal state).
+        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=jan_1)
+        FundingEventOccurrence.objects.create(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=jan_1,
+            status=initial_status,
+        )
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        jan_occ = FundingEventOccurrence.objects.get(
+            budget=budget, scheduled_date=jan_1
+        )
+        feb_occ = FundingEventOccurrence.objects.get(
+            budget=budget, scheduled_date=today
+        )
+        assert jan_occ.status == FundingEventOccurrence.Status.SKIPPED
+        assert feb_occ.status == FundingEventOccurrence.Status.COMPLETE
+        assert report.transfers == 1
+        assert report.occurrences_completed == 1
+
+
+########################################################################
+########################################################################
+#
 class TestIdempotency:
     """Re-running the engine on the same day produces no duplicate transfers."""
 
@@ -1833,6 +1919,35 @@ class TestScheduleFundingRuns:
         assert call.args[0].id == account.id
         assert call.args[1] == date(2026, 5, 17)
         assert call.kwargs["kinds"] == {EventKind.RECUR}
+
+    ####################################################################
+    #
+    def test_auto_funding_disabled_account_is_not_dispatched(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: an account with auto_funding_enabled=False
+        WHEN:  schedule_funding_runs fires (inside a FUND window)
+        THEN:  fund_one_account is not enqueued for that account
+        """
+        account = bank_account_factory(auto_funding_enabled=False)
+        owner = account.owners.first()
+        assert owner is not None
+        owner.timezone = self._TZ_NY
+        owner.save()
+
+        fake_now = datetime(2026, 5, 18, 3, 10, tzinfo=UTC)
+
+        with (
+            patch("moneypools.tasks.datetime") as mock_dt,
+            patch("moneypools.tasks.fund_one_account.apply_async") as mock_fund,
+            patch("moneypools.tasks.recur_one_account.apply_async"),
+        ):
+            mock_dt.now.return_value = fake_now
+            schedule_funding_runs()
+
+        assert mock_fund.called is False
 
 
 ########################################################################

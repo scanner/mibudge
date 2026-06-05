@@ -2335,3 +2335,73 @@ class TestFundingEventOccurrenceAPI:
         mid_idx = returned_ids.index(str(middle.id))
         early_idx = returned_ids.index(str(early.id))
         assert late_idx < mid_idx < early_idx
+
+
+########################################################################
+########################################################################
+#
+class TestRunFundingEndpoint:
+    """POST /api/v1/bank-accounts/<id>/run-funding/"""
+
+    ####################################################################
+    #
+    def _url(self, account: BankAccount) -> str:
+        return reverse(
+            "api_v1:bankaccount-run-funding", kwargs={"id": str(account.id)}
+        )
+
+    ####################################################################
+    #
+    def test_returns_409_when_nothing_due(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: an account with no due funding events (no budgets with schedules)
+        WHEN:  POST run-funding
+        THEN:  409 Conflict -- nothing to do
+        """
+        account = bank_account_factory(owners=[user])
+        response = auth_client.post(self._url(account))
+        assert response.status_code == status.HTTP_409_CONFLICT
+
+    ####################################################################
+    #
+    def test_auto_funding_disabled_account_still_runs(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: an account with auto_funding_enabled=False and a due FUND event
+        WHEN:  POST run-funding (manual trigger)
+        THEN:  200 -- the toggle only blocks scheduled tasks, not manual runs
+        """
+        account = bank_account_factory(
+            owners=[user], auto_funding_enabled=False
+        )
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+        b = budget_svc.create(
+            bank_account=account,
+            name="Emergency Fund",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(1000, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        # Place the pointer before the first schedule occurrence so a
+        # FUND event is due immediately.
+        Budget.objects.filter(pkid=b.pkid).update(
+            last_funded_on=date(2026, 1, 1)
+        )
+        response = auth_client.post(self._url(account))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["transfers"] >= 1
