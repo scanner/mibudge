@@ -406,8 +406,6 @@ interface NextFundingDisplay {
   amount: string;
   amount_currency: string;
   daysAway: number;
-  deferred: boolean;
-  deferredReason: string | null; // human-readable explanation when deferred
   isFillup: boolean; // true when the event belongs to the fill-up goal
 }
 
@@ -428,24 +426,11 @@ const nextFundingDisplay = computed((): NextFundingDisplay | null => {
   const msPerDay = 1000 * 60 * 60 * 24;
   const daysAway = Math.round((eventDate.getTime() - today.getTime()) / msPerDay);
 
-  let deferredReason: string | null = null;
-  if (nf.deferred) {
-    const lpt = ctx.activeBankAccount?.last_posted_through;
-    if (lpt) {
-      const lptDate = parseLocalDate(lpt);
-      deferredReason = `Account data current through ${lptDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
-    } else {
-      deferredReason = "No import data recorded yet";
-    }
-  }
-
   return {
     date: eventDate,
     amount: nf.amount,
     amount_currency: nf.amount_currency,
     daysAway,
-    deferred: nf.deferred,
-    deferredReason,
     isFillup: isRecurringWithFillup,
   };
 });
@@ -688,9 +673,6 @@ async function submitMove() {
             <IconCalendar class="mt-0.5 h-4 w-4 flex-none text-neutral-400" />
             <div class="flex-1">
               <span class="text-sm text-neutral-700"> Next fill-up deposit </span>
-              <div v-if="nextFundingDisplay.deferred" class="mt-0.5 text-xs text-amber-600">
-                Delayed — {{ nextFundingDisplay.deferredReason }}
-              </div>
             </div>
             <div class="text-right">
               <MoneyAmount

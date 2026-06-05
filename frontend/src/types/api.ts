@@ -50,7 +50,6 @@ export interface NextFunding {
   date: string; // ISO date string, e.g. "2026-05-01"
   amount: string; // decimal string
   amount_currency: string;
-  deferred: boolean;
 }
 
 ////////////////////////////////////////////////////////////////////////

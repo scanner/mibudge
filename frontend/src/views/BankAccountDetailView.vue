@@ -66,7 +66,6 @@ const fundingSummaryData = ref<FundingSummary | null>(null);
 const nothingDue = computed(
   () =>
     fundingResult.value !== null &&
-    !fundingResult.value.deferred &&
     fundingResult.value.transfers === 0 &&
     fundingResult.value.warnings.length === 0 &&
     fundingResult.value.skipped_budgets.length === 0,
@@ -519,17 +518,12 @@ async function deleteAccount() {
             v-if="fundingResult"
             class="rounded-subcard border px-3 py-2.5 text-sm"
             :class="
-              fundingResult.deferred
-                ? 'border-amber-200 bg-amber-50 text-amber-700'
-                : nothingDue
-                  ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
-                  : 'border-mint-200 bg-mint-50 text-mint-700'
+              nothingDue
+                ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
+                : 'border-mint-200 bg-mint-50 text-mint-700'
             "
           >
-            <template v-if="fundingResult.deferred">
-              Deferred — import data is not current through the next event date.
-            </template>
-            <template v-else-if="nothingDue">
+            <template v-if="nothingDue">
               Nothing currently due.
               <span v-if="fundingNextDate" class="text-neutral-500">
                 Next funding event: {{ fundingNextDate }}.
