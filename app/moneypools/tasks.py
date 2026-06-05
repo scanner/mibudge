@@ -6,20 +6,23 @@ kind of work we do not want to block a request on (cross-account
 database lookups, bulk reconciliation passes, etc.).
 
 Funding tasks:
-    schedule_funding_runs -- beat-triggered (every 30 min): inspects each
-                             account owner's local time and enqueues
-                             fund_one_account in the [23:00, 23:30) window
-                             and recur_one_account in the [03:00, 03:30)
-                             window.
-    fund_one_account      -- per-account worker: processes EventKind.FUND
-                             events only.
-    recur_one_account     -- per-account worker: processes EventKind.RECUR
-                             events only.
+    schedule_funding_runs              -- beat-triggered (every 30 min): inspects
+                                         each account owner's local time and
+                                         enqueues fund_one_account always and
+                                         recur_one_account in the [03:00, 03:30)
+                                         local-time window.
+    fund_one_account                   -- per-account worker: processes
+                                         EventKind.FUND events only.
+    recur_one_account                  -- per-account worker: processes
+                                         EventKind.RECUR events only.
+    prune_funding_event_occurrences    -- weekly: deletes COMPLETE/SKIPPED
+                                         FundingEventOccurrence rows whose
+                                         scheduled_date is > 365 days old.
 """
 
 # system imports
 import logging
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -27,7 +30,12 @@ from notifications.service import notify_for
 
 # Project imports
 from config import celery_app
-from moneypools.models import BankAccount, EventKind, Transaction
+from moneypools.models import (
+    BankAccount,
+    EventKind,
+    FundingEventOccurrence,
+    Transaction,
+)
 from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
 from moneypools.service.linking import attempt_link
@@ -35,18 +43,13 @@ from moneypools.service.shared import funding_system_user
 
 logger = logging.getLogger(__name__)
 
-# FUND tasks are enqueued on every scheduler tick (every 30 min).
-# Whether funding actually runs is determined inside fund_account by two rules:
-#   1. Import-freshness gate: account must have a posted or imported date
-#      on or after the latest due event date.  Example: a May 31 event
-#      requires last_posted_through >= 2026-05-31 OR
-#      last_imported_at (local) >= 2026-05-31.  If no import has happened
-#      by the due date, funding is deferred at each tick until one does;
-#      once an import arrives the next tick picks up all past-due events.
-#   2. Idempotency: last_funded_on prevents the same event from firing twice.
+# FUND tasks are enqueued on every scheduler tick (every 30 min) for accounts
+# with auto_funding_enabled=True.  Idempotency is enforced by
+# FundingEventOccurrence rows: an event that already reached COMPLETE is not
+# re-attempted.
 #
-# RECUR tasks still use a fixed window (after midnight, local time) so they
-# only fire after FUND has had a chance to run and fill the fillup_goal.
+# RECUR tasks use a fixed window (after midnight, local time) so they only fire
+# after FUND has had a chance to run and fill the fillup_goal.
 #
 _RECUR_WINDOW_START = time(3, 0)
 _RECUR_WINDOW_END = time(3, 30)
@@ -336,4 +339,32 @@ def recur_one_account(
         local_date_str,
         kinds={EventKind.RECUR},
         label="recur_one_account",
+    )
+
+
+########################################################################
+#
+@celery_app.task(ignore_result=True)
+def prune_funding_event_occurrences() -> None:
+    """
+    Delete old COMPLETE and SKIPPED FundingEventOccurrence rows.
+
+    Runs weekly (registered in MANAGED_PERIODIC_TASKS).  Rows whose
+    scheduled_date is more than 365 days in the past are eligible for
+    deletion regardless of whether they reached COMPLETE or SKIPPED.
+    PENDING and PARTIAL rows are never touched.
+    """
+    cutoff = date.today() - timedelta(days=365)
+    deleted, _ = FundingEventOccurrence.objects.filter(
+        status__in=[
+            FundingEventOccurrence.Status.COMPLETE,
+            FundingEventOccurrence.Status.SKIPPED,
+        ],
+        scheduled_date__lt=cutoff,
+    ).delete()
+    logger.info(
+        "prune_funding_event_occurrences: deleted %d row(s) with "
+        "scheduled_date before %s.",
+        deleted,
+        cutoff,
     )
