@@ -12,11 +12,27 @@ from rest_framework.mixins import (
     RetrieveModelMixin,
     UpdateModelMixin,
 )
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from .serializers import ChangePasswordSerializer, UserSerializer
+from users.email_change import (
+    AlreadyConfirmedError,
+    AlreadyRevokedError,
+    EmailAlreadyTakenError,
+    RevocationWindowClosedError,
+    TokenExpiredError,
+    TokenNotFoundError,
+    confirm_request,
+    create_request,
+    revoke_request,
+)
+
+from .serializers import (
+    ChangePasswordSerializer,
+    EmailChangeRequestSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -154,3 +170,147 @@ class UserViewSet(
             user=user,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Request an email address change",
+        description=(
+            "Initiate a self-service email change.  Sends a verification "
+            "link to the new address and a revocation link to the old "
+            "address.  Returns 403 if the user has no usable password; "
+            "409 if new_email is already taken or a revocation window is "
+            "currently open for this account."
+        ),
+        request=EmailChangeRequestSerializer,
+        responses={201: None},
+    )
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path="me/change-email",
+        permission_classes=[IsAuthenticated],
+    )
+    def change_email(self, request):
+        """Initiate an email-address change for the authenticated user."""
+        if not request.user.has_usable_password():
+            return Response(
+                {"detail": "Set a password before changing your email."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = EmailChangeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_email = serializer.validated_data["new_email"]
+        try:
+            create_request(request.user, new_email)
+        except EmailAlreadyTakenError:
+            return Response(
+                {"new_email": "This email address is already in use."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except Exception:  # RevocationWindowOpenError
+            return Response(
+                {
+                    "detail": (
+                        "An email change is already in progress for this "
+                        "account.  Please wait for the revocation window to "
+                        "close before requesting another change."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_201_CREATED)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Confirm an email address change (new-address token)",
+        description=(
+            "Verify a pending email change using the token from the "
+            "verification link sent to the new address.  No authentication "
+            "required -- the token is the credential.\n\n"
+            "**Dual-path note:** The email link points to a Django GET view "
+            "at ``/users/email-change/{token}/confirm/`` which processes the "
+            "action and redirects the browser to the SPA result page.  "
+            "Native apps that register mibudge.money as a Universal Link "
+            "(iOS) or App Link (Android) intercept that URL and call this "
+            "endpoint instead, receiving JSON and controlling their own UI."
+        ),
+        responses={200: None},
+    )
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path=r"me/change-email/(?P<token>[^/.]+)/confirm",
+        permission_classes=[AllowAny],
+    )
+    def change_email_confirm(self, request, token=None):
+        """Confirm an email-change request (new-address token, no auth required)."""
+        try:
+            confirm_request(token)
+            return Response(status=status.HTTP_200_OK)
+        except (TokenNotFoundError, AlreadyRevokedError):
+            return Response(
+                {"detail": "This link is no longer valid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except AlreadyConfirmedError:
+            return Response(
+                {"detail": "This email change has already been confirmed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except TokenExpiredError:
+            return Response(
+                {"detail": "This verification link has expired."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except EmailAlreadyTakenError:
+            return Response(
+                {
+                    "detail": "This email address has been taken by another account."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Revoke an email address change ('this wasn't me')",
+        description=(
+            "Cancel a pending or recently confirmed email change using the "
+            "token from the notification sent to the old address.  Valid for "
+            "up to 7 days after confirmation.  No authentication required -- "
+            "the token is the credential.\n\n"
+            "On post-confirmation revocation the email is reverted and all "
+            "active sessions are invalidated.\n\n"
+            "**Dual-path note:** See ``change_email_confirm`` -- the same "
+            "Universal Link / App Link pattern applies here."
+        ),
+        responses={200: None},
+    )
+    @action(
+        detail=False,
+        methods=["POST"],
+        url_path=r"me/change-email/(?P<token>[^/.]+)/revoke",
+        permission_classes=[AllowAny],
+    )
+    def change_email_revoke(self, request, token=None):
+        """Revoke an email-change request (old-address token, no auth required)."""
+        try:
+            revoke_request(token)
+            return Response(status=status.HTTP_200_OK)
+        except (TokenNotFoundError, AlreadyRevokedError):
+            return Response(
+                {"detail": "This link is no longer valid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except RevocationWindowClosedError:
+            return Response(
+                {
+                    "detail": (
+                        "The 7-day revocation window for this change has "
+                        "closed.  Contact support if you need assistance."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )

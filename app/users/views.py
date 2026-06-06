@@ -10,7 +10,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import AbstractBaseUser
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponseRedirect
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import DetailView, RedirectView, UpdateView
@@ -20,6 +21,22 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
+)
+
+# Project imports
+#
+from users.email_change import (
+    SPA_EMAIL_CHANGE_CONFIRMED,
+    SPA_EMAIL_CHANGE_ERROR,
+    SPA_EMAIL_CHANGE_REVOKED,
+    AlreadyConfirmedError,
+    AlreadyRevokedError,
+    EmailAlreadyTakenError,
+    RevocationWindowClosedError,
+    TokenExpiredError,
+    TokenNotFoundError,
+    confirm_request,
+    revoke_request,
 )
 
 # app imports
@@ -182,3 +199,74 @@ class CookieTokenRefreshView(TokenRefreshView):
 
 
 cookie_token_refresh_view = CookieTokenRefreshView.as_view()
+
+
+########################################################################
+########################################################################
+#
+# Email-change browser views
+#
+# These views are the GET handlers for the links embedded in the two
+# email-change notification emails.  They process the action and redirect
+# the user's browser to an SPA result page.
+#
+# Native mobile apps that have registered mibudge.money as a Universal
+# Link (iOS) or App Link (Android) will intercept these URLs before the
+# browser opens them and call the corresponding REST API endpoints instead:
+#
+#   POST /api/v1/users/me/change-email/<token>/confirm/
+#   POST /api/v1/users/me/change-email/<token>/revoke/
+#
+# Both the browser path (here) and the API path share the same service
+# functions in users.email_change, so business logic lives in one place.
+#
+########################################################################
+########################################################################
+#
+def email_change_confirm_view(
+    request: HttpRequest, token: str
+) -> HttpResponseRedirect:
+    """Process a new-address verification link and redirect to the SPA.
+
+    Called when a user clicks the confirmation link sent to their new
+    email address.  On success the email is updated and the browser is
+    sent to the 'confirmed' SPA result page.  Any error condition sends
+    the browser to the 'error' result page with a ``reason`` query param
+    so the SPA can display a meaningful message.
+    """
+    try:
+        confirm_request(token)
+        return redirect(SPA_EMAIL_CHANGE_CONFIRMED)
+    except AlreadyConfirmedError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=already_confirmed")
+    except AlreadyRevokedError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=revoked")
+    except TokenExpiredError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=expired")
+    except EmailAlreadyTakenError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=email_taken")
+    except TokenNotFoundError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=invalid")
+
+
+########################################################################
+########################################################################
+#
+def email_change_revoke_view(
+    request: HttpRequest, token: str
+) -> HttpResponseRedirect:
+    """Process a 'this wasn't me' revocation link and redirect to the SPA.
+
+    Called when a user clicks the revocation link sent to their old email
+    address.  On success the email is reverted, all sessions are
+    invalidated, and the browser is sent to the 'revoked' SPA result page.
+    """
+    try:
+        revoke_request(token)
+        return redirect(SPA_EMAIL_CHANGE_REVOKED)
+    except AlreadyRevokedError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=already_revoked")
+    except RevocationWindowClosedError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=window_closed")
+    except TokenNotFoundError:
+        return redirect(f"{SPA_EMAIL_CHANGE_ERROR}?reason=invalid")

@@ -1,0 +1,26 @@
+{% load tz %}A request was made to change the email address on your {{ site_display_name }} account to:
+
+  {{ new_email }}
+
+If this was you, no action is needed. The new address must confirm the
+change within {{ expires_hours }} hours or the request will expire.
+
+------------------------------------------------------------
+IF THIS WAS NOT YOU, cancel the request immediately:
+
+  {{ revoke_url }}
+
+This link stays valid for {{ revocation_days }} days after the new address
+confirms. At the latest, it will expire on:
+
+  {% timezone notification.user.timezone %}{{ revoke_by_latest|date:"N j, Y \a\t g:i A T" }}{% endtimezone %}
+
+Cancelling will:
+  - Revert your email address if the change already went through
+  - Sign out all active sessions
+  - Send a security notice to both addresses
+
+If you cannot use the link, contact us at {{ support_email }}
+------------------------------------------------------------
+
+{{ site_display_name }} -- {{ site_url }}

@@ -1,0 +1,6 @@
+{{ site_display_name }} -- {{ site_url }}
+
+A request to associate this email address with a {{ site_display_name }}
+account has been cancelled. No action is required on your part.
+
+If you have questions, contact {{ support_email }}

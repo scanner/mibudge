@@ -78,6 +78,15 @@ class ChangePasswordSerializer(serializers.Serializer):
         return data
 
 
+########################################################################
+########################################################################
+#
+class EmailChangeRequestSerializer(serializers.Serializer):
+    """Validate a request to initiate an email-address change."""
+
+    new_email = serializers.EmailField()
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user profiles.
 
