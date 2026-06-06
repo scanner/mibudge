@@ -1,1 +1,1 @@
-mibudge: new transactions posted for {{ account_name }}
+mibudge: new {% if pending %}pending {% endif %}transactions for {{ account_name }}

@@ -1,4 +1,4 @@
-<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">New transactions posted</h2>
+<h2 style="margin:0 0 8px; font-size:16px; color:#1a1a1a;">{% if pending %}New pending transactions{% else %}New transactions posted{% endif %}</h2>
 <p style="margin:0 0 12px; color:#374151;"><strong>{{ account_name }}</strong> &mdash; {{ date }}</p>
 <table style="width:100%; border-collapse:collapse; font-size:14px; margin:0 0 12px;">
   <thead>
