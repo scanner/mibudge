@@ -1,4 +1,4 @@
-{% load tz %}A request was made to change the email address on your {{ site_display_name }} account to:
+A request was made to change the email address on your {{ site_display_name }} account to:
 
   {{ new_email }}
 
@@ -13,7 +13,7 @@ IF THIS WAS NOT YOU, cancel the request immediately:
 This link stays valid for {{ revocation_days }} days after the new address
 confirms. At the latest, it will expire on:
 
-  {% timezone notification.user.timezone %}{{ revoke_by_latest|date:"N j, Y \a\t g:i A T" }}{% endtimezone %}
+  {{ revoke_by_latest }}
 
 Cancelling will:
   - Revert your email address if the change already went through

@@ -55,6 +55,7 @@ hardcoding the path strings.
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 # 3rd party imports
 #
@@ -63,6 +64,7 @@ from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.dateformat import format as django_date_format
 
 # Project imports
 #
@@ -451,13 +453,26 @@ def _send_verification_email(ecr: EmailChangeRequest) -> None:
 ########################################################################
 #
 def _notify_old_address(user: "User", ecr: EmailChangeRequest) -> None:
-    """Notify the old address that a change was requested (includes revoke link)."""
+    """Notify the old address that a change was requested (includes revoke link).
+
+    The revocation deadline is pre-formatted as a string (not a datetime)
+    because notification contexts are JSON-serialized at queue time --
+    datetime objects are not JSON-serializable with Django's default
+    JSONField encoder.  Pre-formatting also bakes in the correct timezone
+    so the stored context is self-contained and renderable without any
+    further computation.
+    """
     # Latest possible revocation deadline: if the new address confirms at the
-    # last possible moment (expires_at), the window closes at expires_at + 7 days.
-    # Templates show this as a bound ("no later than ...") so the user knows
-    # they have at least this long to act.
+    # last possible moment (expires_at), the window closes at expires_at + 7
+    # days.  Templates show this as a bound ("no later than ...").
     revoke_by_latest = ecr.expires_at + timedelta(
         days=settings.EMAIL_CHANGE_REVOCATION_DAYS
+    )
+    user_tz = ZoneInfo(user.timezone)
+    revoke_by_latest_local = revoke_by_latest.astimezone(user_tz)
+    # Django date-format tokens (same as |date template filter).
+    revoke_by_latest_str = django_date_format(
+        revoke_by_latest_local, r"N j, Y \a\t g:i A e"
     )
     notify(
         user,
@@ -467,7 +482,7 @@ def _notify_old_address(user: "User", ecr: EmailChangeRequest) -> None:
             "revoke_url": _revoke_url(ecr.token),
             "expires_hours": settings.EMAIL_CHANGE_TOKEN_EXPIRY_HOURS,
             "revocation_days": settings.EMAIL_CHANGE_REVOCATION_DAYS,
-            "revoke_by_latest": revoke_by_latest,
+            "revoke_by_latest": revoke_by_latest_str,
         },
     )
 

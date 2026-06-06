@@ -1,4 +1,3 @@
-{% load tz %}
 <p style="margin:0 0 16px;color:#374151;">
   A request was made to change the email address on your account to:
 </p>
@@ -24,7 +23,7 @@
         address confirms &mdash; at the latest until:
       </p>
       <p style="margin:0 0 16px;font-size:15px;font-weight:600;color:#1a1a1a;">
-        {% timezone notification.user.timezone %}{{ revoke_by_latest|date:"N j, Y \a\t g:i A T" }}{% endtimezone %}
+        {{ revoke_by_latest }}
       </p>
       <a href="{{ revoke_url }}"
         style="display:inline-block;background-color:#dc2626;color:#ffffff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:4px;text-decoration:none;">

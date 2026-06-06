@@ -21,6 +21,7 @@ from users.email_change import (
     AlreadyRevokedError,
     EmailAlreadyTakenError,
     RevocationWindowClosedError,
+    RevocationWindowOpenError,
     TokenExpiredError,
     TokenNotFoundError,
     confirm_request,
@@ -208,7 +209,7 @@ class UserViewSet(
                 {"new_email": "This email address is already in use."},
                 status=status.HTTP_409_CONFLICT,
             )
-        except Exception:  # RevocationWindowOpenError
+        except RevocationWindowOpenError:
             return Response(
                 {
                     "detail": (
