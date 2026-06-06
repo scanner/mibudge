@@ -421,7 +421,11 @@ def _sync_scrape_locked(
     # Snapshot existing pending before wipe so we can detect truly new
     # (or changed) pending rows after re-insertion.
     existing_pending_keys: set[tuple[date, Decimal, str]] = {
-        (row["transaction_date"].date(), row["amount"], row["raw_description"])
+        (
+            row["transaction_date"].date(),
+            Decimal(row["amount"]),
+            row["raw_description"],
+        )
         for row in pending_qs.values(
             "transaction_date", "amount", "raw_description"
         )
