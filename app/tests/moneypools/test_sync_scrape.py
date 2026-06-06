@@ -1312,7 +1312,7 @@ class TestSyncScrapeNotifications:
         GIVEN: a scrape that either deletes a pending tx or inserts a posted tx
         WHEN:  sync_scrape runs
         THEN:  IMPORT_COMPLETE always fires (opted-in); TRANSACTION_POSTED
-               fires only when inserted_posted > 0
+               fires only when inserted_posted > 0 or new/changed pending exist
         """
         owner = empty_account.owners.first()
         assert owner is not None
@@ -1333,6 +1333,11 @@ class TestSyncScrapeNotifications:
                 ],
             )
             sync_scrape_svc.sync_scrape(empty_account, seed)
+            # Seed fires TRANSACTION_POSTED for the new pending tx; clear it
+            # so the assertion below only checks the second (empty) sync.
+            Notification.objects.filter(
+                user=owner, kind=TRANSACTION_POSTED
+            ).delete()
             payload = _payload(
                 ending_balance=Decimal("0.00"),
                 transactions=[],
