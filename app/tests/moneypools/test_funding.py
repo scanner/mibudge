@@ -24,7 +24,13 @@ from notifications.models import Notification
 
 # Project imports
 #
-from moneypools.models import BankAccount, Budget, InternalTransaction
+from moneypools.models import (
+    BankAccount,
+    Budget,
+    EventKind,
+    FundingEventOccurrence,
+    InternalTransaction,
+)
 from moneypools.notification_kinds import (
     FUNDING_COMPLETE,
     RECURRING_BUDGET_REFRESHED,
@@ -158,7 +164,6 @@ class TestFundingEngineSingleEvent:
 
         report = funding_svc.fund_account(account, today, system_user)
 
-        assert report.deferred is False
         assert report.transfers == 1
         assert not report.warnings
 
@@ -407,351 +412,26 @@ class TestFundingEngineMultiPeriodCatchup:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 3
+        assert report.occurrences_completed == 3
         budget.refresh_from_db()
         assert budget.last_funded_on == date(2026, 3, 1)
         assert budget.balance == Money(300, "USD")
 
-
-########################################################################
-########################################################################
-#
-class TestImportFreshnessGate:
-    """Gate: account deferred when last_posted_through < gate_date."""
-
-    ####################################################################
-    #
-    def test_deferred_when_last_posted_through_is_behind(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: due event on 2026-03-01, last_posted_through=2026-02-28
-        WHEN:  fund_account runs
-        THEN:  report.deferred=True; no transfers; no DB changes
-        """
-        today = date(2026, 3, 1)
-        account = make_account(posted_through=date(2026, 2, 28))
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
+        # All three catch-up dates have COMPLETE occurrences in order.
+        occurrences = list(
+            FundingEventOccurrence.objects.filter(
+                budget=budget, kind=EventKind.FUND.value
+            ).order_by("scheduled_date")
         )
-
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_MONTHLY,
+        assert [o.scheduled_date for o in occurrences] == [
+            date(2026, 1, 1),
+            date(2026, 2, 1),
+            date(2026, 3, 1),
+        ]
+        assert all(
+            o.status == FundingEventOccurrence.Status.COMPLETE
+            for o in occurrences
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 2, 28)
-        )
-
-        report = funding_svc.fund_account(account, today, system_user)
-
-        assert report.deferred is True
-        assert report.transfers == 0
-        assert (
-            InternalTransaction.objects.filter(bank_account=account).count()
-            == 0
-        )
-
-    ####################################################################
-    #
-    def test_advance_posted_through_unblocks_backlog(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: account deferred; then last_posted_through advanced to cover gate
-        WHEN:  fund_account runs again
-        THEN:  backlog processed normally
-        """
-        today = date(2026, 3, 1)
-        account = make_account(posted_through=date(2026, 2, 28))
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 2, 28)
-        )
-
-        # First run: deferred
-        report = funding_svc.fund_account(account, today, system_user)
-        assert report.deferred is True
-
-        # Advance coverage past the gate then re-run
-        BankAccount.objects.filter(pkid=account.pkid).update(
-            last_posted_through=today
-        )
-        account.refresh_from_db()
-
-        report = funding_svc.fund_account(account, today, system_user)
-        assert report.deferred is False
-        assert report.transfers == 1
-
-    ####################################################################
-    #
-    def test_import_unblocks_deferred_funding(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: account with a due funding event and no import data at all
-               (last_posted_through=None, last_imported_at=None)
-        WHEN:  fund_account runs -- gate fails, no funding
-               then an import happens (last_imported_at set to today, local)
-               then fund_account runs again
-        THEN:  first run: deferred=True, no transfers, no InternalTransactions
-               second run: deferred=False, transfer executes
-
-        This is the core scenario for Option A scheduling: because fund tasks
-        run on every tick, the second run happens automatically once an import
-        lands rather than waiting until the next day's 11pm window.
-        """
-        today = date(2026, 5, 31)
-        tz = "America/Los_Angeles"
-        account = make_account(posted_through=None, imported_at=None)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_TWICE_MONTHLY_15_EOM,
-        )
-        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 5, 15)
-        )
-
-        # First run: gate fails -- no import data at all
-        report = funding_svc.fund_account(account, today, system_user, tz=tz)
-        assert report.deferred is True
-        assert report.transfers == 0
-        assert (
-            InternalTransaction.objects.filter(bank_account=account).count()
-            == 0
-        )
-
-        # Import arrives: 2pm PDT May 31 = 21:00 UTC May 31
-        BankAccount.objects.filter(pkid=account.pkid).update(
-            last_imported_at=datetime(2026, 5, 31, 21, 0, tzinfo=UTC)
-        )
-        account.refresh_from_db()
-
-        # Second run (next tick): gate passes via last_imported_at
-        report = funding_svc.fund_account(account, today, system_user, tz=tz)
-        assert report.deferred is False
-        assert report.transfers == 1
-
-    ####################################################################
-    #
-    def test_deferred_when_last_posted_through_is_none(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: brand-new account with no imports (last_posted_through=None)
-        WHEN:  fund_account runs with a due event
-        THEN:  report.deferred=True
-        """
-        today = date(2026, 3, 1)
-        account = make_account(posted_through=None)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 2, 28)
-        )
-
-        report = funding_svc.fund_account(account, today, system_user)
-        assert report.deferred is True
-
-    ####################################################################
-    #
-    def test_passes_gate_via_last_imported_at(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: last_posted_through=None; last_imported_at is on gate_date in
-               the user's local timezone (America/Los_Angeles)
-        WHEN:  fund_account runs with tz=user.timezone
-        THEN:  report.deferred=False -- import data is fresh enough to fund
-
-        A same-day import with no posted transactions should pass the gate.
-        """
-        today = date(2026, 5, 31)
-        # 8am PDT (UTC-7) on May 31 = 15:00 UTC on May 31 -- same local date
-        imported_at = datetime(2026, 5, 31, 15, 0, tzinfo=UTC)
-        account = make_account(posted_through=None, imported_at=imported_at)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_TWICE_MONTHLY_15_EOM,
-        )
-        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 5, 15)
-        )
-
-        report = funding_svc.fund_account(
-            account, today, system_user, tz=system_user.timezone
-        )
-
-        assert report.deferred is False
-        assert report.transfers == 1
-
-    ####################################################################
-    #
-    def test_deferred_when_import_was_yesterday_in_local_tz(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: last_posted_through=None; last_imported_at is 11pm PDT on
-               May 30 -- which is 6am UTC on May 31. The UTC date (May 31)
-               equals gate_date, but the local PDT date (May 30) does not.
-        WHEN:  fund_account runs with tz=America/Los_Angeles
-        THEN:  report.deferred=True
-
-        Regression: the old UTC .date() check would have passed this gate
-        because 2026-05-31 UTC >= 2026-05-31 gate_date.
-
-        An import from yesterday (local time) must not unlock funding for today,
-        even if the UTC date of that import happens to equal the gate date.
-        """
-        today = date(2026, 5, 31)
-        # 11pm PDT on May 30 = 06:00 UTC on May 31
-        # UTC date = May 31 (old gate passes), PDT date = May 30 (new gate fails)
-        imported_at = datetime(2026, 5, 31, 6, 0, tzinfo=UTC)
-        account = make_account(posted_through=None, imported_at=imported_at)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_TWICE_MONTHLY_15_EOM,
-        )
-        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 5, 15)
-        )
-
-        report = funding_svc.fund_account(
-            account, today, system_user, tz=system_user.timezone
-        )
-
-        assert report.deferred is True
-        assert report.transfers == 0
-
-    ####################################################################
-    #
-    def test_import_unblocks_when_posted_through_is_behind(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: last_posted_through is behind gate_date (all txns still pending);
-               last_imported_at covers gate_date in the user's local timezone
-        WHEN:  fund_account runs with tz=user.timezone
-        THEN:  report.deferred=False -- import path takes over from posted path
-
-        This is the real-world scenario: end-of-month sync returned only
-        pending transactions so last_posted_through didn't advance, but
-        last_imported_at did.
-
-        last_imported_at should act as a fallback that allows funding to
-        proceed when the bank hasn't posted all transactions yet.
-        """
-        today = date(2026, 5, 31)
-        # 2pm PDT on May 31 = 21:00 UTC on May 31
-        imported_at = datetime(2026, 5, 31, 21, 0, tzinfo=UTC)
-        account = make_account(
-            posted_through=date(2026, 5, 30), imported_at=imported_at
-        )
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_TWICE_MONTHLY_15_EOM,
-        )
-        # last_funded_on=May 15 → next event is May 31 → gate_date=May 31
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 5, 15)
-        )
-
-        report = funding_svc.fund_account(
-            account, today, system_user, tz=system_user.timezone
-        )
-
-        assert report.deferred is False
-        assert report.transfers == 1
 
 
 ########################################################################
@@ -770,9 +450,12 @@ class TestCapAndWarn:
         """
         GIVEN: unallocated=$20, budget wants $50
         WHEN:  fund event fires
-        THEN:  $20 transferred; warning logged; last_funded_on advances
+        THEN:  $20 transferred; warning logged; the occurrence is left
+               PARTIAL and last_funded_on does NOT advance, so a later
+               run can top it up once Unallocated is replenished.
         """
         today = date(2026, 3, 1)
+        prior = date(2026, 2, 28)
         account = make_account(posted_through=today)
         unallocated = account.unallocated_budget
         assert unallocated is not None
@@ -789,23 +472,30 @@ class TestCapAndWarn:
             funding_amount=Money(50, "USD"),
             funding_schedule=_MONTHLY,
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 2, 28)
-        )
+        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=prior)
 
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
+        assert report.occurrences_partial == 1
+        assert report.occurrences_completed == 0
         assert len(report.warnings) == 1
         assert "capped" in report.warnings[0]
 
         budget.refresh_from_db()
         assert budget.balance == Money(20, "USD")
-        assert budget.last_funded_on == today
+        assert budget.last_funded_on == prior
+
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
 
     ####################################################################
     #
-    def test_empty_unallocated_skips_and_advances_pointer(
+    def test_empty_unallocated_leaves_event_partial(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,
@@ -813,9 +503,9 @@ class TestCapAndWarn:
         """
         GIVEN: unallocated=$0
         WHEN:  fund event fires
-        THEN:  no transfer; warning logged; last_funded_on advances to today
-               (pointer advances unconditionally -- no retry on subsequent days;
-               same-day re-runs will retry via the today-always-fires rule)
+        THEN:  no transfer; warning logged; the occurrence is left
+               PARTIAL and last_funded_on does NOT advance, so the next
+               run picks the event up after Unallocated is replenished.
         """
         today = date(2026, 3, 1)
         prior = date(2026, 2, 28)
@@ -840,11 +530,19 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 0
+        assert report.occurrences_partial == 1
         assert len(report.warnings) == 1
         assert "transfer skipped" in report.warnings[0]
 
         budget.refresh_from_db()
-        assert budget.last_funded_on == today
+        assert budget.last_funded_on == prior
+
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
 
     ####################################################################
     #
@@ -1093,10 +791,13 @@ class TestPausedAndArchived:
         GIVEN: one paused budget, one active budget (parametrized)
         WHEN:  fund_account runs
         THEN:  paused budget gets no transfer; active budget is funded;
-               paused name appears in report.skipped_budgets when paused=True;
-               paused budget's last_funded_on advances (start-fresh on unpause)
+               paused name appears in report.skipped_budgets when
+               paused=True; the paused budget's occurrence is SKIPPED
+               and last_funded_on stays at its prior value (so the
+               event is recorded as missed, not consumed).
         """
         today = date(2026, 3, 1)
+        prior = date(2026, 2, 28)
         account = make_account(posted_through=today)
         unallocated = account.unallocated_budget
         assert unallocated is not None
@@ -1125,7 +826,7 @@ class TestPausedAndArchived:
         )
         Budget.objects.filter(
             pkid__in=[active.pkid, paused_budget.pkid]
-        ).update(last_funded_on=date(2026, 2, 28))
+        ).update(last_funded_on=prior)
 
         report = funding_svc.fund_account(account, today, system_user)
 
@@ -1134,7 +835,14 @@ class TestPausedAndArchived:
             assert "Paused" in report.skipped_budgets
             paused_budget.refresh_from_db()
             assert paused_budget.balance == Money(0, "USD")
-            assert paused_budget.last_funded_on == today
+            assert paused_budget.last_funded_on == prior
+
+            occurrence = FundingEventOccurrence.objects.get(
+                budget=paused_budget,
+                kind=EventKind.FUND.value,
+                scheduled_date=today,
+            )
+            assert occurrence.status == FundingEventOccurrence.Status.SKIPPED
         else:
             assert report.transfers == 2
             assert not report.skipped_budgets
@@ -1178,6 +886,92 @@ class TestPausedAndArchived:
         assert report.transfers == 0
         budget.refresh_from_db()
         assert budget.balance == Money(0, "USD")
+
+
+########################################################################
+########################################################################
+#
+class TestOccurrenceSupersession:
+    """Newer occurrence closes prior PENDING/PARTIAL as SKIPPED.
+
+    When fund_account processes a new event date, _close_prior_incomplete
+    marks any earlier-dated PENDING or PARTIAL occurrence for the same
+    (budget, kind) as SKIPPED before the newer event is processed.
+    """
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "initial_status",
+        [
+            pytest.param(
+                FundingEventOccurrence.Status.PENDING,
+                id="pending-superseded",
+            ),
+            pytest.param(
+                FundingEventOccurrence.Status.PARTIAL,
+                id="partial-superseded",
+            ),
+        ],
+    )
+    def test_newer_occurrence_closes_prior_incomplete_as_skipped(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+        initial_status: str,
+    ) -> None:
+        """
+        GIVEN: a stale PENDING or PARTIAL occurrence for Jan 1 in the DB,
+               and last_funded_on set to Jan 1 so _collect_events only
+               sees Feb 1 as due
+        WHEN:  fund_account runs for Feb 1 with sufficient funds
+        THEN:  _close_prior_incomplete marks Jan 1 as SKIPPED;
+               Feb 1 occurrence is COMPLETE; one transfer is made
+        """
+        jan_1 = date(2026, 1, 1)
+        today = date(2026, 2, 1)
+        account = make_account(posted_through=today)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
+        )
+
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Vacation",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money(1000, "USD"),
+            funding_amount=Money(50, "USD"),
+            funding_schedule=_MONTHLY,
+        )
+        # Advance the pointer past Jan 1 so _collect_events only sees
+        # Feb 1.  The stale occurrence below simulates a run that
+        # created the occurrence but never advanced the pointer (e.g.
+        # a crash between writing the occurrence and committing the
+        # pointer update -- or an explicit partial-run that left the
+        # occurrence in a non-terminal state).
+        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=jan_1)
+        FundingEventOccurrence.objects.create(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=jan_1,
+            status=initial_status,
+        )
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        jan_occ = FundingEventOccurrence.objects.get(
+            budget=budget, scheduled_date=jan_1
+        )
+        feb_occ = FundingEventOccurrence.objects.get(
+            budget=budget, scheduled_date=today
+        )
+        assert jan_occ.status == FundingEventOccurrence.Status.SKIPPED
+        assert feb_occ.status == FundingEventOccurrence.Status.COMPLETE
+        assert report.transfers == 1
+        assert report.occurrences_completed == 1
 
 
 ########################################################################
@@ -1331,9 +1125,22 @@ class TestSameDayRerun:
         report1 = funding_svc.fund_account(account, today, system_user)
 
         assert report1.transfers == 1
+        assert report1.occurrences_partial == 1
+        assert report1.occurrences_completed == 0
+
         budget.refresh_from_db()
         assert budget.balance == Money(expected_after_run1, "USD")
-        assert budget.last_funded_on == today
+        # Pointer does NOT advance on PARTIAL; the event is still
+        # outstanding and eligible for retry.
+        assert budget.last_funded_on == date(2026, 2, 28)
+
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=budget,
+            kind=EventKind.FUND.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
+        assert occurrence.completed_at is None
 
         # Simulate user topping up Unallocated between runs.
         Budget.objects.filter(pkid=unallocated.pkid).update(
@@ -1343,12 +1150,21 @@ class TestSameDayRerun:
         report2 = funding_svc.fund_account(account, today, system_user)
 
         assert report2.transfers == 1
+        assert report2.occurrences_completed == 1
+        assert report2.occurrences_partial == 0
+
         budget.refresh_from_db()
         assert budget.balance == Money(expected_after_run2, "USD")
+        # COMPLETE on run 2 -- pointer now advances to the event date.
+        assert budget.last_funded_on == today
+
+        occurrence.refresh_from_db()
+        assert occurrence.status == FundingEventOccurrence.Status.COMPLETE
+        assert occurrence.completed_at is not None
 
     ####################################################################
     #
-    def test_recur_event_partial_topup_rerun(
+    def test_recur_event_is_one_shot_even_when_underfunded(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,
@@ -1356,15 +1172,13 @@ class TestSameDayRerun:
     ) -> None:
         """
         GIVEN: recur event fires; fill-up ($120) is below target ($200);
-               user adds $80 to fill-up via a manual (non-system) ITX;
-               fund_account re-runs on the same day
-        WHEN:  second run processes the same recur event
-        THEN:  second run transfers $80 (already_moved=$120 from first run);
-               Recurring is fully funded at $200
-
-        This is the spec section 14.2 worked example.  The manual ITX from
-        the user is not counted in already_moved because it lacks
-        system_event_kind/system_event_date.
+               first run sweeps fill-up into Recurring leaving it short
+        WHEN:  fund_account re-runs on the same day after the user
+               manually tops up the fill-up
+        THEN:  the occurrence is already COMPLETE -- RECUR is one-shot --
+               so the second run is a no-op and the extra $80 stays in
+               the fill-up.  Money that lands after the recur boundary
+               waits for the next cycle.
         """
         today = date(2026, 2, 1)
         account = make_account(posted_through=today)
@@ -1403,9 +1217,18 @@ class TestSameDayRerun:
         assert fillup.balance == Money(0, "USD")
         assert recurring.last_recurrence_on == today
 
-        # User moves $80 into the fill-up from a savings budget (manual ITX,
-        # no system_event_kind).  state_at_start_of_D rolls back the engine's
-        # ITX but not this one, so fill_B_0 for the second run = $200.
+        # Even after a partial sweep the occurrence is COMPLETE -- the
+        # design treats the cycle boundary as a hard break.
+        occurrence = FundingEventOccurrence.objects.get(
+            budget=recurring,
+            kind=EventKind.RECUR.value,
+            scheduled_date=today,
+        )
+        assert occurrence.status == FundingEventOccurrence.Status.COMPLETE
+
+        # User moves $80 into the fill-up from a savings budget after
+        # the boundary has passed.  We re-run the engine; nothing should
+        # move because the RECUR occurrence has been settled.
         savings = budget_svc.create(
             bank_account=account,
             name="Savings",
@@ -1428,11 +1251,11 @@ class TestSameDayRerun:
 
         report2 = funding_svc.fund_account(account, today, system_user)
 
-        assert report2.transfers == 1
+        assert report2.transfers == 0
         recurring.refresh_from_db()
-        assert recurring.balance == Money(200, "USD")
         fillup.refresh_from_db()
-        assert fillup.balance == Money(0, "USD")
+        assert recurring.balance == Money(120, "USD")
+        assert fillup.balance == Money(80, "USD")
 
     ####################################################################
     #
@@ -1849,17 +1672,23 @@ class TestRecurringScenarios:
         """
         GIVEN: (budget_type) budget; paused=True; last_funded_on=2026-02-28;
                fund_account ran on 2026-03-01 while paused
-               (pointer advanced to Mar 1; 0 transfers; budget skipped)
+               (occurrence created as SKIPPED; 0 transfers; pointer
+               stays at Feb 28 because nothing reached COMPLETE)
         WHEN:  budget unpaused via budget_svc.update on 2026-03-15
-               (budget_svc.update resets last_funded_on to Mar 14 = today-1)
+               (budget_svc.update resets last_funded_on to Mar 14 = today-1
+               so events that fell during the pause are dropped without
+               replay)
         AND    fund_account runs on 2026-04-01
         THEN:  Apr 1 fund event fires; money transferred; last_funded_on=Apr 1
         """
         account = make_account(posted_through=date(2026, 4, 1))
         unallocated = account.unallocated_budget
         assert unallocated is not None
+        # Enough to cover both parametrize cases: the GOAL wants $50 and
+        # the RECURRING (TARGET_DATE) prorates to up to $300 per event,
+        # which must fully clear so last_funded_on actually advances.
         Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
+            balance=Money(500, "USD")
         )
 
         # Recurring budgets require TARGET_DATE; Goals use FIXED_AMOUNT.
@@ -1902,7 +1731,10 @@ class TestRecurringScenarios:
         assert "Savings" in report_while_paused.skipped_budgets
 
         budget.refresh_from_db()
-        assert budget.last_funded_on == date(2026, 3, 1)
+        # Pointer does NOT advance for a skipped (paused) event under
+        # the new occurrence semantics -- the SKIPPED row records the
+        # event so it is not replayed.
+        assert budget.last_funded_on == date(2026, 2, 28)
 
         # User unpauses: budget_svc.update resets pointer to today-1.
         unpause_date = date(2026, 3, 15)
@@ -2047,8 +1879,6 @@ class TestScheduleFundingRuns:
         THEN:  funding_svc.fund_account is called with kinds={EventKind.FUND}
                and the parsed local date
         """
-        from moneypools.service.funding_strategy import EventKind
-
         account = bank_account_factory()
 
         with patch("moneypools.tasks.funding_svc.fund_account") as mock_fund:
@@ -2076,8 +1906,6 @@ class TestScheduleFundingRuns:
         THEN:  funding_svc.fund_account is called with kinds={EventKind.RECUR}
                and the parsed local date
         """
-        from moneypools.service.funding_strategy import EventKind
-
         account = bank_account_factory()
 
         with patch("moneypools.tasks.funding_svc.fund_account") as mock_fund:
@@ -2091,6 +1919,35 @@ class TestScheduleFundingRuns:
         assert call.args[0].id == account.id
         assert call.args[1] == date(2026, 5, 17)
         assert call.kwargs["kinds"] == {EventKind.RECUR}
+
+    ####################################################################
+    #
+    def test_auto_funding_disabled_account_is_not_dispatched(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: an account with auto_funding_enabled=False
+        WHEN:  schedule_funding_runs fires (inside a FUND window)
+        THEN:  fund_one_account is not enqueued for that account
+        """
+        account = bank_account_factory(auto_funding_enabled=False)
+        owner = account.owners.first()
+        assert owner is not None
+        owner.timezone = self._TZ_NY
+        owner.save()
+
+        fake_now = datetime(2026, 5, 18, 3, 10, tzinfo=UTC)
+
+        with (
+            patch("moneypools.tasks.datetime") as mock_dt,
+            patch("moneypools.tasks.fund_one_account.apply_async") as mock_fund,
+            patch("moneypools.tasks.recur_one_account.apply_async"),
+        ):
+            mock_dt.now.return_value = fake_now
+            schedule_funding_runs()
+
+        assert mock_fund.called is False
 
 
 ########################################################################
@@ -2242,27 +2099,18 @@ class TestNextFundingInfo:
 
     ####################################################################
     #
-    @pytest.mark.parametrize(
-        "posted_through,expected_deferred",
-        [
-            pytest.param(date(2026, 3, 1), False, id="current"),
-            pytest.param(None, True, id="deferred"),
-        ],
-    )
     def test_fixed_amount_goal(
         self,
         make_account: Callable[..., BankAccount],
-        posted_through: date | None,
-        expected_deferred: bool,
     ) -> None:
         """
-        GIVEN: GOAL budget with FIXED_AMOUNT funding; last_funded_on in prior month
+        GIVEN: GOAL budget with FIXED_AMOUNT funding; last_funded_on in
+               prior month
         WHEN:  next_funding_info called
-        THEN:  returns event with correct date and amount; deferred matches
-               import freshness (False when account is current, True when not)
+        THEN:  returns the next event date and amount.
         """
         today = date(2026, 3, 1)
-        account = make_account(posted_through=posted_through)
+        account = make_account()
         budget = budget_svc.create(
             bank_account=account,
             name="Laptop Fund",
@@ -2282,41 +2130,6 @@ class TestNextFundingInfo:
         assert info is not None
         assert info.date == date(2026, 3, 1)
         assert info.amount == Money(100, "USD")
-        assert info.deferred is expected_deferred
-
-    ####################################################################
-    #
-    def test_future_event_deferred_when_no_import_data(
-        self,
-        make_account: Callable[..., BankAccount],
-    ) -> None:
-        """
-        GIVEN: budget created today; next event is in the future; last_posted_through=None
-        WHEN:  next_funding_info called
-        THEN:  deferred=True even though the event date has not yet passed
-
-        Regression: old code only set deferred when next_date <= today, so a
-        future event on an account with no import data showed deferred=False.
-        """
-        today = date(2026, 4, 30)
-        account = make_account(posted_through=None)
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New Budget",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(1000, "USD"),
-            funding_amount=Money(100, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-        # Budget created today → after = April 30 → first event is May 1
-        budget.refresh_from_db()
-
-        info = funding_svc.next_funding_info(budget, today=today)
-
-        assert info is not None
-        assert info.date > today  # event is in the future
-        assert info.deferred is True
 
     ####################################################################
     #
@@ -2580,66 +2393,6 @@ class TestNextFundingInfo:
         # $3400 / 8 = $425.00
         assert info.amount == Money("425.00", "USD")
 
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "imported_at,tz,expected_deferred",
-        [
-            pytest.param(
-                datetime(2026, 5, 31, 15, 0, tzinfo=UTC),  # 8am PDT May 31
-                "America/Los_Angeles",
-                False,
-                id="imported-today-local",
-            ),
-            pytest.param(
-                datetime(
-                    2026, 5, 31, 6, 0, tzinfo=UTC
-                ),  # 11pm PDT May 30 -- UTC date is May 31
-                "America/Los_Angeles",
-                True,
-                id="imported-yesterday-local-but-today-utc",
-            ),
-        ],
-    )
-    def test_import_freshness_gate_respects_local_timezone(
-        self,
-        make_account: Callable[..., BankAccount],
-        imported_at: datetime,
-        tz: str,
-        expected_deferred: bool,
-    ) -> None:
-        """
-        GIVEN: last_posted_through=None; last_imported_at varies relative to
-               gate_date in the user's local timezone
-        WHEN:  next_funding_info called with tz=user_timezone
-        THEN:  deferred reflects whether the import was on gate_date locally
-
-        Gate evaluation must use the local date of the import, not the UTC
-        date.  An import at 11pm PDT on May 30 (= 6am UTC May 31) must not
-        pass a gate_date of May 31 -- the data is from yesterday locally.
-        """
-        today = date(2026, 5, 31)
-        account = make_account(posted_through=None, imported_at=imported_at)
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Laptop Fund",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(1000, "USD"),
-            funding_amount=Money(100, "USD"),
-            funding_schedule=_TWICE_MONTHLY_15_EOM,
-        )
-        # last_funded_on=May 15 → next event is May 31 → gate checks May 31
-        Budget.objects.filter(pkid=budget.pkid).update(
-            last_funded_on=date(2026, 5, 15)
-        )
-        budget.refresh_from_db()
-
-        info = funding_svc.next_funding_info(budget, today=today, tz=tz)
-
-        assert info is not None
-        assert info.deferred is expected_deferred
-
 
 ########################################################################
 ########################################################################
@@ -2877,7 +2630,6 @@ class TestFundingNotifications:
         fund_one_account(
             str(account.id),
             local_date_str=today.isoformat(),
-            owner_tz=owner.timezone,
         )
 
         n = Notification.objects.get(user=owner, kind=FUNDING_COMPLETE)

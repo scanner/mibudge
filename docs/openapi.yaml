@@ -36,21 +36,17 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenObtainPairRequest'
+              $ref: '#/components/schemas/EmailTokenObtainPairRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/TokenObtainPairRequest'
+              $ref: '#/components/schemas/EmailTokenObtainPairRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/TokenObtainPairRequest'
+              $ref: '#/components/schemas/EmailTokenObtainPairRequest'
         required: true
       responses:
         '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenObtainPair'
-          description: ''
+          description: No response body
   /api/token/refresh/:
     post:
       operationId: api_token_refresh_create
@@ -501,9 +497,11 @@ paths:
               schema:
                 type: object
                 properties:
-                  deferred:
-                    type: boolean
                   transfers:
+                    type: integer
+                  occurrences_completed:
+                    type: integer
+                  occurrences_partial:
                     type: integer
                   warnings:
                     type: array
@@ -514,6 +512,10 @@ paths:
                     items:
                       type: string
           description: Funding run result.
+        '409':
+          description: Either another worker is currently processing this account
+            (lock held), or there is nothing due or outstanding to run as of the supplied
+            date.
   /api/v1/bank-accounts/{id}/sync-scrape/:
     post:
       operationId: bank_accounts_sync_scrape_create
@@ -865,6 +867,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/Budget'
           description: ''
+  /api/v1/channel-preferences/:
+    get:
+      operationId: channel_preferences_list
+      description: Return all notification channels with the authenticated user's
+        delivery preferences. Channels without a stored preference fall back to DAILY_MORNING.
+      summary: List channel preferences
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - channel-preferences
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChannelPreferenceList'
+          description: ''
+  /api/v1/channel-preferences/{channel}/:
+    patch:
+      operationId: channel_preferences_partial_update
+      description: Set the digest_frequency for a notification channel. Returns 404
+        if the channel value is not valid.
+      summary: Update a channel preference
+      parameters:
+      - in: path
+        name: channel
+        schema:
+          type: string
+        description: Channel identifier (e.g. 'email').
+        required: true
+      tags:
+      - channel-preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedChannelPreferenceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedChannelPreferenceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedChannelPreferenceRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelPreference'
+          description: ''
   /api/v1/currencies/:
     get:
       operationId: currencies_retrieve
@@ -879,6 +946,116 @@ paths:
       responses:
         '200':
           description: List of supported currencies.
+  /api/v1/funding-occurrences/:
+    get:
+      operationId: funding_occurrences_list
+      description: Return funding event occurrences for budgets on accounts owned
+        by the authenticated user.  Filterable by bank_account, budget, kind, status
+        (multi-value), and scheduled_date range.  Orderable by scheduled_date or created_at.
+      summary: List funding event occurrences
+      parameters:
+      - in: query
+        name: bank_account
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: budget
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: kind
+        schema:
+          type: string
+          enum:
+          - fund
+          - recur
+        description: |-
+          Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
+
+          * `fund` - fund
+          * `recur` - recur
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - COMPLETE
+            - PARTIAL
+            - PENDING
+            - SKIPPED
+        description: |-
+          * `PENDING` - Pending
+          * `PARTIAL` - Partial
+          * `COMPLETE` - Complete
+          * `SKIPPED` - Skipped
+        explode: true
+        style: form
+      tags:
+      - funding-occurrences
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFundingEventOccurrenceList'
+          description: ''
+  /api/v1/funding-occurrences/{id}/:
+    get:
+      operationId: funding_occurrences_retrieve
+      description: Return a single funding event occurrence by UUID.
+      summary: Get a funding event occurrence
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - funding-occurrences
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundingEventOccurrence'
+          description: ''
   /api/v1/internal-transactions/:
     get:
       operationId: internal_transactions_list
@@ -998,6 +1175,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InternalTransaction'
+          description: ''
+  /api/v1/notification-preferences/:
+    get:
+      operationId: notification_preferences_list
+      description: Return all registered notification kinds merged with the authenticated
+        user's preferences. Kinds without a stored preference fall back to the registry
+        default_delivery_mode.
+      summary: List notification preferences
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - notification-preferences
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationPreferenceList'
+          description: ''
+  /api/v1/notification-preferences/{kind}/:
+    patch:
+      operationId: notification_preferences_partial_update
+      description: Set delivery_mode ('digest', 'immediate', or 'off') for a single
+        notification kind. Returns 400 if the kind has can_suppress=False. Returns
+        404 if the kind is not registered.
+      summary: Update a notification preference
+      parameters:
+      - in: path
+        name: kind
+        schema:
+          type: string
+          pattern: ^[^/]+$
+        required: true
+      tags:
+      - notification-preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationPreferenceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationPreferenceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationPreferenceRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
           description: ''
   /api/v1/transactions/:
     get:
@@ -1626,6 +1870,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+  /api/v1/users/me/change-password/:
+    post:
+      operationId: users_me_change_password_create
+      description: Change the authenticated user's password. Requires the current
+        password for verification. The new password must score at least 2 on the zxcvbn
+        scale. Existing JWT tokens remain valid; the caller may silently refresh as
+        normal -- no forced re-login is imposed.
+      summary: Change current user's password
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
 components:
   schemas:
     AccountTypeEnum:
@@ -1737,6 +2008,11 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        auto_funding_enabled:
+          type: boolean
+          description: When enabled (the default), scheduled funding and recurrence
+            events run automatically for this account.  Disable to opt out of automation
+            and drive funding entirely from the 'Run funding now' button.
         last_imported_at:
           type: string
           format: date-time
@@ -1813,6 +2089,11 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        auto_funding_enabled:
+          type: boolean
+          description: When enabled (the default), scheduled funding and recurrence
+            events run automatically for this account.  Disable to opt out of automation
+            and drive funding entirely from the 'Run funding now' button.
       required:
       - bank
       - name
@@ -1915,7 +2196,7 @@ components:
                 obj: The Budget instance being serialized.
 
             Returns:
-                Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+                Dict with 'date', 'amount', 'amount_currency', or None.
           readOnly: true
         created_at:
           type: string
@@ -2316,6 +2597,153 @@ components:
         * `Utilities:Phone` - Phone
         * `Utilities:Trash` - Trash
         * `Utilities:Water & Sewer` - Water & Sewer
+    ChangePasswordRequest:
+      type: object
+      description: |-
+        Validate a password-change request.
+
+        Checks that the new password is strong enough (zxcvbn score >= 2)
+        and that the two new-password fields match.  Current-password
+        verification and the actual password update are handled in the view.
+      properties:
+        current_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        confirm_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - confirm_password
+      - current_password
+      - new_password
+    ChannelPreference:
+      type: object
+      description: |-
+        Channel delivery preference.
+
+        Read: channel, display_name, digest_frequency.
+        Write (PATCH): digest_frequency only.
+      properties:
+        channel:
+          type: string
+          readOnly: true
+        display_name:
+          type: string
+          readOnly: true
+        digest_frequency:
+          $ref: '#/components/schemas/DigestFrequencyEnum'
+      required:
+      - channel
+      - digest_frequency
+      - display_name
+    DeliveryModeEnum:
+      enum:
+      - digest
+      - immediate
+      - 'off'
+      type: string
+      description: |-
+        * `digest` - Digest
+        * `immediate` - Immediate
+        * `off` - Off
+    DigestFrequencyEnum:
+      enum:
+      - daily_morning
+      - daily_evening
+      - twice_daily
+      - weekly_friday
+      - weekly_saturday
+      - weekly_sunday
+      type: string
+      description: |-
+        * `daily_morning` - Once daily (morning, ~7 am)
+        * `daily_evening` - Once daily (evening, ~6 pm)
+        * `twice_daily` - Twice daily (morning + evening)
+        * `weekly_friday` - Weekly on Friday
+        * `weekly_saturday` - Weekly on Saturday
+        * `weekly_sunday` - Weekly on Sunday
+    EmailTokenObtainPairRequest:
+      type: object
+      description: |-
+        TokenObtainPairSerializer variant that uses ``email`` as the login
+        field instead of ``username``.
+
+        USERNAME_FIELD is kept as "username" so Django admin is unaffected;
+        we override ``username_field`` here so simplejwt presents an ``email``
+        field in the login payload and passes it to EmailBackend.authenticate().
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    FundingEventOccurrence:
+      type: object
+      description: |-
+        Read-only serializer for FundingEventOccurrence rows.
+
+        Exposes the budget UUID as 'budget' rather than the internal pkid so
+        callers can cross-reference with the Budget endpoint.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        budget:
+          type: string
+          format: uuid
+          readOnly: true
+        kind:
+          type: string
+          readOnly: true
+          description: 'Funding event discriminator: "fund" or "recur".  Stored as
+            the EventKind string value; not exposed in user-facing forms so no choices=
+            is set.'
+        scheduled_date:
+          type: string
+          format: date
+          readOnly: true
+          description: Calendar date the event was scheduled to fire.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Wall-clock time the occurrence reached COMPLETE.  Null while
+            PENDING/PARTIAL/SKIPPED.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        modified_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - budget
+      - completed_at
+      - created_at
+      - id
+      - kind
+      - modified_at
+      - scheduled_date
+      - status
     FundingTypeEnum:
       enum:
       - D
@@ -2441,6 +2869,30 @@ components:
       - bank_account
       - dst_budget
       - src_budget
+    NotificationPreference:
+      type: object
+      description: |-
+        Notification kind preference.
+
+        Read: kind, display_name, can_suppress, delivery_mode.
+        Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
+      properties:
+        kind:
+          type: string
+          readOnly: true
+        display_name:
+          type: string
+          readOnly: true
+        can_suppress:
+          type: boolean
+          readOnly: true
+        delivery_mode:
+          $ref: '#/components/schemas/DeliveryModeEnum'
+      required:
+      - can_suppress
+      - delivery_mode
+      - display_name
+      - kind
     PaginatedBankAccountList:
       type: object
       required:
@@ -2510,6 +2962,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Budget'
+    PaginatedChannelPreferenceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelPreference'
+    PaginatedFundingEventOccurrenceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FundingEventOccurrence'
     PaginatedInternalTransactionList:
       type: object
       required:
@@ -2533,6 +3031,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InternalTransaction'
+    PaginatedNotificationPreferenceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationPreference'
     PaginatedTransactionAllocationList:
       type: object
       required:
@@ -2644,6 +3165,11 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        auto_funding_enabled:
+          type: boolean
+          description: When enabled (the default), scheduled funding and recurrence
+            events run automatically for this account.  Disable to opt out of automation
+            and drive funding entirely from the 'Run funding now' button.
     PatchedBudgetRequest:
       type: object
       description: |-
@@ -2698,6 +3224,26 @@ components:
           nullable: true
           maxLength: 512
         auto_spend: {}
+    PatchedChannelPreferenceRequest:
+      type: object
+      description: |-
+        Channel delivery preference.
+
+        Read: channel, display_name, digest_frequency.
+        Write (PATCH): digest_frequency only.
+      properties:
+        digest_frequency:
+          $ref: '#/components/schemas/DigestFrequencyEnum'
+    PatchedNotificationPreferenceRequest:
+      type: object
+      description: |-
+        Notification kind preference.
+
+        Read: kind, display_name, can_suppress, delivery_mode.
+        Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
+      properties:
+        delivery_mode:
+          $ref: '#/components/schemas/DeliveryModeEnum'
     PatchedTransactionRequest:
       type: object
       description: |-
@@ -2909,32 +3455,18 @@ components:
       - is_pending
       - posted_date
       - raw_description
-    TokenObtainPair:
-      type: object
-      properties:
-        access:
-          type: string
-          readOnly: true
-        refresh:
-          type: string
-          readOnly: true
-      required:
-      - access
-      - refresh
-    TokenObtainPairRequest:
-      type: object
-      properties:
-        username:
-          type: string
-          writeOnly: true
-          minLength: 1
-        password:
-          type: string
-          writeOnly: true
-          minLength: 1
-      required:
-      - password
-      - username
+    StatusEnum:
+      enum:
+      - PENDING
+      - PARTIAL
+      - COMPLETE
+      - SKIPPED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `PARTIAL` - Partial
+        * `COMPLETE` - Complete
+        * `SKIPPED` - Skipped
     TokenRefresh:
       type: object
       properties:
@@ -3298,6 +3830,11 @@ components:
           readOnly: true
           description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
             only.
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: Email address
         name:
           type: string
           title: Name of User
@@ -3314,6 +3851,7 @@ components:
           type: string
           maxLength: 100
       required:
+      - email
       - url
       - username
     UserRequest:

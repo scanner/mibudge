@@ -195,6 +195,7 @@ class ScrapeSyncReport:
     posting_order_mismatches: list[str] = field(default_factory=list)
     last_posted_through: date | None = None
     new_transaction_ids: list[str] = field(default_factory=list)
+    new_pending_transaction_ids: list[str] = field(default_factory=list)
 
 
 ########################################################################
@@ -284,10 +285,13 @@ def sync_scrape(
             "date": payload.scraped_at.strftime("%Y-%m-%d"),
         },
     )
+    _TRANSACTION_DISPLAY_LIMIT = 15
+
     if report.inserted_posted > 0:
-        _TRANSACTION_DISPLAY_LIMIT = 15
         _new_txns = list(
-            Transaction.objects.filter(id__in=report.new_transaction_ids)
+            Transaction.objects.filter(
+                id__in=report.new_transaction_ids, pending=False
+            )
             .prefetch_related("allocations__budget")
             .order_by("transaction_date")[: _TRANSACTION_DISPLAY_LIMIT + 1]
         )
@@ -319,6 +323,45 @@ def sync_scrape(
                 - _TRANSACTION_DISPLAY_LIMIT
                 if truncated
                 else 0,
+            },
+        )
+    if report.new_pending_transaction_ids:
+        _new_pending = list(
+            Transaction.objects.filter(
+                id__in=report.new_pending_transaction_ids
+            )
+            .prefetch_related("allocations__budget")
+            .order_by("transaction_date")[: _TRANSACTION_DISPLAY_LIMIT + 1]
+        )
+        truncated = len(_new_pending) > _TRANSACTION_DISPLAY_LIMIT
+        pending_ctx = [
+            {
+                "date": tx.transaction_date.strftime("%Y-%m-%d"),
+                "description": tx.description,
+                "amount": str(tx.amount),
+                "budgets": [
+                    a.budget.name
+                    for a in tx.allocations.all()
+                    if a.budget is not None
+                ],
+            }
+            for tx in _new_pending[:_TRANSACTION_DISPLAY_LIMIT]
+        ]
+        count = len(report.new_pending_transaction_ids)
+        notify_for(
+            bank_account,
+            TRANSACTION_POSTED,
+            {
+                "account_name": bank_account.name,
+                "account_id": str(bank_account.id),
+                "count": count,
+                "date": payload.scraped_at.strftime("%Y-%m-%d"),
+                "transactions": pending_ctx,
+                "truncated": truncated,
+                "remaining_count": count - _TRANSACTION_DISPLAY_LIMIT
+                if truncated
+                else 0,
+                "pending": True,
             },
         )
     if report.balance_mismatch is not None:
@@ -374,6 +417,19 @@ def _sync_scrape_locked(
     # so the FK type is correct.
     pending_pkids = list(pending_qs.values_list("pkid", flat=True))
     deleted_pending = len(pending_pkids)
+
+    # Snapshot existing pending before wipe so we can detect truly new
+    # (or changed) pending rows after re-insertion.
+    existing_pending_keys: set[tuple[date, Decimal, str]] = {
+        (
+            row["transaction_date"].date(),
+            Decimal(row["amount"]),
+            row["raw_description"],
+        )
+        for row in pending_qs.values(
+            "transaction_date", "amount", "raw_description"
+        )
+    }
 
     pending_tx_sum = Decimal("0")
     pending_alloc_sum = Decimal("0")
@@ -495,6 +551,7 @@ def _sync_scrape_locked(
 
     # --- 4. Insert pending (reverse scrape order) ----------------------
     inserted_pending = 0
+    new_pending_tx_ids: list[str] = []
     for stx in reversed(scraped_pending):
         posted_dt, txn_dt = _normalize_dates(stx)
         tx = _insert_transaction(
@@ -511,6 +568,10 @@ def _sync_scrape_locked(
         avail_delta += stx.amount.amount
         # pending does NOT touch posted_balance.
         unalloc_delta += stx.amount.amount
+
+        pending_key = (txn_dt.date(), stx.amount.amount, stx.raw_description)
+        if pending_key not in existing_pending_keys:
+            new_pending_tx_ids.append(str(tx.id))
 
     # --- 5. Apply accumulated balance deltas ---------------------------
     bank_account.available_balance = moneyed.Money(
@@ -591,6 +652,7 @@ def _sync_scrape_locked(
         posting_order_mismatches=posting_warnings,
         last_posted_through=new_last_posted_through,
         new_transaction_ids=new_tx_ids,
+        new_pending_transaction_ids=new_pending_tx_ids,
     )
 
 

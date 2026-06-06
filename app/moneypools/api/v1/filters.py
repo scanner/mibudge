@@ -16,6 +16,8 @@ from django_filters import rest_framework as filters
 # Project imports
 from moneypools.models import (
     Budget,
+    EventKind,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -141,6 +143,41 @@ class InternalTransactionFilter(filters.FilterSet):
             "src_budget",
             "dst_budget",
             "budget",
+            "date_from",
+            "date_to",
+        ]
+
+
+########################################################################
+########################################################################
+#
+class FundingEventOccurrenceFilter(filters.FilterSet):
+    """Filter funding event occurrences by account, budget, kind, status, and date."""
+
+    bank_account = filters.UUIDFilter(field_name="budget__bank_account__id")
+    budget = filters.UUIDFilter(field_name="budget__id")
+    kind = filters.ChoiceFilter(
+        choices=[(k.value, k.value) for k in EventKind],
+    )
+    status = filters.MultipleChoiceFilter(
+        choices=FundingEventOccurrence.Status.choices,
+    )
+    date_from = filters.DateFilter(
+        field_name="scheduled_date",
+        lookup_expr="gte",
+    )
+    date_to = filters.DateFilter(
+        field_name="scheduled_date",
+        lookup_expr="lte",
+    )
+
+    class Meta:
+        model = FundingEventOccurrence
+        fields = [
+            "bank_account",
+            "budget",
+            "kind",
+            "status",
             "date_from",
             "date_to",
         ]

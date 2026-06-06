@@ -38,6 +38,7 @@ from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -53,6 +54,7 @@ from moneypools.service.shared import funding_system_user
 
 from .filters import (
     BudgetFilter,
+    FundingEventOccurrenceFilter,
     InternalTransactionFilter,
     TransactionAllocationFilter,
     TransactionFilter,
@@ -61,6 +63,7 @@ from .serializers import (
     BankAccountSerializer,
     BankSerializer,
     BudgetSerializer,
+    FundingEventOccurrenceSerializer,
     InternalTransactionSerializer,
     ResolvePendingSerializer,
     ScrapeSyncReportSerializer,
@@ -345,8 +348,9 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
                 response={
                     "type": "object",
                     "properties": {
-                        "deferred": {"type": "boolean"},
                         "transfers": {"type": "integer"},
+                        "occurrences_completed": {"type": "integer"},
+                        "occurrences_partial": {"type": "integer"},
                         "warnings": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -357,7 +361,14 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
                         },
                     },
                 },
-            )
+            ),
+            409: OpenApiResponse(
+                description=(
+                    "Either another worker is currently processing this "
+                    "account (lock held), or there is nothing due or "
+                    "outstanding to run as of the supplied date."
+                ),
+            ),
         },
     )
     @action(detail=True, methods=["post"], url_path="run-funding")
@@ -383,11 +394,52 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
                 {"detail": "Funding system user not configured."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
         report = funding_svc.fund_account(account, as_of, system_user)
+
+        # Another worker is already running funding for this account;
+        # refuse rather than wait, so the user gets immediate feedback
+        # and we do not duplicate transfers.
+        #
+        if report.busy:
+            return Response(
+                {
+                    "detail": (
+                        "Funding is already running for this account; "
+                        "try again in a moment."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Nothing material happened -- no transfers, no occurrences
+        # transitioned, no paused-skips.  This is the spam-click path
+        # after a complete run; surface it as a 409 so the UI can show
+        # an idempotent "nothing to do" state instead of a misleading
+        # success.
+        #
+        nothing_to_do = (
+            report.transfers == 0
+            and report.occurrences_completed == 0
+            and report.occurrences_partial == 0
+            and not report.skipped_budgets
+        )
+        if nothing_to_do:
+            return Response(
+                {
+                    "detail": (
+                        "No funding events are due or outstanding for "
+                        "this account as of the requested date."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         return Response(
             {
-                "deferred": report.deferred,
                 "transfers": report.transfers,
+                "occurrences_completed": report.occurrences_completed,
+                "occurrences_partial": report.occurrences_partial,
                 "warnings": report.warnings,
                 "skipped_budgets": report.skipped_budgets,
             }
@@ -504,9 +556,7 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         currency = account.currency
 
         for budget in budgets:
-            info = funding_svc.next_funding_info(
-                budget, today=today, tz=request.user.timezone
-            )
+            info = funding_svc.next_funding_info(budget, today=today)
             if info is None:
                 continue
 
@@ -1041,6 +1091,47 @@ class InternalTransactionViewSet(
             actor=self.request.user,
             effective_date=data.get("effective_date"),
         )
+
+
+########################################################################
+########################################################################
+#
+@extend_schema_view(
+    list=extend_schema(
+        summary="List funding event occurrences",
+        description=(
+            "Return funding event occurrences for budgets on accounts "
+            "owned by the authenticated user.  Filterable by bank_account, "
+            "budget, kind, status (multi-value), and scheduled_date range.  "
+            "Orderable by scheduled_date or created_at."
+        ),
+    ),
+    retrieve=extend_schema(
+        summary="Get a funding event occurrence",
+        description="Return a single funding event occurrence by UUID.",
+    ),
+)
+class FundingEventOccurrenceViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only access to FundingEventOccurrence rows for owned accounts."""
+
+    serializer_class = FundingEventOccurrenceSerializer
+    queryset = FundingEventOccurrence.objects.select_related(
+        "budget__bank_account"
+    ).all()
+    lookup_field = "id"
+    permission_classes = [IsAuthenticated, IsAccountOwner]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = FundingEventOccurrenceFilter
+    ordering_fields = ["scheduled_date", "created_at"]
+    ordering = ["-scheduled_date"]
+
+    ####################################################################
+    #
+    def get_queryset(self):
+        """Restrict to occurrences on accounts the requesting user owns."""
+        return FundingEventOccurrence.objects.select_related(
+            "budget__bank_account"
+        ).filter(budget__bank_account__owners=self.request.user)
 
 
 ########################################################################

@@ -1,7 +1,7 @@
 import random
 import string
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import factory
@@ -14,6 +14,8 @@ from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
+    EventKind,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -306,3 +308,16 @@ class InternalTransactionFactory(DjangoModelFactory):
             actor=kwargs["actor"],
             effective_date=kwargs.get("effective_date"),
         )
+
+
+########################################################################
+########################################################################
+#
+class FundingEventOccurrenceFactory(DjangoModelFactory):
+    class Meta:
+        model = FundingEventOccurrence
+
+    budget = factory.SubFactory(BudgetFactory)
+    kind = EventKind.FUND.value
+    scheduled_date = factory.LazyFunction(date.today)
+    status = FundingEventOccurrence.Status.PENDING

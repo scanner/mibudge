@@ -53,8 +53,9 @@ export function fundingSummary(accountId: string): Promise<FundingSummary> {
 ////////////////////////////////////////////////////////////////////////
 //
 export interface FundingRunResult {
-  deferred: boolean;
   transfers: number;
+  occurrences_completed: number;
+  occurrences_partial: number;
   warnings: string[];
   skipped_budgets: string[];
 }

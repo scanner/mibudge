@@ -37,6 +37,7 @@ export interface BankAccount {
   available_balance: string;
   available_balance_currency: string;
   unallocated_budget: string;
+  auto_funding_enabled: boolean;
   last_imported_at: string | null;
   last_posted_through: string | null;
   created_at: string;
@@ -49,7 +50,6 @@ export interface NextFunding {
   date: string; // ISO date string, e.g. "2026-05-01"
   amount: string; // decimal string
   amount_currency: string;
-  deferred: boolean;
 }
 
 ////////////////////////////////////////////////////////////////////////

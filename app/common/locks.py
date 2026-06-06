@@ -49,15 +49,27 @@ _LOCK_TIMEOUT = 30  # seconds
 ########################################################################
 #
 @contextmanager
-def acquire_lock(key: str) -> Iterator[None]:
+def acquire_lock(key: str, blocking: bool = True) -> Iterator[bool]:
     """Acquire a named Redis lock for the duration of the block.
 
     Args:
         key: The Redis key to lock on.  Use a model's ``lock_key``
             property to produce a well-formed, collision-free key.
+        blocking: When True (the default), wait until the lock is
+            available.  When False, attempt to acquire once and yield
+            False if another holder has it -- the caller is then
+            expected to branch on the yielded value rather than
+            mutating state.
 
     Yields:
-        None
+        True if the lock was acquired, False otherwise (only possible
+        when ``blocking=False``).  Existing blocking call sites can
+        ignore the value.
     """
-    with redis_client().lock(key, timeout=_LOCK_TIMEOUT):
-        yield
+    lock = redis_client().lock(key, timeout=_LOCK_TIMEOUT)
+    acquired = lock.acquire(blocking=blocking)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            lock.release()

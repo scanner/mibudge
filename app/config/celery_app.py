@@ -68,6 +68,12 @@ MANAGED_PERIODIC_TASKS: dict = {
         "task": "notifications.tasks.purge_old_notifications",
         "schedule": {"crontab": {"minute": "0", "hour": "3"}},
     },
+    "Prune funding event occurrences": {
+        "task": "moneypools.tasks.prune_funding_event_occurrences",
+        "schedule": {
+            "crontab": {"minute": "0", "hour": "4", "day_of_week": "0"}
+        },
+    },
 }
 
 

@@ -1,3 +1,4 @@
+import enum
 import uuid
 from typing import Any
 
@@ -28,6 +29,24 @@ def get_default_currency() -> str:
     does not generate new migrations.
     """
     return settings.DEFAULT_CURRENCY
+
+
+########################################################################
+########################################################################
+#
+class EventKind(enum.StrEnum):
+    """Discriminator for the two funding event types.
+
+    Used by the funding service to distinguish FUND events (move money
+    from unallocated into a budget, or into a recurring budget's fill-up
+    goal) from RECUR events (move money from a fill-up goal into its
+    associated recurring budget).  Lives here rather than in the
+    funding service so that FundingEventOccurrence.kind can be typed
+    against the same enum that the service uses.
+    """
+
+    FUND = "fund"
+    RECUR = "recur"
 
 
 ####################################################################
@@ -209,9 +228,22 @@ class BankAccount(MoneyPoolBaseClass):
         ),
     )
 
+    # When False, scheduled funding/recurrence runs skip this account.
+    # The "Run funding now" REST endpoint ignores this flag -- the user
+    # can always trigger funding manually.
+    #
+    auto_funding_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            "When enabled (the default), scheduled funding and recurrence "
+            "events run automatically for this account.  Disable to opt out "
+            "of automation and drive funding entirely from the 'Run funding "
+            "now' button."
+        ),
+    )
+
     # Import-freshness tracking.  Set by the mark-imported endpoint after
-    # each successful import run.  The funding engine gates on these values
-    # to ensure it never processes events that lack backing transaction data.
+    # each successful import run.
     #
     last_imported_at = models.DateTimeField(
         null=True,
@@ -762,6 +794,102 @@ class Budget(MoneyPoolBaseClass):
     def lock_key(self) -> str:
         """Return the Redis lock key for this budget."""
         return f"budget:{self.id}"
+
+
+########################################################################
+########################################################################
+#
+class FundingEventOccurrence(MoneyPoolBaseClass):
+    """A single scheduled funding or recurrence event for a budget.
+
+    Materialized by the funding service when an event becomes due so that
+    partial or skipped events have a place to live until they are either
+    completed on a later run or superseded by the next event of the same
+    kind for the same budget.
+
+    Lifecycle:
+        PENDING  -- materialized, no transfer attempted yet.
+        PARTIAL  -- transfer attempted; some funds moved but the strategy's
+                    intended amount was not fully covered.  Eligible for
+                    retry on subsequent runs (manual or scheduled) until
+                    superseded.
+        COMPLETE -- intended amount fully transferred; no further action.
+        SKIPPED  -- closed without completion.  Set when (a) a newer
+                    occurrence of the same (budget, kind) is materialized
+                    while this one is still PENDING/PARTIAL, or (b) the
+                    budget is paused at the time the event would fire.
+
+    The 'intended' amount is NOT stored on this row -- it is recomputed
+    via the budget's strategy on every attempt so that mid-cycle edits to
+    target_balance, funding_amount, etc. take effect immediately.  The
+    'funded so far' figure is derived by summing matching
+    InternalTransaction rows (system_event_kind, system_event_date).
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PARTIAL = "PARTIAL", "Partial"
+        COMPLETE = "COMPLETE", "Complete"
+        SKIPPED = "SKIPPED", "Skipped"
+
+    budget = models.ForeignKey(
+        Budget,
+        to_field="id",
+        on_delete=models.CASCADE,
+        related_name="funding_occurrences",
+    )
+    kind = models.CharField(
+        max_length=5,
+        help_text=(
+            'Funding event discriminator: "fund" or "recur".  Stored as '
+            "the EventKind string value; not exposed in user-facing forms "
+            "so no choices= is set."
+        ),
+    )
+    scheduled_date = models.DateField(
+        help_text="Calendar date the event was scheduled to fire.",
+    )
+    status = models.CharField(
+        max_length=8,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Wall-clock time the occurrence reached COMPLETE.  Null while "
+            "PENDING/PARTIAL/SKIPPED."
+        ),
+    )
+
+    ####################################################################
+    #
+    def __str__(self) -> str:
+        return (
+            f"{self.budget.name} {self.kind} "
+            f"{self.scheduled_date} ({self.get_status_display()})"
+        )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["budget", "kind", "scheduled_date"],
+                name="funding_event_occ_unique_per_event",
+            ),
+        ]
+        indexes = [
+            # Cheap "what's outstanding?" lookup for a budget or its
+            # parent account: find PENDING/PARTIAL occurrences ordered
+            # by date.  Partial index keeps it small as COMPLETE rows
+            # accumulate.
+            models.Index(
+                fields=["budget", "scheduled_date"],
+                condition=models.Q(status__in=["PENDING", "PARTIAL"]),
+                name="funding_event_occ_outstanding",
+            ),
+        ]
 
 
 ########################################################################

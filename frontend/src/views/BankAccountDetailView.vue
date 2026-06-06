@@ -66,7 +66,6 @@ const fundingSummaryData = ref<FundingSummary | null>(null);
 const nothingDue = computed(
   () =>
     fundingResult.value !== null &&
-    !fundingResult.value.deferred &&
     fundingResult.value.transfers === 0 &&
     fundingResult.value.warnings.length === 0 &&
     fundingResult.value.skipped_budgets.length === 0,
@@ -200,6 +199,20 @@ async function saveName() {
 
 ////////////////////////////////////////////////////////////////////////
 //
+async function toggleAutoFunding(): Promise<void> {
+  if (!account.value) return;
+  const prev = account.value.auto_funding_enabled;
+  account.value.auto_funding_enabled = !prev;
+  try {
+    const updated = await updateBankAccount(props.id, {
+      auto_funding_enabled: !prev,
+    });
+    account.value = updated;
+  } catch {
+    account.value.auto_funding_enabled = prev;
+  }
+}
+
 async function deleteAccount() {
   deleting.value = true;
   try {
@@ -465,6 +478,32 @@ async function deleteAccount() {
               across {{ fundingSummaryData.schedules.length }} schedules
             </template>
           </div>
+          <!-- Automatic funding toggle -->
+          <label class="flex cursor-pointer items-center justify-between">
+            <div>
+              <p class="text-sm text-neutral-900">Automatic funding</p>
+              <p class="mt-0.5 text-xs text-secondary">
+                Run funding events on a schedule. Disable to fund manually only.
+              </p>
+            </div>
+            <div class="relative ml-4 flex-none">
+              <input
+                type="checkbox"
+                class="sr-only"
+                :checked="account.auto_funding_enabled"
+                @change="toggleAutoFunding"
+              />
+              <div
+                class="h-6 w-10 rounded-full transition-colors"
+                :class="account.auto_funding_enabled ? 'bg-ocean-400' : 'bg-neutral-300'"
+              />
+              <div
+                class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+                :class="account.auto_funding_enabled ? 'translate-x-4' : 'translate-x-0.5'"
+              />
+            </div>
+          </label>
+
           <button
             type="button"
             :disabled="funding"
@@ -479,17 +518,12 @@ async function deleteAccount() {
             v-if="fundingResult"
             class="rounded-subcard border px-3 py-2.5 text-sm"
             :class="
-              fundingResult.deferred
-                ? 'border-amber-200 bg-amber-50 text-amber-700'
-                : nothingDue
-                  ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
-                  : 'border-mint-200 bg-mint-50 text-mint-700'
+              nothingDue
+                ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
+                : 'border-mint-200 bg-mint-50 text-mint-700'
             "
           >
-            <template v-if="fundingResult.deferred">
-              Deferred — import data is not current through the next event date.
-            </template>
-            <template v-else-if="nothingDue">
+            <template v-if="nothingDue">
               Nothing currently due.
               <span v-if="fundingNextDate" class="text-neutral-500">
                 Next funding event: {{ fundingNextDate }}.

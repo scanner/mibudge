@@ -39,6 +39,7 @@ from moneypools.models import (
     Bank,
     BankAccount,
     Budget,
+    FundingEventOccurrence,
     InternalTransaction,
     Transaction,
     TransactionAllocation,
@@ -193,6 +194,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "available_balance",
             "available_balance_currency",
             "unallocated_budget",
+            "auto_funding_enabled",
             "last_imported_at",
             "last_posted_through",
             "created_at",
@@ -433,18 +435,15 @@ class BudgetSerializer(serializers.ModelSerializer):
             obj: The Budget instance being serialized.
 
         Returns:
-            Dict with 'date', 'amount', 'amount_currency', 'deferred', or None.
+            Dict with 'date', 'amount', 'amount_currency', or None.
         """
-        request = self.context.get("request")
-        tz = request.user.timezone if request is not None else None
-        info = funding_svc.next_funding_info(obj, tz=tz)
+        info = funding_svc.next_funding_info(obj)
         if info is None:
             return None
         return {
             "date": info.date.isoformat(),
             "amount": str(info.amount.amount),
             "amount_currency": str(info.amount.currency),
-            "deferred": info.deferred,
         }
 
     ####################################################################
@@ -1274,3 +1273,30 @@ class ScrapeSyncReportSerializer(serializers.Serializer):
     )
     last_posted_through = serializers.DateField(allow_null=True)
     new_transaction_ids = serializers.ListField(child=serializers.UUIDField())
+
+
+########################################################################
+########################################################################
+#
+class FundingEventOccurrenceSerializer(serializers.ModelSerializer):
+    """Read-only serializer for FundingEventOccurrence rows.
+
+    Exposes the budget UUID as 'budget' rather than the internal pkid so
+    callers can cross-reference with the Budget endpoint.
+    """
+
+    budget = serializers.UUIDField(source="budget.id", read_only=True)
+
+    class Meta:
+        model = FundingEventOccurrence
+        fields = [
+            "id",
+            "budget",
+            "kind",
+            "scheduled_date",
+            "status",
+            "completed_at",
+            "created_at",
+            "modified_at",
+        ]
+        read_only_fields = fields

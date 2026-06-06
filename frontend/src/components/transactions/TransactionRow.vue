@@ -184,7 +184,7 @@ function fmtAccountBalance(raw: string, currency: string): string {
         <span v-if="transaction.pending" class="min-w-0 truncate text-[12px] text-ocean-600">
           Unallocated
           <span v-if="allocations?.[0]?.budget_balance" class="text-secondary">
-            ({{ fmtMoney(allocations[0].budget_balance) }} left)
+            (now {{ fmtMoney(allocations[0].budget_balance) }})
           </span>
         </span>
         <span v-else class="min-w-0 truncate text-[12px] italic text-secondary">
@@ -205,7 +205,7 @@ function fmtAccountBalance(raw: string, currency: string): string {
       <div v-else-if="allocInfo.single" class="mt-0.5 flex items-center justify-between gap-2">
         <span class="min-w-0 truncate text-[12px] text-ocean-600">
           {{ allocInfo.single.name }}
-          <span class="text-secondary">({{ fmtMoney(allocInfo.single.balance) }} left)</span>
+          <span class="text-secondary">(now {{ fmtMoney(allocInfo.single.balance) }})</span>
         </span>
         <div class="flex flex-none items-center gap-1.5">
           <span
@@ -243,12 +243,10 @@ function fmtAccountBalance(raw: string, currency: string): string {
         >
           <span class="min-w-0 flex-1 truncate text-[12px] text-ocean-600">
             {{ leg.name }}
+            <span class="text-secondary">(now {{ fmtMoney(leg.balance) }})</span>
           </span>
           <span class="flex-none text-[12px] font-medium text-neutral-700">
             {{ fmtMoney(leg.amount) }}
-          </span>
-          <span class="flex-none text-[11px] text-secondary">
-            ({{ fmtMoney(leg.balance) }} left)
           </span>
         </div>
       </div>

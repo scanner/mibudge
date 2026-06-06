@@ -6,20 +6,23 @@ kind of work we do not want to block a request on (cross-account
 database lookups, bulk reconciliation passes, etc.).
 
 Funding tasks:
-    schedule_funding_runs -- beat-triggered (every 30 min): inspects each
-                             account owner's local time and enqueues
-                             fund_one_account in the [23:00, 23:30) window
-                             and recur_one_account in the [03:00, 03:30)
-                             window.
-    fund_one_account      -- per-account worker: processes EventKind.FUND
-                             events only.
-    recur_one_account     -- per-account worker: processes EventKind.RECUR
-                             events only.
+    schedule_funding_runs              -- beat-triggered (every 30 min): inspects
+                                         each account owner's local time and
+                                         enqueues fund_one_account always and
+                                         recur_one_account in the [03:00, 03:30)
+                                         local-time window.
+    fund_one_account                   -- per-account worker: processes
+                                         EventKind.FUND events only.
+    recur_one_account                  -- per-account worker: processes
+                                         EventKind.RECUR events only.
+    prune_funding_event_occurrences    -- weekly: deletes COMPLETE/SKIPPED
+                                         FundingEventOccurrence rows whose
+                                         scheduled_date is > 365 days old.
 """
 
 # system imports
 import logging
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -27,27 +30,26 @@ from notifications.service import notify_for
 
 # Project imports
 from config import celery_app
-from moneypools.models import BankAccount, Transaction
+from moneypools.models import (
+    BankAccount,
+    EventKind,
+    FundingEventOccurrence,
+    Transaction,
+)
 from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
-from moneypools.service.funding_strategy import EventKind
 from moneypools.service.linking import attempt_link
 from moneypools.service.shared import funding_system_user
 
 logger = logging.getLogger(__name__)
 
-# FUND tasks are enqueued on every scheduler tick (every 30 min).
-# Whether funding actually runs is determined inside fund_account by two rules:
-#   1. Import-freshness gate: account must have a posted or imported date
-#      on or after the latest due event date.  Example: a May 31 event
-#      requires last_posted_through >= 2026-05-31 OR
-#      last_imported_at (local) >= 2026-05-31.  If no import has happened
-#      by the due date, funding is deferred at each tick until one does;
-#      once an import arrives the next tick picks up all past-due events.
-#   2. Idempotency: last_funded_on prevents the same event from firing twice.
+# FUND tasks are enqueued on every scheduler tick (every 30 min) for accounts
+# with auto_funding_enabled=True.  Idempotency is enforced by
+# FundingEventOccurrence rows: an event that already reached COMPLETE is not
+# re-attempted.
 #
-# RECUR tasks still use a fixed window (after midnight, local time) so they
-# only fire after FUND has had a chance to run and fill the fillup_goal.
+# RECUR tasks use a fixed window (after midnight, local time) so they only fire
+# after FUND has had a chance to run and fill the fillup_goal.
 #
 _RECUR_WINDOW_START = time(3, 0)
 _RECUR_WINDOW_END = time(3, 30)
@@ -99,29 +101,53 @@ def schedule_funding_runs() -> None:
     Beat-triggered (every 30 min): inspect each account's local time and
     enqueue the appropriate per-account funding worker.
 
-    For each BankAccount, the first owner (ordered by pk) supplies the
-    IANA timezone.  Accounts whose owner has an unknown timezone are
-    skipped with a warning.
+    Accounts with ``auto_funding_enabled=False`` are skipped here -- the
+    owner has opted out of automatic funding and will run funding
+    manually via the "Run funding now" REST endpoint.
 
-    fund_one_account is enqueued on every tick; the import-freshness gate
-    inside fund_account determines whether execution actually proceeds.
-    recur_one_account is enqueued only in the [03:00, 03:30) local window
-    so it fires after FUND has had a chance to fill the fillup_goal.
+    For each remaining BankAccount, the first owner (ordered by pk)
+    supplies the IANA timezone used to compute the owner-local date and
+    to decide whether we are inside the RECUR window.  Accounts whose
+    owner has an unknown timezone are skipped with a warning.
+
+    fund_one_account is enqueued on every tick.  This is intentional even
+    though most ticks have no work to do:
+
+    - *Partial-retry*: when a FUND event leaves a FundingEventOccurrence
+      in PARTIAL state because Unallocated was empty, every later tick
+      attempts to top it up.  Without frequent ticks the user would have
+      to wait until the next scheduled funding date or click "Run funding
+      now" manually.
+    - *Downtime recovery*: if beat or workers were offline through an
+      account's scheduled funding window, the PENDING occurrence sits in
+      the database.  The next available tick after recovery materializes
+      and processes it, rather than waiting another full day.
+
+    The no-op cost per idle account is small: a single non-blocking
+    Redis lock attempt and the rrule enumeration in ``_collect_events``;
+    when no events fall in the window the worker returns immediately.
+
+    recur_one_account is enqueued only in the [03:00, 03:30) local
+    window.  RECUR is one-shot -- there is nothing to retry -- so a
+    single fire per day is correct, and the 03:00 placement gives FUND
+    the four hours after its 23:00 window to fill the fillup_goal before
+    the sweep into the recurring budget.
 
     Tasks are spread evenly across up to 30 minutes so a large number
     of accounts does not stampede the database.
     """
     now_utc = datetime.now(tz=UTC)
 
-    # Each tuple: (account_id, local_date_str, owner_tz)
+    # Each tuple: (account_id, local_date_str)
     #   account_id:      BankAccount UUID string
     #   local_date_str:  ISO date in the owner's local timezone (YYYY-MM-DD)
-    #   owner_tz:        IANA timezone name of the first account owner
-    fund_accounts: list[tuple[str, str, str]] = []
-    recur_accounts: list[tuple[str, str, str]] = []
+    fund_accounts: list[tuple[str, str]] = []
+    recur_accounts: list[tuple[str, str]] = []
 
-    for account in BankAccount.objects.prefetch_related("owners").order_by(
-        "pk"
+    for account in (
+        BankAccount.objects.filter(auto_funding_enabled=True)
+        .prefetch_related("owners")
+        .order_by("pk")
     ):
         owner = account.owners.order_by("pk").first()
         if owner is None:
@@ -147,13 +173,13 @@ def schedule_funding_runs() -> None:
         local_date_str = local_now.date().isoformat()
         account_id = str(account.id)
 
-        fund_accounts.append((account_id, local_date_str, owner.timezone))
+        fund_accounts.append((account_id, local_date_str))
         if _RECUR_WINDOW_START <= local_time < _RECUR_WINDOW_END:
-            recur_accounts.append((account_id, local_date_str, owner.timezone))
+            recur_accounts.append((account_id, local_date_str))
 
     def _dispatch(
         task,
-        pairs: list[tuple[str, str, str]],
+        pairs: list[tuple[str, str]],
         label: str,
     ) -> None:
         n = len(pairs)
@@ -163,13 +189,10 @@ def schedule_funding_runs() -> None:
             "schedule_funding_runs: enqueueing %d %s account(s).", n, label
         )
         interval = min(30.0, _SPREAD_SECONDS / n)
-        for i, (account_id, local_date_str, owner_tz) in enumerate(pairs):
+        for i, (account_id, local_date_str) in enumerate(pairs):
             task.apply_async(
                 args=[account_id],
-                kwargs={
-                    "local_date_str": local_date_str,
-                    "owner_tz": owner_tz,
-                },
+                kwargs={"local_date_str": local_date_str},
                 countdown=int(i * interval),
             )
 
@@ -185,7 +208,6 @@ def _run_funding_task(
     local_date_str: str | None,
     kinds: set[EventKind],
     label: str,
-    owner_tz: str | None = None,
 ) -> None:
     """
     Shared implementation for fund_one_account and recur_one_account.
@@ -197,9 +219,6 @@ def _run_funding_task(
             when None (manual invocation or legacy callers).
         kinds: EventKind set passed through to fund_account().
         label: Task name used in log messages.
-        owner_tz: IANA timezone name of the account owner, used to
-            localize last_imported_at in the import-freshness gate.
-            Falls back to UTC when None.
     """
     try:
         account = BankAccount.objects.select_related(
@@ -236,16 +255,13 @@ def _run_funding_task(
     else:
         today = date.today()
 
-    report = funding_svc.fund_account(
-        account, today, actor, kinds=kinds, tz=owner_tz
-    )
+    report = funding_svc.fund_account(account, today, actor, kinds=kinds)
 
-    if report.deferred:
+    if report.busy:
         logger.info(
-            "%s: account %s deferred (last_posted_through=%s).",
+            "%s: account %s busy -- another worker held the lock.",
             label,
             account_id,
-            account.last_posted_through,
         )
         return
 
@@ -279,27 +295,24 @@ def _run_funding_task(
 def fund_one_account(
     account_id: str,
     local_date_str: str | None = None,
-    owner_tz: str | None = None,
 ) -> None:
     """
     Process due FUND events for one BankAccount.
 
-    Enqueued by schedule_funding_runs during the [23:00, 23:30) local-
-    time window.  Uses the owner's local date at dispatch time so the
-    reference date is stable even if the worker runs after midnight.
+    Enqueued by schedule_funding_runs on every tick.  Uses the owner's
+    local date at dispatch time so the reference date is stable even
+    when the worker runs after midnight.
 
     Args:
         account_id: UUID string of the BankAccount to fund.
         local_date_str: ISO date string ('YYYY-MM-DD') from the scheduler.
             Defaults to UTC today when called manually or from tests.
-        owner_tz: IANA timezone name passed through to the freshness gate.
     """
     _run_funding_task(
         account_id,
         local_date_str,
         kinds={EventKind.FUND},
         label="fund_one_account",
-        owner_tz=owner_tz,
     )
 
 
@@ -309,7 +322,6 @@ def fund_one_account(
 def recur_one_account(
     account_id: str,
     local_date_str: str | None = None,
-    owner_tz: str | None = None,
 ) -> None:
     """
     Process due RECUR events for one BankAccount.
@@ -321,12 +333,38 @@ def recur_one_account(
         account_id: UUID string of the BankAccount to process.
         local_date_str: ISO date string ('YYYY-MM-DD') from the scheduler.
             Defaults to UTC today when called manually or from tests.
-        owner_tz: IANA timezone name passed through to the freshness gate.
     """
     _run_funding_task(
         account_id,
         local_date_str,
         kinds={EventKind.RECUR},
         label="recur_one_account",
-        owner_tz=owner_tz,
+    )
+
+
+########################################################################
+#
+@celery_app.task(ignore_result=True)
+def prune_funding_event_occurrences() -> None:
+    """
+    Delete old COMPLETE and SKIPPED FundingEventOccurrence rows.
+
+    Runs weekly (registered in MANAGED_PERIODIC_TASKS).  Rows whose
+    scheduled_date is more than 365 days in the past are eligible for
+    deletion regardless of whether they reached COMPLETE or SKIPPED.
+    PENDING and PARTIAL rows are never touched.
+    """
+    cutoff = date.today() - timedelta(days=365)
+    deleted, _ = FundingEventOccurrence.objects.filter(
+        status__in=[
+            FundingEventOccurrence.Status.COMPLETE,
+            FundingEventOccurrence.Status.SKIPPED,
+        ],
+        scheduled_date__lt=cutoff,
+    ).delete()
+    logger.info(
+        "prune_funding_event_occurrences: deleted %d row(s) with "
+        "scheduled_date before %s.",
+        deleted,
+        cutoff,
     )
