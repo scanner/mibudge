@@ -35,8 +35,9 @@ env = environ.FileAwareEnv(
     DJANGO_ADMIN_URL=(str, "admin/"),
     DJANGO_DEFAULT_FROM_EMAIL=(
         str,
-        "My Budgets <noreply@mibudge.apricot.com>",
+        "MiBudge <noreply@example.com>",
     ),
+    DJANGO_SUPPORT_EMAIL=(str, "support@example.com"),
     DJANGO_EMAIL_BACKEND=(
         str,
         "django.core.mail.backends.smtp.EmailBackend",
@@ -66,6 +67,14 @@ REPOSITORY_URL = env(
 ADMINISTRATIVE_EMAIL_ADDRESS = env("ADMINISTRATIVE_EMAIL_ADDRESS", default="")
 SITE_URL = env("SITE_URL", default="http://localhost:8000")
 SITE_NAME = env("SITE_NAME", default="mibudge")
+# Human-readable name shown in email subjects, headers, and footers.
+# Set per environment so emails clearly identify their source instance:
+#   production:        SITE_DISPLAY_NAME=MiBudge
+#   integration:       SITE_DISPLAY_NAME=MiBudge [int]
+#   dev / local:       SITE_DISPLAY_NAME=MiBudge [dev]
+# Users who run their own instance should set this to something distinct
+# so their emails cannot be confused with the canonical mibudge.money instance.
+SITE_DISPLAY_NAME = env("SITE_DISPLAY_NAME", default="MiBudge [dev]")
 
 # Settings exported to the Django template context via django-settings-export.
 # Access in templates as {{ settings.VARIABLE_NAME }}.
@@ -293,9 +302,10 @@ EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND")
 EMAIL_TIMEOUT = 5
 DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL")
 SERVER_EMAIL = env("DJANGO_SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
-EMAIL_SUBJECT_PREFIX = env(
-    "DJANGO_EMAIL_SUBJECT_PREFIX", default="[My Budgets]"
-)
+EMAIL_SUBJECT_PREFIX = env("DJANGO_EMAIL_SUBJECT_PREFIX", default="[MiBudge]")
+# Support contact address shown in notification emails and error pages.
+# Set per deployment -- do not rely on the default in production.
+SUPPORT_EMAIL: str = env("DJANGO_SUPPORT_EMAIL")
 
 EMAIL_HOST = env("EMAIL_HOST", default="")
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)
@@ -306,7 +316,8 @@ EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 # ADMIN
 # ------------------------------------------------------------------------------
 ADMIN_URL = env("DJANGO_ADMIN_URL")
-ADMINS = [("Scanner", "scanner@apricot.com")]
+# Operators who want Django error emails should set this in deployment config.
+ADMINS: list[tuple[str, str]] = []
 MANAGERS = ADMINS
 
 # LOGGING
@@ -521,6 +532,15 @@ if DEBUG:
         install(show_locals=True)
     except ImportError:
         pass
+
+# Users app
+# ------------------------------------------------------------------------------
+
+# How long the new-address verification link is valid.
+EMAIL_CHANGE_TOKEN_EXPIRY_HOURS: int = 24
+
+# How long after confirmation the 'this wasn't me' revocation link stays valid.
+EMAIL_CHANGE_REVOCATION_DAYS: int = 7
 
 # Mibudge
 # ------------------------------------------------------------------------------

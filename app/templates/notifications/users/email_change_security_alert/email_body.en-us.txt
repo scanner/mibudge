@@ -1,0 +1,24 @@
+{% load tz %}{% timezone notification.user.timezone %}{% with now=notification.created_at %}The email address change request on your {{ site_display_name }} account
+has been cancelled on {{ now|date:"N j, Y \a\t g:i A T" }}.
+{% endwith %}{% endtimezone %}
+{% if was_confirmed %}
+The change had already been confirmed before it was cancelled. Your account
+has been restored:
+
+  Email address: {{ old_email }}
+  All active sessions have been signed out.
+
+Please log in again at {{ site_url }}/app/login/
+{% else %}
+The pending request to change your email to {{ new_email }} has been
+cancelled before it could take effect. No changes were made to your account.
+{% endif %}
+If you did not cancel this request yourself, someone else may have access
+to your old email inbox. We recommend:
+
+  - Changing your {{ site_display_name }} password
+  - Reviewing your account for any other unexpected changes
+
+Questions? {{ support_email }}
+
+{{ site_display_name }} -- {{ site_url }}

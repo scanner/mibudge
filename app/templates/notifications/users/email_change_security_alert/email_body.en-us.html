@@ -1,0 +1,52 @@
+{% load tz %}
+{% timezone notification.user.timezone %}
+{% with now=notification.created_at %}
+<p style="margin:0 0 16px;color:#374151;">
+  The email address change request on your account was cancelled on
+  <strong>{{ now|date:"N j, Y \a\t g:i A T" }}</strong>.
+</p>
+{% endwith %}
+{% endtimezone %}
+
+{% if was_confirmed %}
+<table cellpadding="0" cellspacing="0" border="0" width="100%"
+  style="background:#fef2f2;border-radius:6px;margin:0 0 20px;">
+  <tr>
+    <td style="padding:16px 20px;">
+      <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.05em;">
+        Account restored
+      </p>
+      <p style="margin:0 0 8px;color:#374151;">
+        The change had already been confirmed before it was cancelled.
+        Your account has been restored:
+      </p>
+      <p style="margin:0 0 4px;color:#1a1a1a;">
+        <strong>Email address:</strong> {{ old_email }}
+      </p>
+      <p style="margin:0 0 12px;color:#1a1a1a;">
+        <strong>Sessions:</strong> All active sessions have been signed out.
+      </p>
+      <a href="{{ site_url }}/app/login/"
+        style="display:inline-block;background-color:#1d4ed8;color:#ffffff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:4px;text-decoration:none;">
+        Log in again
+      </a>
+    </td>
+  </tr>
+</table>
+{% else %}
+<p style="margin:0 0 20px;color:#374151;">
+  The pending request to change your email to
+  <strong>{{ new_email }}</strong> was cancelled before it could take
+  effect. No changes were made to your account.
+</p>
+{% endif %}
+
+<p style="margin:0 0 8px;font-size:13px;color:#6b7280;">
+  If you did not cancel this request, someone else may have access to
+  your old email inbox. We recommend changing your password and
+  reviewing your account for unexpected changes.
+</p>
+<p style="margin:0;font-size:13px;color:#6b7280;">
+  Questions?
+  <a href="mailto:{{ support_email }}" style="color:#1d4ed8;">{{ support_email }}</a>
+</p>

@@ -1,0 +1,47 @@
+<p style="margin:0 0 16px;color:#374151;">
+  A request was made to change the email address on your account to:
+</p>
+<p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a1a1a;">
+  {{ new_email }}
+</p>
+<p style="margin:0 0 20px;color:#374151;">
+  If this was you, no action is needed. The new address must confirm
+  the change within <strong>{{ expires_hours }} hours</strong> or the
+  request will expire automatically.
+</p>
+
+<table cellpadding="0" cellspacing="0" border="0" width="100%"
+  style="border:2px solid #dc2626;border-radius:6px;margin:0 0 20px;">
+  <tr>
+    <td style="padding:16px 20px;">
+      <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.05em;">
+        If this was not you &mdash; act now
+      </p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151;">
+        Cancel the request immediately. Your revocation link stays valid
+        for <strong>{{ revocation_days }} days</strong> after the new
+        address confirms &mdash; at the latest until:
+      </p>
+      <p style="margin:0 0 16px;font-size:15px;font-weight:600;color:#1a1a1a;">
+        {{ revoke_by_latest }}
+      </p>
+      <a href="{{ revoke_url }}"
+        style="display:inline-block;background-color:#dc2626;color:#ffffff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:4px;text-decoration:none;">
+        This wasn't me &mdash; cancel the change
+      </a>
+      <p style="margin:12px 0 0;font-size:13px;color:#6b7280;">
+        Cancelling will revert your email address (if already changed),
+        sign out all active sessions, and notify both addresses.
+      </p>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0;font-size:13px;color:#6b7280;">
+  Can't use the button?
+  <a href="{{ revoke_url }}" style="color:#1d4ed8;word-break:break-all;">{{ revoke_url }}</a>
+</p>
+<p style="margin:8px 0 0;font-size:13px;color:#6b7280;">
+  Need help?
+  <a href="mailto:{{ support_email }}" style="color:#1d4ed8;">{{ support_email }}</a>
+</p>

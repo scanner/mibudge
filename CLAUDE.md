@@ -102,6 +102,10 @@ Two-token JWT pattern:
 
 The Vue `auth` Pinia store manages the access token lifecycle and provides an authenticated `apiFetch` wrapper that silently refreshes before expiry.
 
+**No-usable-password state.** A user can be fully authenticated (valid JWT session) while `User.has_usable_password()` returns `False`. This happens when the account was created via the bank-account co-ownership invitation flow: the invitation acceptance issues a JWT directly without requiring a password. The user can browse and use the app normally, but cannot use the change-password or change-email features until they establish a password. The recovery path is allauth's password-reset flow at `/accounts/password/reset/`, which emails a one-time link and allows the user to set their first password without knowing a current one. The `has_usable_password` boolean is exposed on `GET /api/v1/users/me/` so the SPA can show appropriate guidance rather than silently disabling forms.
+
+**Self-service email change.** Users can change their login email via `POST /api/v1/users/me/change-email/`. Requires `has_usable_password == True`. The flow sends a verification link to the new address and a revocation link to the old address; the revocation link remains valid for 7 days after confirmation so the legitimate owner can cancel even if an attacker confirmed the change first. See `users/email_change.py` for the full security policy (dual-path design, session invalidation, lockout during revocation window).
+
 ### Core Models (`moneypools/`)
 
 All models extend `MoneyPoolBaseClass` (abstract), which provides `pkid` (BigAutoField PK), `id` (UUID), and `created_at`/`modified_at` timestamps.

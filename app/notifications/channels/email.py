@@ -34,7 +34,6 @@ new template files; no code changes are needed.
 # system imports
 #
 import logging
-from urllib.parse import urlparse
 
 # 3rd party imports
 #
@@ -70,18 +69,24 @@ def _fallback_locale() -> str:
 ########################################################################
 #
 def _site_context() -> dict[str, str]:
-    """Return template context variables derived from SITE_URL.
+    """Return template context variables injected into every notification email.
 
-    Injected into every outgoing notification email so templates can
-    link back to the app and provide a support contact address.
+    Provides consistent instance identification and contact information
+    without relying on runtime hostname (which is an opaque hex string
+    inside Docker containers).
 
     Returns:
-        Dict with 'site_url' (trailing slash stripped) and
-        'support_email' (support@<hostname>).
+        Dict with:
+        - ``site_url``: base URL, trailing slash stripped.
+        - ``site_display_name``: human-readable instance name
+          (e.g. ``'MiBudge'`` or ``'MiBudge [dev]'``).
+        - ``support_email``: explicitly configured support address.
     """
-    url = settings.SITE_URL.rstrip("/")
-    hostname = urlparse(url).hostname or "localhost"
-    return {"site_url": url, "support_email": f"support@{hostname}"}
+    return {
+        "site_url": settings.SITE_URL.rstrip("/"),
+        "site_display_name": settings.SITE_DISPLAY_NAME,
+        "support_email": settings.SUPPORT_EMAIL,
+    }
 
 
 ########################################################################

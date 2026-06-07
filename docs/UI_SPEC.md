@@ -289,11 +289,13 @@ On tablet/desktop the sidebar shows the same four items vertically with labels, 
 
 ### 4.1 Login View (`/app/login/`)
 
-- Username + password fields
+- Email + password fields
 - Submit → `POST /api/token/` → store `access` token in memory (Pinia), `refresh` in httpOnly cookie
 - On success → redirect to `/app/`
 - On 401 → inline error message
-- No "forgot password" in v1
+- "Forgot password?" link → `/accounts/password/reset/` (allauth-rendered page)
+
+**Note on passwordless accounts.** Users created via the co-ownership invitation flow have a valid JWT session but no usable password set. They can use the app normally but cannot use the change-password or change-email features. Both forms detect this via `has_usable_password` on the `/api/v1/users/me/` response and show a prompt to visit `/accounts/password/reset/` to set an initial password.
 
 ### 4.2 Budgets View (`/app/budgets/`)
 

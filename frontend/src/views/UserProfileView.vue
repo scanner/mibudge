@@ -12,7 +12,8 @@ import { useRouter } from "vue-router";
 // app imports
 //
 import AppShell from "@/components/layout/AppShell.vue";
-import { updateCurrentUser } from "@/api/users";
+import { ApiError } from "@/api/client";
+import { changeEmail, updateCurrentUser } from "@/api/users";
 import { useAuthStore } from "@/stores/auth";
 
 ////////////////////////////////////////////////////////////////////////
@@ -24,6 +25,15 @@ const name = ref(auth.user?.name ?? "");
 const timezone = ref(auth.user?.timezone ?? "America/Los_Angeles");
 const saving = ref(false);
 const error = ref<string | null>(null);
+
+////////////////////////////////////////////////////////////////////////
+//
+// Change-email form state.
+//
+const newEmail = ref("");
+const emailSaving = ref(false);
+const emailSuccess = ref(false);
+const emailError = ref<string | null>(null);
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -53,6 +63,28 @@ const TIMEZONE_OPTIONS: { value: string; label: string }[] = [
   { value: "Pacific/Auckland", label: "NZST/NZDT — Auckland" },
   { value: "UTC", label: "UTC" },
 ];
+
+////////////////////////////////////////////////////////////////////////
+//
+async function submitEmailChange() {
+  emailSaving.value = true;
+  emailSuccess.value = false;
+  emailError.value = null;
+  try {
+    await changeEmail(newEmail.value);
+    emailSuccess.value = true;
+    newEmail.value = "";
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      emailError.value =
+        "That address is already in use, or an email change is already in progress. Please wait and try again.";
+    } else {
+      emailError.value = err instanceof Error ? err.message : "Failed to request email change.";
+    }
+  } finally {
+    emailSaving.value = false;
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -87,6 +119,7 @@ async function save() {
         {{ error }}
       </div>
 
+      <!-- Profile form: name + timezone only -->
       <form class="space-y-4" @submit.prevent="save">
         <!-- Name -->
         <div>
@@ -150,6 +183,73 @@ async function save() {
           </button>
         </div>
       </form>
+
+      <!-- Change email — separate section, never nested inside the profile form -->
+      <section class="mt-8">
+        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+          Change email
+        </h2>
+
+        <div class="rounded-card border border-neutral-200 bg-white px-4 py-4">
+          <!-- No usable password -->
+          <div v-if="!auth.user?.has_usable_password" class="text-sm text-neutral-500">
+            Your account doesn't have a password set yet.
+            <a
+              href="/accounts/password/reset/"
+              class="ml-1 text-ocean-600 underline hover:text-ocean-800"
+            >
+              Set a password via email
+            </a>
+            to unlock this feature.
+          </div>
+
+          <template v-else>
+            <!-- Success -->
+            <div
+              v-if="emailSuccess"
+              class="rounded-subcard bg-mint-50 px-3 py-3 text-sm text-mint-600"
+              role="alert"
+            >
+              Check your new address for a verification link, and your current address for a
+              security notice.
+            </div>
+
+            <template v-else>
+              <!-- Error -->
+              <div
+                v-if="emailError"
+                class="mb-3 rounded-subcard bg-coral-50 px-3 py-3 text-sm text-coral-600"
+                role="alert"
+              >
+                {{ emailError }}
+              </div>
+
+              <form class="flex gap-2" @submit.prevent="submitEmailChange">
+                <input
+                  v-model="newEmail"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="New email address"
+                  required
+                  class="min-w-0 flex-1 rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+                />
+                <button
+                  type="submit"
+                  :disabled="emailSaving || !newEmail"
+                  class="rounded-subcard bg-ocean-400 px-4 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+                >
+                  {{ emailSaving ? "Sending…" : "Send link" }}
+                </button>
+              </form>
+              <p class="mt-1.5 text-xs text-neutral-500">
+                A verification link will be sent to the new address. Your current address will
+                receive a security notice with a link to cancel the change for 7 days after
+                confirmation.
+              </p>
+            </template>
+          </template>
+        </div>
+      </section>
     </div>
   </AppShell>
 </template>

@@ -1,0 +1,21 @@
+{% load tz %}{{ site_display_name }} -- {{ site_url }}
+
+Verify your email address
+-------------------------
+
+The {{ site_display_name }} account at {{ old_email }} has requested
+to use this address as their new login email.
+
+To confirm, visit:
+
+  {{ confirm_url }}
+
+This link expires in {{ expires_hours }} hours, on:
+  {% timezone user_timezone %}{{ expires_at|date:"N j, Y \a\t g:i A T" }}{% endtimezone %}
+
+If you do not confirm, no change will be made. The original address
+has already been notified and can cancel this request at any time.
+
+If you did not request this, you can safely ignore this email.
+
+Questions? {{ support_email }}
