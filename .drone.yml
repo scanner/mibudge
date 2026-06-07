@@ -118,6 +118,39 @@ steps:
       build_args_from_env:
         - SALT_KEY
 
+  - name: Build prod (Docker Hub)
+    image: plugins/docker
+    environment:
+      SALT_KEY:
+        from_secret: BUILD_SALT_KEY
+    settings:
+      username:
+        from_secret: DOCKERHUB_USER
+      password:
+        from_secret: DOCKERHUB_TOKEN
+      repo: scanner/mibudge
+      auto_tag: true
+      target: prod
+      build_args_from_env:
+        - SALT_KEY
+
+  - name: Build dev (Docker Hub)
+    image: plugins/docker
+    environment:
+      SALT_KEY:
+        from_secret: BUILD_SALT_KEY
+    settings:
+      username:
+        from_secret: DOCKERHUB_USER
+      password:
+        from_secret: DOCKERHUB_TOKEN
+      repo: scanner/mibudge
+      auto_tag: true
+      auto_tag_suffix: dev
+      target: dev
+      build_args_from_env:
+        - SALT_KEY
+
 trigger:
   event:
     - tag

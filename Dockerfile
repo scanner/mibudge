@@ -101,6 +101,11 @@ ENV UV_NO_SYNC=1 \
 # Copy application code
 COPY ./app ./
 
+# Include the built frontend so the dev image is self-contained.
+# Local dev still uses the Vite dev server (DJANGO_VITE_DEV_MODE=True), but
+# the image can also run with dev mode off (e.g. staging smoke-tests).
+COPY --from=frontend-builder /frontend/dist /frontend/dist
+
 RUN addgroup --system --gid 900 app && \
     adduser --system --uid 900 --ingroup app app
 
