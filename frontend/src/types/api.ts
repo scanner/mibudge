@@ -254,6 +254,7 @@ export interface User {
   url: string;
   default_bank_account: string | null;
   timezone: string;
+  has_usable_password: boolean;
 }
 
 ////////////////////////////////////////////////////////////////////////

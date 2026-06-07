@@ -34,3 +34,12 @@ export function changePassword(payload: ChangePasswordPayload): Promise<void> {
     body: payload as unknown as BodyInit,
   });
 }
+
+////////////////////////////////////////////////////////////////////////
+//
+export function changeEmail(newEmail: string): Promise<void> {
+  return useAuthStore().request<void>("/users/me/change-email/", {
+    method: "POST",
+    body: { new_email: newEmail } as unknown as BodyInit,
+  });
+}

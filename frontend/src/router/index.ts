@@ -88,6 +88,26 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/BankAccountDetailView.vue"),
     props: true,
   },
+  // Email-change result pages — public, arrived at via links in emails.
+  // Paths must match SPA_EMAIL_CHANGE_* constants in users/email_change.py.
+  {
+    path: "/email-change/confirmed/",
+    name: "email-change-confirmed",
+    component: () => import("@/views/EmailChangeConfirmedView.vue"),
+    meta: { public: true },
+  },
+  {
+    path: "/email-change/revoked/",
+    name: "email-change-revoked",
+    component: () => import("@/views/EmailChangeRevokedView.vue"),
+    meta: { public: true },
+  },
+  {
+    path: "/email-change/error/",
+    name: "email-change-error",
+    component: () => import("@/views/EmailChangeErrorView.vue"),
+    meta: { public: true },
+  },
 ];
 
 ////////////////////////////////////////////////////////////////////////

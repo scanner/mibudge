@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.base_user import AbstractBaseUser
 from rest_framework import serializers
 from zxcvbn import zxcvbn
 
@@ -93,6 +94,9 @@ class UserSerializer(serializers.ModelSerializer):
     The ``default_bank_account`` field is writable but constrained:
     the bank account must be owned by the user being updated.  On
     output it returns the UUID string (or null).
+
+    ``has_usable_password`` is read-only and used by the SPA to decide
+    whether to enable the change-email and change-password forms.
     """
 
     default_bank_account = serializers.SlugRelatedField(
@@ -101,6 +105,11 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    has_usable_password = serializers.SerializerMethodField()
+
+    def get_has_usable_password(self, obj: AbstractBaseUser) -> bool:
+        """Return True if the user has a usable (non-unusable) password set."""
+        return obj.has_usable_password()
 
     class Meta:
         model = User
@@ -111,6 +120,7 @@ class UserSerializer(serializers.ModelSerializer):
             "url",
             "default_bank_account",
             "timezone",
+            "has_usable_password",
         ]
 
         extra_kwargs = {

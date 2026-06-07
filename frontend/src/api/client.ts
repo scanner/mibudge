@@ -81,8 +81,20 @@ async function requestAt<T>(
     throw new ApiError(response.status, errBody);
   }
 
-  // Return null for 204 No Content rather than trying to parse an empty body.
-  if (response.status === 204) return null as T;
+  // Parse the body only when there is content to parse.  Some endpoints
+  // return 201 or other 2xx codes with an empty body; calling response.json()
+  // on an empty body throws in WebKit ("The string did not match the expected
+  // pattern.") so we guard on the Content-Length / Content-Type headers
+  // before attempting JSON parsing.
+  const contentLength = response.headers.get("Content-Length");
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (
+    contentLength === "0" ||
+    response.status === 204 ||
+    !contentType.includes("application/json")
+  ) {
+    return null as T;
+  }
 
   return response.json() as Promise<T>;
 }

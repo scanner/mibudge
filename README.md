@@ -95,15 +95,18 @@ mibudge supports multiple bank accounts -- checking, savings, credit cards -- ea
 
 All resources are under `/api/v1/`. Full endpoint docs: [`docs/api.md`](docs/api.md) · OpenAPI schema: [`docs/openapi.yaml`](docs/openapi.yaml) (regenerate with `make api-docs`).
 
-| Resource              | Endpoint                         | Notes                                                                                          |
-|-----------------------|----------------------------------|------------------------------------------------------------------------------------------------|
-| Users                 | `/api/v1/users/`                 | List/update restricted to staff; `/me/` available to all                                       |
-| Banks                 | `/api/v1/banks/`                 | Read-only reference data                                                                       |
-| Bank Accounts         | `/api/v1/bank-accounts/`         | Scoped to account owners; `sync-scrape` action reconciles a full bank-side snapshot atomically |
-| Budgets               | `/api/v1/budgets/`               | Scoped to account owners                                                                       |
-| Transactions          | `/api/v1/transactions/`          | Scoped to account owners                                                                       |
-| Allocations           | `/api/v1/allocations/`           | Budget assignments for transactions                                                            |
-| Internal Transactions | `/api/v1/internal-transactions/` | Budget-to-budget transfers                                                                     |
+| Resource              | Endpoint                                         | Notes                                                                                          |
+|-----------------------|--------------------------------------------------|------------------------------------------------------------------------------------------------|
+| Users                 | `/api/v1/users/`                                 | List/update restricted to staff; `/me/` available to all                                       |
+| Email change          | `/api/v1/users/me/change-email/`                 | Initiate a self-service email change (requires usable password)                                |
+| Email confirm         | `/api/v1/users/me/change-email/{token}/confirm/` | Confirm the new address (no auth required -- token is the credential)                          |
+| Email revoke          | `/api/v1/users/me/change-email/{token}/revoke/`  | Cancel a change within the 7-day revocation window (no auth required)                          |
+| Banks                 | `/api/v1/banks/`                                 | Read-only reference data                                                                       |
+| Bank Accounts         | `/api/v1/bank-accounts/`                         | Scoped to account owners; `sync-scrape` action reconciles a full bank-side snapshot atomically |
+| Budgets               | `/api/v1/budgets/`                               | Scoped to account owners                                                                       |
+| Transactions          | `/api/v1/transactions/`                          | Scoped to account owners                                                                       |
+| Allocations           | `/api/v1/allocations/`                           | Budget assignments for transactions                                                            |
+| Internal Transactions | `/api/v1/internal-transactions/`                 | Budget-to-budget transfers                                                                     |
 
 All resources except Banks and Users are scoped to bank account ownership -- only members of an account's `owners` M2M can access that account's data. Staff and superuser status does **not** bypass ownership checks in the REST API.
 
@@ -129,10 +132,9 @@ All resources except Banks and Users are scoped to bank account ownership -- onl
 - **Silent refresh on 401**: when the access token expires, the auth store
   calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie
   automatically, returning a new access token and rotating the refresh cookie.
-- **django-allauth**: remains mounted at `/accounts/` for password reset flows
-  only; it is not part of the SPA login path. See
-  `task-mibudge-crispy-allauth` for the follow-up work required before the
-  allauth templates can render.
+- **django-allauth**: remains mounted at `/accounts/` for password reset only (`/accounts/password/reset/`); it is not part of the SPA login path. The allauth templates are plain Django-rendered pages -- they do not use the SPA shell.
+- **Passwordless accounts**: users created via the bank-account co-ownership invitation flow are issued a JWT session immediately but have no password set (`has_usable_password() == False`). They can use the app normally but cannot use the change-password or change-email features until they set a password via `/accounts/password/reset/`. Both forms detect this state via the `has_usable_password` field on `GET /api/v1/users/me/` and prompt the user accordingly.
+- **Self-service email change**: users can change their login email address via a verified two-step flow. A 7-day post-confirmation revocation window lets the legitimate owner cancel even if an attacker confirmed the change first, with automatic session invalidation on revocation. See `users/email_change.py` for the security policy.
 
 ## Project structure
 
@@ -267,7 +269,10 @@ No configuration needed. The default SMTP backend points at the Mailpit containe
 Set these env vars:
 
 ```
-DJANGO_DEFAULT_FROM_EMAIL=My Budgets <noreply@example.com>
+DJANGO_DEFAULT_FROM_EMAIL=MiBudge <noreply@yourdomain.com>
+DJANGO_SUPPORT_EMAIL=support@yourdomain.com
+SITE_DISPLAY_NAME=MiBudge
+SITE_URL=https://yourdomain.com
 EMAIL_HOST=smtp.example.com
 EMAIL_PORT=587                 # default
 EMAIL_HOST_USER=user@example.com
@@ -277,9 +282,11 @@ EMAIL_USE_TLS=True             # default
 
 `DJANGO_EMAIL_BACKEND` can be left at its default (`anymail.backends.smtp.EmailBackend`).
 
+`SITE_DISPLAY_NAME` appears in email subjects and headers. Set it to something distinct if you run multiple instances (e.g. `MiBudge [staging]`) so users can tell them apart. `DJANGO_SUPPORT_EMAIL` is shown in notification emails as the contact address.
+
 #### Production: API-based provider (Postmark, Mailgun, SendGrid, SparkPost)
 
-Set `DJANGO_EMAIL_BACKEND` to the anymail backend for your provider, then supply the corresponding token:
+Set `DJANGO_EMAIL_BACKEND` to the anymail backend for your provider, supply the corresponding token, and set the sender/site variables as above:
 
 | Provider  | `DJANGO_EMAIL_BACKEND`                    | Token env var                              |
 |-----------|-------------------------------------------|--------------------------------------------|
@@ -289,6 +296,19 @@ Set `DJANGO_EMAIL_BACKEND` to the anymail backend for your provider, then supply
 | SparkPost | `anymail.backends.sparkpost.EmailBackend` | `SPARKPOST_API_KEY`                        |
 
 The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backend.
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [`docs/api.md`](docs/api.md) | REST API reference (generated from OpenAPI schema) |
+| [`docs/funding.md`](docs/funding.md) | Budget funding engine: rules, invariants, test scenarios |
+| [`docs/importers.md`](docs/importers.md) | Bank statement import tools |
+| [`docs/management-commands.md`](docs/management-commands.md) | Django management commands |
+| [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | Frontend screen inventory and component breakdown |
+| [`app/notifications/README.md`](app/notifications/README.md) | Notification service: kind registration, digest mechanics, adding channels |
+
+Detailed documentation for user account management (co-ownership invitations, email change flow, security policy) will be added to `docs/` as those features stabilise.
 
 ## License
 
