@@ -28,6 +28,9 @@ from moneypools.api.v1.views import (
     TransactionAllocationViewSet,
     TransactionViewSet,
     currencies,
+    invitation_accept,
+    invitation_decline,
+    invitation_detail,
 )
 from users.api.v1.views import UserViewSet
 
@@ -63,5 +66,21 @@ router.register(
 app_name = "api_v1"
 urlpatterns = [
     path("currencies/", currencies, name="currencies"),
+    # Public invitation endpoints (AllowAny -- token is the credential)
+    path(
+        "invitations/<str:token>/",
+        invitation_detail,
+        name="invitation-detail",
+    ),
+    path(
+        "invitations/<str:token>/accept/",
+        invitation_accept,
+        name="invitation-accept",
+    ),
+    path(
+        "invitations/<str:token>/decline/",
+        invitation_decline,
+        name="invitation-decline",
+    ),
     *router.urls,
 ]

@@ -24,6 +24,11 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     # Moneypools
     path("mp/", include("moneypools.urls")),
+    # Invitation acceptance pages (outside the SPA; unauthenticated-accessible)
+    path(
+        "invitations/",
+        include("moneypools.invitation_urls", namespace="invitations"),
+    ),
     # REST API -- versioned. All resource endpoints live under /api/v1/
     # so a future v2 can be added without breaking existing clients.
     path("api/v1/", include("config.api_router")),

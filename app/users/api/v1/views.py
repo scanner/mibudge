@@ -16,6 +16,8 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from moneypools.api.v1.serializers import BankAccountInvitationSerializer
+from moneypools.models import BankAccountInvitation
 from users.email_change import (
     AlreadyConfirmedError,
     AlreadyRevokedError,
@@ -315,3 +317,32 @@ class UserViewSet(
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="List current user's outgoing pending invitations",
+        description=(
+            "Return all pending co-ownership invitations sent by the "
+            "authenticated user, across all accounts."
+        ),
+        responses={200: BankAccountInvitationSerializer(many=True)},
+    )
+    @action(
+        detail=False,
+        methods=["GET"],
+        url_path="me/invitations",
+        permission_classes=[IsAuthenticated],
+    )
+    def my_invitations(self, request) -> Response:
+        """List outgoing pending co-ownership invitations for the current user."""
+        qs = (
+            BankAccountInvitation.objects.filter(
+                invited_by=request.user,
+                status=BankAccountInvitation.Status.PENDING,
+            )
+            .select_related("bank_account", "bank_account__bank")
+            .order_by("-created_at")
+        )
+        serializer = BankAccountInvitationSerializer(qs, many=True)
+        return Response(serializer.data)

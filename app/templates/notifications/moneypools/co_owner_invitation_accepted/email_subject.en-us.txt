@@ -1,0 +1,1 @@
+{{ invitee_email }} accepted your co-owner invitation for {{ bank_account_name }}

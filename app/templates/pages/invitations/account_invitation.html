@@ -1,0 +1,171 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Co-owner invitation{% if invitation %} &mdash; {{ invitation.bank_account.name }}{% endif %}</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1a1a1a;background:#f5f5f5;margin:0;padding:0}
+    .wrap{max-width:640px;margin:48px auto;padding:0 16px}
+    .card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);margin-bottom:16px;overflow:hidden}
+    .card-header{background:#0ea5e9;color:#fff;padding:16px 24px;font-size:18px;font-weight:600}
+    .card-body{padding:24px}
+    .card-footer{background:#f9fafb;padding:12px 24px;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:14px}
+    th{text-align:left;padding:6px 12px;color:#6b7280;font-weight:500;width:120px}
+    td{padding:6px 12px;color:#1a1a1a}
+    .btn{display:inline-block;padding:10px 20px;border-radius:4px;font-size:14px;font-weight:600;cursor:pointer;border:none;text-decoration:none}
+    .btn-primary{background:#0ea5e9;color:#fff}
+    .btn-secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+    .alert{padding:12px 16px;border-radius:6px;margin-bottom:16px;font-size:14px}
+    .alert-info{background:#e0f2fe;color:#075985;border-left:4px solid #0ea5e9}
+    .note{font-size:12px;color:#6b7280;margin-top:8px}
+    a{color:#1d4ed8}
+  </style>
+</head>
+<body>
+{% if request.user.is_authenticated %}
+<div style="background:#1e293b;color:#f1f5f9;padding:10px 24px;font-size:13px;">
+  Signed in as <strong>{{ request.user.email }}</strong>
+  &nbsp;&middot;&nbsp;
+  <a href="/app/" style="color:#7dd3fc;">Go to mibudge</a>
+</div>
+{% endif %}
+
+<div class="wrap">
+
+{# ------------------------------------------------------------------ #}
+{# Token not found                                                      #}
+{# ------------------------------------------------------------------ #}
+{% if error == "not_found" %}
+<div class="card">
+  <div class="card-header">Invitation not found</div>
+  <div class="card-body">
+    <p>This invitation link is not valid. It may have been mistyped or the invitation may have been removed.</p>
+  </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Terminal / expired states shown on GET                               #}
+{# ------------------------------------------------------------------ #}
+{% elif error == "expired" %}
+<div class="card">
+  <div class="card-header">Invitation expired</div>
+  <div class="card-body">
+    <p>This invitation is no longer valid. Please ask the account owner to send a new one.</p>
+  </div>
+</div>
+
+{% elif error == "cancelled" %}
+<div class="card">
+  <div class="card-header">Invitation cancelled</div>
+  <div class="card-body">
+    <p>The person who sent this invitation has cancelled it.</p>
+  </div>
+</div>
+
+{% elif error == "accepted" %}
+<div class="card">
+  <div class="card-header">Already accepted</div>
+  <div class="card-body"><p>This invitation has already been accepted.</p></div>
+</div>
+
+{% elif error == "declined" %}
+<div class="card">
+  <div class="card-header">Already declined</div>
+  <div class="card-body"><p>This invitation has already been declined.</p></div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# POST result pages                                                    #}
+{# ------------------------------------------------------------------ #}
+{% elif result == "accepted" %}
+<div class="card">
+  <div class="card-header">You're in!</div>
+  <div class="card-body">
+    <p>You have been added as a co-owner of <strong>{{ invitation.bank_account.name }}</strong>.</p>
+    {% if is_new_user %}
+    <p>We sent a password-setup link to <strong>{{ invitation.invitee_email }}</strong>. Click it to set your password and start using mibudge.</p>
+    <p class="note">You will be able to change your email address after you have set a password.</p>
+    {% else %}
+    <a href="/app/" class="btn btn-primary">Go to mibudge &rarr;</a>
+    {% endif %}
+  </div>
+</div>
+
+{% elif result == "declined" %}
+<div class="card">
+  <div class="card-header">Invitation declined</div>
+  <div class="card-body"><p>You have declined the invitation. You can close this page.</p></div>
+</div>
+
+{% elif result == "expired" %}
+<div class="card">
+  <div class="card-header">Invitation expired</div>
+  <div class="card-body"><p>This invitation expired before you could act on it. Please ask the account owner to send a new one.</p></div>
+</div>
+
+{% elif result == "cancelled" %}
+<div class="card">
+  <div class="card-header">Invitation cancelled</div>
+  <div class="card-body"><p>This invitation was cancelled by the sender.</p></div>
+</div>
+
+{% elif result %}
+<div class="card">
+  <div class="card-header">Unable to process invitation</div>
+  <div class="card-body"><p>This invitation has already been acted on or is no longer available.</p></div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Active invitation(s) -- main accept/decline page                    #}
+{# ------------------------------------------------------------------ #}
+{% elif invitation %}
+
+  {% if is_new_user %}
+  <div class="alert alert-info">
+    <strong>New to mibudge?</strong>
+    Accepting this invitation will create an account for you using
+    <strong>{{ invitation.invitee_email }}</strong> as your username.
+    You will receive a separate email to set your password.
+  </div>
+  {% endif %}
+
+  {% for inv in all_pending %}
+  <div class="card">
+    <div class="card-header">Invitation to co-own an account</div>
+    <div class="card-body">
+      <table>
+        <tr><th>Account</th><td><strong>{{ inv.bank_account.name }}</strong></td></tr>
+        <tr><th>Bank</th><td>{{ inv.bank_account.bank.name }}</td></tr>
+        <tr><th>Invited by</th><td>{{ inv.invited_by.name|default:inv.invited_by.email|default:"unknown" }}</td></tr>
+        <tr>
+          <th>Owners</th>
+          <td>{% for owner in inv.bank_account.owners.all %}{{ owner.name|default:owner.email }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        </tr>
+      </table>
+      <form method="post" action="{% url 'invitations:account-invitation' token=inv.token %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" name="action" value="accept" class="btn btn-primary" style="margin-right:8px;">Accept</button>
+        <button type="submit" name="action" value="decline" class="btn btn-secondary">Decline</button>
+      </form>
+    </div>
+    <div class="card-footer">Expires {{ inv.expires_at|date:"N j, Y" }}</div>
+  </div>
+  {% empty %}
+  <div class="card">
+    <div class="card-header">No pending invitations</div>
+    <div class="card-body"><p>There are no pending invitations for this address.</p></div>
+  </div>
+  {% endfor %}
+
+  {% if is_new_user %}
+  <p class="note" style="text-align:center;">You can change your email address after you have set a password.</p>
+  {% endif %}
+
+{% endif %}
+
+</div>{# /.wrap #}
+</body>
+</html>

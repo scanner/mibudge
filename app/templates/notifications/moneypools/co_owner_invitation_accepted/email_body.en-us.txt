@@ -1,0 +1,9 @@
+{{ invitee_email }} has accepted your invitation to co-own
+{{ bank_account_name }} ({{ bank_name }}).
+
+They now have access to the account on {{ site_display_name }}.
+
+View the account: {{ site_url }}/app/
+
+-- {{ site_display_name }}
+   Questions? {{ support_email }}
