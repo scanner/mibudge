@@ -247,6 +247,26 @@ export interface ChannelPreference {
 
 ////////////////////////////////////////////////////////////////////////
 //
+export type InvitationStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
+
+export interface BankAccountInvitation {
+  id: string;
+  token: string;
+  bank_account_id: string;
+  bank_account_name: string;
+  invitee_email: string;
+  invited_by: string | null; // inviter's email
+  status: InvitationStatus;
+  expires_at: string;
+  accepted_at: string | null;
+  declined_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  modified_at: string;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 export interface User {
   username: string;
   email: string;

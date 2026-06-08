@@ -1307,16 +1307,34 @@ class FundingEventOccurrenceSerializer(serializers.ModelSerializer):
 ########################################################################
 #
 class BankAccountInvitationSerializer(serializers.ModelSerializer):
-    """Read-only serializer for BankAccountInvitation rows."""
+    """Read-only serializer for BankAccountInvitation rows.
+
+    ``token`` is included so the SPA can construct the cancel URL without a
+    separate lookup.  It is safe to expose to authenticated account owners
+    since they created the invitation and the cancel endpoint enforces that
+    only the sender may cancel.
+
+    ``bank_account_id`` and ``bank_account_name`` are included for the
+    cross-account listing on the user's settings page (me/invitations/).
+    """
 
     invited_by = serializers.EmailField(
         source="invited_by.email", read_only=True, default=None
+    )
+    bank_account_id = serializers.UUIDField(
+        source="bank_account.id", read_only=True
+    )
+    bank_account_name = serializers.CharField(
+        source="bank_account.name", read_only=True
     )
 
     class Meta:
         model = BankAccountInvitation
         fields = [
             "id",
+            "token",
+            "bank_account_id",
+            "bank_account_name",
             "invitee_email",
             "invited_by",
             "status",

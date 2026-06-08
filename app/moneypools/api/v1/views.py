@@ -657,10 +657,16 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
     def invitations(self, request: Request, id: str = "") -> Response:
         """List pending co-ownership invitations for this bank account."""
         account: BankAccount = self.get_object()
-        qs = BankAccountInvitation.objects.filter(
-            bank_account=account,
-            status=BankAccountInvitation.Status.PENDING,
-        ).order_by("-created_at")
+        qs = (
+            BankAccountInvitation.objects.select_related(
+                "bank_account", "invited_by"
+            )
+            .filter(
+                bank_account=account,
+                status=BankAccountInvitation.Status.PENDING,
+            )
+            .order_by("-created_at")
+        )
         serializer = BankAccountInvitationSerializer(qs, many=True)
         return Response(serializer.data)
 
