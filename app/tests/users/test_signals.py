@@ -11,8 +11,8 @@ from allauth.account.signals import (
     password_changed,
     password_reset,
 )
-from notifications.models import Notification, NotificationPriority
 
+from notifications.models import Notification, NotificationPriority
 from users.notification_kinds import EMAIL_CHANGED, PASSWORD_CHANGED
 
 pytestmark = pytest.mark.django_db

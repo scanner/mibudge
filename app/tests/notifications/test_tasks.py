@@ -11,6 +11,7 @@ import celery.exceptions
 import pytest
 from django.core.cache import cache
 from freezegun import freeze_time
+
 from notifications.models import (
     Channel,
     ChannelPreference,

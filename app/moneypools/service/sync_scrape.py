@@ -74,16 +74,14 @@ from decimal import Decimal
 # 3rd party imports
 #
 import moneyed
-
-# Project imports
-#
-from common.locks import acquire_lock
 from django.db import transaction as db_transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from notifications.service import notify_for
 
+# Project imports
+#
+from common.locks import acquire_lock
 from moneypools.description_utils import parse_transaction_date
 from moneypools.models import (
     BankAccount,
@@ -101,6 +99,7 @@ from moneypools.service import transaction as transaction_svc
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
 )
+from notifications.service import notify_for
 
 logger = logging.getLogger(__name__)
 

@@ -839,6 +839,6 @@ class BankAccountInvitationAdmin(admin.ModelAdmin):
             try:
                 invitation_svc.cancel_invitation(inv)
                 cancelled += 1
-            except invitation_svc.BankAccountInvitationError:
+            except invitation_svc.InvitationError:
                 pass
         self.message_user(request, f"Cancelled {cancelled} invitation(s).")

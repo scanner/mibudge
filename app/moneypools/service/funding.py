@@ -46,17 +46,15 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-# Project imports
-#
-from common.locks import acquire_lock
-
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from djmoney.money import Money
-from notifications.service import notify_for
 
+# Project imports
+#
+from common.locks import acquire_lock
 from moneypools.models import (
     BankAccount,
     Budget,
@@ -71,6 +69,7 @@ from moneypools.service.schedules import (
     enumerate_schedule,
     prev_recurrence_boundary,
 )
+from notifications.service import notify_for
 from users.models import User
 
 logger = logging.getLogger(__name__)

@@ -21,15 +21,14 @@ Operations:
 from contextlib import ExitStack
 from datetime import UTC, date, datetime
 
-# Project imports
-#
-from common.locks import acquire_lock
-
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
 from djmoney.money import Money
 
+# Project imports
+#
+from common.locks import acquire_lock
 from moneypools.models import BankAccount, Budget, InternalTransaction
 from moneypools.service import transaction_allocation as alloc_svc
 from users.models import User

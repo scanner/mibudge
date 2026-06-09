@@ -4,9 +4,6 @@ import types
 from collections.abc import Generator
 from unittest.mock import MagicMock
 
-# project imports
-import notifications.service as notifications_service
-
 # 3rd party imports
 import py
 import pytest
@@ -17,6 +14,8 @@ from fakeredis import FakeConnection, FakeServer
 from pytest_factoryboy import register
 from pytest_mock import MockerFixture
 
+# project imports
+import notifications.service as notifications_service
 from tests.users.factories import UserFactory
 from users.models import User
 

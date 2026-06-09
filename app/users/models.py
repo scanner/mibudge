@@ -1,4 +1,3 @@
-import secrets
 import uuid
 from datetime import timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -13,16 +12,14 @@ from django.db.models import (
     DateTimeField,
     EmailField,
     ForeignKey,
+    PositiveSmallIntegerField,
     UUIDField,
 )
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-
-def _email_change_token() -> str:
-    """Generate a cryptographically secure URL-safe token."""
-    return secrets.token_urlsafe(48)
+from common.tokens import generate_token
 
 
 def validate_timezone(value: str) -> None:
@@ -113,7 +110,7 @@ class EmailChangeRequest(models.Model):
     )
     old_email = EmailField()
     new_email = EmailField()
-    token = CharField(max_length=64, unique=True, default=_email_change_token)
+    token = CharField(max_length=64, unique=True, default=generate_token)
     expires_at = DateTimeField()
     confirmed_at = DateTimeField(null=True, blank=True)
     # Set to confirmed_at + EMAIL_CHANGE_REVOCATION_DAYS when confirmed.
@@ -203,3 +200,128 @@ class EmailChangeRequest(models.Model):
         """Mark revoked. Caller handles user revert and session kill."""
         self.revoked_at = timezone.now()
         self.save(update_fields=["revoked_at"])
+
+
+########################################################################
+########################################################################
+#
+class UserInvitation(models.Model):
+    """Tracks a staff-initiated invitation for a brand-new mibudge user.
+
+    A staff admin invites someone by email address.  If the address is
+    already registered the invitation is rejected at creation time.  On
+    acceptance the invitee's account is activated and an allauth
+    password-reset link is emailed so they can set their first password.
+
+    Lifecycle:
+      - pending:   invitation sent; invitee has not yet acted.
+      - accepted:  invitee accepted; account activated, password-reset sent.
+      - expired:   token TTL elapsed with no action.
+
+    Rows are never deleted (audit trail).
+    """
+
+    ####################################################################
+    #
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        CANCELLED = "cancelled", "Cancelled"
+        EXPIRED = "expired", "Expired"
+
+    #
+    ####################################################################
+
+    invited_by = ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_user_invitations",
+    )
+    invitee_email = EmailField(
+        help_text="Email address the invitation was sent to. Immutable after creation.",
+        editable=False,
+    )
+    # Populated at creation time via get_or_create_inactive_user().
+    # May be NULL if the user record is later deleted (SET_NULL).
+    invitee_user = ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="received_user_invitations",
+    )
+    token = CharField(
+        max_length=64,
+        unique=True,
+        default=generate_token,
+        editable=False,
+    )
+    status = CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    expires_at = DateTimeField()
+    accepted_at = DateTimeField(null=True, blank=True)
+    cancelled_at = DateTimeField(null=True, blank=True)
+    # Resend tracking: how many times the invitation email has been sent
+    # (starts at 1 for the initial send) and when it was last sent.
+    send_count = PositiveSmallIntegerField(default=1)
+    last_sent_at = DateTimeField(default=timezone.now)
+    created_at = DateTimeField(auto_now_add=True)
+    modified_at = DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    ####################################################################
+    #
+    @property
+    def is_expired(self) -> bool:
+        """True if the invitation token has passed its expiry."""
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_pending(self) -> bool:
+        """True if the invitation is still awaiting a response."""
+        return self.status == self.Status.PENDING
+
+    @property
+    def is_terminal(self) -> bool:
+        """True if the invitation has reached a final state."""
+        return self.status in (
+            self.Status.ACCEPTED,
+            self.Status.CANCELLED,
+            self.Status.EXPIRED,
+        )
+
+    ####################################################################
+    #
+    @classmethod
+    def make(
+        cls,
+        invited_by: "User",
+        invitee_email: str,
+        invitee_user: "User | None",
+    ) -> "UserInvitation":
+        """Create a new pending invitation with a pre-computed expiry."""
+        expiry_days = settings.INVITATION_EXPIRY_DAYS
+        return cls.objects.create(
+            invited_by=invited_by,
+            invitee_email=invitee_email,
+            invitee_user=invitee_user,
+            expires_at=timezone.now() + timedelta(days=expiry_days),
+        )
+
+    ####################################################################
+    #
+    @classmethod
+    def pending_for_token(cls, token: str) -> "UserInvitation | None":
+        """Return the pending invitation for the given token, or None."""
+        return (
+            cls.objects.filter(token=token, status=cls.Status.PENDING)
+            .select_related("invited_by", "invitee_user")
+            .first()
+        )

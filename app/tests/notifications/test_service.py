@@ -6,6 +6,7 @@ from collections.abc import Callable
 from unittest.mock import MagicMock, patch  # patch used for registry isolation
 
 import pytest
+
 from notifications.models import (
     Channel,
     DeliveryMode,
@@ -15,7 +16,6 @@ from notifications.models import (
 )
 from notifications.registry import NotificationRegistry
 from notifications.service import notify, notify_for
-
 from users.models import User
 
 pytestmark = pytest.mark.django_db

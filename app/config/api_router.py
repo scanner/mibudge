@@ -13,10 +13,6 @@ The module path mirrors the URL -- each Django app owns an
 
 from django.conf import settings
 from django.urls import path
-from notifications.api.v1.views import (
-    ChannelPreferenceViewSet,
-    NotificationPreferenceViewSet,
-)
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
 from moneypools.api.v1.views import (
@@ -31,6 +27,10 @@ from moneypools.api.v1.views import (
     invitation_accept,
     invitation_decline,
     invitation_detail,
+)
+from notifications.api.v1.views import (
+    ChannelPreferenceViewSet,
+    NotificationPreferenceViewSet,
 )
 from users.api.v1.views import UserViewSet
 

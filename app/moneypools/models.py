@@ -1,5 +1,4 @@
 import enum
-import secrets
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -13,6 +12,8 @@ from django.utils import timezone
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
 from encrypted_fields.fields import EncryptedCharField
+
+from common.tokens import generate_token
 
 User = get_user_model()
 
@@ -1308,14 +1309,6 @@ class TransactionAllocation(MoneyPoolBaseClass):
 ########################################################################
 ########################################################################
 #
-def _invitation_token() -> str:
-    """Generate a cryptographically secure URL-safe invitation token."""
-    return secrets.token_urlsafe(48)
-
-
-########################################################################
-########################################################################
-#
 class BankAccountInvitation(MoneyPoolBaseClass):
     """Tracks a pending or completed bank-account co-ownership invitation.
 
@@ -1376,7 +1369,7 @@ class BankAccountInvitation(MoneyPoolBaseClass):
     token = models.CharField(
         max_length=64,
         unique=True,
-        default=_invitation_token,
+        default=generate_token,
         editable=False,
     )
     status = models.CharField(
@@ -1388,6 +1381,10 @@ class BankAccountInvitation(MoneyPoolBaseClass):
     accepted_at = models.DateTimeField(null=True, blank=True)
     declined_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    # Resend tracking: how many times the invitation email has been sent
+    # (starts at 1 for the initial send) and when it was last sent.
+    send_count = models.PositiveSmallIntegerField(default=1)
+    last_sent_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["-created_at"]
@@ -1425,7 +1422,7 @@ class BankAccountInvitation(MoneyPoolBaseClass):
         invitee_user: "Any",
     ) -> "BankAccountInvitation":
         """Create a new pending invitation with a pre-computed expiry."""
-        expiry_days = getattr(settings, "INVITATION_EXPIRY_DAYS", 7)
+        expiry_days = settings.INVITATION_EXPIRY_DAYS
         return cls.objects.create(
             bank_account=bank_account,
             invited_by=invited_by,

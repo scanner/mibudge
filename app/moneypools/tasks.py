@@ -26,7 +26,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
-from notifications.service import notify_for
 
 # Project imports
 from config import celery_app
@@ -40,6 +39,7 @@ from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
 from moneypools.service.linking import attempt_link
 from moneypools.service.shared import funding_system_user
+from notifications.service import notify_for
 
 logger = logging.getLogger(__name__)
 

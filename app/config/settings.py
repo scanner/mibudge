@@ -542,6 +542,18 @@ EMAIL_CHANGE_TOKEN_EXPIRY_HOURS: int = 24
 # How long after confirmation the 'this wasn't me' revocation link stays valid.
 EMAIL_CHANGE_REVOCATION_DAYS: int = 7
 
+# How long an invitation token is valid.
+INVITATION_EXPIRY_DAYS: int = 7
+
+# Per-invitation resend limits: max 3 resends, no more than one per hour.
+INVITATION_MAX_RESENDS: int = 3
+INVITATION_RESEND_COOLDOWN_HOURS: int = 1
+
+# Per-address abuse prevention: no more than 5 invitations to the same address
+# in any 30-day rolling window, regardless of status.
+INVITATION_MAX_PER_WINDOW: int = 5
+INVITATION_WINDOW_DAYS: int = 30
+
 # Mibudge
 # ------------------------------------------------------------------------------
 DEFAULT_CURRENCY = "USD"

@@ -20,7 +20,6 @@ import recurrence
 from django.conf import settings
 from django.urls import reverse
 from djmoney.money import Money
-from notifications.models import Notification
 
 # Project imports
 #
@@ -44,6 +43,7 @@ from moneypools.tasks import (
     recur_one_account,
     schedule_funding_runs,
 )
+from notifications.models import Notification
 from tests.users.factories import UserFactory
 from users.models import User
 

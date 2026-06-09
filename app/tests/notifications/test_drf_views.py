@@ -7,6 +7,7 @@ from collections.abc import Callable
 # 3rd party imports
 #
 import pytest
+from rest_framework.test import APIClient
 
 # app imports
 #
@@ -16,8 +17,6 @@ from notifications.models import (
     DigestFrequency,
     NotificationPreference,
 )
-from rest_framework.test import APIClient
-
 from users.models import User
 
 pytestmark = pytest.mark.django_db
