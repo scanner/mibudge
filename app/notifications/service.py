@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 #
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction as db_transaction
 
 # Project imports
 #
@@ -152,7 +153,10 @@ def notify(
     ):
         from notifications.tasks import send_notification_now
 
-        send_notification_now.delay(str(notification.id))
+        notification_id = str(notification.id)
+        db_transaction.on_commit(
+            lambda: send_notification_now.delay(notification_id)
+        )
         logger.debug(
             "notify: enqueued immediate send for notification %s "
             "(kind=%r, delivery_mode=%r, priority=%s, user=%s)",

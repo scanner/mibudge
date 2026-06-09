@@ -1,14 +1,16 @@
 # system imports
 #
+import types
 from collections.abc import Generator
 from unittest.mock import MagicMock
+
+# project imports
+import notifications.service as notifications_service
 
 # 3rd party imports
 import py
 import pytest
 import redis
-
-# project imports
 from django.conf import LazySettings
 from django.db import connections
 from fakeredis import FakeConnection, FakeServer
@@ -141,10 +143,19 @@ def mock_send_notification_now(mocker: MockerFixture) -> MagicMock:
     Without it, notify() calls send_notification_now.delay() which tries to
     connect to the real Celery broker and fails in the test environment.
 
+    notify() dispatches via db_transaction.on_commit() so that the task is
+    enqueued only after the surrounding request transaction commits
+    (ATOMIC_REQUESTS=True).  In tests the outer transaction never commits, so
+    we also patch notifications.service.db_transaction locally (not globally)
+    to fire on_commit callbacks immediately.  Other modules' on_commit calls
+    (e.g. attempt_link_transaction in moneypools) are not affected.
+
     Returns:
         The MagicMock replacing send_notification_now, so callers can assert
         .delay() was called with the expected notification ID.
     """
+    mock_tx = types.SimpleNamespace(on_commit=lambda fn: fn())
+    mocker.patch.object(notifications_service, "db_transaction", mock_tx)
     return mocker.patch("notifications.tasks.send_notification_now")
 
 
