@@ -1,0 +1,1 @@
+{{ inviter_name }} has invited you to {{ site_display_name }}
