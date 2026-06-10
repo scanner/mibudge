@@ -56,6 +56,8 @@ dependencies = [
     "hvac>=2.4.0",
     "django-settings-export>=1.2.1",
     "zxcvbn>=4.5.0",
+    "django-crispy-forms>=2.6",
+    "crispy-bootstrap5>=2026.3",
 ]
 
 [build-system]

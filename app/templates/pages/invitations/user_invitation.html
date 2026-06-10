@@ -1,0 +1,139 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invitation to mibudge{% if invitation %} &mdash; {{ invitation.invitee_email }}{% endif %}</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1a1a1a;background:#f5f5f5;margin:0;padding:0}
+    .wrap{max-width:640px;margin:48px auto;padding:0 16px}
+    .card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);margin-bottom:16px;overflow:hidden}
+    .card-header{background:#0ea5e9;color:#fff;padding:16px 24px;font-size:18px;font-weight:600}
+    .card-body{padding:24px}
+    .card-footer{background:#f9fafb;padding:12px 24px;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb}
+    .btn{display:inline-block;padding:10px 20px;border-radius:4px;font-size:14px;font-weight:600;cursor:pointer;border:none;text-decoration:none}
+    .btn-primary{background:#0ea5e9;color:#fff}
+    .field{margin-bottom:20px}
+    .field-label{font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+    .field-value{font-size:15px;color:#1a1a1a;background:#f9fafb;padding:8px 12px;border-radius:4px;border:1px solid #e5e7eb}
+    .note{font-size:12px;color:#6b7280;margin-top:12px}
+    a{color:#1d4ed8}
+  </style>
+</head>
+<body>
+{% if request.user.is_authenticated %}
+<div style="background:#1e293b;color:#f1f5f9;padding:10px 24px;font-size:13px;">
+  Signed in as <strong>{{ request.user.email }}</strong>
+  &nbsp;&middot;&nbsp;
+  <a href="/app/" style="color:#7dd3fc;">Go to mibudge</a>
+</div>
+{% endif %}
+
+<div class="wrap">
+
+{# ------------------------------------------------------------------ #}
+{# Token not found                                                      #}
+{# ------------------------------------------------------------------ #}
+{% if error == "not_found" %}
+<div class="card">
+  <div class="card-header">Invitation not found</div>
+  <div class="card-body">
+    <p>This invitation link is not valid. It may have been mistyped or the invitation may have been removed.</p>
+  </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Terminal / expired states shown on GET                               #}
+{# ------------------------------------------------------------------ #}
+{% elif error == "expired" %}
+<div class="card">
+  <div class="card-header">Invitation expired</div>
+  <div class="card-body">
+    <p>This invitation is no longer valid. Contact a mibudge administrator to send a new one.</p>
+  </div>
+</div>
+
+{% elif error == "cancelled" %}
+<div class="card">
+  <div class="card-header">Invitation cancelled</div>
+  <div class="card-body">
+    <p>This invitation has been cancelled. Contact a mibudge administrator if you believe this is a mistake.</p>
+  </div>
+</div>
+
+{% elif error == "accepted" %}
+<div class="card">
+  <div class="card-header">Already accepted</div>
+  <div class="card-body">
+    <p>This invitation has already been accepted.</p>
+    <p>If you need to log in to mibudge, use the <a href="/accounts/password/reset/">password reset page</a> to receive a sign-in link.</p>
+  </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# POST result pages                                                    #}
+{# ------------------------------------------------------------------ #}
+{% elif result == "accepted" %}
+<div class="card">
+  <div class="card-header">You're all set!</div>
+  <div class="card-body">
+    <p>Your account has been created. We sent a password-setup link to <strong>{{ invitation.invitee_email }}</strong>. Click it to set your password and start using mibudge.</p>
+    <p class="note">You will be able to change your email address after you have set a password.</p>
+  </div>
+</div>
+
+{% elif result == "expired" %}
+<div class="card">
+  <div class="card-header">Invitation expired</div>
+  <div class="card-body">
+    <p>This invitation expired before you could accept it. Contact a mibudge administrator to send a new one.</p>
+  </div>
+</div>
+
+{% elif result == "cancelled" %}
+<div class="card">
+  <div class="card-header">Invitation cancelled</div>
+  <div class="card-body">
+    <p>This invitation was cancelled before you could accept it. Contact a mibudge administrator if you believe this is a mistake.</p>
+  </div>
+</div>
+
+{% elif result %}
+<div class="card">
+  <div class="card-header">Unable to process invitation</div>
+  <div class="card-body">
+    <p>This invitation has already been acted on or is no longer available.</p>
+  </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Active invitation -- main accept page                                #}
+{# ------------------------------------------------------------------ #}
+{% elif invitation %}
+<div class="card">
+  <div class="card-header">You've been invited to mibudge</div>
+  <div class="card-body">
+    <p style="color:#374151;margin-bottom:20px;">mibudge is a personal budgeting service that uses virtual envelopes to help you track and plan your spending.</p>
+    <div class="field">
+      <div class="field-label">Your email address</div>
+      <div class="field-value">{{ invitation.invitee_email }}</div>
+    </div>
+    <p style="font-size:14px;color:#374151;margin-bottom:20px;">
+      Accepting this invitation will create your mibudge account.
+      You will receive a separate email with a link to set your password.
+    </p>
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" name="action" value="accept" class="btn btn-primary">Accept invitation</button>
+    </form>
+    <p class="note">You will be able to change your email address after you have set a password.</p>
+  </div>
+  <div class="card-footer">Invitation expires {{ invitation.expires_at|date:"N j, Y" }}</div>
+</div>
+
+{% endif %}
+
+</div>{# /.wrap #}
+</body>
+</html>

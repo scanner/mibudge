@@ -112,6 +112,8 @@ DJANGO_APPS = [
     "django.contrib.admin",
 ]
 THIRD_PARTY_APPS = [
+    "crispy_forms",
+    "crispy_bootstrap5",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -378,6 +380,11 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 if DEBUG:
     CELERY_TASK_EAGER_PROPAGATES = True
+
+# django-crispy-forms
+# ------------------------------------------------------------------------------
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # django-allauth
 # ------------------------------------------------------------------------------
