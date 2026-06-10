@@ -159,7 +159,7 @@ AUTH_USER_MODEL = "users.User"
 # The SPA owns its own auth flow (silent refresh + /app/login/), so there
 # is no allauth-to-SPA handoff URL.  allauth remains mounted for password
 # reset flows only.
-LOGIN_URL = "account_login"
+LOGIN_URL = "/app/login/"
 
 # PASSWORDS
 # ------------------------------------------------------------------------------

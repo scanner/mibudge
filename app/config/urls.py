@@ -1,7 +1,9 @@
+from allauth.account import views as allauth_views
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.generic import RedirectView
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -21,7 +23,54 @@ urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
     # User management
     path("users/", include("users.urls", namespace="users")),
-    path("accounts/", include("allauth.urls")),
+    # allauth: password reset/change/set only.  Login, signup, email
+    # management, and all other allauth flows are not in use -- their URLs
+    # are intentionally absent so they return 404 rather than render pages.
+    path(
+        "accounts/",
+        include(
+            [
+                # account_login must exist so allauth internals can reverse() it.
+                # Visiting it redirects to the SPA login page instead of serving
+                # allauth's own login form.
+                path(
+                    "login/",
+                    RedirectView.as_view(url="/app/login/"),
+                    name="account_login",
+                ),
+                path(
+                    "password/reset/",
+                    allauth_views.password_reset,
+                    name="account_reset_password",
+                ),
+                path(
+                    "password/reset/done/",
+                    allauth_views.password_reset_done,
+                    name="account_reset_password_done",
+                ),
+                re_path(
+                    r"^password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$",
+                    allauth_views.password_reset_from_key,
+                    name="account_reset_password_from_key",
+                ),
+                path(
+                    "password/reset/key/done/",
+                    allauth_views.password_reset_from_key_done,
+                    name="account_reset_password_from_key_done",
+                ),
+                path(
+                    "password/change/",
+                    allauth_views.password_change,
+                    name="account_change_password",
+                ),
+                path(
+                    "password/set/",
+                    allauth_views.password_set,
+                    name="account_set_password",
+                ),
+            ]
+        ),
+    ),
     # Moneypools
     path("mp/", include("moneypools.urls")),
     # Invitation acceptance pages (outside the SPA; unauthenticated-accessible)
