@@ -65,15 +65,14 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.dateformat import format as django_date_format
-
-# Project imports
-#
-from notifications.service import notify
 from rest_framework_simplejwt.token_blacklist.models import (
     BlacklistedToken,
     OutstandingToken,
 )
 
+# Project imports
+#
+from notifications.service import notify
 from users.models import EmailChangeRequest
 from users.notification_kinds import (
     EMAIL_CHANGE_REQUESTED,

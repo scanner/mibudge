@@ -1,5 +1,6 @@
 import enum
 import uuid
+from datetime import timedelta
 from typing import Any
 
 import recurrence.fields
@@ -7,9 +8,12 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
 from encrypted_fields.fields import EncryptedCharField
+
+from common.tokens import generate_token
 
 User = get_user_model()
 
@@ -1300,3 +1304,146 @@ class TransactionAllocation(MoneyPoolBaseClass):
         default=TransactionCategory.UNASSIGNED,
     )
     memo = models.TextField(max_length=512, null=True, blank=True)
+
+
+########################################################################
+########################################################################
+#
+class BankAccountInvitation(MoneyPoolBaseClass):
+    """Tracks a pending or completed bank-account co-ownership invitation.
+
+    An existing account owner invites someone (by email) to become a
+    co-owner.  The invitee may or may not already have a mibudge account.
+
+    Lifecycle:
+      - pending:   invitation sent; invitee has not yet acted.
+      - accepted:  invitee accepted; added to BankAccount.owners.
+      - declined:  invitee explicitly declined.
+      - cancelled: inviter cancelled before the invitee acted.
+      - expired:   token TTL elapsed with no action (set by the service
+                   layer or a periodic cleanup task -- rows themselves are
+                   never deleted so an audit trail is preserved).
+
+    Rows are never deleted (audit trail).
+    """
+
+    ####################################################################
+    #
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+        CANCELLED = "cancelled", "Cancelled"
+        EXPIRED = "expired", "Expired"
+
+    #
+    ####################################################################
+
+    bank_account = models.ForeignKey(
+        BankAccount,
+        to_field="id",
+        on_delete=models.CASCADE,
+        editable=False,
+        related_name="invitations",
+    )
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_invitations",
+    )
+    invitee_email = models.EmailField(
+        help_text="Email address the invitation was sent to. Immutable after creation.",
+        editable=False,
+    )
+    # Populated at creation time via get_or_create_inactive_user().
+    # May be NULL if the user record is later deleted (SET_NULL).
+    invitee_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="received_invitations",
+    )
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        default=generate_token,
+        editable=False,
+    )
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    # Resend tracking: how many times the invitation email has been sent
+    # (starts at 1 for the initial send) and when it was last sent.
+    send_count = models.PositiveSmallIntegerField(default=1)
+    last_sent_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    ####################################################################
+    #
+    @property
+    def is_expired(self) -> bool:
+        """True if the invitation token has passed its expiry."""
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_pending(self) -> bool:
+        """True if the invitation is still awaiting a response."""
+        return self.status == self.Status.PENDING
+
+    @property
+    def is_terminal(self) -> bool:
+        """True if the invitation has reached a final state."""
+        return self.status in (
+            self.Status.ACCEPTED,
+            self.Status.DECLINED,
+            self.Status.CANCELLED,
+            self.Status.EXPIRED,
+        )
+
+    ####################################################################
+    #
+    @classmethod
+    def make(
+        cls,
+        bank_account: "BankAccount",
+        invited_by: "Any",
+        invitee_email: str,
+        invitee_user: "Any",
+    ) -> "BankAccountInvitation":
+        """Create a new pending invitation with a pre-computed expiry."""
+        expiry_days = settings.INVITATION_EXPIRY_DAYS
+        return cls.objects.create(
+            bank_account=bank_account,
+            invited_by=invited_by,
+            invitee_email=invitee_email,
+            invitee_user=invitee_user,
+            expires_at=timezone.now() + timedelta(days=expiry_days),
+        )
+
+    ####################################################################
+    #
+    @classmethod
+    def pending_for_email(
+        cls, email: str
+    ) -> "models.QuerySet[BankAccountInvitation]":
+        """Return all pending, non-expired invitations for the given email.
+
+        Used by the acceptance page to display all open invitations for
+        the same invitee (multi-invitation support).
+        """
+        return cls.objects.filter(
+            invitee_email=email,
+            status=cls.Status.PENDING,
+            expires_at__gt=timezone.now(),
+        ).select_related("bank_account", "bank_account__bank", "invited_by")

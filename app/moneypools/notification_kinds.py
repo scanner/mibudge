@@ -25,6 +25,8 @@ RECURRING_BUDGET_REFRESHED = "moneypools.recurring_budget_refreshed"
 TRANSACTION_POSTED = "moneypools.transaction_posted"
 BALANCE_MISMATCH = "moneypools.balance_mismatch"
 IMPORT_ERROR = "moneypools.import_error"
+CO_OWNER_INVITATION_ACCEPTED = "moneypools.co_owner_invitation_accepted"
+CO_OWNER_INVITATION_DECLINED = "moneypools.co_owner_invitation_declined"
 
 
 ########################################################################
@@ -90,4 +92,18 @@ def register_all() -> None:
         can_suppress=True,
         default_delivery_mode=DeliveryMode.DIGEST,
         recipients=_account_owners,
+    )
+    registry.register(
+        kind=CO_OWNER_INVITATION_ACCEPTED,
+        display_name="Co-owner invitation accepted",
+        default_priority=NotificationPriority.NORMAL,
+        can_suppress=True,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
+    )
+    registry.register(
+        kind=CO_OWNER_INVITATION_DECLINED,
+        display_name="Co-owner invitation declined",
+        default_priority=NotificationPriority.NORMAL,
+        can_suppress=True,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
     )

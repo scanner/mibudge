@@ -407,6 +407,19 @@ wheels = [
 ]
 
 [[package]]
+name = "crispy-bootstrap5"
+version = "2026.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "django-crispy-forms" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/e8/05e1170f6b8fbfe4098392bdca813c2094659853a438919234d4663009b1/crispy_bootstrap5-2026.3.tar.gz", hash = "sha256:e7f5adb36acfbb456444c46e82c436931c796c539e9c620be4fa9dc9c9d6679c", size = 23452, upload-time = "2026-03-01T10:08:00.459Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/2d/93f78072f203aa28d961add6a130b929b47f7aa3fef6905898b4bb9a637d/crispy_bootstrap5-2026.3-py3-none-any.whl", hash = "sha256:e0fff85c0503e9aed610a0ee31368e2191d340657f813669491c288c1c2e2dfa", size = 24770, upload-time = "2026-03-01T10:07:59.058Z" },
+]
+
+[[package]]
 name = "cron-descriptor"
 version = "1.4.5"
 source = { registry = "https://pypi.org/simple" }
@@ -556,6 +569,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/21/39/55822b15b7ec87410f34cd16ce04065ff390e50f9e29f31d6d116fc80456/django_cors_headers-4.9.0.tar.gz", hash = "sha256:fe5d7cb59fdc2c8c646ce84b727ac2bca8912a247e6e68e1fb507372178e59e8", size = 21458, upload-time = "2025-09-18T10:40:52.326Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/30/d8/19ed1e47badf477d17fb177c1c19b5a21da0fd2d9f093f23be3fb86c5fab/django_cors_headers-4.9.0-py3-none-any.whl", hash = "sha256:15c7f20727f90044dcee2216a9fd7303741a864865f0c3657e28b7056f61b449", size = 12809, upload-time = "2025-09-18T10:40:50.843Z" },
+]
+
+[[package]]
+name = "django-crispy-forms"
+version = "2.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/42/c2cfb672493730b963ef377b103e29871c56348a215d0ae8cf362fe8ab1e/django_crispy_forms-2.6.tar.gz", hash = "sha256:4921a1087c6cd4f9fa3c139654c1de1c1c385f8bd6729aaee530bc0121ab4b93", size = 1097838, upload-time = "2026-03-01T09:03:37.138Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/e3/4c5915a732d6ab54da8871400852b67529518eedfb6b78ecf10bbccfcabb/django_crispy_forms-2.6-py3-none-any.whl", hash = "sha256:8ee0ae28b6b0ac41ff48a65944480c049fe8d1b0047086874fd7efabf4ec1374", size = 31479, upload-time = "2026-03-01T09:03:36.048Z" },
 ]
 
 [[package]]
@@ -1394,11 +1419,13 @@ dependencies = [
     { name = "argon2-cffi" },
     { name = "celery" },
     { name = "click" },
+    { name = "crispy-bootstrap5" },
     { name = "django" },
     { name = "django-allauth" },
     { name = "django-anymail" },
     { name = "django-celery-beat" },
     { name = "django-cors-headers" },
+    { name = "django-crispy-forms" },
     { name = "django-environ" },
     { name = "django-extensions" },
     { name = "django-fernet-encrypted-fields" },
@@ -1466,11 +1493,13 @@ requires-dist = [
     { name = "argon2-cffi" },
     { name = "celery" },
     { name = "click", specifier = ">=8.3.1" },
+    { name = "crispy-bootstrap5", specifier = ">=2026.3" },
     { name = "django", specifier = ">=5.2,<6" },
     { name = "django-allauth" },
     { name = "django-anymail" },
     { name = "django-celery-beat" },
     { name = "django-cors-headers" },
+    { name = "django-crispy-forms", specifier = ">=2.6" },
     { name = "django-environ" },
     { name = "django-extensions" },
     { name = "django-fernet-encrypted-fields" },

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from django.template import TemplateDoesNotExist
+
 from notifications.channels.email import (
     EmailChannel,
     _kind_template_dir,

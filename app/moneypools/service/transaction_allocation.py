@@ -39,13 +39,12 @@ from typing import Any
 # 3rd party imports
 #
 import moneyed
+from django.db import transaction as db_transaction
+from django.db.models import Q, Sum
 
 # Project imports
 #
 from common.locks import acquire_lock
-from django.db import transaction as db_transaction
-from django.db.models import Q, Sum
-
 from moneypools.models import (
     Budget,
     InternalTransaction,

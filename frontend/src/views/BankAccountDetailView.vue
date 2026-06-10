@@ -1,8 +1,27 @@
 <script setup lang="ts">
 //
 // BankAccountDetailView — read-only hero grid, details, owners, budget
-// count, inline name edit, and delete with confirmation.
+// count, inline name edit, delete with confirmation, and co-owner invitation.
 // (UI_SPEC §4.8, /app/account/bank-accounts/:id/)
+//
+// Invite flow overview
+// --------------------
+// The co-owner invite is a two-step action deliberately modelled on the
+// existing name-edit and delete-confirmation patterns already in this view:
+//
+//   1. Owner clicks "Invite co-owner" → openInvite() shows the inline form.
+//   2. Owner enters an email and clicks "Review" → reviewInvite() validates
+//      and opens the ConfirmSheet asking "Send invitation to <email>?".
+//   3. Owner confirms → doSendInvite() POSTs to the backend, then reloads
+//      the pending-invitations list from the server.
+//
+// Cancellation (doCancelInvitation) is an optimistic removal: the row
+// disappears immediately and is only restored if the backend returns an
+// error (rare; the most likely failure is a network blip).
+//
+// All invite/cancel state is local to this component.  There is no Pinia
+// store for invitations because the data is only ever needed here and on
+// the AccountSettingsView; each view loads its own slice independently.
 //
 
 // 3rd party imports
@@ -24,12 +43,14 @@ import {
   updateBankAccount,
   type FundingRunResult,
 } from "@/api/bankAccounts";
-import type { FundingSummary } from "@/types/api";
+import { cancelInvitation, listAccountInvitations, sendInvitation } from "@/api/invitations";
+import { ApiError } from "@/api/client";
+import type { BankAccount, BankAccountInvitation, FundingSummary } from "@/types/api";
 import { getBank } from "@/api/banks";
 import { listBudgets } from "@/api/budgets";
 import { useAccountContextStore } from "@/stores/accountContext";
+import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
-import type { BankAccount } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -38,6 +59,7 @@ const props = defineProps<{ id: string }>();
 const router = useRouter();
 const ctx = useAccountContextStore();
 const budgetsStore = useBudgetsStore();
+const authStore = useAuthStore();
 
 const account = ref<BankAccount | null>(null);
 const bankName = ref<string | null>(null);
@@ -55,6 +77,27 @@ const nameError = ref<string | null>(null);
 // Delete confirmation.
 const confirmDelete = ref(false);
 const deleting = ref(false);
+
+// Invite co-owner state.
+//
+// invitations     — current list of PENDING invitations for this account,
+//                   loaded on mount alongside the rest of the page data.
+// inviteOpen      — controls visibility of the inline email-entry form.
+// inviteConfirm   — controls the ConfirmSheet shown before the API call.
+// inviteSending   — true while the POST /invite/ is in-flight; disables
+//                   the Send button so the user cannot double-submit.
+// inviteSuccess   — transient flag that shows the "Invitation sent" banner
+//                   after a successful send; cleared when the form reopens.
+// cancellingId    — the UUID of the invitation currently being cancelled,
+//                   used to show a spinner on that specific row's button.
+const invitations = ref<BankAccountInvitation[]>([]);
+const inviteOpen = ref(false);
+const inviteEmail = ref("");
+const inviteConfirm = ref(false);
+const inviteSending = ref(false);
+const inviteError = ref<string | null>(null);
+const inviteSuccess = ref(false);
+const cancellingId = ref<string | null>(null);
 
 // Run-funding state.
 const funding = ref(false);
@@ -124,11 +167,13 @@ onMounted(async () => {
   loading.value = true;
   error.value = null;
   try {
-    const [acct, budgetsPage, summary] = await Promise.all([
+    const [acct, budgetsPage, summary, invites] = await Promise.all([
       getBankAccount(props.id),
       listBudgets({ bank_account: props.id }),
       fundingSummary(props.id).catch(() => null as FundingSummary | null),
+      listAccountInvitations(props.id).catch(() => [] as BankAccountInvitation[]),
     ]);
+    invitations.value = invites;
     fundingSummaryData.value = summary;
     account.value = acct;
     editName.value = acct.name;
@@ -211,6 +256,129 @@ async function toggleAutoFunding(): Promise<void> {
   } catch {
     account.value.auto_funding_enabled = prev;
   }
+}
+
+////////////////////////////////////////////////////////////////////////
+// Invite co-owner — three-function flow
+//
+// The flow is deliberately split into three small functions (open → review
+// → send) rather than one large async handler.  This mirrors the delete
+// flow (startDelete → confirmDelete sheet → deleteAccount) and keeps each
+// step testable in isolation: open resets UI state, review validates and
+// opens the confirmation dialog, doSendInvite performs the async work.
+
+// openInvite — enter step 1 of the invite flow.
+//
+// Resets all invite-related state so that reopening the form after a
+// previous error or success always starts clean.
+function openInvite() {
+  inviteOpen.value = true;
+  inviteEmail.value = "";
+  inviteError.value = null;
+  inviteSuccess.value = false;
+}
+
+// cancelInviteForm — dismiss the invite form without sending anything.
+//
+// Called by the "Cancel" button inside the inline form, and also when
+// the ConfirmSheet's cancel handler fires (the user backed out of the
+// confirmation dialog).
+function cancelInviteForm() {
+  inviteOpen.value = false;
+  inviteError.value = null;
+}
+
+// reviewInvite — validate the email and open the confirmation dialog.
+//
+// This is the bridge between the text-input step and the ConfirmSheet.
+// Client-side validation here is intentionally minimal (just "is it
+// non-empty?") — the backend will reject an already-used address or a
+// malformed email with a descriptive error that doSendInvite surfaces.
+function reviewInvite() {
+  inviteError.value = null;
+  if (!inviteEmail.value.trim()) {
+    inviteError.value = "Email address is required.";
+    return;
+  }
+  inviteConfirm.value = true;
+}
+
+// doSendInvite — POST the invitation once the user has confirmed.
+//
+// Called by the ConfirmSheet's @confirm event.  On success the inline
+// form closes, the pending-invitations list refreshes from the server
+// (rather than appending speculatively, to get the real token and
+// timestamps), and a transient success banner appears.
+//
+// HTTP 409 has two distinct causes the backend may return: the address
+// is already an owner, or a pending invitation already exists.  Both
+// are grouped into a single user-facing message because the action the
+// user should take is the same either way (contact the person by other
+// means or wait for the existing invitation to expire).
+async function doSendInvite() {
+  inviteConfirm.value = false;
+  inviteSending.value = true;
+  inviteError.value = null;
+  try {
+    await sendInvitation(props.id, inviteEmail.value.trim().toLowerCase());
+    inviteOpen.value = false;
+    inviteEmail.value = "";
+    inviteSuccess.value = true;
+    // Reload from server so the new row has real server-assigned timestamps
+    // and the token needed for the cancel action.
+    invitations.value = await listAccountInvitations(props.id);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      inviteError.value =
+        "A pending invitation for this address already exists, or they are already an owner.";
+    } else {
+      inviteError.value = err instanceof Error ? err.message : "Failed to send invitation.";
+    }
+  } finally {
+    inviteSending.value = false;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// doCancelInvitation — withdraw a pending invitation before it is accepted.
+//
+// Uses an optimistic removal: the row disappears immediately from the UI
+// and is only put back if the backend returns an error.  This keeps the
+// interaction snappy for the common case (successful cancel) without
+// requiring a loading spinner on every row.
+//
+// cancellingId tracks which row is in-flight so the template can disable
+// that row's button while the request is pending, preventing double-clicks
+// from racing each other.
+async function doCancelInvitation(inv: BankAccountInvitation) {
+  cancellingId.value = inv.id;
+  try {
+    await cancelInvitation(props.id, inv.token);
+    invitations.value = invitations.value.filter((i) => i.id !== inv.id);
+  } catch {
+    // Silently leave the list unchanged on error.  The user can retry; a
+    // toast or persistent error would be disproportionate for this action.
+  } finally {
+    cancellingId.value = null;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// fmtDate — format an ISO datetime string as a short locale date.
+//
+// Used inline rather than as a shared utility because date formatting
+// needs differ per view and a shared formatter would need configuration
+// options that would make it more complex than just calling toLocaleDateString
+// directly.  See task-mibudge-spa-architecture-doc for the known-gap note
+// on this.
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 async function deleteAccount() {
@@ -392,13 +560,25 @@ async function deleteAccount() {
         </dl>
       </section>
 
-      <!-- Owners -->
+      <!-- Owners + invite form
+           The invite form lives inside this section so it visually belongs
+           with the owners list.  The two-step flow (enter email → confirm
+           in ConfirmSheet) keeps the destructive-action confirmation
+           pattern consistent with the delete flow below. -->
       <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
-        <h2
-          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-        >
-          Owners
-        </h2>
+        <div class="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+          <h2 class="text-[11px] font-semibold uppercase tracking-wider text-secondary">Owners</h2>
+          <button
+            v-if="!inviteOpen"
+            type="button"
+            class="text-xs font-medium text-ocean-600 hover:text-ocean-700"
+            @click="openInvite"
+          >
+            + Invite co-owner
+          </button>
+        </div>
+
+        <!-- Current owners list -->
         <ul class="divide-y divide-neutral-100">
           <li
             v-for="owner in account.owners"
@@ -408,6 +588,97 @@ async function deleteAccount() {
             {{ owner }}
           </li>
           <li v-if="!account.owners?.length" class="px-4 py-3 text-sm text-neutral-400">—</li>
+        </ul>
+
+        <!-- Inline invite form — step 1: enter the email address.
+             Appears below the owner list when inviteOpen is true.
+             The "Review" button triggers client-side validation and then
+             opens the ConfirmSheet for step 2 rather than sending directly,
+             giving the user a chance to double-check the address. -->
+        <div v-if="inviteOpen" class="border-t border-neutral-100 px-4 py-4">
+          <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="invite-email">
+            Email address to invite
+          </label>
+          <input
+            id="invite-email"
+            v-model="inviteEmail"
+            type="email"
+            autocomplete="email"
+            placeholder="colleague@example.com"
+            class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+            @keydown.enter="reviewInvite"
+            @keydown.escape="cancelInviteForm"
+          />
+          <p v-if="inviteError" class="mt-1 text-xs text-coral-600">{{ inviteError }}</p>
+          <div class="mt-3 flex gap-2">
+            <button
+              type="button"
+              :disabled="inviteSending"
+              class="flex-1 rounded-subcard bg-ocean-400 py-2 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+              @click="reviewInvite"
+            >
+              {{ inviteSending ? "Sending…" : "Review" }}
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-subcard border border-neutral-200 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+              @click="cancelInviteForm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- Success banner shown after a successful invite send.
+             Displayed inside the Owners card so it is contextually near
+             the action that triggered it. -->
+        <div
+          v-if="inviteSuccess && !inviteOpen"
+          class="border-t border-neutral-100 px-4 py-3 text-sm text-mint-600"
+        >
+          Invitation sent.
+        </div>
+      </section>
+
+      <!-- Pending invitations
+           Shown as a separate section (not merged into Owners) because
+           the pending list has its own actions (Cancel) and lifecycle,
+           and mixing it into the owners list would make the UI harder to
+           scan.  The section is only rendered when there is at least one
+           pending invitation; once all are accepted/declined/cancelled it
+           disappears automatically. -->
+      <section
+        v-if="invitations.length > 0"
+        class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+      >
+        <h2
+          class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        >
+          Pending invitations
+        </h2>
+        <ul class="divide-y divide-neutral-100">
+          <li
+            v-for="inv in invitations"
+            :key="inv.id"
+            class="flex items-center justify-between px-4 py-3"
+          >
+            <div>
+              <p class="text-sm text-neutral-900">{{ inv.invitee_email }}</p>
+              <p class="mt-0.5 text-xs text-secondary">Expires {{ fmtDate(inv.expires_at) }}</p>
+            </div>
+            <!-- Only show Cancel for invitations sent by the current user.
+                 The backend enforces the same rule (403 if not the sender),
+                 but hiding the button for others avoids a confusing error. -->
+            <button
+              v-if="inv.invited_by === authStore.user?.email"
+              type="button"
+              :disabled="cancellingId === inv.id"
+              class="text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+              @click="doCancelInvitation(inv)"
+            >
+              {{ cancellingId === inv.id ? "Cancelling…" : "Cancel" }}
+            </button>
+          </li>
         </ul>
       </section>
 
@@ -569,6 +840,22 @@ async function deleteAccount() {
         </p>
       </section>
     </div>
+
+    <!-- Invite confirmation sheet — step 2 of the invite flow.
+         Echoes the email back to the user before committing the send,
+         satisfying the UX requirement that the address be confirmed
+         before the invitation is created.  Cancelling here returns the
+         user to the email-entry form (inviteOpen stays true) so they
+         can correct a typo without starting over. -->
+    <ConfirmSheet
+      :open="inviteConfirm"
+      title="Send co-owner invitation?"
+      :message="`Send a co-owner invitation to ${inviteEmail}? They will receive an email with a link to accept or decline.`"
+      confirm-label="Send invitation"
+      tone="ocean"
+      @confirm="doSendInvite"
+      @cancel="inviteConfirm = false"
+    />
 
     <!-- Delete confirmation sheet -->
     <ConfirmSheet

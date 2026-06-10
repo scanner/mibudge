@@ -13,7 +13,6 @@ from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory
-from django.urls import reverse
 from pytest_mock import MockerFixture
 
 # app imports
@@ -142,9 +141,9 @@ class TestUserDetailView:
         request.user = AnonymousUser()
 
         response = user_detail_view(request, username=user.username)
-        login_url = reverse(settings.LOGIN_URL)
 
         assert response.status_code == 302
+        # LOGIN_URL is a path ("/app/login/"), not a URL name, so no reverse().
         # user_detail_view returns HttpResponseRedirect which has .url, but the
         # type is declared as HttpResponseBase which doesn't -- revisit if django-stubs improve
-        assert response.url == f"{login_url}?next=/fake-url/"  # type: ignore[attr-defined]
+        assert response.url == f"{settings.LOGIN_URL}?next=/fake-url/"  # type: ignore[attr-defined]

@@ -1,7 +1,19 @@
 <script setup lang="ts">
 //
-// AccountSettingsView — password change and notification preferences.
+// AccountSettingsView — password change, notification preferences, and
+// outgoing co-owner invitation management.
 // (/app/account/settings/)
+//
+// This view groups all user-level "account hygiene" actions in one place.
+// Invitations appear here (in addition to the per-account detail page)
+// because a user may have sent invitations to several different accounts
+// and wants a single place to review and cancel them all.  The per-account
+// detail page shows invitations for that account only.
+//
+// Invitation state is loaded once on mount and is not live-updated; the
+// user must reload the page to see changes made in another tab.  This is
+// intentional — invitations change rarely and the complexity of polling or
+// WebSocket updates is not warranted.
 //
 
 // 3rd party imports
@@ -14,6 +26,7 @@ import { useRouter } from "vue-router";
 import AppShell from "@/components/layout/AppShell.vue";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter.vue";
 import { ApiError } from "@/api/client";
+import { cancelInvitation, listMyInvitations } from "@/api/invitations";
 import { changePassword } from "@/api/users";
 import {
   getChannelPreferences,
@@ -22,7 +35,7 @@ import {
   updateNotificationPreference,
 } from "@/api/notifications";
 import { useAuthStore } from "@/stores/auth";
-import type { ChannelPreference, NotificationPreference } from "@/types/api";
+import type { BankAccountInvitation, ChannelPreference, NotificationPreference } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -97,6 +110,18 @@ const submitDisabled = (): boolean =>
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Outgoing invitation state.
+//
+// myInvitations   — all PENDING invitations sent by this user across all
+//                   accounts, loaded once on mount.
+// inviteCancellingId — UUID of the invitation row currently being cancelled
+//                   (used to show "Cancelling…" on that specific button and
+//                   prevent double-clicks).  Null when no cancel is in-flight.
+const myInvitations = ref<BankAccountInvitation[]>([]);
+const inviteCancellingId = ref<string | null>(null);
+
+////////////////////////////////////////////////////////////////////////
+//
 // Notification preferences state.
 //
 const notifPrefs = ref<NotificationPreference[]>([]);
@@ -122,12 +147,18 @@ const DELIVERY_MODE_OPTIONS: { value: NotificationPreference["delivery_mode"]; l
 ////////////////////////////////////////////////////////////////////////
 //
 onMounted(async () => {
+  // Load notification preferences and outgoing invitations in parallel.
+  // Invitations failures are silenced (myInvitations stays empty) so that a
+  // transient API error does not degrade the password-change and notification
+  // sections of this page.
   try {
-    const [prefs, channels] = await Promise.all([
+    const [prefs, channels, invites] = await Promise.all([
       getNotificationPreferences(),
       getChannelPreferences(),
+      listMyInvitations().catch(() => [] as BankAccountInvitation[]),
     ]);
     notifPrefs.value = prefs;
+    myInvitations.value = invites;
     const email = channels.find((c: ChannelPreference) => c.channel === "email");
     if (email) emailDigestFrequency.value = email.digest_frequency;
   } catch {
@@ -153,6 +184,31 @@ async function setDeliveryMode(
     // Revert on failure.
     notifPrefs.value[idx] = pref;
     prefsError.value = "Failed to update notification preference.";
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// doCancelInvitation — withdraw one of the current user's pending invitations.
+//
+// Uses optimistic removal (same rationale as BankAccountDetailView): the
+// row disappears immediately and is restored only on failure.  The cancel
+// endpoint requires both the account UUID and the invitation token; both
+// are present in the BankAccountInvitation object returned by the API.
+//
+// We do not show a confirmation dialog here because cancelling an invitation
+// is low-risk and easily reversible (the owner can re-invite at any time).
+// Compare with delete-account, which uses ConfirmSheet because it is
+// permanent and destructive.
+async function doCancelInvitation(inv: BankAccountInvitation): Promise<void> {
+  inviteCancellingId.value = inv.id;
+  try {
+    await cancelInvitation(inv.bank_account_id, inv.token);
+    myInvitations.value = myInvitations.value.filter((i) => i.id !== inv.id);
+  } catch {
+    // Silently leave the list unchanged; the user can retry.
+  } finally {
+    inviteCancellingId.value = null;
   }
 }
 
@@ -390,6 +446,52 @@ async function saveEmailDigest(): Promise<void> {
           </template>
         </div>
       </section>
+      <!-- ── Outgoing invitations ───────────────────────────────────── -->
+      <!-- Only rendered when there is at least one pending invitation so
+           the section does not appear at all for users who have never
+           invited anyone or whose invitations have all been resolved. -->
+      <template v-if="myInvitations.length > 0">
+        <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">Pending invitations</h1>
+
+        <section>
+          <div class="rounded-card border border-neutral-200 bg-white">
+            <ul class="divide-y divide-neutral-100">
+              <li
+                v-for="inv in myInvitations"
+                :key="inv.id"
+                class="flex items-start justify-between px-4 py-3"
+              >
+                <div>
+                  <!-- Account name links the invitation back to its
+                       context; the invitee email is the primary identifier. -->
+                  <p class="text-xs font-medium uppercase tracking-wider text-secondary">
+                    {{ inv.bank_account_name }}
+                  </p>
+                  <p class="mt-0.5 text-sm text-neutral-900">{{ inv.invitee_email }}</p>
+                  <p class="mt-0.5 text-xs text-secondary">
+                    Expires
+                    {{
+                      new Date(inv.expires_at).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  :disabled="inviteCancellingId === inv.id"
+                  class="mt-0.5 flex-none text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+                  @click="doCancelInvitation(inv)"
+                >
+                  {{ inviteCancellingId === inv.id ? "Cancelling…" : "Cancel" }}
+                </button>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </template>
     </div>
   </AppShell>
 </template>

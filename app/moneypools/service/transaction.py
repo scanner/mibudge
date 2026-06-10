@@ -37,12 +37,11 @@ from typing import Any
 # 3rd party imports
 #
 import moneyed
+from django.db import transaction as db_transaction
 
 # Project imports
 #
 from common.locks import acquire_lock
-from django.db import transaction as db_transaction
-
 from moneypools.description_utils import parse_transaction_date
 from moneypools.models import (
     BankAccount,

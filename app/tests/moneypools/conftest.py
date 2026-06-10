@@ -4,6 +4,7 @@ from rest_framework.test import APIClient
 
 from .factories import (
     BankAccountFactory,
+    BankAccountInvitationFactory,
     BankFactory,
     BudgetFactory,
     FundingEventOccurrenceFactory,
@@ -25,6 +26,9 @@ register(
 register(
     FundingEventOccurrenceFactory
 )  # FundingEventOccurrenceFactory -> funding_event_occurrence_factory
+register(
+    BankAccountInvitationFactory
+)  # BankAccountInvitationFactory -> bank_account_invitation_factory
 
 
 @pytest.fixture

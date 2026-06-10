@@ -1,0 +1,22 @@
+{{ inviter_name }} has invited you to become a co-owner of the following
+account on {{ site_display_name }}:
+
+  Account: {{ bank_account_name }}
+  Bank:    {{ bank_name }}
+
+Click the link below to view and accept or decline this invitation:
+
+  {{ invitation_url }}
+
+This invitation expires in {{ expiry_days }} days.
+{% if is_new_user %}
+Accepting this invitation will create a new {{ site_display_name }} account
+using {{ invitee_email }} as your username. After accepting, you will receive
+a separate email to set your password.
+
+Note: you can change your email address after you have set a password.
+{% endif %}
+If you were not expecting this invitation, you can safely ignore this email.
+
+-- {{ site_display_name }} ({{ site_url }})
+   Questions? {{ support_email }}

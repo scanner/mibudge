@@ -22,14 +22,13 @@ Operations:
 from datetime import UTC, datetime
 from typing import Any
 
-# Project imports
-#
-from common.locks import acquire_lock
-
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
 
+# Project imports
+#
+from common.locks import acquire_lock
 from moneypools.models import Bank, BankAccount, Budget
 from users.models import User
 

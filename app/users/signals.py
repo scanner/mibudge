@@ -18,7 +18,6 @@ from django.dispatch import receiver
 # Project imports
 #
 from notifications.service import notify
-
 from users.notification_kinds import EMAIL_CHANGED, PASSWORD_CHANGED
 
 logger = logging.getLogger(__name__)

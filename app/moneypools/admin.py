@@ -21,6 +21,7 @@ from .models import (
     MAX_DIGITS,
     Bank,
     BankAccount,
+    BankAccountInvitation,
     Budget,
     InternalTransaction,
     Transaction,
@@ -768,3 +769,76 @@ class InternalTransactionAdmin(admin.ModelAdmin):
         if obj is not None:
             return False
         return super().has_change_permission(request, obj)
+
+
+########################################################################
+########################################################################
+#
+@admin.register(BankAccountInvitation)
+class BankAccountInvitationAdmin(admin.ModelAdmin):
+    """Read-only audit view for co-ownership invitations.
+
+    All state changes go through the service layer; the admin exposes
+    a cancel action for staff remediation and a read-only audit trail.
+    """
+
+    list_display = (
+        "invitee_email",
+        "bank_account",
+        "invited_by",
+        "status",
+        "expires_at",
+        "created_at",
+    )
+    list_filter = ("status",)
+    readonly_fields = (
+        "bank_account",
+        "invited_by",
+        "invitee_email",
+        "invitee_user",
+        "token",
+        "status",
+        "expires_at",
+        "accepted_at",
+        "declined_at",
+        "cancelled_at",
+        "created_at",
+        "modified_at",
+    )
+    search_fields = ("invitee_email", "bank_account__name")
+    ordering = ("-created_at",)
+    actions = ["cancel_selected_invitations"]
+
+    ####################################################################
+    #
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    ####################################################################
+    #
+    def has_change_permission(
+        self,
+        request: HttpRequest,
+        obj: BankAccountInvitation | None = None,
+    ) -> bool:
+        return False
+
+    ####################################################################
+    #
+    @admin.action(description="Cancel selected invitations")
+    def cancel_selected_invitations(
+        self,
+        request: HttpRequest,
+        queryset: Any,
+    ) -> None:
+        """Cancel all selected pending invitations via the service layer."""
+        from moneypools.service import invitation as invitation_svc
+
+        cancelled = 0
+        for inv in queryset.filter(status=BankAccountInvitation.Status.PENDING):
+            try:
+                invitation_svc.cancel_invitation(inv)
+                cancelled += 1
+            except invitation_svc.InvitationError:
+                pass
+        self.message_user(request, f"Cancelled {cancelled} invitation(s).")

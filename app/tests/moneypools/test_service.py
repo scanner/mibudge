@@ -17,12 +17,11 @@ from datetime import UTC, datetime
 # 3rd party imports
 #
 import pytest
+from djmoney.money import Money
 
 # Project imports
 #
 from common.locks import acquire_lock
-from djmoney.money import Money
-
 from moneypools.models import (
     Bank,
     BankAccount,

@@ -112,6 +112,8 @@ DJANGO_APPS = [
     "django.contrib.admin",
 ]
 THIRD_PARTY_APPS = [
+    "crispy_forms",
+    "crispy_bootstrap5",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -157,7 +159,7 @@ AUTH_USER_MODEL = "users.User"
 # The SPA owns its own auth flow (silent refresh + /app/login/), so there
 # is no allauth-to-SPA handoff URL.  allauth remains mounted for password
 # reset flows only.
-LOGIN_URL = "account_login"
+LOGIN_URL = "/app/login/"
 
 # PASSWORDS
 # ------------------------------------------------------------------------------
@@ -379,6 +381,11 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 if DEBUG:
     CELERY_TASK_EAGER_PROPAGATES = True
 
+# django-crispy-forms
+# ------------------------------------------------------------------------------
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+CRISPY_TEMPLATE_PACK = "bootstrap5"
+
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env("DJANGO_ACCOUNT_ALLOW_REGISTRATION")
@@ -541,6 +548,18 @@ EMAIL_CHANGE_TOKEN_EXPIRY_HOURS: int = 24
 
 # How long after confirmation the 'this wasn't me' revocation link stays valid.
 EMAIL_CHANGE_REVOCATION_DAYS: int = 7
+
+# How long an invitation token is valid.
+INVITATION_EXPIRY_DAYS: int = 7
+
+# Per-invitation resend limits: max 3 resends, no more than one per hour.
+INVITATION_MAX_RESENDS: int = 3
+INVITATION_RESEND_COOLDOWN_HOURS: int = 1
+
+# Per-address abuse prevention: no more than 5 invitations to the same address
+# in any 30-day rolling window, regardless of status.
+INVITATION_MAX_PER_WINDOW: int = 5
+INVITATION_WINDOW_DAYS: int = 30
 
 # Mibudge
 # ------------------------------------------------------------------------------

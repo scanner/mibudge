@@ -85,6 +85,12 @@ async function onSubmit() {
         />
       </label>
 
+      <div class="mt-1 flex justify-end">
+        <a href="/accounts/password/reset/" class="text-xs text-neutral-500 hover:text-ocean-500"
+          >Forgot password?</a
+        >
+      </div>
+
       <p v-if="errorMessage" class="mt-3 text-sm text-coral-600" role="alert">
         {{ errorMessage }}
       </p>

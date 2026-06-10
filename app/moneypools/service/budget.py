@@ -32,15 +32,14 @@ from contextlib import ExitStack
 from datetime import date, timedelta
 from typing import Any
 
-# Project imports
-#
-from common.locks import acquire_lock
-
 # 3rd party imports
 #
 from django.db import transaction as db_transaction
 from djmoney.money import Money
 
+# Project imports
+#
+from common.locks import acquire_lock
 from moneypools.models import BankAccount, Budget
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.schedules import enumerate_schedule

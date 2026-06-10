@@ -1,0 +1,9 @@
+{{ invitee_email }} has declined your invitation to co-own
+{{ bank_account_name }} ({{ bank_name }}).
+
+You can send a new invitation at any time from the account page.
+
+View the account: {{ site_url }}/app/
+
+-- {{ site_display_name }}
+   Questions? {{ support_email }}

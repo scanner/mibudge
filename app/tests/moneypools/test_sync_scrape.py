@@ -21,11 +21,6 @@ from unittest.mock import MagicMock
 #
 import pytest
 from djmoney.money import Money
-from notifications.models import (
-    DeliveryMode,
-    Notification,
-    NotificationPreference,
-)
 from pytest_mock import MockerFixture
 
 # Project imports
@@ -38,6 +33,11 @@ from moneypools.notification_kinds import (
     TRANSACTION_POSTED,
 )
 from moneypools.service import sync_scrape as sync_scrape_svc
+from notifications.models import (
+    DeliveryMode,
+    Notification,
+    NotificationPreference,
+)
 from users.models import User
 
 pytestmark = pytest.mark.django_db

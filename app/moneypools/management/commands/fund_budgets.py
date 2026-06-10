@@ -23,7 +23,6 @@ from typing import Any
 #
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from notifications.service import notify_for
 
 # Project imports
 #
@@ -32,6 +31,7 @@ from moneypools.models import BankAccount, Budget
 from moneypools.notification_kinds import FUNDING_COMPLETE
 from moneypools.service import funding as funding_svc
 from moneypools.service.shared import funding_system_user
+from notifications.service import notify_for
 
 
 ########################################################################

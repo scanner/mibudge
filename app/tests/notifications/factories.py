@@ -1,6 +1,7 @@
 import factory
 from django.contrib.auth import get_user_model
 from factory.django import DjangoModelFactory
+
 from notifications.models import (
     Channel,
     ChannelPreference,

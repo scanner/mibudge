@@ -34,14 +34,13 @@ from django.core import mail
 from django.test import Client
 from django.urls import reverse
 from freezegun import freeze_time
-
-# Project imports
-#
-from notifications.models import Notification
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
+# Project imports
+#
+from notifications.models import Notification
 from users.models import EmailChangeRequest, User
 from users.notification_kinds import (
     EMAIL_CHANGE_REQUESTED,

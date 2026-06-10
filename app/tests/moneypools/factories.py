@@ -13,6 +13,7 @@ from factory.django import DjangoModelFactory
 from moneypools.models import (
     Bank,
     BankAccount,
+    BankAccountInvitation,
     Budget,
     EventKind,
     FundingEventOccurrence,
@@ -321,3 +322,20 @@ class FundingEventOccurrenceFactory(DjangoModelFactory):
     kind = EventKind.FUND.value
     scheduled_date = factory.LazyFunction(date.today)
     status = FundingEventOccurrence.Status.PENDING
+
+
+class BankAccountInvitationFactory(DjangoModelFactory):
+    bank_account = factory.SubFactory(BankAccountFactory)
+    invited_by = factory.SubFactory(UserFactory)
+    invitee_email = factory.Sequence(lambda n: f"invitee{n}@example.com")
+    invitee_user = factory.SubFactory(UserFactory)
+    token = factory.LazyFunction(
+        lambda: __import__("secrets").token_urlsafe(48)
+    )
+    status = BankAccountInvitation.Status.PENDING
+    expires_at = factory.LazyFunction(
+        lambda: datetime.now(UTC) + timedelta(days=7)
+    )
+
+    class Meta:
+        model = BankAccountInvitation
