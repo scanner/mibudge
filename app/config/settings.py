@@ -46,6 +46,11 @@ env = environ.FileAwareEnv(
     REDIS_URL=(str, "redis://localhost:6379/0"),
     SENTRY_DSN=(str, None),
     SENTRY_TRACES_SAMPLE_RATE=(float, 0.0),
+    EMAIL_HOST=(str, ""),
+    EMAIL_PORT=(int, 587),
+    EMAIL_HOST_USER=(str, ""),
+    EMAIL_HOST_PASSWORD=(str, ""),
+    EMAIL_USE_TLS=(bool, True),
 )
 
 # Read .env file if it exists (no-op in Docker where env vars are

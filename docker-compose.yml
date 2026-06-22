@@ -1,3 +1,4 @@
+#name: mibudge
 volumes:
   local_postgres_data: {}
   local_redis_data: {}
@@ -8,7 +9,6 @@ services:
       context: .
       target: dev
     image: mibudge:dev
-    container_name: migrate
     depends_on:
       postgres:
         condition: service_healthy
@@ -24,7 +24,6 @@ services:
       context: .
       target: dev
     image: mibudge:dev
-    container_name: backend
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -45,7 +44,6 @@ services:
 
   postgres:
     image: postgres:18-alpine
-    container_name: postgres
     # Expose postgres for local development access. Keeping ports out of
     # default range to avoid conflicts.
     #
@@ -72,14 +70,11 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: mailpit
     ports:
       - "8025:8025"
-      - "1025:1025"
 
   redis:
     image: redis:7-alpine
-    container_name: redis
     # Expose ports for local development access. Keeping ports out of
     # default range to avoid conflicts.
     #
@@ -97,7 +92,6 @@ services:
   celeryworker:
     <<: *backend
     image: mibudge:dev
-    container_name: celeryworker
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -111,7 +105,6 @@ services:
   celerybeat:
     <<: *backend
     image: mibudge:dev
-    container_name: celerybeat
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -125,7 +118,6 @@ services:
   flower:
     <<: *backend
     image: mibudge:dev
-    container_name: flower
     depends_on:
       redis:
         condition: service_healthy
