@@ -1,0 +1,98 @@
+# Docker Compose deployment template for integration, staging, and production.
+# Copy this directory to the target host, populate .env from dot-env.example,
+# write the five secret files under secrets/, then: docker compose up -d
+#
+# Required variables in .env:
+#   VERSION   -- image tag to pull (e.g. "1.2.3" or "latest")
+#   PORT      -- localhost port the reverse proxy connects to (default 8000)
+#
+# Required secret files under secrets/ (one value per file, no trailing newline):
+#   secrets/database_url        -- full postgres connection URL
+#                                  e.g. postgres://user:pass@host:5432/mibudge
+#   secrets/django_secret_key   -- Django SECRET_KEY
+#   secrets/salt_key            -- SALT_KEY (fernet encryption key derivation;
+#                                  comma-separated for key rotation)
+#   secrets/email_host_user     -- SMTP username
+#   secrets/email_host_password -- SMTP password
+#
+# External networks that must exist before starting this stack:
+#   postgres_net     -- created by the postgres-docker-compose stack
+#   redis_network    -- created by the redis stack
+#   telegraf_network -- created by the monitoring stack (remove if not used)
+name: mibudge
+
+secrets:
+  database_url:
+    file: ./secrets/database_url
+  django_secret_key:
+    file: ./secrets/django_secret_key
+  salt_key:
+    file: ./secrets/salt_key
+  email_host_user:
+    file: ./secrets/email_host_user
+  email_host_password:
+    file: ./secrets/email_host_password
+
+# x- prefix is a Compose extension field -- ignored as a service definition.
+x-base: &base
+  image: "ghcr.io/scanner/mibudge:${VERSION}"
+  env_file: .env
+  environment:
+    # django-environ's FileAwareEnv reads KEY_FILE vars from disk at startup.
+    DATABASE_URL_FILE: /run/secrets/database_url
+    DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
+    SALT_KEY_FILE: /run/secrets/salt_key
+    EMAIL_HOST_USER_FILE: /run/secrets/email_host_user
+    EMAIL_HOST_PASSWORD_FILE: /run/secrets/email_host_password
+  secrets:
+    - database_url
+    - django_secret_key
+    - salt_key
+    - email_host_user
+    - email_host_password
+  networks:
+    - postgres_net
+    - redis_network
+    - telegraf_network
+
+services:
+  migrate:
+    <<: *base
+    restart: "no"
+    command: python /app/manage.py migrate --no-input
+
+  web:
+    <<: *base
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${PORT:-8000}:8000"
+
+  celeryworker:
+    <<: *base
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: /app/scripts/start_celeryworker.sh
+
+  celerybeat:
+    <<: *base
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: /app/scripts/start_celerybeat.sh
+
+networks:
+  postgres_net:
+    name: postgres_net
+    external: true
+  redis_network:
+    name: redis_network
+    external: true
+  telegraf_network:
+    name: telegraf_network
+    external: true
