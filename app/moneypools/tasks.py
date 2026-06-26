@@ -8,7 +8,8 @@ database lookups, bulk reconciliation passes, etc.).
 Funding tasks:
     schedule_funding_runs              -- beat-triggered (every 30 min): inspects
                                          each account owner's local time and
-                                         enqueues fund_one_account always and
+                                         enqueues fund_one_account in the
+                                         [23:00, 23:30) local-time window and
                                          recur_one_account in the [03:00, 03:30)
                                          local-time window.
     fund_one_account                   -- per-account worker: processes
@@ -43,14 +44,23 @@ from notifications.service import notify_for
 
 logger = logging.getLogger(__name__)
 
-# FUND tasks are enqueued on every scheduler tick (every 30 min) for accounts
-# with auto_funding_enabled=True.  Idempotency is enforced by
-# FundingEventOccurrence rows: an event that already reached COMPLETE is not
-# re-attempted.
+# Both task types are gated on local-time windows so they fire predictably
+# once per day at the right point in the budget cycle:
 #
-# RECUR tasks use a fixed window (after midnight, local time) so they only fire
-# after FUND has had a chance to run and fill the fillup_goal.
+#   FUND  [23:00, 23:30) -- runs in the evening on the fund date (e.g. the
+#                           15th or last day of the month), filling the
+#                           fill-up goal before midnight.
+#   RECUR [03:00, 03:30) -- runs early the next morning on the recur date
+#                           (e.g. the 1st of the month), sweeping the
+#                           fill-up into the recurring budget after FUND
+#                           has had all night to complete.
 #
+# The 4-hour gap between the windows (23:00 → 03:00 next day) is
+# intentional: it gives FUND time to finish filling the fill-up goal
+# before the RECUR sweep drains it.
+#
+_FUND_WINDOW_START = time(23, 0)
+_FUND_WINDOW_END = time(23, 30)
 _RECUR_WINDOW_START = time(3, 0)
 _RECUR_WINDOW_END = time(3, 30)
 
@@ -107,31 +117,20 @@ def schedule_funding_runs() -> None:
 
     For each remaining BankAccount, the first owner (ordered by pk)
     supplies the IANA timezone used to compute the owner-local date and
-    to decide whether we are inside the RECUR window.  Accounts whose
+    to decide whether we are inside a task window.  Accounts whose
     owner has an unknown timezone are skipped with a warning.
 
-    fund_one_account is enqueued on every tick.  This is intentional even
-    though most ticks have no work to do:
-
-    - *Partial-retry*: when a FUND event leaves a FundingEventOccurrence
-      in PARTIAL state because Unallocated was empty, every later tick
-      attempts to top it up.  Without frequent ticks the user would have
-      to wait until the next scheduled funding date or click "Run funding
-      now" manually.
-    - *Downtime recovery*: if beat or workers were offline through an
-      account's scheduled funding window, the PENDING occurrence sits in
-      the database.  The next available tick after recovery materializes
-      and processes it, rather than waiting another full day.
-
-    The no-op cost per idle account is small: a single non-blocking
-    Redis lock attempt and the rrule enumeration in ``_collect_events``;
-    when no events fall in the window the worker returns immediately.
+    fund_one_account is enqueued only in the [23:00, 23:30) local window.
+    This places funding in the evening on the fund date (e.g. the 15th
+    or last day of the month), consistent with typical payroll deposit
+    timing.  FUND events always transfer the full intended amount
+    regardless of the Unallocated balance, so no mid-day retry is needed.
 
     recur_one_account is enqueued only in the [03:00, 03:30) local
     window.  RECUR is one-shot -- there is nothing to retry -- so a
-    single fire per day is correct, and the 03:00 placement gives FUND
-    the four hours after its 23:00 window to fill the fillup_goal before
-    the sweep into the recurring budget.
+    single fire per day is correct.  The ~4-hour gap between the 23:00
+    FUND window and the 03:00 RECUR window gives the fill-up goal time
+    to be fully funded before the recurring budget sweep.
 
     Tasks are spread evenly across up to 30 minutes so a large number
     of accounts does not stampede the database.
@@ -173,7 +172,8 @@ def schedule_funding_runs() -> None:
         local_date_str = local_now.date().isoformat()
         account_id = str(account.id)
 
-        fund_accounts.append((account_id, local_date_str))
+        if _FUND_WINDOW_START <= local_time < _FUND_WINDOW_END:
+            fund_accounts.append((account_id, local_date_str))
         if _RECUR_WINDOW_START <= local_time < _RECUR_WINDOW_END:
             recur_accounts.append((account_id, local_date_str))
 
@@ -299,9 +299,9 @@ def fund_one_account(
     """
     Process due FUND events for one BankAccount.
 
-    Enqueued by schedule_funding_runs on every tick.  Uses the owner's
-    local date at dispatch time so the reference date is stable even
-    when the worker runs after midnight.
+    Enqueued by schedule_funding_runs in the [23:00, 23:30) local window.
+    Uses the owner's local date at dispatch time so the reference date is
+    stable even when the worker runs past midnight.
 
     Args:
         account_id: UUID string of the BankAccount to fund.
