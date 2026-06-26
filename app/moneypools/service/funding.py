@@ -608,11 +608,12 @@ def _process_fund_event(
     the target is the budget itself.
 
     Computes already_moved (sum of prior system FUND ITXs for this
-    event date) and transfers only the remainder of intended.  The
-    occurrence row is updated to COMPLETE when the cumulative transfer
-    covers the intended amount and to PARTIAL otherwise -- the latter
-    leaves the event eligible for retry on a later run once funds become
-    available.  ``Budget.last_funded_on`` is advanced only on COMPLETE.
+    event date) and transfers the full remainder of intended regardless
+    of the current unallocated balance.  The unallocated budget may go
+    negative; this is expected when pending transactions temporarily
+    reduce the available balance.  ``Budget.last_funded_on`` advances
+    and the occurrence is marked COMPLETE once the full intended amount
+    has been transferred.
 
     Args:
         ev: The funding event to process.
@@ -663,31 +664,7 @@ def _process_fund_event(
         )
         return
 
-    # No source funds available -- leave the occurrence PARTIAL so the
-    # next run can top it up once Unallocated is replenished.
-    #
-    available = unallocated.balance.amount
-    if available <= Decimal("0"):
-        report.warnings.append(
-            f"[{ev.date}] {budget.name}: unallocated is empty; transfer skipped."
-        )
-        _mark_occurrence_partial(occurrence, report)
-        return
-
-    # Partial coverage: transfer what we have and remember we still owe
-    # the difference; the COMPLETE/PARTIAL decision below is driven by
-    # the actual transferred amount, not the original intent.
-    #
-    capped = net > available
-    transferred = min(net, available)
-    if capped:
-        report.warnings.append(
-            f"[{ev.date}] {budget.name}: wanted "
-            f"{Money(net, intended.currency)}, only {unallocated.balance} "
-            "available; capped."
-        )
-
-    amount = Money(transferred, intended.currency)
+    amount = Money(net, intended.currency)
     # Use the event date as effective_date so the InternalTransaction
     # slots into the correct position in the historical timeline when
     # running a backfill for past periods.
@@ -737,15 +714,9 @@ def _process_fund_event(
         ev.date,
     )
 
-    # COMPLETE if cumulative transfers now meet the intended amount;
-    # otherwise PARTIAL and we will revisit on the next run.
-    #
-    if already_moved + transferred >= intended.amount:
-        _mark_occurrence_complete(
-            occurrence, budget, EventKind.FUND, ev.date, report
-        )
-    else:
-        _mark_occurrence_partial(occurrence, report)
+    _mark_occurrence_complete(
+        occurrence, budget, EventKind.FUND, ev.date, report
+    )
 
 
 ####################################################################

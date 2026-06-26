@@ -295,8 +295,11 @@ class TestFundingEngineRecurringWithFillup:
         fillup = recurring.fillup_goal
         assert fillup is not None
 
-        # Seed fillup with $80 (short of the $100 target)
-        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(80, "USD"))
+        # Seed fillup with $80, capped at that target so the fund event
+        # sees a zero gap and does not add to it before the recur fires.
+        Budget.objects.filter(pkid=fillup.pkid).update(
+            balance=Money(80, "USD"), target_balance=Money(80, "USD")
+        )
         Budget.objects.filter(pkid=recurring.pkid).update(
             last_funded_on=today,
             last_recurrence_on=date(2026, 1, 31),
@@ -305,11 +308,8 @@ class TestFundingEngineRecurringWithFillup:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
-        assert len(report.warnings) == 2
-        # today's fund event fires (pointer was already at today but today
-        # always re-fires); unallocated is $0 so it produces a skipped warning.
-        assert "transfer skipped" in report.warnings[0]
-        assert "underfunded" in report.warnings[1]
+        assert len(report.warnings) == 1
+        assert "underfunded" in report.warnings[0]
 
         recurring.refresh_from_db()
         fillup.refresh_from_db()
@@ -438,21 +438,33 @@ class TestFundingEngineMultiPeriodCatchup:
 ########################################################################
 #
 class TestCapAndWarn:
-    """Insufficient balance: cap transfer, log warning, advance pointers."""
+    """Unallocated balance does not block or cap funding."""
 
     ####################################################################
     #
-    def test_insufficient_unallocated_caps_and_warns(
+    @pytest.mark.parametrize(
+        "unallocated_start,expected_unallocated_end",
+        [
+            pytest.param(Money(0, "USD"), Money(-50, "USD"), id="zero"),
+            pytest.param(
+                Money(20, "USD"),
+                Money(-30, "USD"),
+                id="positive_but_insufficient",
+            ),
+        ],
+    )
+    def test_fund_event_completes_when_unallocated_insufficient(
         self,
+        unallocated_start: Money,
+        expected_unallocated_end: Money,
         make_account: Callable[..., BankAccount],
         system_user: User,
     ) -> None:
         """
-        GIVEN: unallocated=$20, budget wants $50
+        GIVEN: unallocated has less than the intended funding amount
         WHEN:  fund event fires
-        THEN:  $20 transferred; warning logged; the occurrence is left
-               PARTIAL and last_funded_on does NOT advance, so a later
-               run can top it up once Unallocated is replenished.
+        THEN:  full $50 transfers regardless; unallocated goes negative;
+               occurrence is COMPLETE and last_funded_on advances.
         """
         today = date(2026, 3, 1)
         prior = date(2026, 2, 28)
@@ -460,7 +472,7 @@ class TestCapAndWarn:
         unallocated = account.unallocated_budget
         assert unallocated is not None
         Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(20, "USD")
+            balance=unallocated_start
         )
 
         budget = budget_svc.create(
@@ -477,72 +489,23 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
-        assert report.occurrences_partial == 1
-        assert report.occurrences_completed == 0
-        assert len(report.warnings) == 1
-        assert "capped" in report.warnings[0]
+        assert report.occurrences_completed == 1
+        assert report.occurrences_partial == 0
+        assert not report.warnings
 
         budget.refresh_from_db()
-        assert budget.balance == Money(20, "USD")
-        assert budget.last_funded_on == prior
+        assert budget.balance == Money(50, "USD")
+        assert budget.last_funded_on == today
+
+        unallocated.refresh_from_db()
+        assert unallocated.balance == expected_unallocated_end
 
         occurrence = FundingEventOccurrence.objects.get(
             budget=budget,
             kind=EventKind.FUND.value,
             scheduled_date=today,
         )
-        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
-
-    ####################################################################
-    #
-    def test_empty_unallocated_leaves_event_partial(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,
-    ) -> None:
-        """
-        GIVEN: unallocated=$0
-        WHEN:  fund event fires
-        THEN:  no transfer; warning logged; the occurrence is left
-               PARTIAL and last_funded_on does NOT advance, so the next
-               run picks the event up after Unallocated is replenished.
-        """
-        today = date(2026, 3, 1)
-        prior = date(2026, 2, 28)
-        account = make_account(posted_through=today)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(0, "USD")
-        )
-
-        budget = budget_svc.create(
-            bank_account=account,
-            name="New High-tech Overpriced Sneakers",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(300, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-        Budget.objects.filter(pkid=budget.pkid).update(last_funded_on=prior)
-
-        report = funding_svc.fund_account(account, today, system_user)
-
-        assert report.transfers == 0
-        assert report.occurrences_partial == 1
-        assert len(report.warnings) == 1
-        assert "transfer skipped" in report.warnings[0]
-
-        budget.refresh_from_db()
-        assert budget.last_funded_on == prior
-
-        occurrence = FundingEventOccurrence.objects.get(
-            budget=budget,
-            kind=EventKind.FUND.value,
-            scheduled_date=today,
-        )
-        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
+        assert occurrence.status == FundingEventOccurrence.Status.COMPLETE
 
     ####################################################################
     #
@@ -575,7 +538,10 @@ class TestCapAndWarn:
         fillup = recurring.fillup_goal
         assert fillup is not None
 
-        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(0, "USD"))
+        # Fillup at $0, target also $0 so the fund event sees no gap.
+        Budget.objects.filter(pkid=fillup.pkid).update(
+            balance=Money(0, "USD"), target_balance=Money(0, "USD")
+        )
         Budget.objects.filter(pkid=recurring.pkid).update(
             last_funded_on=today,
             last_recurrence_on=prior,
@@ -584,10 +550,8 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 0
-        # Two warnings: today's fund event hits empty unallocated; recur event
-        # hits empty fill-up.
-        assert len(report.warnings) == 2
-        assert any("fill-up goal is empty" in w for w in report.warnings)
+        assert len(report.warnings) == 1
+        assert "fill-up goal is empty" in report.warnings[0]
 
         recurring.refresh_from_db()
         assert recurring.last_recurrence_on == today
@@ -620,7 +584,10 @@ class TestCapAndWarn:
         fillup = recurring.fillup_goal
         assert fillup is not None
 
-        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(30, "USD"))
+        # Fillup at $30, target also $30 so the fund event sees no gap.
+        Budget.objects.filter(pkid=fillup.pkid).update(
+            balance=Money(30, "USD"), target_balance=Money(30, "USD")
+        )
         Budget.objects.filter(pkid=recurring.pkid).update(
             last_funded_on=today,
             last_recurrence_on=date(2026, 1, 31),
@@ -629,10 +596,8 @@ class TestCapAndWarn:
         report = funding_svc.fund_account(account, today, system_user)
 
         assert report.transfers == 1
-        # Two warnings: today's fund event hits empty unallocated; recur event
-        # is underfunded by the fill-up.
-        assert len(report.warnings) == 2
-        assert any("underfunded" in w for w in report.warnings)
+        assert len(report.warnings) == 1
+        assert "underfunded" in report.warnings[0]
 
         recurring.refresh_from_db()
         assert recurring.balance == Money(30, "USD")
@@ -1035,11 +1000,10 @@ class TestSameDayRerun:
     """Same-day re-run semantics: already_moved prevents double-counting.
 
     The engine always processes today's scheduled events regardless of the
-    last_funded_on / last_recurrence_on pointer position.  When a first
-    run transfers less than intended (source funds were low), the user can
-    top up the source and re-run on the same day; the second run computes
-    already_moved from system ITXs already issued for today and transfers
-    only the remaining gap.
+    last_funded_on / last_recurrence_on pointer position.  A first run
+    always completes the full intended transfer.  A same-day re-run
+    computes already_moved from system ITXs already issued for today and
+    transfers only the remaining gap -- zero when the first run succeeded.
     """
 
     ####################################################################
@@ -1047,38 +1011,15 @@ class TestSameDayRerun:
     @pytest.mark.parametrize(
         "budget_type,initial_balance,initial_funded,"
         "target,funding_amount,"
-        "initial_unallocated,topup_to,"
-        "expected_after_run1,expected_after_run2",
+        "initial_unallocated,expected_balance",
         [
-            pytest.param(
-                "G",
-                0,
-                0,
-                100,
-                50,
-                20,
-                50,
-                20,
-                50,
-                id="goal",
-            ),
-            # Capped: B_0=10, intended=min(20, max(0,50-10))=20;
-            # first run capped to $5 (unallocated); second run moves $15.
-            pytest.param(
-                "C",
-                10,
-                0,
-                50,
-                20,
-                5,
-                40,
-                15,
-                30,
-                id="capped",
-            ),
+            # Goal: full $50 transfers regardless of unallocated starting at $5.
+            pytest.param("G", 0, 0, 100, 50, 5, 50, id="goal"),
+            # Capped: B_0=10, intended=min(20, max(0,50-10))=20; full $20 transfers.
+            pytest.param("C", 10, 0, 50, 20, 5, 30, id="capped"),
         ],
     )
-    def test_fund_event_partial_topup_rerun(
+    def test_fund_event_completes_when_unallocated_insufficient(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,
@@ -1088,16 +1029,14 @@ class TestSameDayRerun:
         target: int,
         funding_amount: int,
         initial_unallocated: int,
-        topup_to: int,
-        expected_after_run1: int,
-        expected_after_run2: int,
+        expected_balance: int,
     ) -> None:
         """
         GIVEN: fund event fires; Unallocated is below the intended amount
-        WHEN:  fund_account runs (partial transfer); user tops up Unallocated;
-               fund_account re-runs on the same day
-        THEN:  second run transfers only the remaining gap (already_moved
-               deducts the first-run system ITX from the intended amount)
+        WHEN:  fund_account runs
+        THEN:  full intended amount transfers in a single pass; unallocated
+               goes negative; occurrence is COMPLETE; same-day re-run is
+               a no-op (already_moved == intended)
         """
         today = date(2026, 3, 1)
         account = make_account(posted_through=today)
@@ -1125,42 +1064,31 @@ class TestSameDayRerun:
         report1 = funding_svc.fund_account(account, today, system_user)
 
         assert report1.transfers == 1
-        assert report1.occurrences_partial == 1
-        assert report1.occurrences_completed == 0
+        assert report1.occurrences_completed == 1
+        assert report1.occurrences_partial == 0
+        assert not report1.warnings
 
         budget.refresh_from_db()
-        assert budget.balance == Money(expected_after_run1, "USD")
-        # Pointer does NOT advance on PARTIAL; the event is still
-        # outstanding and eligible for retry.
-        assert budget.last_funded_on == date(2026, 2, 28)
+        assert budget.balance == Money(expected_balance, "USD")
+        assert budget.last_funded_on == today
 
         occurrence = FundingEventOccurrence.objects.get(
             budget=budget,
             kind=EventKind.FUND.value,
             scheduled_date=today,
         )
-        assert occurrence.status == FundingEventOccurrence.Status.PARTIAL
-        assert occurrence.completed_at is None
+        assert occurrence.status == FundingEventOccurrence.Status.COMPLETE
+        assert occurrence.completed_at is not None
 
-        # Simulate user topping up Unallocated between runs.
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(topup_to, "USD")
-        )
-
+        # Same-day re-run: already_moved == intended so net == 0.
         report2 = funding_svc.fund_account(account, today, system_user)
 
-        assert report2.transfers == 1
-        assert report2.occurrences_completed == 1
+        assert report2.transfers == 0
+        assert report2.occurrences_completed == 0
         assert report2.occurrences_partial == 0
 
         budget.refresh_from_db()
-        assert budget.balance == Money(expected_after_run2, "USD")
-        # COMPLETE on run 2 -- pointer now advances to the event date.
-        assert budget.last_funded_on == today
-
-        occurrence.refresh_from_db()
-        assert occurrence.status == FundingEventOccurrence.Status.COMPLETE
-        assert occurrence.completed_at is not None
+        assert budget.balance == Money(expected_balance, "USD")
 
     ####################################################################
     #
@@ -1198,11 +1126,12 @@ class TestSameDayRerun:
         fillup = recurring.fillup_goal
         assert fillup is not None
 
+        # Fillup at $120, target also $120 so the fund event sees no gap
+        # and does not add to the fillup before the recur fires.
         Budget.objects.filter(pkid=fillup.pkid).update(
-            balance=Money(120, "USD")
+            balance=Money(120, "USD"), target_balance=Money(120, "USD")
         )
         Budget.objects.filter(pkid=recurring.pkid).update(
-            # Skip the FUND event so only the RECUR event fires today.
             last_funded_on=today,
             last_recurrence_on=date(2026, 1, 31),
         )
@@ -1325,14 +1254,14 @@ class TestSameDayRerun:
         user_factory: Callable[..., User],
     ) -> None:
         """
-        GIVEN: first run transfers $60 of an intended $100 (Unallocated capped);
+        GIVEN: first run transfers the full $100 intended (COMPLETE);
                user manually moves $30 from a savings budget into the Goal
-               (non-system ITX, actor=user, no system_event_kind); Unallocated
-               topped to $50; fund_account re-runs on the same day
+               (non-system ITX, actor=user, no system_event_kind);
+               fund_account re-runs on the same day
         WHEN:  second run processes the same fund event
-        THEN:  second run transfers $40, not $10; only the first-run system ITX
-               ($60) is counted in already_moved, not the manual $30 ITX;
-               total system transfers = $100 = intended
+        THEN:  second run is a no-op; already_moved==$100 covers the full
+               intended amount; the manual $30 ITX is not counted in
+               already_moved; total system transfers = $100 = intended
         """
         today = date(2026, 3, 1)
         account = make_account(posted_through=today)
@@ -1372,7 +1301,7 @@ class TestSameDayRerun:
 
         assert report1.transfers == 1
         goal.refresh_from_db()
-        assert goal.balance == Money(60, "USD")
+        assert goal.balance == Money(100, "USD")
 
         # Manual user ITX: savings -> goal, $30.  No system_event_kind set.
         internal_transaction_svc.create(
@@ -1383,19 +1312,13 @@ class TestSameDayRerun:
             actor=user_factory(),
         )
         goal.refresh_from_db()
-        assert goal.balance == Money(90, "USD")
-
-        # Top up Unallocated for the second run.
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(50, "USD")
-        )
+        assert goal.balance == Money(130, "USD")
 
         report2 = funding_svc.fund_account(account, today, system_user)
 
-        assert report2.transfers == 1
+        # already_moved=$100 == intended; manual ITX not counted; no new transfer.
+        assert report2.transfers == 0
         goal.refresh_from_db()
-        # $90 (after manual ITX) + $40 (second run) = $130.
-        # If manual ITX were counted in already_moved, net would be $10 not $40.
         assert goal.balance == Money(130, "USD")
 
         system_itxs = InternalTransaction.objects.filter(
@@ -1632,13 +1555,15 @@ class TestRecurringScenarios:
         fillup = recurring.fillup_goal
         assert fillup is not None
 
-        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(30, "USD"))
+        Budget.objects.filter(pkid=fillup.pkid).update(
+            balance=Money(30, "USD"), target_balance=Money(30, "USD")
+        )
         Budget.objects.filter(pkid=recurring.pkid).update(
             last_funded_on=today,
             last_recurrence_on=date(2026, 1, 31),
         )
 
-        # First run (Feb 1): partial transfer; pointer advances.
+        # First run (Feb 1): recur fires; underfunded but COMPLETE (one-shot).
         report1 = funding_svc.fund_account(account, today, system_user)
 
         assert report1.transfers == 1
@@ -1773,19 +1698,21 @@ class TestScheduleFundingRuns:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "utc_hour,utc_minute,tz,expect_recur",
+        "utc_hour,utc_minute,tz,expect_fund,expect_recur",
         [
             pytest.param(
                 3,
                 10,
                 _TZ_NY,
+                True,
                 False,
-                id="outside-recur-window: 03:10 UTC = 23:10 EDT",
+                id="fund-window: 03:10 UTC = 23:10 EDT",
             ),
             pytest.param(
                 7,
                 10,
                 _TZ_NY,
+                False,
                 True,
                 id="recur-window: 07:10 UTC = 03:10 EDT",
             ),
@@ -1794,7 +1721,8 @@ class TestScheduleFundingRuns:
                 0,
                 _TZ_NY,
                 False,
-                id="outside-recur-window: 12:00 UTC = 08:00 EDT",
+                False,
+                id="outside-both-windows: 12:00 UTC = 08:00 EDT",
             ),
         ],
     )
@@ -1804,12 +1732,13 @@ class TestScheduleFundingRuns:
         utc_hour: int,
         utc_minute: int,
         tz: str,
+        expect_fund: bool,
         expect_recur: bool,
     ) -> None:
         """
         GIVEN: one account whose owner is in a known timezone
         WHEN:  schedule_funding_runs fires at a specific UTC time
-        THEN:  fund_one_account is always enqueued
+        THEN:  fund_one_account is enqueued iff local time is in [23:00, 23:30)
                recur_one_account is enqueued iff local time is in [03:00, 03:30)
         """
         account = bank_account_factory()
@@ -1830,7 +1759,7 @@ class TestScheduleFundingRuns:
             mock_dt.now.return_value = fake_now
             schedule_funding_runs()
 
-        assert mock_fund.called is True
+        assert mock_fund.called == expect_fund
         assert mock_recur.called == expect_recur
 
     ####################################################################
@@ -2661,12 +2590,13 @@ class TestFundingNotifications:
         system_user: User,
     ) -> None:
         """
-        GIVEN: a RECURRING budget with $80 in fillup, unallocated=$0,
+        GIVEN: a RECURRING budget with $80 in fillup (target=$80),
                recur fires Feb 1 (last_recurrence_on=Jan 31)
         WHEN:  fund_account runs
         THEN:  a RECURRING_BUDGET_REFRESHED notification is created with all
                expected context keys; FUNDING_COMPLETE is not created because
-               the FUND event was skipped (empty unallocated)
+               the FUND event contributes $0 (fillup at target) and the recur
+               transfer is internal (fillup -> recurring, not unallocated)
         """
         today = date(2026, 2, 1)
         account = make_account(posted_through=today)
@@ -2684,7 +2614,10 @@ class TestFundingNotifications:
         fillup = recurring.fillup_goal
         assert fillup is not None
 
-        Budget.objects.filter(pkid=fillup.pkid).update(balance=Money(80, "USD"))
+        # Fillup at $80, target also $80 so the fund event sees no gap.
+        Budget.objects.filter(pkid=fillup.pkid).update(
+            balance=Money(80, "USD"), target_balance=Money(80, "USD")
+        )
         Budget.objects.filter(pkid=recurring.pkid).update(
             last_funded_on=today,
             last_recurrence_on=date(2026, 1, 31),

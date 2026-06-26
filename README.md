@@ -24,9 +24,11 @@ As money comes in (paychecks, etc.), it's automatically distributed to budgets o
 
 **Funding** moves money from the per-account "Unallocated" budget into other budgets on a schedule. No real bank transfer happens -- it is reallocation within mibudge's virtual accounting.
 
-The funding engine processes two event kinds: **fund events** (on each budget's `funding_schedule`) and **recur events** (on each Recurring budget's `recurrence_schedule`, refreshing it from its Associated Fill-up). It runs daily at 3:00 AM UTC (`fund_all_accounts` Celery beat task), and can be triggered manually via `POST /api/v1/bank-accounts/<id>/run-funding/` or the importer's `--run-funding` flag. The engine is safely re-runnable any number of times in the same day -- a re-run after the user tops up Unallocated will complete partially-funded events without double-funding.
+The funding engine processes two event kinds: **fund events** (on each budget's `funding_schedule`) and **recur events** (on each Recurring budget's `recurrence_schedule`, refreshing it from its Associated Fill-up). Automatic funding fires via the `schedule_funding_runs` Celery beat task (every 30 minutes): fund events run in the `[23:00, 23:30)` local-time window on the fund date; recur events run in the `[03:00, 03:30)` local-time window on the recur date, giving the fill-up time to be fully funded before the sweep.
 
-Before running, the engine checks `account.last_posted_through`; if it is behind the latest due event, the entire run is deferred to avoid funding against stale transaction data.
+Automatic funding is designed for users with predictable income -- they know their pay schedule and have calibrated their budget amounts accordingly. When a paycheck is still pending at 23:00 on a fund date, Unallocated may go temporarily negative; this is expected and self-corrects when the deposit posts. Users with irregular income may prefer to turn off automatic funding and use the **"Run funding now"** button on the account page, which triggers both fund and recur events immediately on demand.
+
+The engine is safely re-runnable any number of times -- a re-run on the same day transfers only the remaining gap (via the `already_moved` formula) without double-funding. Funding can also be triggered manually via `POST /api/v1/bank-accounts/<id>/run-funding/`.
 
 See **[`docs/funding.md`](docs/funding.md)** for the full specification: per-type funding rules, the `funded_amount` invariant, Goal completion semantics, pause/archive behavior, the migration plan, and the test scenario matrix.
 
@@ -232,20 +234,20 @@ make uv-upgrade       # Upgrade all dependencies
 
 Local dev uses **two** env files with distinct purposes:
 
-| File | Read by | Contains |
-|------|---------|----------|
-| `.env` (repo root, gitignored) | Local shell — `uv run manage.py`, `pytest`, linters, `make api-schema` | `localhost` URLs with published ports |
-| `deployment/local-dev-docker.env` (gitignored) | docker-compose (`env_file:`) | Docker-internal hostnames and port numbers |
+| File                                           | Read by                                                                | Contains                                   |
+|------------------------------------------------|------------------------------------------------------------------------|--------------------------------------------|
+| `.env` (repo root, gitignored)                 | Local shell — `uv run manage.py`, `pytest`, linters, `make api-schema` | `localhost` URLs with published ports      |
+| `deployment/local-dev-docker.env` (gitignored) | docker-compose (`env_file:`)                                           | Docker-internal hostnames and port numbers |
 
 The split lets you run `app/manage.py` directly from the native shell without docker-execing into a container, while docker-compose services still talk to each other over the docker network.
 
 **Published ports** (docker → localhost):
 
-| Service | docker-internal | localhost |
-|---------|----------------|-----------|
-| PostgreSQL | `postgres:5432` | `localhost:6432` |
-| Redis | `redis:6379` | `localhost:7379` |
-| Mailpit SMTP | `mailpit:1025` | `localhost:1025` |
+| Service      | docker-internal | localhost        |
+|--------------|-----------------|------------------|
+| PostgreSQL   | `postgres:5432` | `localhost:6432` |
+| Redis        | `redis:6379`    | `localhost:7379` |
+| Mailpit SMTP | `mailpit:1025`  | `localhost:1025` |
 
 **First-time setup:**
 
@@ -299,13 +301,13 @@ The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backen
 
 ## Documentation
 
-| Doc | Contents |
-|-----|----------|
-| [`docs/api.md`](docs/api.md) | REST API reference (generated from OpenAPI schema) |
-| [`docs/funding.md`](docs/funding.md) | Budget funding engine: rules, invariants, test scenarios |
-| [`docs/importers.md`](docs/importers.md) | Bank statement import tools |
-| [`docs/management-commands.md`](docs/management-commands.md) | Django management commands |
-| [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | Frontend screen inventory and component breakdown |
+| Doc                                                          | Contents                                                                   |
+|--------------------------------------------------------------|----------------------------------------------------------------------------|
+| [`docs/api.md`](docs/api.md)                                 | REST API reference (generated from OpenAPI schema)                         |
+| [`docs/funding.md`](docs/funding.md)                         | Budget funding engine: rules, invariants, test scenarios                   |
+| [`docs/importers.md`](docs/importers.md)                     | Bank statement import tools                                                |
+| [`docs/management-commands.md`](docs/management-commands.md) | Django management commands                                                 |
+| [`docs/UI_SPEC.md`](docs/UI_SPEC.md)                         | Frontend screen inventory and component breakdown                          |
 | [`app/notifications/README.md`](app/notifications/README.md) | Notification service: kind registration, digest mechanics, adding channels |
 
 Detailed documentation for user account management (co-ownership invitations, email change flow, security policy) will be added to `docs/` as those features stabilise.
