@@ -646,6 +646,21 @@ async function submitMove() {
               </span>
             </div>
             <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
+              <IconCalendar class="h-4 w-4 flex-none text-neutral-400" />
+              <span class="flex-1 text-sm text-neutral-700">Next refresh</span>
+              <span class="text-sm text-secondary">
+                {{
+                  budget.next_recurrence
+                    ? parseLocalDate(budget.next_recurrence).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : "—"
+                }}
+              </span>
+            </div>
+            <div class="flex items-center gap-3 border-b border-neutral-100 px-4 py-3">
               <IconClock class="h-4 w-4 flex-none text-neutral-400" />
               <span class="flex-1 text-sm text-neutral-700">Funding schedule</span>
               <span class="text-right text-sm text-secondary">

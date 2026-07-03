@@ -424,6 +424,130 @@ paths:
                   currency:
                     type: string
           description: Per-schedule funding totals.
+  /api/v1/bank-accounts/{id}/invitations/:
+    get:
+      operationId: bank_accounts_invitations_list
+      description: Returns all pending invitations for this bank account.
+      summary: List pending invitations for this account
+      parameters:
+      - in: query
+        name: account_type
+        schema:
+          type: string
+          enum:
+          - C
+          - S
+          - X
+        description: |-
+          * `C` - Checking
+          * `S` - Savings
+          * `X` - Credit Card
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - bank-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBankAccountInvitationList'
+          description: ''
+  /api/v1/bank-accounts/{id}/invitations/{token}/cancel/:
+    post:
+      operationId: bank_accounts_invitations_cancel_create
+      description: Cancel a pending co-ownership invitation by token. Only the user
+        who sent the invitation may cancel it.
+      summary: Cancel a pending invitation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BankAccountRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bank-accounts/{id}/invite/:
+    post:
+      operationId: bank_accounts_invite_create
+      description: Send a co-ownership invitation to the given email address. If no
+        mibudge account exists for that address, an inactive placeholder account is
+        created; the invitee sets their password after accepting. Returns 409 if the
+        address is already an owner or a pending invitation already exists.
+      summary: Invite a co-owner
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteOwnerRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InviteOwnerRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InviteOwnerRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          description: No response body
   /api/v1/bank-accounts/{id}/mark-imported/:
     post:
       operationId: bank_accounts_mark_imported_create
@@ -1176,6 +1300,73 @@ paths:
               schema:
                 $ref: '#/components/schemas/InternalTransaction'
           description: ''
+  /api/v1/invitations/{token}/:
+    get:
+      operationId: invitations_retrieve
+      description: Return bank account name, current owners, and invitee status for
+        the invitation identified by *token*. No authentication required -- the token
+        is the credential. Used by native apps to render the acceptance UI; the Django
+        template view renders this server-side.
+      summary: Get invitation details (public)
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - invitations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicInvitationDetail'
+          description: ''
+  /api/v1/invitations/{token}/accept/:
+    post:
+      operationId: invitations_accept_create
+      description: Accept the co-ownership invitation identified by *token*. Adds
+        the invitee to the account's owners. For brand-new users (no password set),
+        a password-reset email is also dispatched. No authentication required.
+      summary: Accept an invitation (public)
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - invitations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/invitations/{token}/decline/:
+    post:
+      operationId: invitations_decline_create
+      description: Decline the co-ownership invitation identified by *token*. No authentication
+        required.
+      summary: Decline an invitation (public)
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - invitations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/notification-preferences/:
     get:
       operationId: notification_preferences_list
@@ -1870,6 +2061,101 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+  /api/v1/users/me/change-email/:
+    post:
+      operationId: users_me_change_email_create
+      description: Initiate a self-service email change.  Sends a verification link
+        to the new address and a revocation link to the old address.  Returns 403
+        if the user has no usable password; 409 if new_email is already taken or a
+        revocation window is currently open for this account.
+      summary: Request an email address change
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailChangeRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmailChangeRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmailChangeRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          description: No response body
+  /api/v1/users/me/change-email/{token}/confirm/:
+    post:
+      operationId: users_me_change_email_confirm_create
+      description: |-
+        Verify a pending email change using the token from the verification link sent to the new address.  No authentication required -- the token is the credential.
+
+        **Dual-path note:** The email link points to a Django GET view at ``/users/email-change/{token}/confirm/`` which processes the action and redirects the browser to the SPA result page.  Native apps that register mibudge.money as a Universal Link (iOS) or App Link (Android) intercept that URL and call this endpoint instead, receiving JSON and controlling their own UI.
+      summary: Confirm an email address change (new-address token)
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users/me/change-email/{token}/revoke/:
+    post:
+      operationId: users_me_change_email_revoke_create
+      description: |-
+        Cancel a pending or recently confirmed email change using the token from the notification sent to the old address.  Valid for up to 7 days after confirmation.  No authentication required -- the token is the credential.
+
+        On post-confirmation revocation the email is reverted and all active sessions are invalidated.
+
+        **Dual-path note:** See ``change_email_confirm`` -- the same Universal Link / App Link pattern applies here.
+      summary: Revoke an email address change ('this wasn't me')
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/users/me/change-password/:
     post:
       operationId: users_me_change_password_create
@@ -1897,6 +2183,42 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/users/me/invitations/:
+    get:
+      operationId: users_me_invitations_list
+      description: Return all pending co-ownership invitations sent by the authenticated
+        user, across all accounts.
+      summary: List current user's outgoing pending invitations
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBankAccountInvitationList'
+          description: ''
 components:
   schemas:
     AccountTypeEnum:
@@ -2047,6 +2369,87 @@ components:
       - owners
       - posted_balance_currency
       - unallocated_budget
+    BankAccountInvitation:
+      type: object
+      description: |-
+        Read-only serializer for BankAccountInvitation rows.
+
+        ``token`` is included so the SPA can construct the cancel URL without a
+        separate lookup.  It is safe to expose to authenticated account owners
+        since they created the invitation and the cancel endpoint enforces that
+        only the sender may cancel.
+
+        ``bank_account_id`` and ``bank_account_name`` are included for the
+        cross-account listing on the user's settings page (me/invitations/).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        token:
+          type: string
+          readOnly: true
+        bank_account_id:
+          type: string
+          format: uuid
+          readOnly: true
+        bank_account_name:
+          type: string
+          readOnly: true
+        invitee_email:
+          type: string
+          format: email
+          readOnly: true
+          description: Email address the invitation was sent to. Immutable after creation.
+        invited_by:
+          type: string
+          format: email
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status58bEnum'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        declined_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        modified_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - accepted_at
+      - bank_account_id
+      - bank_account_name
+      - cancelled_at
+      - created_at
+      - declined_at
+      - expires_at
+      - id
+      - invited_by
+      - invitee_email
+      - modified_at
+      - status
+      - token
     BankAccountRequest:
       type: object
       description: |-
@@ -2180,6 +2583,13 @@ components:
         recurrence_schedule:
           type: string
           nullable: true
+          description: 'Refresh cycle for Recurring budgets.  Restricted grammar:
+            a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional
+            INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes
+            on (e.g. ''DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY'' refreshes on
+            the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates
+            are rejected -- the anchor date is the only day-of-cycle control.  The
+            funding_schedule field is not restricted this way.'
         memo:
           type: string
           nullable: true
@@ -2197,6 +2607,23 @@ components:
 
             Returns:
                 Dict with 'date', 'amount', 'amount_currency', or None.
+          readOnly: true
+        next_recurrence:
+          type: string
+          nullable: true
+          description: |-
+            Return the date of the next recurrence (refresh) event, or null.
+
+            The recurrence_schedule's DTSTART is only the rule's anchor;
+            this field is the actual upcoming refresh date (first
+            occurrence after last_recurrence_on).  Only Recurring budgets
+            have one.
+
+            Args:
+                obj: The Budget instance being serialized.
+
+            Returns:
+                ISO date string, or None.
           readOnly: true
         created_at:
           type: string
@@ -2219,6 +2646,7 @@ components:
       - modified_at
       - name
       - next_funding
+      - next_recurrence
       - target_balance
       - target_balance_currency
     BudgetRequest:
@@ -2270,6 +2698,13 @@ components:
         recurrence_schedule:
           type: string
           nullable: true
+          description: 'Refresh cycle for Recurring budgets.  Restricted grammar:
+            a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional
+            INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes
+            on (e.g. ''DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY'' refreshes on
+            the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates
+            are rejected -- the anchor date is the only day-of-cycle control.  The
+            funding_schedule field is not restricted this way.'
         memo:
           type: string
           nullable: true
@@ -2668,6 +3103,16 @@ components:
         * `weekly_friday` - Weekly on Friday
         * `weekly_saturday` - Weekly on Saturday
         * `weekly_sunday` - Weekly on Sunday
+    EmailChangeRequestRequest:
+      type: object
+      description: Validate a request to initiate an email-address change.
+      properties:
+        new_email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - new_email
     EmailTokenObtainPairRequest:
       type: object
       description: |-
@@ -2718,7 +3163,7 @@ components:
           description: Calendar date the event was scheduled to fire.
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/FundingEventOccurrenceStatusEnum'
           readOnly: true
         completed_at:
           type: string
@@ -2744,6 +3189,18 @@ components:
       - modified_at
       - scheduled_date
       - status
+    FundingEventOccurrenceStatusEnum:
+      enum:
+      - PENDING
+      - PARTIAL
+      - COMPLETE
+      - SKIPPED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `PARTIAL` - Partial
+        * `COMPLETE` - Complete
+        * `SKIPPED` - Skipped
     FundingTypeEnum:
       enum:
       - D
@@ -2869,6 +3326,16 @@ components:
       - bank_account
       - dst_budget
       - src_budget
+    InviteOwnerRequest:
+      type: object
+      description: Write-only serializer for the invite-owner action.
+      properties:
+        invitee_email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - invitee_email
     NotificationPreference:
       type: object
       description: |-
@@ -2893,6 +3360,29 @@ components:
       - delivery_mode
       - display_name
       - kind
+    PaginatedBankAccountInvitationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankAccountInvitation'
     PaginatedBankAccountList:
       type: object
       required:
@@ -3219,6 +3709,13 @@ components:
         recurrence_schedule:
           type: string
           nullable: true
+          description: 'Refresh cycle for Recurring budgets.  Restricted grammar:
+            a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional
+            INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes
+            on (e.g. ''DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY'' refreshes on
+            the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates
+            are rejected -- the anchor date is the only day-of-cycle control.  The
+            funding_schedule field is not restricted this way.'
         memo:
           type: string
           nullable: true
@@ -3313,6 +3810,9 @@ components:
         The ``default_bank_account`` field is writable but constrained:
         the bank account must be owned by the user being updated.  On
         output it returns the UUID string (or null).
+
+        ``has_usable_password`` is read-only and used by the SPA to decide
+        whether to enable the change-email and change-password forms.
       properties:
         name:
           type: string
@@ -3326,6 +3826,55 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+    PublicInvitationDetail:
+      type: object
+      description: |-
+        Read-only serializer for the public invitation-detail endpoint.
+
+        Returns the minimum information needed to render the acceptance page
+        for API clients.  Owner names are intentionally minimal (display name
+        or email only) to limit PII exposure behind a bare token.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status58bEnum'
+          readOnly: true
+        invitee_email:
+          type: string
+          format: email
+          readOnly: true
+          description: Email address the invitation was sent to. Immutable after creation.
+        bank_account_name:
+          type: string
+          readOnly: true
+        bank_name:
+          type: string
+          readOnly: true
+        current_owners:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        is_new_user:
+          type: boolean
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - bank_account_name
+      - bank_name
+      - current_owners
+      - expires_at
+      - id
+      - invitee_email
+      - is_new_user
+      - status
     ResolvePendingRequest:
       type: object
       description: |-
@@ -3455,18 +4004,20 @@ components:
       - is_pending
       - posted_date
       - raw_description
-    StatusEnum:
+    Status58bEnum:
       enum:
-      - PENDING
-      - PARTIAL
-      - COMPLETE
-      - SKIPPED
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      - expired
       type: string
       description: |-
-        * `PENDING` - Pending
-        * `PARTIAL` - Partial
-        * `COMPLETE` - Complete
-        * `SKIPPED` - Skipped
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `cancelled` - Cancelled
+        * `expired` - Expired
     TokenRefresh:
       type: object
       properties:
@@ -3824,6 +4375,9 @@ components:
         The ``default_bank_account`` field is writable but constrained:
         the bank account must be owned by the user being updated.  On
         output it returns the UUID string (or null).
+
+        ``has_usable_password`` is read-only and used by the SPA to decide
+        whether to enable the change-email and change-password forms.
       properties:
         username:
           type: string
@@ -3850,8 +4404,14 @@ components:
         timezone:
           type: string
           maxLength: 100
+        has_usable_password:
+          type: boolean
+          description: Return True if the user has a usable (non-unusable) password
+            set.
+          readOnly: true
       required:
       - email
+      - has_usable_password
       - url
       - username
     UserRequest:
@@ -3862,6 +4422,9 @@ components:
         The ``default_bank_account`` field is writable but constrained:
         the bank account must be owned by the user being updated.  On
         output it returns the UUID string (or null).
+
+        ``has_usable_password`` is read-only and used by the SPA to decide
+        whether to enable the change-email and change-password forms.
       properties:
         name:
           type: string

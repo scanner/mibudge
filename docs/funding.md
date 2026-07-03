@@ -46,7 +46,7 @@ There are three user-facing budget types plus one supporting type:
 |------------------------|--------------------------------------------------------------|-----------------|-------------------------------|
 | **Goal**               | One-shot accumulation toward a target                        | No              | `FIXED_AMOUNT`, `TARGET_DATE` |
 | **Capped**             | Perpetually topped up to a cap                               | No              | `FIXED_AMOUNT` only           |
-| **Recurring**          | Periodic budget that resets on a cycle                       | Yes (mandatory) | `TARGET_DATE` only            |
+| **Recurring**          | Periodic budget that refreshes on a cycle                    | Yes (mandatory) | `TARGET_DATE` only            |
 | **Associated Fill-up** | Sibling of a Recurring; accumulates funding across the cycle | n/a             | n/a                           |
 
 A Recurring budget always has exactly one Associated Fill-up sibling,
@@ -134,6 +134,48 @@ denormalized caches of the most recent COMPLETE occurrence date for
 each kind.  They are kept by `_mark_occurrence_complete` so that
 `_collect_events` and `next_funding_info` can use them without joining
 the occurrence table.
+
+
+### 3.2 Recurrence schedule shape
+
+A `recurrence_schedule` is a **cycle plus an anchor date**, not a
+general RFC 2445 recurrence:
+
+```
+DTSTART:20260708T000000Z
+RRULE:FREQ=MONTHLY
+```
+
+- The RRULE carries only `FREQ` (`WEEKLY` / `MONTHLY` / `YEARLY`) and an
+  optional `INTERVAL`.
+- `DTSTART` anchors the day of the cycle — day-of-month for monthly,
+  month + day for yearly, weekday for weekly — and the phase when
+  `INTERVAL > 1` (every-2-months anchored March 1 fires Mar/May/Jul/…).
+  DTSTART itself counts as an occurrence, so a user-picked "next refresh
+  date" is the first refresh.
+- `BY*` parts, `COUNT`, `UNTIL`, `EXRULE`/`RDATE`/`EXDATE`, and multiple
+  RRULEs are **rejected with a 400** by
+  `BudgetSerializer.validate_recurrence_schedule`
+  (`app/moneypools/api/v1/serializers.py`).  Two reasons: `BY*` parts
+  silently override the DTSTART anchor during dateutil evaluation (the
+  historical wrong-refresh-day bug), and the proration formula in §4.4
+  assumes exactly one boundary per cycle.
+- The anchor-date model is a feature, not just a simplification: it lets
+  the user shift the refresh day to absorb real-world slop.  Example: a
+  mortgage paid on the last day of the month can stay pending across the
+  month boundary; anchoring the refresh on the 8th guarantees the
+  payment has posted (and is allocatable) before the budget refreshes.
+- The restriction is **serializer-level only**.  The django-admin and
+  management commands (`import_bank_account`) bypass it deliberately.
+- `funding_schedule` is **not** restricted — multi-day rules like
+  `BYMONTHDAY=15,-1` (semi-monthly paydays) remain fully supported
+  there.
+
+`DTSTART` is only the rule's anchor; it never advances and does not
+track the next refresh.  The upcoming refresh date is computed on demand
+by `next_recurrence_date()` (§12) as the first occurrence strictly after
+`Budget.last_recurrence_on`, and exposed to clients as the read-only
+`next_recurrence` field on the Budget API.
 
 
 ---
@@ -727,6 +769,22 @@ def next_funding_info(budget: Budget, today: date | None = None) -> NextFundingI
 Returns a `NextFundingInfo(date, amount)` for the next scheduled event, or
 `None` if none is due.  No import-freshness check; the caller supplies
 context for display purposes only.
+
+### `app/moneypools/service/funding.py:next_recurrence_date`
+
+```python
+def next_recurrence_date(budget: Budget, today: date | None = None) -> date | None:
+```
+
+Returns the date of the budget's next recurrence (refresh) event — the
+first occurrence of `recurrence_schedule` strictly after
+`Budget.last_recurrence_on` — or `None` for non-Recurring, paused,
+archived, or schedule-less budgets.  When `last_recurrence_on` is unset
+it anchors to the cycle boundary at or before creation, mirroring
+`_collect_events`.  A returned date in the past means the event is
+overdue and will run on the next scheduler pass.  Backs the read-only
+`next_recurrence` field on the Budget serializer; display code must use
+this rather than the schedule's DTSTART (see §3.2).
 
 ### `app/moneypools/models.py`
 

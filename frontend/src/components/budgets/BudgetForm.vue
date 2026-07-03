@@ -20,7 +20,7 @@ import { computed, ref } from "vue";
 import SchedulePicker from "./SchedulePicker.vue";
 import { createBudget, updateBudget } from "@/api/budgets";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { combineDtstart, DEFAULT_RRULE, extractDtstart } from "@/utils/rrule";
+import { combineDtstart, DEFAULT_RRULE, extractDtstart, stripToIntervalOnly } from "@/utils/rrule";
 import type { Budget, BudgetType } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -52,7 +52,11 @@ const fundingSchedule = ref(props.budget?.funding_schedule ?? DEFAULT_RRULE);
 
 const existingRecurrence = extractDtstart(props.budget?.recurrence_schedule ?? DEFAULT_RRULE);
 const recurrenceSchedule = ref(existingRecurrence.rrule);
-const nextDueDate = ref(existingRecurrence.dtstart ?? "");
+// Prefer the server-computed next refresh date; the schedule's DTSTART
+// is only the rule anchor and goes stale once a cycle has elapsed.
+// Saving the next occurrence back as DTSTART is safe: it is on-phase
+// with the rule, so the schedule itself is unchanged.
+const nextRefreshDate = ref(props.budget?.next_recurrence ?? existingRecurrence.dtstart ?? "");
 
 const paused = ref(props.budget?.paused ?? false);
 
@@ -90,9 +94,15 @@ async function submit() {
       payload.funding_amount = fundingAmount.value || null;
     }
   } else if (isRecurring.value) {
-    payload.recurrence_schedule = nextDueDate.value
-      ? combineDtstart(recurrenceSchedule.value, nextDueDate.value)
-      : recurrenceSchedule.value;
+    // The refresh-cycle picker is interval-only; the chosen date is the
+    // DTSTART anchor that supplies the day-of-month/-year.  Strip any
+    // BY* parts carried over from an older rule (e.g. BYMONTHDAY=1 from
+    // the create default) -- the API rejects them, and they would
+    // override DTSTART and refresh the budget on the wrong day.
+    const cycle = stripToIntervalOnly(recurrenceSchedule.value);
+    payload.recurrence_schedule = nextRefreshDate.value
+      ? combineDtstart(cycle, nextRefreshDate.value)
+      : cycle;
   } else if (isCapped.value) {
     // Capped always uses Fixed Amount funding.
     payload.funding_type = "F";
@@ -336,15 +346,17 @@ async function submit() {
     <template v-else-if="isRecurring">
       <SchedulePicker v-model="recurrenceSchedule" label="Refresh cycle" interval-only />
 
-      <!-- Next due date (stored as DTSTART in recurrence_schedule) -->
+      <!-- Next refresh date (stored as DTSTART in recurrence_schedule) -->
       <div>
-        <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="next-due-date">
-          Next due date
+        <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="next-refresh-date">
+          Next refresh date
         </label>
-        <p class="mb-1.5 text-[11px] text-neutral-500">When the budgeted expense actually hits</p>
+        <p class="mb-1.5 text-[11px] text-neutral-500">
+          When the budgeted expense next hits and the budget refreshes
+        </p>
         <input
-          id="next-due-date"
-          v-model="nextDueDate"
+          id="next-refresh-date"
+          v-model="nextRefreshDate"
           type="date"
           class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
         />

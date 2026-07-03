@@ -568,8 +568,10 @@ class Budget(MoneyPoolBaseClass):
 
     # Only relevant for Goal budgets with FundingType 'target_date'.
     # The date by which the budget should be fully funded.  Recurring
-    # budgets encode their "next due" date as the DTSTART of the
-    # recurrence_schedule recurrence instead.
+    # budgets have no target_date; their upcoming refresh date is
+    # computed from recurrence_schedule and last_recurrence_on (see
+    # funding.next_recurrence_date) -- the schedule's DTSTART is only
+    # the rule's anchor and never advances.
     #
     target_date = models.DateField(null=True, blank=True)
 
@@ -668,6 +670,13 @@ class Budget(MoneyPoolBaseClass):
     # recurrence schedule to be shortly before that subscription is due.  The
     # idea is that the budget is refreshed just after midnight on its
     # recurrence schedule.
+    #
+    # NOTE: the REST API restricts this field to a cycle-plus-anchor
+    # grammar (one RRULE, FREQ + optional INTERVAL, day anchored by
+    # DTSTART; no BY*/COUNT/UNTIL).  See
+    # BudgetSerializer.validate_recurrence_schedule and docs/funding.md
+    # section 3.2.  The model field itself accepts any recurrence so
+    # the admin and import commands remain unrestricted.
     #
     recurrence_schedule = recurrence.fields.RecurrenceField(null=True)
 

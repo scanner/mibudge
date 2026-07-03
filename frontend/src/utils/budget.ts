@@ -94,7 +94,16 @@ export function budgetMeta(budget: Budget): string {
     return "Capped";
   }
   if (budget.recurrence_schedule) {
-    return `Recurring · resets ${rruleHuman(budget.recurrence_schedule)}`;
+    let meta = `Recurring · refreshes ${rruleHuman(budget.recurrence_schedule)}`;
+    if (budget.next_recurrence) {
+      const label = parseLocalDate(budget.next_recurrence).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+      meta += ` · next refresh ${label}`;
+    }
+    return meta;
   }
   return "Recurring";
 }
