@@ -239,6 +239,72 @@ def next_funding_info(
 
 ####################################################################
 #
+def next_recurrence_date(
+    budget: Budget,
+    today: date | None = None,
+) -> date | None:
+    """Return the date of the budget's next recurrence (refresh) event.
+
+    The next recurrence is the first occurrence of the budget's
+    recurrence_schedule that the recurrence handler has not yet
+    processed -- i.e. the first occurrence strictly after
+    ``last_recurrence_on``.  The schedule's DTSTART is only the anchor
+    of the recurrence rule, not the next event; use this function
+    whenever the upcoming refresh date is needed for display.
+
+    A returned date in the past means the event is overdue and will be
+    processed on the next scheduler run.
+
+    Returns None for:
+    - Paused or archived budgets
+    - Non-RECURRING budgets
+    - Budgets with no recurrence_schedule
+    - Budgets with no occurrence in the next two years
+
+    Args:
+        budget: The Budget to inspect.
+        today: Reference date for event enumeration (defaults to
+            date.today()).
+
+    Returns:
+        Date of the next recurrence event, or None.
+    """
+    if today is None:
+        today = date.today()
+
+    if budget.paused or budget.archived:
+        return None
+
+    if budget.budget_type != Budget.BudgetType.RECURRING:
+        return None
+
+    if not budget.recurrence_schedule:
+        return None
+
+    if budget.last_recurrence_on is not None:
+        after = budget.last_recurrence_on
+    else:
+        # Mirror _collect_events: anchor to the most recent cycle
+        # boundary at or before the budget's creation date so a
+        # recurrence between the schedule's DTSTART and created_at is
+        # not skipped.
+        prev = prev_recurrence_boundary(
+            budget.recurrence_schedule, budget.created_at.date()
+        )
+        after = (
+            prev - timedelta(days=1)
+            if prev is not None
+            else budget.created_at.date()
+        )
+
+    # Look ahead up to 2 years to find the next event.
+    look_ahead = date(today.year + 2, today.month, today.day)
+    upcoming = enumerate_schedule(budget.recurrence_schedule, after, look_ahead)
+    return upcoming[0] if upcoming else None
+
+
+####################################################################
+#
 def fund_account(
     account: BankAccount,
     today: date,

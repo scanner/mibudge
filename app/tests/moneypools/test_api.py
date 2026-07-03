@@ -561,6 +561,210 @@ class TestBudgetNextFundingField:
 ########################################################################
 ########################################################################
 #
+class TestBudgetNextRecurrenceField:
+    """API-level tests for the next_recurrence SerializerMethodField.
+
+    Service-level logic (which date next_recurrence_date returns) is
+    covered in test_funding.py.  These tests verify the field appears
+    in the API response with the expected shape and nullability.
+    """
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "budget_type,expected",
+        [
+            # Recurring: first occurrence after last_recurrence_on,
+            # not the schedule's DTSTART (Jan 1).
+            (Budget.BudgetType.RECURRING, "2026-08-01"),
+            # Non-recurring budgets have no recurrence -> null.
+            (Budget.BudgetType.GOAL, None),
+        ],
+    )
+    def test_next_recurrence_field_in_budget_response(
+        self,
+        budget_type: str,
+        expected: str | None,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget refreshed on Jul 1, or a GOAL budget
+        WHEN:  GET /api/v1/budgets/<id>/
+        THEN:  next_recurrence is the upcoming refresh date, or null
+        """
+        account = bank_account_factory(owners=[user])
+        b = budget_svc.create(
+            bank_account=account,
+            name="Groceries",
+            budget_type=budget_type,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(500, "USD"),
+            funding_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY,
+        )
+        Budget.objects.filter(pkid=b.pkid).update(
+            last_recurrence_on=date(2026, 7, 1)
+        )
+
+        response = auth_client.get(f"/api/v1/budgets/{b.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["next_recurrence"] == expected
+
+
+########################################################################
+########################################################################
+#
+class TestRecurrenceScheduleValidation:
+    """recurrence_schedule accepts only the restricted refresh grammar.
+
+    The refresh cycle is a single RRULE (WEEKLY/MONTHLY/YEARLY plus an
+    optional INTERVAL) anchored by an optional DTSTART.  Richer RFC 2445
+    shapes are rejected because BY* parts silently override the DTSTART
+    anchor and the funding engine assumes one boundary per cycle.  The
+    funding_schedule field is intentionally NOT restricted this way.
+    """
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "rule,expected_status",
+        [
+            # -- Accepted: cycle + optional interval + optional anchor.
+            pytest.param(
+                "RRULE:FREQ=MONTHLY",
+                status.HTTP_201_CREATED,
+                id="ok/monthly",
+            ),
+            pytest.param(
+                "DTSTART:20260708T000000Z\nRRULE:FREQ=MONTHLY",
+                status.HTTP_201_CREATED,
+                id="ok/monthly_anchored",
+            ),
+            pytest.param(
+                "RRULE:FREQ=MONTHLY;INTERVAL=3",
+                status.HTTP_201_CREATED,
+                id="ok/quarterly",
+            ),
+            pytest.param(
+                "DTSTART:20260615T000000Z\nRRULE:FREQ=YEARLY;INTERVAL=2",
+                status.HTTP_201_CREATED,
+                id="ok/biyearly_anchored",
+            ),
+            pytest.param(
+                "RRULE:FREQ=WEEKLY;INTERVAL=2",
+                status.HTTP_201_CREATED,
+                id="ok/biweekly",
+            ),
+            # -- Rejected: day parts must come from DTSTART, not BY*.
+            pytest.param(
+                "DTSTART:20260708T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/bymonthday",
+            ),
+            pytest.param(
+                "RRULE:FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/last_friday",
+            ),
+            pytest.param(
+                "RRULE:FREQ=YEARLY;BYMONTH=4,12;BYMONTHDAY=10",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/multi_month_yearly",
+            ),
+            # -- Rejected: a refresh cycle does not end.
+            pytest.param(
+                "RRULE:FREQ=MONTHLY;COUNT=12",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/count",
+            ),
+            pytest.param(
+                "RRULE:FREQ=MONTHLY;UNTIL=20270101T000000Z",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/until",
+            ),
+            # -- Rejected: unsupported frequency and rule sets.
+            pytest.param(
+                "RRULE:FREQ=DAILY",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/daily",
+            ),
+            pytest.param(
+                "RRULE:FREQ=MONTHLY\nRRULE:FREQ=WEEKLY",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/multiple_rrules",
+            ),
+            pytest.param(
+                "RRULE:FREQ=MONTHLY\nEXDATE:20261201T000000Z",
+                status.HTTP_400_BAD_REQUEST,
+                id="reject/exdate",
+            ),
+        ],
+    )
+    def test_create_budget_recurrence_schedule_grammar(
+        self,
+        rule: str,
+        expected_status: int,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a budget create payload with a recurrence_schedule
+        WHEN:  POST /api/v1/budgets/
+        THEN:  rules in the restricted grammar are accepted and all
+               richer RFC 2445 shapes are rejected with a 400.
+        """
+        account = bank_account_factory(owners=[user])
+        response = auth_client.post(
+            reverse("api_v1:budget-list"),
+            {
+                "name": "Mortgage",
+                "bank_account": str(account.id),
+                "budget_type": "R",
+                "funding_type": "D",
+                "target_balance": "2088.00",
+                "recurrence_schedule": rule,
+            },
+        )
+        assert response.status_code == expected_status
+        if expected_status == status.HTTP_400_BAD_REQUEST:
+            assert "recurrence_schedule" in response.data
+
+    ####################################################################
+    #
+    def test_funding_schedule_keeps_full_grammar(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a budget create payload with a BYMONTHDAY funding_schedule
+        WHEN:  POST /api/v1/budgets/
+        THEN:  it is accepted -- only recurrence_schedule is restricted.
+        """
+        account = bank_account_factory(owners=[user])
+        response = auth_client.post(
+            reverse("api_v1:budget-list"),
+            {
+                "name": "Mortgage",
+                "bank_account": str(account.id),
+                "budget_type": "R",
+                "funding_type": "D",
+                "target_balance": "2088.00",
+                "funding_schedule": "RRULE:FREQ=MONTHLY;BYMONTHDAY=15,-1",
+                "recurrence_schedule": "DTSTART:20260708T000000Z\nRRULE:FREQ=MONTHLY",
+            },
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+
+########################################################################
+########################################################################
+#
 class TestBudgetAPI:
     """Tests for the /api/v1/budgets/ endpoint."""
 

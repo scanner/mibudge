@@ -77,6 +77,10 @@ export interface Budget {
   memo: string | null;
   auto_spend: unknown;
   next_funding: NextFunding | null;
+  // ISO date of the next refresh event (Recurring budgets only).
+  // Computed server-side from the schedule and last_recurrence_on;
+  // the schedule's DTSTART is only the rule anchor, not the next date.
+  next_recurrence: string | null;
   created_at: string;
   modified_at: string;
 }
