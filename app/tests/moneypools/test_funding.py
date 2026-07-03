@@ -2326,6 +2326,178 @@ class TestNextFundingInfo:
 ########################################################################
 ########################################################################
 #
+class TestNextRecurrenceDate:
+    """next_recurrence_date() returns the upcoming refresh date."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "recurrence_schedule,last_recurrence_on,today,expected",
+        [
+            # The display bug this function fixes: a monthly budget
+            # whose DTSTART (Feb 1) is long past.  The next refresh is
+            # derived from the pointer, not from DTSTART.
+            pytest.param(
+                _MONTHLY_FIRST,
+                date(2026, 7, 1),
+                date(2026, 7, 3),
+                date(2026, 8, 1),
+                id="monthly/next_cycle",
+            ),
+            # Yearly budget refreshed on Jun 15 2026; the next refresh
+            # is Jun 15 of the following year.
+            pytest.param(
+                recurrence.Recurrence(
+                    dtstart=datetime(2026, 6, 15),
+                    rrules=[recurrence.Rule(recurrence.YEARLY)],
+                ),
+                date(2026, 6, 15),
+                date(2026, 7, 3),
+                date(2027, 6, 15),
+                id="yearly/next_year",
+            ),
+            # Every 2 months anchored Mar 1 (Mar, May, Jul, Sep, ...);
+            # the interval phase from DTSTART is preserved.
+            pytest.param(
+                recurrence.Recurrence(
+                    dtstart=datetime(2026, 3, 1),
+                    rrules=[recurrence.Rule(recurrence.MONTHLY, interval=2)],
+                ),
+                date(2026, 7, 1),
+                date(2026, 7, 3),
+                date(2026, 9, 1),
+                id="bimonthly/phase_preserved",
+            ),
+            # Overdue: the Jun 1 event was never processed, so it is
+            # still the next one (it will run at the next scheduler
+            # pass) even though the date is in the past.
+            pytest.param(
+                _MONTHLY_FIRST,
+                date(2026, 5, 1),
+                date(2026, 7, 3),
+                date(2026, 6, 1),
+                id="monthly/overdue_catchup",
+            ),
+        ],
+    )
+    def test_returns_first_unprocessed_occurrence(
+        self,
+        make_account: Callable[..., BankAccount],
+        recurrence_schedule: recurrence.Recurrence,
+        last_recurrence_on: date,
+        today: date,
+        expected: date,
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget with last_recurrence_on set
+        WHEN:  next_recurrence_date is called
+        THEN:  it returns the first occurrence after last_recurrence_on,
+               regardless of the schedule's DTSTART anchor.
+        """
+        account = make_account()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Recurring Budget",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+            recurrence_schedule=recurrence_schedule,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_recurrence_on=last_recurrence_on
+        )
+        budget.refresh_from_db()
+
+        assert funding_svc.next_recurrence_date(budget, today=today) == expected
+
+    ####################################################################
+    #
+    def test_never_processed_uses_creation_anchor(
+        self,
+        make_account: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a RECURRING budget created before its first cycle
+               (DTSTART in the future) with last_recurrence_on=None
+        WHEN:  next_recurrence_date is called
+        THEN:  it returns the schedule's first occurrence.
+        """
+        account = make_account()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Recurring Budget",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY_MAY_FIRST,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            last_recurrence_on=None,
+            created_at=datetime(2026, 4, 20, tzinfo=UTC),
+        )
+        budget.refresh_from_db()
+
+        result = funding_svc.next_recurrence_date(
+            budget, today=date(2026, 4, 25)
+        )
+        assert result == date(2026, 5, 1)
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "budget_type,updates",
+        [
+            pytest.param(
+                Budget.BudgetType.RECURRING, {"paused": True}, id="paused"
+            ),
+            pytest.param(
+                Budget.BudgetType.RECURRING, {"archived": True}, id="archived"
+            ),
+            pytest.param(
+                Budget.BudgetType.RECURRING,
+                {"recurrence_schedule": None},
+                id="no_schedule",
+            ),
+            pytest.param(Budget.BudgetType.GOAL, {}, id="goal_type"),
+        ],
+    )
+    def test_returns_none_when_not_applicable(
+        self,
+        make_account: Callable[..., BankAccount],
+        budget_type: str,
+        updates: dict[str, Any],
+    ) -> None:
+        """
+        GIVEN: a budget that is paused, archived, non-Recurring, or has
+               no recurrence_schedule
+        WHEN:  next_recurrence_date is called
+        THEN:  it returns None.
+        """
+        account = make_account()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Some Budget",
+            budget_type=budget_type,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(100, "USD"),
+            funding_schedule=_MONTHLY,
+            recurrence_schedule=_MONTHLY_FIRST,
+        )
+        if updates:
+            Budget.objects.filter(pkid=budget.pkid).update(**updates)
+            budget.refresh_from_db()
+
+        result = funding_svc.next_recurrence_date(
+            budget, today=date(2026, 7, 3)
+        )
+        assert result is None
+
+
+########################################################################
+########################################################################
+#
 class TestFillAmountProrated:
     """Unit tests for _fill_amount_prorated -- the core proration formula.
 

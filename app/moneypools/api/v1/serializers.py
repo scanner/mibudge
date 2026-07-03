@@ -382,9 +382,21 @@ class BudgetSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
         allow_null=True,
+        help_text=(
+            "Refresh cycle for Recurring budgets.  Restricted grammar: "
+            "a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY "
+            "with an optional INTERVAL, plus an optional DTSTART that "
+            "anchors the day the cycle refreshes on (e.g. "
+            "'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes "
+            "on the 8th of every month).  BY* parts, COUNT, UNTIL, and "
+            "exception rules/dates are rejected -- the anchor date is "
+            "the only day-of-cycle control.  The funding_schedule "
+            "field is not restricted this way."
+        ),
     )
 
     next_funding = serializers.SerializerMethodField()
+    next_recurrence = serializers.SerializerMethodField()
 
     class Meta:
         model = Budget
@@ -411,6 +423,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "memo",
             "auto_spend",
             "next_funding",
+            "next_recurrence",
             "created_at",
             "modified_at",
         ]
@@ -446,6 +459,109 @@ class BudgetSerializer(serializers.ModelSerializer):
             "amount": str(info.amount.amount),
             "amount_currency": str(info.amount.currency),
         }
+
+    ####################################################################
+    #
+    def get_next_recurrence(self, obj: Budget) -> str | None:
+        """Return the date of the next recurrence (refresh) event, or null.
+
+        The recurrence_schedule's DTSTART is only the rule's anchor;
+        this field is the actual upcoming refresh date (first
+        occurrence after last_recurrence_on).  Only Recurring budgets
+        have one.
+
+        Args:
+            obj: The Budget instance being serialized.
+
+        Returns:
+            ISO date string, or None.
+        """
+        d = funding_svc.next_recurrence_date(obj)
+        return d.isoformat() if d is not None else None
+
+    ####################################################################
+    #
+    def validate_recurrence_schedule(
+        self, value: recurrence.Recurrence | str | None
+    ) -> recurrence.Recurrence | str | None:
+        """Restrict the refresh cycle to the supported grammar.
+
+        A recurrence_schedule is a simple cycle (weekly, monthly, or
+        yearly, with an optional interval) anchored by an optional
+        DTSTART that supplies the refresh day.  Richer RFC 2445 shapes
+        (BY* parts, COUNT, UNTIL, exception rules/dates, multiple
+        rules) are rejected: BY* parts silently override the DTSTART
+        anchor during evaluation, and the funding engine assumes one
+        boundary per cycle.  The funding_schedule field keeps the full
+        grammar; only the refresh cycle is restricted.
+
+        Args:
+            value: The deserialized Recurrence, or None/'' when the
+                schedule is being cleared.
+
+        Returns:
+            The validated value unchanged.
+
+        Raises:
+            ValidationError: If the rule falls outside the supported
+                grammar.
+        """
+        if not isinstance(value, recurrence.Recurrence):
+            # None (cleared) or '' (blank) -- nothing to validate.
+            return value
+
+        if value.exrules or value.rdates or value.exdates:
+            raise serializers.ValidationError(
+                "recurrence_schedule does not support exception rules "
+                "(EXRULE), extra dates (RDATE), or excluded dates "
+                "(EXDATE)."
+            )
+
+        if len(value.rrules) != 1:
+            raise serializers.ValidationError(
+                "recurrence_schedule must contain exactly one RRULE."
+            )
+
+        rule = value.rrules[0]
+
+        if rule.freq not in (
+            recurrence.WEEKLY,
+            recurrence.MONTHLY,
+            recurrence.YEARLY,
+        ):
+            raise serializers.ValidationError(
+                "recurrence_schedule FREQ must be WEEKLY, MONTHLY, or YEARLY."
+            )
+
+        if rule.interval < 1:
+            raise serializers.ValidationError(
+                "recurrence_schedule INTERVAL must be a positive integer."
+            )
+
+        if rule.count is not None or rule.until is not None:
+            raise serializers.ValidationError(
+                "recurrence_schedule does not support COUNT or UNTIL; "
+                "a refresh cycle does not end."
+            )
+
+        by_parts = (
+            rule.byday,
+            rule.bymonthday,
+            rule.bymonth,
+            rule.byyearday,
+            rule.byweekno,
+            rule.bysetpos,
+            rule.byhour,
+            rule.byminute,
+            rule.bysecond,
+        )
+        if any(by_parts):
+            raise serializers.ValidationError(
+                "recurrence_schedule does not support BY* rule parts; "
+                "use DTSTART to anchor the day the cycle refreshes on."
+            )
+
+        return value
 
     ####################################################################
     #

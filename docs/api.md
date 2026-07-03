@@ -589,6 +589,105 @@ Return the total amounts that will be automatically funded at the next event for
 - **`total_amount`** (`string`)
 - **`currency`** (`string`)
 
+#### `GET /api/v1/bank-accounts/{id}/invitations/`
+
+**Operation:** `bank_accounts_invitations_list`
+
+Returns all pending invitations for this bank account.
+
+**Parameters:**
+
+- `account_type` (query, optional) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card
+- `id` (path, required)
+- `ordering` (query, optional) — Which field to use when ordering the results.
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `POST /api/v1/bank-accounts/{id}/invitations/{token}/cancel/`
+
+**Operation:** `bank_accounts_invitations_cancel_create`
+
+Cancel a pending co-ownership invitation by token. Only the user who sent the invitation may cancel it.
+
+**Parameters:**
+
+- `id` (path, required)
+- `token` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`bank`** (`string`) *(required)*
+- **`account_type`** (`string`) — * `C` - Checking
+* `S` - Savings
+* `X` - Credit Card Enum: ['C', 'S', 'X']
+- **`account_number`** (`string`)
+- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
+- **`posted_balance`** (`string`)
+- **`available_balance`** (`string`)
+- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
+
+**Response 200:** No response body
+
+#### `POST /api/v1/bank-accounts/{id}/invite/`
+
+**Operation:** `bank_accounts_invite_create`
+
+Send a co-ownership invitation to the given email address. If no mibudge account exists for that address, an inactive placeholder account is created; the invitee sets their password after accepting. Returns 409 if the address is already an owner or a pending invitation already exists.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`invitee_email`** (`string`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`invitee_email`** (`string`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`invitee_email`** (`string`) *(required)*
+
+**Response 201:** No response body
+
 #### `POST /api/v1/bank-accounts/{id}/mark-imported/`
 
 **Operation:** `bank_accounts_mark_imported_create`
@@ -779,7 +878,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -799,7 +898,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -819,7 +918,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -847,7 +946,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -857,6 +956,18 @@ Args:
 
 Returns:
     Dict with 'date', 'amount', 'amount_currency', or None.
+- **`next_recurrence`** (`string`) *(required, read-only)* — Return the date of the next recurrence (refresh) event, or null.
+
+The recurrence_schedule's DTSTART is only the rule's anchor;
+this field is the actual upcoming refresh date (first
+occurrence after last_recurrence_on).  Only Recurring budgets
+have one.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    ISO date string, or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -894,7 +1005,7 @@ Return a single budget by UUID.
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -904,6 +1015,18 @@ Args:
 
 Returns:
     Dict with 'date', 'amount', 'amount_currency', or None.
+- **`next_recurrence`** (`string`) *(required, read-only)* — Return the date of the next recurrence (refresh) event, or null.
+
+The recurrence_schedule's DTSTART is only the rule's anchor;
+this field is the actual upcoming refresh date (first
+occurrence after last_recurrence_on).  Only Recurring budgets
+have one.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    ISO date string, or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -933,7 +1056,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -953,7 +1076,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -973,7 +1096,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1001,7 +1124,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -1011,6 +1134,18 @@ Args:
 
 Returns:
     Dict with 'date', 'amount', 'amount_currency', or None.
+- **`next_recurrence`** (`string`) *(required, read-only)* — Return the date of the next recurrence (refresh) event, or null.
+
+The recurrence_schedule's DTSTART is only the rule's anchor;
+this field is the actual upcoming refresh date (first
+occurrence after last_recurrence_on).  Only Recurring budgets
+have one.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    ISO date string, or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1040,7 +1175,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1060,7 +1195,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1080,7 +1215,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1108,7 +1243,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -1118,6 +1253,18 @@ Args:
 
 Returns:
     Dict with 'date', 'amount', 'amount_currency', or None.
+- **`next_recurrence`** (`string`) *(required, read-only)* — Return the date of the next recurrence (refresh) event, or null.
+
+The recurrence_schedule's DTSTART is only the rule's anchor;
+this field is the actual upcoming refresh date (first
+occurrence after last_recurrence_on).  Only Recurring budgets
+have one.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    ISO date string, or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1159,7 +1306,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1179,7 +1326,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1199,7 +1346,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -1227,7 +1374,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -1237,6 +1384,18 @@ Args:
 
 Returns:
     Dict with 'date', 'amount', 'amount_currency', or None.
+- **`next_recurrence`** (`string`) *(required, read-only)* — Return the date of the next recurrence (refresh) event, or null.
+
+The recurrence_schedule's DTSTART is only the rule's anchor;
+this field is the actual upcoming refresh date (first
+occurrence after last_recurrence_on).  Only Recurring budgets
+have one.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    ISO date string, or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1472,6 +1631,53 @@ Return a single internal transaction by UUID.
 - **`dst_budget_balance_currency`** (`string`) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### invitations
+
+#### `GET /api/v1/invitations/{token}/`
+
+**Operation:** `invitations_retrieve`
+
+Return bank account name, current owners, and invitee status for the invitation identified by *token*. No authentication required -- the token is the credential. Used by native apps to render the acceptance UI; the Django template view renders this server-side.
+
+**Parameters:**
+
+- `token` (path, required)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`status`** (``) *(required, read-only)*
+- **`invitee_email`** (`string`) *(required, read-only)* — Email address the invitation was sent to. Immutable after creation.
+- **`bank_account_name`** (`string`) *(required, read-only)*
+- **`bank_name`** (`string`) *(required, read-only)*
+- **`current_owners`** (`array`) *(required, read-only)*
+- **`is_new_user`** (`boolean`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+
+#### `POST /api/v1/invitations/{token}/accept/`
+
+**Operation:** `invitations_accept_create`
+
+Accept the co-ownership invitation identified by *token*. Adds the invitee to the account's owners. For brand-new users (no password set), a password-reset email is also dispatched. No authentication required.
+
+**Parameters:**
+
+- `token` (path, required)
+
+**Response 200:** No response body
+
+#### `POST /api/v1/invitations/{token}/decline/`
+
+**Operation:** `invitations_decline_create`
+
+Decline the co-ownership invitation identified by *token*. No authentication required.
+
+**Parameters:**
+
+- `token` (path, required)
+
+**Response 200:** No response body
 
 ### notification-preferences
 
@@ -2017,6 +2223,7 @@ Return a single user by username. Restricted to staff/admin users.
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
 #### `PUT /api/v1/users/{username}/`
 
@@ -2054,6 +2261,7 @@ Full update of a user profile. Restricted to staff/admin users.
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
 #### `PATCH /api/v1/users/{username}/`
 
@@ -2091,6 +2299,7 @@ Partial update of a user profile. Restricted to staff/admin users.
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
 #### `GET /api/v1/users/me/`
 
@@ -2106,6 +2315,7 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
 #### `PATCH /api/v1/users/me/`
 
@@ -2139,6 +2349,93 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
+
+#### `POST /api/v1/users/me/change-email/`
+
+**Operation:** `users_me_change_email_create`
+
+Initiate a self-service email change.  Sends a verification link to the new address and a revocation link to the old address.  Returns 403 if the user has no usable password; 409 if new_email is already taken or a revocation window is currently open for this account.
+
+**Request Body** (`application/json`):
+
+- **`new_email`** (`string`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`new_email`** (`string`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`new_email`** (`string`) *(required)*
+
+**Response 201:** No response body
+
+#### `POST /api/v1/users/me/change-email/{token}/confirm/`
+
+**Operation:** `users_me_change_email_confirm_create`
+
+Verify a pending email change using the token from the verification link sent to the new address.  No authentication required -- the token is the credential.
+
+**Dual-path note:** The email link points to a Django GET view at ``/users/email-change/{token}/confirm/`` which processes the action and redirects the browser to the SPA result page.  Native apps that register mibudge.money as a Universal Link (iOS) or App Link (Android) intercept that URL and call this endpoint instead, receiving JSON and controlling their own UI.
+
+**Parameters:**
+
+- `token` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Response 200:** No response body
+
+#### `POST /api/v1/users/me/change-email/{token}/revoke/`
+
+**Operation:** `users_me_change_email_revoke_create`
+
+Cancel a pending or recently confirmed email change using the token from the notification sent to the old address.  Valid for up to 7 days after confirmation.  No authentication required -- the token is the credential.
+
+On post-confirmation revocation the email is reverted and all active sessions are invalidated.
+
+**Dual-path note:** See ``change_email_confirm`` -- the same Universal Link / App Link pattern applies here.
+
+**Parameters:**
+
+- `token` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`)
+- **`default_bank_account`** (`string`)
+- **`timezone`** (`string`)
+
+**Response 200:** No response body
 
 #### `POST /api/v1/users/me/change-password/`
 
@@ -2165,6 +2462,25 @@ Change the authenticated user's password. Requires the current password for veri
 - **`confirm_password`** (`string`) *(required)*
 
 **Response 204:** No response body
+
+#### `GET /api/v1/users/me/invitations/`
+
+**Operation:** `users_me_invitations_list`
+
+Return all pending co-ownership invitations sent by the authenticated user, across all accounts.
+
+**Parameters:**
+
+- `ordering` (query, optional) — Which field to use when ordering the results.
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
 
 ## Schemas
 
@@ -2220,6 +2536,32 @@ Group assignment is not yet supported via the API.
 - **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
 - **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+### BankAccountInvitation
+
+Read-only serializer for BankAccountInvitation rows.
+
+``token`` is included so the SPA can construct the cancel URL without a
+separate lookup.  It is safe to expose to authenticated account owners
+since they created the invitation and the cancel endpoint enforces that
+only the sender may cancel.
+
+``bank_account_id`` and ``bank_account_name`` are included for the
+cross-account listing on the user's settings page (me/invitations/).
+
+- **`id`** (`string`) *(required, read-only)*
+- **`token`** (`string`) *(required, read-only)*
+- **`bank_account_id`** (`string`) *(required, read-only)*
+- **`bank_account_name`** (`string`) *(required, read-only)*
+- **`invitee_email`** (`string`) *(required, read-only)* — Email address the invitation was sent to. Immutable after creation.
+- **`invited_by`** (`string`) *(required, read-only)*
+- **`status`** (``) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+- **`accepted_at`** (`string`) *(required, read-only)*
+- **`declined_at`** (`string`) *(required, read-only)*
+- **`cancelled_at`** (`string`) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -2286,7 +2628,7 @@ signal and is not accepted from the client.
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
@@ -2296,6 +2638,18 @@ Args:
 
 Returns:
     Dict with 'date', 'amount', 'amount_currency', or None.
+- **`next_recurrence`** (`string`) *(required, read-only)* — Return the date of the next recurrence (refresh) event, or null.
+
+The recurrence_schedule's DTSTART is only the rule's anchor;
+this field is the actual upcoming refresh date (first
+occurrence after last_recurrence_on).  Only Recurring budgets
+have one.
+
+Args:
+    obj: The Budget instance being serialized.
+
+Returns:
+    ISO date string, or None.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -2325,7 +2679,7 @@ signal and is not accepted from the client.
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -2537,6 +2891,12 @@ Write (PATCH): digest_frequency only.
 * `weekly_sunday` - Weekly on Sunday
 
 
+### EmailChangeRequestRequest
+
+Validate a request to initiate an email-address change.
+
+- **`new_email`** (`string`) *(required)*
+
 ### EmailTokenObtainPairRequest
 
 TokenObtainPairSerializer variant that uses ``email`` as the login
@@ -2564,6 +2924,14 @@ callers can cross-reference with the Budget endpoint.
 - **`completed_at`** (`string`) *(required, read-only)* — Wall-clock time the occurrence reached COMPLETE.  Null while PENDING/PARTIAL/SKIPPED.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### FundingEventOccurrenceStatusEnum
+
+* `PENDING` - Pending
+* `PARTIAL` - Partial
+* `COMPLETE` - Complete
+* `SKIPPED` - Skipped
+
 
 ### FundingTypeEnum
 
@@ -2622,6 +2990,12 @@ field declaration is needed.
 - **`dst_budget`** (`string`) *(required)*
 - **`effective_date`** (`string`)
 
+### InviteOwnerRequest
+
+Write-only serializer for the invite-owner action.
+
+- **`invitee_email`** (`string`) *(required)*
+
 ### NotificationPreference
 
 Notification kind preference.
@@ -2635,6 +3009,13 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 - **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
 * `immediate` - Immediate
 * `off` - Off Enum: ['digest', 'immediate', 'off']
+
+### PaginatedBankAccountInvitationList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
 
 ### PaginatedBankAccountList
 
@@ -2758,7 +3139,7 @@ signal and is not accepted from the client.
 - **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`)
+- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
 - **`auto_spend`** (``)
 
@@ -2824,9 +3205,29 @@ The ``default_bank_account`` field is writable but constrained:
 the bank account must be owned by the user being updated.  On
 output it returns the UUID string (or null).
 
+``has_usable_password`` is read-only and used by the SPA to decide
+whether to enable the change-email and change-password forms.
+
 - **`name`** (`string`)
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+
+### PublicInvitationDetail
+
+Read-only serializer for the public invitation-detail endpoint.
+
+Returns the minimum information needed to render the acceptance page
+for API clients.  Owner names are intentionally minimal (display name
+or email only) to limit PII exposure behind a bare token.
+
+- **`id`** (`string`) *(required, read-only)*
+- **`status`** (``) *(required, read-only)*
+- **`invitee_email`** (`string`) *(required, read-only)* — Email address the invitation was sent to. Immutable after creation.
+- **`bank_account_name`** (`string`) *(required, read-only)*
+- **`bank_name`** (`string`) *(required, read-only)*
+- **`current_owners`** (`array`) *(required, read-only)*
+- **`is_new_user`** (`boolean`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
 
 ### ResolvePendingRequest
 
@@ -2889,12 +3290,13 @@ sanity walk; never persisted.
 - **`transaction_type`** (`string`)
 - **`running_balance`** (`string`)
 
-### StatusEnum
+### Status58bEnum
 
-* `PENDING` - Pending
-* `PARTIAL` - Partial
-* `COMPLETE` - Complete
-* `SKIPPED` - Skipped
+* `pending` - Pending
+* `accepted` - Accepted
+* `declined` - Declined
+* `cancelled` - Cancelled
+* `expired` - Expired
 
 
 ### TokenRefresh
@@ -3208,12 +3610,16 @@ The ``default_bank_account`` field is writable but constrained:
 the bank account must be owned by the user being updated.  On
 output it returns the UUID string (or null).
 
+``has_usable_password`` is read-only and used by the SPA to decide
+whether to enable the change-email and change-password forms.
+
 - **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 - **`email`** (`string`) *(required, read-only)*
 - **`name`** (`string`)
 - **`url`** (`string`) *(required, read-only)*
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
 ### UserRequest
 
@@ -3222,6 +3628,9 @@ Serializer for user profiles.
 The ``default_bank_account`` field is writable but constrained:
 the bank account must be owned by the user being updated.  On
 output it returns the UUID string (or null).
+
+``has_usable_password`` is read-only and used by the SPA to decide
+whether to enable the change-email and change-password forms.
 
 - **`name`** (`string`)
 - **`default_bank_account`** (`string`)

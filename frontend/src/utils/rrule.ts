@@ -155,50 +155,53 @@ export function rruleHuman(rule: string): string {
   const { dtstart } = extractDtstart(rule);
   const dtstartDay = dtstart ? new Date(dtstart + "T00:00:00").getDate() : null;
 
+  // Mirror the backend's (dateutil's) precedence: explicit BY* parts
+  // override the DTSTART anchor.  Displaying DTSTART when a BY* part
+  // is present would lie about when the rule actually fires.
+  const rruleLine = rule.split("\n").find((l) => l.startsWith("RRULE:")) ?? rule;
+  const params = parseParams(rruleLine);
+
   let text: string;
 
   if (parsed.freq === "WEEKLY") {
     const prefix = parsed.interval === 1 ? "Every week" : `Every ${parsed.interval} weeks`;
-    if (parsed.byday.length === 0) {
-      text = prefix;
-    } else {
+    if (parsed.byday.length > 0) {
       const days = parsed.byday.map((d) => WEEKDAY_SHORT[d]).join(", ");
       text = `${prefix} on ${days}`;
+    } else if (dtstart) {
+      const dow = new Date(dtstart + "T00:00:00").getDay();
+      const weekday = (["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const)[dow]!;
+      text = `${prefix} on ${WEEKDAY_SHORT[weekday]}`;
+    } else {
+      text = prefix;
     }
   } else if (parsed.freq === "MONTHLY") {
     const prefix = parsed.interval === 1 ? "Every month" : `Every ${parsed.interval} months`;
-    if (dtstartDay != null) {
-      text = `${prefix} on ${ordinal(dtstartDay)}`;
-    } else if (parsed.bymonthday.length === 0) {
-      text = prefix;
-    } else {
+    if (parsed.bymonthday.length > 0) {
       const days = parsed.bymonthday.map(ordinal).join(" and ");
       text = `${prefix} on ${days}`;
+    } else if (dtstartDay != null) {
+      text = `${prefix} on ${ordinal(dtstartDay)}`;
+    } else {
+      text = prefix;
     }
   } else {
     const prefix = parsed.interval === 1 ? "Every year" : `Every ${parsed.interval} years`;
-    if (dtstart) {
-      // DTSTART is the authoritative anchor for the recurrence date; BYMONTH/BYMONTHDAY
-      // may be stale defaults when the budget form uses interval-only mode.
-      const d = new Date(dtstart + "T00:00:00");
-      text = `${prefix} on ${MONTH_NAMES[d.getMonth()]} ${ordinal(d.getDate())}`;
-    } else {
+    if (params.BYMONTH || params.BYMONTHDAY) {
       const month = MONTH_NAMES[(parsed.bymonth ?? 1) - 1];
       const day = ordinal(parsed.bymonthday ?? 1);
       text = `${prefix} on ${month} ${day}`;
+    } else if (dtstart) {
+      const d = new Date(dtstart + "T00:00:00");
+      text = `${prefix} on ${MONTH_NAMES[d.getMonth()]} ${ordinal(d.getDate())}`;
+    } else {
+      text = prefix;
     }
   }
 
-  if (dtstart) {
-    const d = new Date(dtstart + "T00:00:00");
-    const label = d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    text += ` · next due ${label}`;
-  }
-
+  // NOTE: DTSTART is only the rule's anchor (it supplies the
+  // day-of-month wording above); the actual upcoming refresh date is
+  // Budget.next_recurrence, appended by the caller when relevant.
   return text;
 }
 
@@ -222,6 +225,23 @@ export function extractDtstart(raw: string): { dtstart: string | null; rrule: st
 export function combineDtstart(rrule: string, dateStr: string): string {
   const d = dateStr.replace(/-/g, "");
   return `DTSTART:${d}T000000Z\n${rrule}`;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// Reduce a rule to FREQ + INTERVAL only, dropping BYDAY / BYMONTHDAY /
+// BYMONTH.  Used for recurrence (refresh) schedules, where the picker
+// is interval-only and the chosen refresh date becomes the DTSTART
+// anchor.  Any BY* part left over from an older rule would override
+// DTSTART in the backend's evaluation and make the budget refresh on
+// the wrong day.
+//
+export function stripToIntervalOnly(rule: string): string {
+  const parsed = parseRrule(rule);
+  if (!parsed) return rule;
+  const parts = [`RRULE:FREQ=${parsed.freq}`];
+  if (parsed.interval > 1) parts.push(`INTERVAL=${parsed.interval}`);
+  return parts.join(";");
 }
 
 ////////////////////////////////////////////////////////////////////////
