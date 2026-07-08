@@ -13,6 +13,7 @@ factory. This keeps credential/TLS plumbing out of the test path.
 """
 
 # system imports
+import os
 from collections.abc import Callable, Iterator
 from datetime import date, datetime
 from decimal import Decimal
@@ -798,3 +799,81 @@ class TestFuzzyAccountMatch:
         assert "Multiple bank accounts" in result.output
         assert "Personal Checking" in result.output
         assert "Business Checking" in result.output
+
+
+########################################################################
+########################################################################
+#
+class TestLoadImporterEnv:
+    """Tests for the allowlisted .env loader used by the CLI wrappers."""
+
+    ################################################################
+    #
+    @pytest.mark.parametrize(
+        "key,applied",
+        [
+            ("MIBUDGE_EMAIL", True),
+            ("MIBUDGE_URL", True),
+            ("BOFA_ID", True),
+            ("VAULT_ADDR", True),
+            ("ONEPASSWORD_URL", True),
+            ("SSL_CERT_FILE", False),
+            ("DJANGO_SECRET_KEY", False),
+            ("DATABASE_URL", False),
+        ],
+    )
+    def test_only_allowlisted_keys_are_applied(
+        self, mocker: MockerFixture, key: str, applied: bool
+    ) -> None:
+        """
+        GIVEN: a .env file containing a single variable
+        WHEN:  load_importer_env() is called
+        THEN:  the variable is applied to os.environ only if it is
+               importer-related; app-only settings are ignored
+        """
+        mocker.patch.dict(os.environ, {}, clear=True)
+        mocker.patch.object(it, "dotenv_values", return_value={key: "value"})
+
+        it.load_importer_env()
+
+        assert (key in os.environ) is applied
+
+    ################################################################
+    #
+    def test_shell_environment_wins_over_dotenv(
+        self, mocker: MockerFixture
+    ) -> None:
+        """
+        GIVEN: a variable set in both the shell environment and .env
+        WHEN:  load_importer_env() is called
+        THEN:  the shell value is preserved
+        """
+        mocker.patch.dict(
+            os.environ, {"MIBUDGE_EMAIL": "shell@example.com"}, clear=True
+        )
+        mocker.patch.object(
+            it,
+            "dotenv_values",
+            return_value={"MIBUDGE_EMAIL": "dotenv@example.com"},
+        )
+
+        it.load_importer_env()
+
+        assert os.environ["MIBUDGE_EMAIL"] == "shell@example.com"
+
+    ################################################################
+    #
+    def test_valueless_keys_are_skipped(self, mocker: MockerFixture) -> None:
+        """
+        GIVEN: a .env entry with no value (dotenv parses it as None)
+        WHEN:  load_importer_env() is called
+        THEN:  the key is not applied to os.environ
+        """
+        mocker.patch.dict(os.environ, {}, clear=True)
+        mocker.patch.object(
+            it, "dotenv_values", return_value={"MIBUDGE_URL": None}
+        )
+
+        it.load_importer_env()
+
+        assert "MIBUDGE_URL" not in os.environ
