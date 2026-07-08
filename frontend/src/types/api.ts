@@ -283,6 +283,26 @@ export interface User {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// APIKey — a machine credential (see docs/authentication.md).  The
+// plaintext `key` field is present only on the create response and is
+// never returned again afterwards.
+//
+export interface APIKey {
+  uuid: string;
+  name: string;
+  prefix: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface APIKeyCreated extends APIKey {
+  key: string;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // Query parameter shapes for list endpoints.  Use these rather than
 // raw URLSearchParams objects so TypeScript catches typos.
 //

@@ -31,7 +31,7 @@ from tests.moneypools.factories import (
     BudgetFactory,
     TransactionFactory,
 )
-from users.models import User
+from users.models import APIKey, User
 
 # Monthly schedule anchored Jan 1 -- dtstart controls which day-of-month fires.
 _MONTHLY = recurrence.Recurrence(
@@ -2272,6 +2272,56 @@ class TestPermissions:
             reverse(detail_url_name, kwargs={"id": obj.id}),
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+########################################################################
+########################################################################
+#
+class TestAPIKeyAuthParity:
+    """An API key must see exactly the same domain data a JWT session for
+    the same user sees.  Complements the status-code-only checks in
+    tests.users.test_api_keys.TestRequiresInteractiveAuth, which cover
+    that machine credentials are denied on user/security endpoints and
+    allowed on domain endpoints, but don't check response payloads.
+    """
+
+    ####################################################################
+    #
+    def test_api_key_and_jwt_return_identical_account_data(
+        self,
+        auth_client: APIClient,
+        user: User,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a user with several bank accounts, and an API key for
+               that same user
+        WHEN:  GET /api/v1/bank-accounts/ is made once via a JWT
+               session and once via the API key
+        THEN:  both responses return the identical set of accounts,
+               field-for-field
+        """
+        bank_account_factory(owners=[user])
+        bank_account_factory(owners=[user])
+        bank_account_factory(owners=[user])
+
+        _, plaintext = APIKey.make(user, "parity check")
+        key_client = APIClient()
+        key_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
+
+        url = reverse("api_v1:bankaccount-list")
+        jwt_response = auth_client.get(url)
+        key_response = key_client.get(url)
+
+        assert jwt_response.status_code == status.HTTP_200_OK
+        assert key_response.status_code == status.HTTP_200_OK
+
+        # Compare by id rather than assuming identical list ordering
+        # across the two separate requests.
+        jwt_by_id = {a["id"]: a for a in jwt_response.data["results"]}
+        key_by_id = {a["id"]: a for a in key_response.data["results"]}
+        assert len(jwt_by_id) == 3
+        assert jwt_by_id == key_by_id
 
 
 ########################################################################

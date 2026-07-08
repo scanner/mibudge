@@ -24,7 +24,9 @@ import { useRouter } from "vue-router";
 // app imports
 //
 import AppShell from "@/components/layout/AppShell.vue";
+import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter.vue";
+import { createApiKey, listApiKeys, revokeApiKey } from "@/api/apiKeys";
 import { ApiError } from "@/api/client";
 import { cancelInvitation, listMyInvitations } from "@/api/invitations";
 import { changePassword } from "@/api/users";
@@ -35,7 +37,13 @@ import {
   updateNotificationPreference,
 } from "@/api/notifications";
 import { useAuthStore } from "@/stores/auth";
-import type { BankAccountInvitation, ChannelPreference, NotificationPreference } from "@/types/api";
+import type {
+  APIKey,
+  APIKeyCreated,
+  BankAccountInvitation,
+  ChannelPreference,
+  NotificationPreference,
+} from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -122,6 +130,42 @@ const inviteCancellingId = ref<string | null>(null);
 
 ////////////////////////////////////////////////////////////////////////
 //
+// API key state.
+//
+// apiKeys        — every key belonging to this user (active, expired,
+//                   and revoked); revoked/expired keys stay listed for
+//                   audit, per docs/authentication.md.
+// justCreatedKey — the plaintext of a key just created, shown exactly
+//                   once.  Cleared when the user dismisses the banner;
+//                   it is never retrievable again after that.
+// revokeTarget   — the key pending confirmation in ConfirmSheet, or
+//                   null when no confirmation is in flight.
+const apiKeys = ref<APIKey[]>([]);
+const apiKeysLoading = ref(true);
+const apiKeysError = ref<string | null>(null);
+const justCreatedKey = ref<APIKeyCreated | null>(null);
+const copied = ref(false);
+
+const newKeyName = ref("");
+const newKeyExpiryPreset = ref("90");
+const newKeyCustomDays = ref("");
+const creatingKey = ref(false);
+const createKeyError = ref<string | null>(null);
+
+const revokeTarget = ref<APIKey | null>(null);
+const revokingId = ref<string | null>(null);
+
+const EXPIRY_PRESETS: { value: string; label: string }[] = [
+  { value: "30", label: "30 days" },
+  { value: "60", label: "60 days" },
+  { value: "90", label: "90 days" },
+  { value: "365", label: "1 year" },
+  { value: "custom", label: "Custom…" },
+  { value: "never", label: "Never expires" },
+];
+
+////////////////////////////////////////////////////////////////////////
+//
 // Notification preferences state.
 //
 const notifPrefs = ref<NotificationPreference[]>([]);
@@ -166,6 +210,8 @@ onMounted(async () => {
   } finally {
     prefsLoading.value = false;
   }
+
+  await loadApiKeys();
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -220,6 +266,99 @@ async function saveEmailDigest(): Promise<void> {
     await updateChannelPreference("email", emailDigestFrequency.value);
   } catch {
     prefsError.value = "Failed to save email preference.";
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+async function loadApiKeys(): Promise<void> {
+  apiKeysLoading.value = true;
+  apiKeysError.value = null;
+  try {
+    const page = await listApiKeys();
+    apiKeys.value = page.results;
+  } catch {
+    apiKeysError.value = "Failed to load API keys.";
+  } finally {
+    apiKeysLoading.value = false;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// resolveExpiryDays — translate the preset selection into the
+// expiry_days payload value, or null for a key that never expires.
+//
+function resolveExpiryDays(): number | null {
+  if (newKeyExpiryPreset.value === "never") return null;
+  if (newKeyExpiryPreset.value === "custom") {
+    const days = Number(newKeyCustomDays.value);
+    return Number.isFinite(days) && days > 0 ? days : null;
+  }
+  return Number(newKeyExpiryPreset.value);
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+async function submitCreateKey(): Promise<void> {
+  createKeyError.value = null;
+  if (newKeyExpiryPreset.value === "custom" && !resolveExpiryDays()) {
+    createKeyError.value = "Enter a valid number of days.";
+    return;
+  }
+  creatingKey.value = true;
+  try {
+    const created = await createApiKey(newKeyName.value.trim(), resolveExpiryDays());
+    justCreatedKey.value = created;
+    copied.value = false;
+    newKeyName.value = "";
+    newKeyExpiryPreset.value = "90";
+    newKeyCustomDays.value = "";
+    await loadApiKeys();
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 400) {
+      try {
+        const body = JSON.parse(err.body) as Record<string, string[]>;
+        createKeyError.value = body.name?.[0] ?? "Failed to create key.";
+      } catch {
+        createKeyError.value = "Failed to create key.";
+      }
+    } else {
+      createKeyError.value = "Failed to create key.";
+    }
+  } finally {
+    creatingKey.value = false;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+async function copyNewKey(): Promise<void> {
+  if (!justCreatedKey.value) return;
+  await navigator.clipboard.writeText(justCreatedKey.value.key);
+  copied.value = true;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// doRevokeKey — permanently revoke an API key.
+//
+// Unlike invitation cancellation, revocation is irreversible (a new key
+// must be created to replace it), so this goes through ConfirmSheet
+// rather than firing immediately.  Uses optimistic update on the
+// revoked row (mark revoked_at locally) rather than removal, since
+// revoked keys remain listed for audit.
+async function doRevokeKey(key: APIKey): Promise<void> {
+  revokingId.value = key.uuid;
+  try {
+    const revoked = await revokeApiKey(key.uuid);
+    const idx = apiKeys.value.findIndex((k) => k.uuid === key.uuid);
+    if (idx !== -1) apiKeys.value[idx] = revoked;
+  } catch {
+    apiKeysError.value = "Failed to revoke API key.";
+  } finally {
+    revokingId.value = null;
+    revokeTarget.value = null;
   }
 }
 </script>
@@ -368,6 +507,182 @@ async function saveEmailDigest(): Promise<void> {
           </template>
         </div>
       </section>
+
+      <!-- ── API keys ─────────────────────────────────────────────── -->
+      <h2 class="mb-2 mt-10 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+        API keys
+      </h2>
+
+      <section>
+        <p class="mb-3 px-1 text-xs text-secondary">
+          Long-lived credentials for importers and other 3rd-party services to access your account
+          without your password. Keys get the same access a logged-in session has, except for
+          account security actions.
+          <a href="/docs/authentication.md" class="text-ocean-600 hover:underline" target="_blank"
+            >Learn more</a
+          >.
+        </p>
+
+        <!-- Error banner -->
+        <div
+          v-if="apiKeysError"
+          class="mb-3 rounded-subcard bg-coral-50 px-4 py-3 text-sm text-coral-600"
+          role="alert"
+        >
+          {{ apiKeysError }}
+        </div>
+
+        <!-- One-time plaintext display -->
+        <div
+          v-if="justCreatedKey"
+          class="mb-3 rounded-card border border-mint-200 bg-mint-50 px-4 py-4"
+          role="alert"
+        >
+          <p class="text-sm font-medium text-mint-700">
+            Key created — copy it now, it won't be shown again.
+          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <code
+              class="flex-1 overflow-x-auto rounded-subcard border border-mint-200 bg-white px-3 py-2 text-xs text-neutral-900"
+              >{{ justCreatedKey.key }}</code
+            >
+            <button
+              type="button"
+              class="flex-none rounded-subcard border border-mint-300 px-3 py-2 text-xs font-medium text-mint-700 hover:bg-mint-100"
+              @click="copyNewKey"
+            >
+              {{ copied ? "Copied!" : "Copy" }}
+            </button>
+          </div>
+          <button
+            type="button"
+            class="mt-3 text-xs font-medium text-neutral-600 hover:text-neutral-800"
+            @click="justCreatedKey = null"
+          >
+            Done
+          </button>
+        </div>
+
+        <!-- Create key form -->
+        <div class="rounded-card border border-neutral-200 bg-white px-4 py-4">
+          <form class="flex flex-wrap items-end gap-3" @submit.prevent="submitCreateKey">
+            <div class="min-w-[10rem] flex-1">
+              <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="new-key-name">
+                Name
+              </label>
+              <input
+                id="new-key-name"
+                v-model="newKeyName"
+                type="text"
+                required
+                placeholder="e.g. Bank of America importer"
+                class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+              />
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="new-key-expiry">
+                Expires
+              </label>
+              <select
+                id="new-key-expiry"
+                v-model="newKeyExpiryPreset"
+                class="rounded-subcard border border-neutral-200 bg-white py-2.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+              >
+                <option v-for="opt in EXPIRY_PRESETS" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+            <div v-if="newKeyExpiryPreset === 'custom'" class="w-24">
+              <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="new-key-days">
+                Days
+              </label>
+              <input
+                id="new-key-days"
+                v-model="newKeyCustomDays"
+                type="number"
+                min="1"
+                class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+              />
+            </div>
+            <button
+              type="submit"
+              :disabled="creatingKey || !newKeyName.trim()"
+              class="rounded-subcard bg-ocean-400 px-4 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+            >
+              {{ creatingKey ? "Creating…" : "Create key" }}
+            </button>
+          </form>
+          <p v-if="createKeyError" class="mt-2 text-xs text-coral-600">{{ createKeyError }}</p>
+        </div>
+
+        <!-- Existing keys -->
+        <div v-if="apiKeysLoading" class="mt-3 px-4 py-6 text-center text-sm text-secondary">
+          Loading…
+        </div>
+        <div
+          v-else-if="apiKeys.length > 0"
+          class="mt-3 rounded-card border border-neutral-200 bg-white"
+        >
+          <ul class="divide-y divide-neutral-100">
+            <li
+              v-for="key in apiKeys"
+              :key="key.uuid"
+              class="flex items-start justify-between px-4 py-3"
+            >
+              <div>
+                <p class="text-sm font-medium text-neutral-900">{{ key.name }}</p>
+                <p class="mt-0.5 font-mono text-xs text-secondary">{{ key.prefix }}…</p>
+                <p class="mt-0.5 text-xs text-secondary">
+                  Created
+                  {{
+                    new Date(key.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })
+                  }}
+                  <template v-if="key.expires_at">
+                    · Expires
+                    {{
+                      new Date(key.expires_at).toLocaleDateString(undefined, {
+                        dateStyle: "medium",
+                      })
+                    }}
+                  </template>
+                  <template v-else> · Never expires </template>
+                  <template v-if="key.last_used_at">
+                    · Last used
+                    {{
+                      new Date(key.last_used_at).toLocaleDateString(undefined, {
+                        dateStyle: "medium",
+                      })
+                    }}
+                  </template>
+                </p>
+              </div>
+              <span v-if="key.revoked_at" class="mt-0.5 flex-none text-xs text-secondary">
+                Revoked
+              </span>
+              <button
+                v-else
+                type="button"
+                :disabled="revokingId === key.uuid"
+                class="mt-0.5 flex-none text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+                @click="revokeTarget = key"
+              >
+                {{ revokingId === key.uuid ? "Revoking…" : "Revoke" }}
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <ConfirmSheet
+        :open="revokeTarget !== null"
+        title="Revoke this API key?"
+        :message="`Any service using '${revokeTarget?.name}' will immediately lose access. This cannot be undone.`"
+        confirm-label="Revoke"
+        tone="coral"
+        @cancel="revokeTarget = null"
+        @confirm="revokeTarget && doRevokeKey(revokeTarget)"
+      />
 
       <!-- ── Notifications ────────────────────────────────────────── -->
       <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">Notifications</h1>
