@@ -27,6 +27,7 @@ REPO_DIR = ROOT_DIR.parent
 random_chars = "abcdefghijklmnopqrstuvwxyz0123456789!@#%^&*(-_=+)"
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["localhost", "0.0.0.0", "127.0.0.1"]),
+    CSRF_TRUSTED_ORIGINS=(list, []),
     CELERY_BROKER_URL=(str, "redis://localhost:6379/1"),
     CELERY_RESULT_BACKEND=(str, "redis://localhost:6379/2"),
     DATABASE_URL=(str, "sqlite:///./db.sqlite3"),
@@ -46,6 +47,11 @@ env = environ.FileAwareEnv(
     REDIS_URL=(str, "redis://localhost:6379/0"),
     SENTRY_DSN=(str, None),
     SENTRY_TRACES_SAMPLE_RATE=(float, 0.0),
+    EMAIL_HOST=(str, ""),
+    EMAIL_PORT=(int, 587),
+    EMAIL_HOST_USER=(str, ""),
+    EMAIL_HOST_PASSWORD=(str, ""),
+    EMAIL_USE_TLS=(bool, True),
 )
 
 # Read .env file if it exists (no-op in Docker where env vars are
@@ -58,6 +64,7 @@ env.read_env(ROOT_DIR.parent / ".env", overwrite=False)
 DEBUG = env("DEBUG")
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 TIME_ZONE = env("TIME_ZONE", default="America/Los_Angeles")
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1

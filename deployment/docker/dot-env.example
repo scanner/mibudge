@@ -1,0 +1,55 @@
+# Non-secret configuration for Docker-based deployments.
+# Copy to .env and fill in values before starting the stack.
+#
+# Credentials and keys (DATABASE_URL, DJANGO_SECRET_KEY, SALT_KEY,
+# EMAIL_HOST_USER, EMAIL_HOST_PASSWORD) are not set here -- they are
+# delivered via Docker Compose secrets; see secrets/ and docker-compose.yml.
+
+# General
+# ------------------------------------------------------------------------------
+DJANGO_SETTINGS_MODULE=config.settings
+ADMINISTRATIVE_EMAIL_ADDRESS=admin@example.net
+DJANGO_ADMIN_URL=changeme-random-admin-path/
+DJANGO_ALLOWED_HOSTS=.example.com
+CSRF_TRUSTED_ORIGINS=https://example.com
+SITE_URL=https://example.com
+SITE_DISPLAY_NAME=MiBudge
+
+# Security
+# ------------------------------------------------------------------------------
+DJANGO_SECURE_SSL_REDIRECT=True
+
+# Email
+# ------------------------------------------------------------------------------
+DJANGO_DEFAULT_FROM_EMAIL=My Budgets <noreply@example.com>
+DJANGO_SERVER_EMAIL=noreply@example.com
+DJANGO_SUPPORT_EMAIL=support@example.com
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+
+# django-allauth
+# ------------------------------------------------------------------------------
+DJANGO_ACCOUNT_ALLOW_REGISTRATION=False
+
+# Gunicorn
+# ------------------------------------------------------------------------------
+WEB_CONCURRENCY=4
+
+# Sentry
+# ------------------------------------------------------------------------------
+SENTRY_DSN=
+
+# Redis
+# ------------------------------------------------------------------------------
+REDIS_URL=redis://redis:6379/0
+
+# Celery
+# ------------------------------------------------------------------------------
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+# Image
+# ------------------------------------------------------------------------------
+VERSION=latest
+PORT=8000

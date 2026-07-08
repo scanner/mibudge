@@ -4,7 +4,7 @@
 # Environment variables (set in .env):
 #   VERSION   -- image tag to run (e.g. "1.2.3" or "latest")
 #   PORT      -- localhost port the reverse proxy connects to (default 8000)
-
+name: mibudge
 services:
   migrate: &mibudge
     image: "ghcr.io/scanner/mibudge:${VERSION}"
