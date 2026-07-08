@@ -1,13 +1,19 @@
 """
 REST API client for the mibudge service.
 
-Handles JWT authentication, automatic re-authentication on token expiry,
-and transparent pagination for list endpoints.
+Supports two authentication modes:
+
+- **API key** (preferred): a long-lived machine credential sent as
+  ``Authorization: Api-Key <key>``.  Create one at Settings -> API keys
+  in the SPA (or POST /api/v1/users/me/api-keys/).
+- **Email/password JWT** (legacy): obtains a JWT access token from
+  POST /api/token/ and re-authenticates automatically on expiry.
+
+Handles transparent pagination for list endpoints and 429 throttling.
 
 Example usage::
 
-    with MibudgeClient("http://localhost:8000", "user", "pass") as client:
-        client.authenticate()
+    with MibudgeClient("http://localhost:8000", api_key="mib_...") as client:
         for tx in client.get_all("/api/v1/transactions/", {"bank_account": uuid}):
             print(tx["id"])
 """
@@ -85,8 +91,12 @@ class MibudgeClient:
     """
     HTTP client for the mibudge REST API.
 
-    Authenticates via email/password (POST /api/token/) and stores a
-    JWT access token in memory.  On a 401 response the client
+    With *api_key* set, every request carries ``Authorization: Api-Key
+    <key>`` and no login round-trip is needed; a 401 means the key is
+    invalid/revoked/expired and raises AuthenticationError immediately.
+
+    With *email*/*password*, authenticates via POST /api/token/ and
+    stores a JWT access token in memory.  On a 401 response the client
     re-authenticates once and retries the request automatically -- this
     covers the normal token-expiry case without embedding expiry-time
     logic.
@@ -97,8 +107,11 @@ class MibudgeClient:
     Args:
         base_url: Root URL of the mibudge service, e.g.
             'http://localhost:8000'.  Trailing slash is stripped.
-        email: Account email address.
-        password: Account password.
+        email: Account email address (JWT mode).
+        password: Account password (JWT mode).
+        api_key: mibudge API key (machine-credential mode).  Mutually
+            exclusive with email/password; takes precedence if both
+            are supplied.
         timeout: Per-request timeout in seconds (default 30).
         verify: TLS verification setting forwarded to httpx. Pass a
             path to a PEM bundle (e.g. mkcert's rootCA.pem) to trust
@@ -116,15 +129,22 @@ class MibudgeClient:
     def __init__(
         self,
         base_url: str,
-        email: str,
-        password: str,
+        email: str | None = None,
+        password: str | None = None,
+        *,
+        api_key: str | None = None,
         timeout: float = 30.0,
         verify: bool | str | None = None,
         max_throttle_wait: float = 60.0,
     ) -> None:
+        if api_key is None and (email is None or password is None):
+            raise ValueError(
+                "Either api_key or both email and password are required."
+            )
         self._base_url = base_url.rstrip("/")
         self._email = email
         self._password = password
+        self._api_key = api_key
         self._access_token: str | None = None
         self._max_throttle_wait = max_throttle_wait
         # httpx treats verify=True as "use system CAs". Pass a path to
@@ -141,10 +161,15 @@ class MibudgeClient:
         """
         Obtain a fresh JWT access token from the API.
 
+        A no-op in API-key mode: keys are stateless credentials sent on
+        every request, so there is nothing to obtain.
+
         Raises:
             AuthenticationError: If the server returns 401 (bad credentials).
             httpx.HTTPError: For network-level failures.
         """
+        if self._api_key is not None:
+            return
         resp = self._http.post(
             f"{self._base_url}/api/token/",
             json={"email": self._email, "password": self._password},
@@ -161,6 +186,8 @@ class MibudgeClient:
     #
     def _auth_headers(self) -> dict[str, str]:
         """Return Authorization header dict, authenticating first if needed."""
+        if self._api_key is not None:
+            return {"Authorization": f"Api-Key {self._api_key}"}
         if self._access_token is None:
             self.authenticate()
         return {"Authorization": f"Bearer {self._access_token}"}
@@ -202,12 +229,21 @@ class MibudgeClient:
         resp = self._http.request(
             method, url, headers=self._auth_headers(), **kwargs
         )
-        if resp.status_code == 401 and retry_on_401:
-            logger.debug("Received 401; re-authenticating and retrying.")
-            self.authenticate()
-            resp = self._http.request(
-                method, url, headers=self._auth_headers(), **kwargs
-            )
+        if resp.status_code == 401:
+            # An API key never expires mid-run the way a JWT does; a 401
+            # means it is invalid, revoked, or expired -- retrying with
+            # the same key cannot succeed.
+            if self._api_key is not None:
+                raise AuthenticationError(
+                    "The API key was rejected (invalid, revoked, or "
+                    "expired). Create a new key at Settings -> API keys."
+                )
+            if retry_on_401:
+                logger.debug("Received 401; re-authenticating and retrying.")
+                self.authenticate()
+                resp = self._http.request(
+                    method, url, headers=self._auth_headers(), **kwargs
+                )
         if resp.status_code == 429:
             resp = self._handle_throttled(resp, method, url, **kwargs)
         if not resp.is_success:

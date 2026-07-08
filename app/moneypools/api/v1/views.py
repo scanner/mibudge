@@ -53,6 +53,7 @@ from moneypools.service import invitation as invitation_svc
 from moneypools.service import sync_scrape as sync_scrape_svc
 from moneypools.service import transaction as transaction_svc
 from moneypools.service.shared import funding_system_user
+from users.permissions import RequiresInteractiveAuth
 
 from .filters import (
     BudgetFilter,
@@ -619,7 +620,16 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         request=InviteOwnerSerializer,
         responses={201: None},
     )
-    @action(detail=True, methods=["post"], url_path="invite")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="invite",
+        permission_classes=[
+            IsAuthenticated,
+            IsAccountOwner,
+            RequiresInteractiveAuth,
+        ],
+    )
     def invite(self, request: Request, id: str = "") -> Response:
         """Send a co-ownership invitation email for this bank account."""
         account: BankAccount = self.get_object()
@@ -653,7 +663,16 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         description="Returns all pending invitations for this bank account.",
         responses={200: BankAccountInvitationSerializer(many=True)},
     )
-    @action(detail=True, methods=["get"], url_path="invitations")
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="invitations",
+        permission_classes=[
+            IsAuthenticated,
+            IsAccountOwner,
+            RequiresInteractiveAuth,
+        ],
+    )
     def invitations(self, request: Request, id: str = "") -> Response:
         """List pending co-ownership invitations for this bank account."""
         account: BankAccount = self.get_object()
@@ -684,6 +703,11 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         detail=True,
         methods=["post"],
         url_path=r"invitations/(?P<token>[^/.]+)/cancel",
+        permission_classes=[
+            IsAuthenticated,
+            IsAccountOwner,
+            RequiresInteractiveAuth,
+        ],
     )
     def cancel_invitation(
         self, request: Request, id: str = "", token: str = ""

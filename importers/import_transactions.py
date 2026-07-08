@@ -1614,6 +1614,7 @@ def _build_client(
     url: str | None,
     email: str | None,
     password: str | None,
+    api_key: str | None,
     vault_path: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
@@ -1623,12 +1624,14 @@ def _build_client(
     """
     Resolve credentials + TLS settings and return an unauthenticated client.
 
-    Credential resolution order: CLI/env > Vault > error.
+    Credential resolution order: CLI/env > Vault > error.  An API key
+    (CLI/env ``MIBUDGE_API_KEY`` or Vault key ``api_key``) takes
+    precedence over email/password.
     The returned client must be entered as a context manager and have
     ``authenticate()`` called on it before use.
 
     Args:
-        url, email, password: From CLI/env.
+        url, email, password, api_key: From CLI/env.
         vault_path: Optional KV2 path; if present, fills in missing
             credentials.
         ca_bundle: Explicit CA bundle path (overrides system CAs).
@@ -1651,19 +1654,22 @@ def _build_client(
         vault_data = _resolve_vault_secrets(vault_path)
 
     url = url or vault_data.get("url") or "https://localhost:8000"
+    api_key = api_key or vault_data.get("api_key")
     email = email or vault_data.get("email")
     password = password or vault_data.get("password")
 
-    if not email:
-        raise click.ClickException(
-            "Email is required. Set --email, MIBUDGE_EMAIL, "
-            "or provide it via Vault."
-        )
-    if not password:
-        raise click.ClickException(
-            "Password is required. Set --password, MIBUDGE_PASSWORD, "
-            "or provide it via Vault."
-        )
+    match (api_key, email, password):
+        case (None, None, _):
+            raise click.ClickException(
+                "Credentials are required. Set --api-key / MIBUDGE_API_KEY "
+                "(preferred), --email / MIBUDGE_EMAIL, or provide them "
+                "via Vault."
+            )
+        case (None, _, None):
+            raise click.ClickException(
+                "Password is required. Set --password, MIBUDGE_PASSWORD, "
+                "or provide it via Vault."
+            )
 
     verify: bool | str | None = None
     if ca_bundle is not None:
@@ -1673,7 +1679,7 @@ def _build_client(
         if interactive:
             console.print(f"[dim]Trusting local CA bundle: {verify}[/dim]")
 
-    return MibudgeClient(url, email, password, verify=verify)
+    return MibudgeClient(url, email, password, api_key=api_key, verify=verify)
 
 
 ########################################################################
@@ -1805,6 +1811,14 @@ def _print_summary(
     help="API password (prefer env var or Vault over CLI flag).",
 )
 @click.option(
+    "--api-key",
+    default=None,
+    help=(
+        "mibudge API key (preferred over email/password; prefer env var "
+        "MIBUDGE_API_KEY or Vault over CLI flag)."
+    ),
+)
+@click.option(
     "--vault-path",
     default=None,
     help="Vault KV2 path for credentials (e.g. 'mibudge/importer').",
@@ -1931,6 +1945,7 @@ def cli_cmd(
     url: str | None,
     email: str | None,
     password: str | None,
+    api_key: str | None,
     vault_path: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
@@ -2033,6 +2048,7 @@ def cli_cmd(
             url=url,
             email=email,
             password=password,
+            api_key=api_key,
             vault_path=vault_path,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,

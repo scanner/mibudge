@@ -32,7 +32,7 @@ from notifications.api.v1.views import (
     ChannelPreferenceViewSet,
     NotificationPreferenceViewSet,
 )
-from users.api.v1.views import UserViewSet
+from users.api.v1.views import APIKeyViewSet, UserViewSet
 
 if settings.DEBUG:
     router = DefaultRouter()
@@ -40,6 +40,9 @@ else:
     router = SimpleRouter()
 
 router.register("users", UserViewSet)
+# API-key management for the current user.  Interactive (JWT) sessions
+# only -- a key cannot mint or revoke keys.
+router.register("users/me/api-keys", APIKeyViewSet, basename="api-key")
 router.register(
     "notification-preferences",
     NotificationPreferenceViewSet,

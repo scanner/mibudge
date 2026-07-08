@@ -118,25 +118,25 @@ All resources except Banks and Users are scoped to bank account ownership -- onl
 - [`docs/management-commands.md`](docs/management-commands.md) -- Django management commands for service operations, backup/restore, and data correction (requires server access)
 - [`app/notifications/README.md`](app/notifications/README.md) -- pluggable notification service: kind registration, the notify() API, email digest mechanics, and how to add new kinds or channels
 
-### Auth: JWT two-token pattern
+### Authentication
 
-- **Access token** (60 min): held in JS memory only, sent as `Authorization: Bearer` header
-- **Refresh token** (14 days, sliding): `httpOnly; Secure; SameSite=Strict` cookie, never readable by JS
-- **Rotation**: `ROTATE_REFRESH_TOKENS = True`, `BLACKLIST_AFTER_ROTATION = True` -- each refresh call resets the 14-day clock
-- **Login flow**: the SPA owns its own auth UI at `/app/login/`. It posts
-  username+password to `POST /api/token/` (`CookieTokenObtainPairView`), which
-  returns the access token in the JSON body and sets the refresh token as the
-  `httpOnly; Secure; SameSite=Strict` cookie.
-- **Cold-boot silent refresh**: on first load, `main.ts` calls
-  `authStore.refresh()` before installing the router. If the refresh cookie is
-  still valid, the SPA becomes authenticated before the first route guard runs
-  and returning users skip the login screen entirely.
-- **Silent refresh on 401**: when the access token expires, the auth store
-  calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie
-  automatically, returning a new access token and rotating the refresh cookie.
-- **django-allauth**: remains mounted at `/accounts/` for password reset only (`/accounts/password/reset/`); it is not part of the SPA login path. The allauth templates are plain Django-rendered pages -- they do not use the SPA shell.
-- **Passwordless accounts**: users created via the bank-account co-ownership invitation flow are issued a JWT session immediately but have no password set (`has_usable_password() == False`). They can use the app normally but cannot use the change-password or change-email features until they set a password via `/accounts/password/reset/`. Both forms detect this state via the `has_usable_password` field on `GET /api/v1/users/me/` and prompt the user accordingly.
-- **Self-service email change**: users can change their login email address via a verified two-step flow. A 7-day post-confirmation revocation window lets the legitimate owner cancel even if an attacker confirmed the change first, with automatic session invalidation on revocation. See `users/email_change.py` for the security policy.
+Two ways to authenticate against the REST API:
+
+- **Password + JWT** (interactive user agents -- the SPA, mobile/desktop
+  apps): short-lived access token in JS memory, sliding 14-day httpOnly
+  refresh cookie with rotation and silent refresh.
+- **API keys** (machine clients -- transaction importers, 3rd-party
+  services): long-lived `Authorization: Api-Key <key>` credentials with
+  optional expiry, shown in plaintext exactly once. Machine credentials
+  get blanket access to the budgeting domain but are denied on
+  user/security endpoints (password/email change, invitations, user and
+  key management).
+
+OAuth2 for registered third-party apps is planned as the next phase of
+machine authentication. See
+[`docs/authentication.md`](docs/authentication.md) for the full details:
+token lifetimes, silent-refresh mechanics, passwordless accounts, the
+email-change security policy, and API-key management.
 
 ## Project structure
 
@@ -304,6 +304,7 @@ The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backen
 | Doc                                                          | Contents                                                                   |
 |--------------------------------------------------------------|----------------------------------------------------------------------------|
 | [`docs/api.md`](docs/api.md)                                 | REST API reference (generated from OpenAPI schema)                         |
+| [`docs/authentication.md`](docs/authentication.md)          | Authentication: JWT two-token pattern, API keys, machine-credential policy |
 | [`docs/funding.md`](docs/funding.md)                         | Budget funding engine: rules, invariants, test scenarios                   |
 | [`docs/importers.md`](docs/importers.md)                     | Bank statement import tools                                                |
 | [`docs/management-commands.md`](docs/management-commands.md) | Django management commands                                                 |

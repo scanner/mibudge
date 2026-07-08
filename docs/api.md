@@ -20,6 +20,7 @@ Monetary values are represented as a decimal amount paired with an ISO 4217 curr
 
 ## Authentication
 
+- **apiKeyAuth**: `apiKey` (in: `header`, name: `Authorization`)
 - **jwtAuth**: `http` (in: ``, name: ``)
 
 ## Endpoints
@@ -2351,6 +2352,98 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 - **`timezone`** (`string`)
 - **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
+#### `GET /api/v1/users/me/api-keys/`
+
+**Operation:** `users_me_api_keys_list`
+
+Return all API keys (active, expired, and revoked) belonging to the authenticated user.  Key material is never included -- only the displayable prefix.
+
+**Parameters:**
+
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `POST /api/v1/users/me/api-keys/`
+
+**Operation:** `users_me_api_keys_create`
+
+Create a new API key for the authenticated user.  ``expiry_days`` sets the key's lifetime in days (the UI presets are 30 / 60 / 90 / 365); omit it or pass null for a key that never expires.
+
+The response is the **only** time the plaintext ``key`` is returned; it cannot be recovered afterwards.
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`expiry_days`** (`integer`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`expiry_days`** (`integer`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`expiry_days`** (`integer`)
+
+**Response 201:** 
+
+- **`uuid`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
+- **`prefix`** (`string`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+- **`last_used_at`** (`string`) *(required, read-only)*
+- **`revoked_at`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+- **`key`** (`string`) *(required, read-only)*
+
+#### `GET /api/v1/users/me/api-keys/{uuid}/`
+
+**Operation:** `users_me_api_keys_retrieve`
+
+Return a single API key by its UUID.
+
+**Parameters:**
+
+- `uuid` (path, required)
+
+**Response 200:** 
+
+- **`uuid`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
+- **`prefix`** (`string`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+- **`last_used_at`** (`string`) *(required, read-only)*
+- **`revoked_at`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+
+#### `POST /api/v1/users/me/api-keys/{uuid}/revoke/`
+
+**Operation:** `users_me_api_keys_revoke_create`
+
+Permanently revoke an API key.  Revoked keys stop authenticating immediately but remain listed for audit purposes.  Revocation cannot be undone.
+
+**Parameters:**
+
+- `uuid` (path, required)
+
+**Response 200:** 
+
+- **`uuid`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
+- **`prefix`** (`string`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+- **`last_used_at`** (`string`) *(required, read-only)*
+- **`revoked_at`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+
 #### `POST /api/v1/users/me/change-email/`
 
 **Operation:** `users_me_change_email_create`
@@ -2483,6 +2576,50 @@ Return all pending co-ownership invitations sent by the authenticated user, acro
 - **`results`** (`array`) *(required)*
 
 ## Schemas
+
+### APIKey
+
+Read serializer for API keys.
+
+Never exposes the key material -- only the displayable prefix.  The
+plaintext key appears exactly once, in the creation response (see
+APIKeyViewSet.create).
+
+- **`uuid`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
+- **`prefix`** (`string`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+- **`last_used_at`** (`string`) *(required, read-only)*
+- **`revoked_at`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+
+### APIKeyCreateRequest
+
+Validate an API-key creation request.
+
+``expiry_days`` covers all the expiry presets (30 / 60 / 90 / 365 /
+a specific number of days); null or omitted means the key never
+expires.  The presets themselves are a UI concern.
+
+- **`name`** (`string`) *(required)*
+- **`expiry_days`** (`integer`)
+
+### APIKeyCreated
+
+Creation response -- the only place the plaintext key appears.
+
+Exists to document the creation response shape in the OpenAPI
+schema; the view assembles the payload itself.  ``key`` is never a
+model field and cannot be recovered after this response.
+
+- **`uuid`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
+- **`prefix`** (`string`) *(required, read-only)*
+- **`expires_at`** (`string`) *(required, read-only)*
+- **`last_used_at`** (`string`) *(required, read-only)*
+- **`revoked_at`** (`string`) *(required, read-only)*
+- **`created_at`** (`string`) *(required, read-only)*
+- **`key`** (`string`) *(required, read-only)*
 
 ### AccountTypeEnum
 
@@ -3009,6 +3146,13 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 - **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
 * `immediate` - Immediate
 * `off` - Off Enum: ['digest', 'immediate', 'off']
+
+### PaginatedAPIKeyList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
 
 ### PaginatedBankAccountInvitationList
 

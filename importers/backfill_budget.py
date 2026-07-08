@@ -1363,6 +1363,14 @@ def _run_backfill(
     help="API password (prefer env var over CLI flag).",
 )
 @click.option(
+    "--api-key",
+    default=None,
+    help=(
+        "mibudge API key (preferred over email/password; prefer env var "
+        "MIBUDGE_API_KEY or Vault over CLI flag)."
+    ),
+)
+@click.option(
     "--vault-path",
     default=None,
     help="Vault KV2 path for credentials (e.g. 'mibudge/importer').",
@@ -1415,6 +1423,7 @@ def cli_cmd(
     url: str | None,
     email: str | None,
     password: str | None,
+    api_key: str | None,
     vault_path: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
@@ -1435,6 +1444,7 @@ def cli_cmd(
             url=url,
             email=email,
             password=password,
+            api_key=api_key,
             vault_path=vault_path,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,

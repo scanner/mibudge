@@ -126,6 +126,7 @@ paths:
       - allocations
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -149,6 +150,7 @@ paths:
       - allocations
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -197,6 +199,7 @@ paths:
       - bank-accounts
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -227,6 +230,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '201':
           content:
@@ -250,6 +254,7 @@ paths:
       - bank-accounts
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -285,6 +290,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -319,6 +325,7 @@ paths:
               $ref: '#/components/schemas/PatchedBankAccountRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -342,6 +349,7 @@ paths:
       - bank-accounts
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '204':
           description: No response body
@@ -363,6 +371,7 @@ paths:
       - bank-accounts
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -396,6 +405,7 @@ paths:
       - bank-accounts
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -470,6 +480,7 @@ paths:
       - bank-accounts
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -511,6 +522,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           description: No response body
@@ -545,6 +557,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '201':
           description: No response body
@@ -577,6 +590,7 @@ paths:
               - last_posted_through
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -614,6 +628,7 @@ paths:
                     to today.
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -674,6 +689,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -711,6 +727,7 @@ paths:
       - banks
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -734,6 +751,7 @@ paths:
       - banks
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -804,6 +822,7 @@ paths:
       - budgets
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -834,6 +853,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '201':
           content:
@@ -857,6 +877,7 @@ paths:
       - budgets
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -892,6 +913,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -926,6 +948,7 @@ paths:
               $ref: '#/components/schemas/PatchedBudgetRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -950,6 +973,7 @@ paths:
       - budgets
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '204':
           description: No response body
@@ -984,6 +1008,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1014,6 +1039,7 @@ paths:
       - channel-preferences
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1049,6 +1075,7 @@ paths:
               $ref: '#/components/schemas/PatchedChannelPreferenceRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1067,6 +1094,7 @@ paths:
       - currencies
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           description: List of supported currencies.
@@ -1150,6 +1178,7 @@ paths:
       - funding-occurrences
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1173,6 +1202,7 @@ paths:
       - funding-occurrences
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1240,6 +1270,7 @@ paths:
       - internal-transactions
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1270,6 +1301,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '201':
           content:
@@ -1293,6 +1325,7 @@ paths:
       - internal-transactions
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1318,6 +1351,7 @@ paths:
       - invitations
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       - {}
       responses:
         '200':
@@ -1343,6 +1377,7 @@ paths:
       - invitations
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       - {}
       responses:
         '200':
@@ -1363,6 +1398,7 @@ paths:
       - invitations
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       - {}
       responses:
         '200':
@@ -1391,6 +1427,7 @@ paths:
       - notification-preferences
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1427,6 +1464,7 @@ paths:
               $ref: '#/components/schemas/PatchedNotificationPreferenceRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1554,6 +1592,7 @@ paths:
       - transactions
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1584,6 +1623,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '201':
           content:
@@ -1607,6 +1647,7 @@ paths:
       - transactions
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1642,6 +1683,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1676,6 +1718,7 @@ paths:
               $ref: '#/components/schemas/PatchedTransactionRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1699,6 +1742,7 @@ paths:
       - transactions
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '204':
           description: No response body
@@ -1734,6 +1778,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1881,6 +1926,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1916,6 +1962,7 @@ paths:
       - users
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1940,6 +1987,7 @@ paths:
       - users
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -1974,6 +2022,7 @@ paths:
               $ref: '#/components/schemas/UserRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -2008,6 +2057,7 @@ paths:
               $ref: '#/components/schemas/PatchedUserRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -2026,6 +2076,7 @@ paths:
       - users
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -2054,12 +2105,125 @@ paths:
               $ref: '#/components/schemas/PatchedUserRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/me/api-keys/:
+    get:
+      operationId: users_me_api_keys_list
+      description: Return all API keys (active, expired, and revoked) belonging to
+        the authenticated user.  Key material is never included -- only the displayable
+        prefix.
+      summary: List the current user's API keys
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAPIKeyList'
+          description: ''
+    post:
+      operationId: users_me_api_keys_create
+      description: |-
+        Create a new API key for the authenticated user.  ``expiry_days`` sets the key's lifetime in days (the UI presets are 30 / 60 / 90 / 365); omit it or pass null for a key that never expires.
+
+        The response is the **only** time the plaintext ``key`` is returned; it cannot be recovered afterwards.
+      summary: Create an API key
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyCreated'
+          description: ''
+  /api/v1/users/me/api-keys/{uuid}/:
+    get:
+      operationId: users_me_api_keys_retrieve
+      description: Return a single API key by its UUID.
+      summary: Get one of the current user's API keys
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+          description: ''
+  /api/v1/users/me/api-keys/{uuid}/revoke/:
+    post:
+      operationId: users_me_api_keys_revoke_create
+      description: Permanently revoke an API key.  Revoked keys stop authenticating
+        immediately but remain listed for audit purposes.  Revocation cannot be undone.
+      summary: Revoke an API key
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
           description: ''
   /api/v1/users/me/change-email/:
     post:
@@ -2085,6 +2249,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '201':
           description: No response body
@@ -2117,6 +2282,7 @@ paths:
               $ref: '#/components/schemas/UserRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       - {}
       responses:
         '200':
@@ -2152,6 +2318,7 @@ paths:
               $ref: '#/components/schemas/UserRequest'
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       - {}
       responses:
         '200':
@@ -2180,6 +2347,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '204':
           description: No response body
@@ -2212,6 +2380,7 @@ paths:
       - users
       security:
       - jwtAuth: []
+      - apiKeyAuth: []
       responses:
         '200':
           content:
@@ -2221,6 +2390,124 @@ paths:
           description: ''
 components:
   schemas:
+    APIKey:
+      type: object
+      description: |-
+        Read serializer for API keys.
+
+        Never exposes the key material -- only the displayable prefix.  The
+        plaintext key appears exactly once, in the creation response (see
+        APIKeyViewSet.create).
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: User-supplied label identifying what this key is for.
+        prefix:
+          type: string
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - expires_at
+      - last_used_at
+      - name
+      - prefix
+      - revoked_at
+      - uuid
+    APIKeyCreateRequest:
+      type: object
+      description: |-
+        Validate an API-key creation request.
+
+        ``expiry_days`` covers all the expiry presets (30 / 60 / 90 / 365 /
+        a specific number of days); null or omitted means the key never
+        expires.  The presets themselves are a UI concern.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        expiry_days:
+          type: integer
+          maximum: 3650
+          minimum: 1
+          nullable: true
+      required:
+      - name
+    APIKeyCreated:
+      type: object
+      description: |-
+        Creation response -- the only place the plaintext key appears.
+
+        Exists to document the creation response shape in the OpenAPI
+        schema; the view assembles the payload itself.  ``key`` is never a
+        model field and cannot be recovered after this response.
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: User-supplied label identifying what this key is for.
+        prefix:
+          type: string
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        key:
+          type: string
+          readOnly: true
+      required:
+      - created_at
+      - expires_at
+      - key
+      - last_used_at
+      - name
+      - prefix
+      - revoked_at
+      - uuid
     AccountTypeEnum:
       enum:
       - C
@@ -3360,6 +3647,29 @@ components:
       - delivery_mode
       - display_name
       - kind
+    PaginatedAPIKeyList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKey'
     PaginatedBankAccountInvitationList:
       type: object
       required:
@@ -4439,6 +4749,11 @@ components:
           minLength: 1
           maxLength: 100
   securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'API-key authentication. Format: ``Api-Key <key>``.'
     jwtAuth:
       type: http
       scheme: bearer

@@ -1,6 +1,6 @@
 # Importing Transactions and Backfilling Budgets
 
-The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using a normal username and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
+The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using an API key (preferred; create one under Settings -> API keys, pass it via `--api-key` / `MIBUDGE_API_KEY`) or a normal email and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
 
 These tools will eventually live in their own repository. For now they share the project's `pyproject.toml` and are run from the repo root with `uv run`.
 
@@ -54,7 +54,7 @@ export VAULT_TOKEN=s.xxxx
 uv run python -m importers --vault-path mibudge/prod import stmt.ofx
 ```
 
-The Vault secret must have keys `url`, `username`, and `password`.
+The Vault secret must have `url` plus either `api_key` (preferred) or `email` and `password`.
 
 ### Local dev with a self-signed cert
 

@@ -2,6 +2,7 @@
 
 # system imports
 import json
+import os
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
@@ -383,3 +384,75 @@ class TestContextManager:
         with client:
             pass
         mock_close.assert_called_once()
+
+
+########################################################################
+########################################################################
+#
+class TestApiKeyMode:
+    """Tests for API-key authentication mode."""
+
+    ####################################################################
+    #
+    @pytest.fixture
+    def api_key_client(self, mocker: MockerFixture) -> MibudgeClient:
+        """Client in API-key mode, with SSL_CERT_FILE scrubbed (see conftest)."""
+        env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+        mocker.patch.dict(os.environ, env, clear=True)
+        return MibudgeClient("http://testserver", api_key="mib_secret")
+
+    ####################################################################
+    #
+    def test_api_key_header_sent_without_login(
+        self, api_key_client: MibudgeClient, mocker: MockerFixture
+    ) -> None:
+        """
+        GIVEN: a client constructed with an API key
+        WHEN:  a request is made
+        THEN:  the Api-Key Authorization header is sent and no token
+               endpoint round-trip happens (authenticate is a no-op)
+        """
+        client = api_key_client
+        client.authenticate()  # must be a harmless no-op
+        request_mock = mocker.patch.object(
+            client._http,
+            "request",
+            return_value=_make_response(
+                200, {"count": 0, "next": None, "results": []}
+            ),
+        )
+        client.get("/api/v1/bank-accounts/")
+        headers = request_mock.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Api-Key mib_secret"
+
+    ####################################################################
+    #
+    def test_rejected_api_key_raises_without_retry(
+        self, api_key_client: MibudgeClient, mocker: MockerFixture
+    ) -> None:
+        """
+        GIVEN: a client whose API key the server rejects with 401
+        WHEN:  get() is called
+        THEN:  AuthenticationError is raised after a single request
+               (no pointless re-auth retry)
+        """
+        client = api_key_client
+        request_mock = mocker.patch.object(
+            client._http,
+            "request",
+            return_value=_make_response(401, {"detail": "revoked"}),
+        )
+        with pytest.raises(AuthenticationError):
+            client.get("/api/v1/bank-accounts/")
+        assert request_mock.call_count == 1
+
+    ####################################################################
+    #
+    def test_credentials_required(self) -> None:
+        """
+        GIVEN: neither an API key nor a full email/password pair
+        WHEN:  the client is constructed
+        THEN:  ValueError is raised
+        """
+        with pytest.raises(ValueError):
+            MibudgeClient("http://testserver", email="user@example.com")

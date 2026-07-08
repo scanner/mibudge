@@ -401,6 +401,9 @@ SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Machine credentials ('Authorization: Api-Key <key>').  Denied
+        # on user/security endpoints via RequiresInteractiveAuth.
+        "users.authentication.ApiKeyAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -424,6 +427,12 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 100,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+# API keys
+# ------------------------------------------------------------------------------
+# APIKey.last_used_at is updated at most once per this interval so bulk
+# imports (thousands of requests in minutes) do not write on every request.
+API_KEY_LAST_USED_THROTTLE = timedelta(minutes=5)
 
 # drf-spectacular
 # ------------------------------------------------------------------------------
