@@ -67,7 +67,6 @@ from typing import Any
 # 3rd party imports
 import click
 from dateutil.rrule import rrulestr
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
@@ -79,6 +78,7 @@ from importers.import_transactions import (
     _build_client,
     _resolve_account_by_query,
     _setup_logging,
+    load_importer_env,
 )
 from importers.theme import _Theme, get_theme, theme_option
 
@@ -1608,8 +1608,8 @@ def cli_cmd(
 ########################################################################
 #
 def cli() -> None:
-    """Load .env and invoke the CLI."""
-    load_dotenv()
+    """Load importer env vars from .env and invoke the CLI."""
+    load_importer_env()
     cli_cmd()
 
 

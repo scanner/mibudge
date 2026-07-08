@@ -36,7 +36,7 @@ Configuration is resolved in this order (first wins):
 
     1. CLI flags
     2. Environment variables (MIBUDGE_URL, MIBUDGE_EMAIL, etc.)
-    3. .env file (loaded automatically via python-dotenv)
+    3. .env file (importer-related variables only; see load_importer_env)
     4. Vault KV2 secret (if --vault-path / MIBUDGE_VAULT_PATH is set)
 
 The Vault secret is expected to contain keys: ``url``, ``email``,
@@ -46,6 +46,7 @@ used to connect to Vault.
 
 # system imports
 import logging
+import os
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -55,7 +56,7 @@ from zoneinfo import ZoneInfo
 
 # 3rd party imports
 import click
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.markup import escape as markup_escape
@@ -2197,12 +2198,45 @@ def cli_cmd(
         raise SystemExit(1)
 
 
+# Env vars the importer CLIs may pick up from the .env file. The repo-root
+# .env primarily configures the Django app / docker-compose stack; loading
+# it wholesale leaks app-only settings into the importer process (e.g.
+# SSL_CERT_FILE, which httpx would honor when building its SSL context).
+_DOTENV_ALLOWED_PREFIXES = ("MIBUDGE_", "BOFA_", "VAULT_")
+_DOTENV_ALLOWED_NAMES = frozenset({"ONEPASSWORD_URL"})
+
+
+########################################################################
+########################################################################
+#
+def load_importer_env() -> None:
+    """
+    Load importer-relevant variables from the nearest .env file.
+
+    Unlike a plain load_dotenv(), only variables the importer CLIs
+    actually consume are applied: MIBUDGE_* (click auto-envvar options),
+    BOFA_* (scraper credentials), VAULT_* (hvac connection), and
+    ONEPASSWORD_URL. Variables already present in the real environment
+    are never overridden, so a value exported in the shell always wins
+    over the .env file.
+    """
+    for key, value in dotenv_values().items():
+        if value is None or key in os.environ:
+            continue
+        allowed = (
+            key.startswith(_DOTENV_ALLOWED_PREFIXES)
+            or key in _DOTENV_ALLOWED_NAMES
+        )
+        if allowed:
+            os.environ[key] = value
+
+
 ########################################################################
 ########################################################################
 #
 def cli() -> None:
-    """Load .env and invoke the CLI."""
-    load_dotenv()
+    """Load importer env vars from .env and invoke the CLI."""
+    load_importer_env()
     cli_cmd()
 
 

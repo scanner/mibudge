@@ -273,6 +273,9 @@ tags
 
 mibudge/media/
 
+deployment/docker/secrets/*
+!deployment/docker/secrets/.gitkeep
+
 .pytest_cache/
 
 .ipython/

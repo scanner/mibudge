@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Machine credentials are denied access to user/security endpoints (password/email change, invitations, user management, key management) — these require an interactive login
 - Importer CLIs accept `--api-key` / `MIBUDGE_API_KEY` (or Vault key `api_key`), preferred over email/password
 
+### Fixed
+
+- Importer CLIs crashed with `FileNotFoundError` when the repo-root `.env` set app-only variables like `SSL_CERT_FILE`; they now load only importer-related variables (`MIBUDGE_*`, `BOFA_*`, `VAULT_*`, `ONEPASSWORD_URL`) from `.env`
+
 ## [0.1.1] - 2026-07-03
 
 ### Added

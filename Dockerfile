@@ -117,10 +117,10 @@ CMD ["/app/scripts/start_dev.sh"]
 
 ########################################################################
 #
-# Production stage -- nginx + gunicorn in a single deployable unit.
+# Production stage -- nginx + uvicorn in a single deployable unit.
 #
 # nginx (port 8000) serves /static/ directly from the collected staticfiles
-# and proxies all other requests to gunicorn via a Unix socket.
+# and proxies all other requests to uvicorn via a Unix socket.
 # supervisord manages both processes.
 #
 FROM python:${PYTHON_VERSION}-slim AS prod
@@ -179,5 +179,5 @@ RUN chown -R app /app/staticfiles
 
 EXPOSE 8000
 
-# supervisord manages nginx (as root) and gunicorn (as app user)
+# supervisord manages nginx (as root) and uvicorn (as app user)
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
