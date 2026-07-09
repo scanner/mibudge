@@ -532,7 +532,9 @@ paths:
       description: Send a co-ownership invitation to the given email address. If no
         mibudge account exists for that address, an inactive placeholder account is
         created; the invitee sets their password after accepting. Returns 409 if the
-        address is already an owner or a pending invitation already exists.
+        address is already an owner or a pending invitation already exists; 429 if
+        too many invitations have been sent to this address for this account in the
+        rolling window.
       summary: Invite a co-owner
       parameters:
       - in: path

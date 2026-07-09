@@ -220,6 +220,9 @@ invitation" means in each:
   inviting one person to several different accounts is not throttled,
   but hammering one person about one account is.
 
+Over the API, a window-exceeded invite returns `429 Too Many Requests`.
+In the Django admin, both limits surface as inline form/action messages.
+
 ---
 
 ## Implementation map

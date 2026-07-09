@@ -766,6 +766,34 @@ class TestInviteAPI:
         )
         assert response.status_code == status.HTTP_409_CONFLICT
 
+    ####################################################################
+    #
+    def test_returns_429_when_rolling_window_exceeded(
+        self,
+        account: BankAccount,
+        auth_client: APIClient,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+    ) -> None:
+        """
+        GIVEN: the rolling-window cap is exhausted for this email + account
+        WHEN:  POST invite for the same email
+        THEN:  429 Too Many Requests (not a 500)
+        """
+        email = "flooded@example.com"
+        for _ in range(5):
+            bank_account_invitation_factory(
+                bank_account=account,
+                invitee_email=email,
+                status=BankAccountInvitation.Status.CANCELLED,
+            )
+
+        response = auth_client.post(
+            _invite_url(str(account.id)), {"invitee_email": email}
+        )
+
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert "Too many invitations" in response.data["detail"]
+
 
 ########################################################################
 ########################################################################
