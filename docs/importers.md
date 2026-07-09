@@ -56,7 +56,7 @@ uv run python -m importers --vault-path mibudge/prod import stmt.ofx
 
 The Vault secret must have `url` plus either `api_key` (preferred) or `email` and `password`.
 
-Or pull just the API key from 1Password (set `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` to an item URL whose `API key` field holds the key used to authenticate to mibudge; requires the `op` CLI signed in). This is a distinct env var from the BofA scraper's own `BOFA_ONEPASSWORD_URL` -- see [BofA Live Scraper](#bofa-live-scraper) below.
+Or pull just the API key from 1Password (set `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` to a full secret reference -- `op://<vault>/<item>[/<section>]/<field>`, e.g. `op://Personal/mibudge/API key` -- naming the field that holds the key used to authenticate to mibudge; requires the `op` CLI signed in). Since the reference names the field, one item can hold several API keys under different section/field names. This is a distinct env var from the BofA scraper's own `BOFA_ONEPASSWORD_URL` -- see [BofA Live Scraper](#bofa-live-scraper) below.
 
 ### Local dev with a self-signed cert
 
@@ -205,7 +205,7 @@ uv sync --group importers-bofa
 uv run --group importers-bofa python -m importers.import_bofa_live
 ```
 
-BofA credentials are read from `BOFA_ID` and `BOFA_PASSCODE` environment variables (or `--bofa-id` / `--bofa-passcode` flags), or from a 1Password item via `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` (reads the item's `username`/`password` fields). mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → the mibudge 1Password item via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` → Vault). The two 1Password URLs are separate env vars on purpose -- each name says which credential it fetches.
+BofA credentials are read from `BOFA_ID` and `BOFA_PASSCODE` environment variables (or `--bofa-id` / `--bofa-passcode` flags), or from a 1Password item via `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` (reads the item's `username`/`password` fields). mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → the mibudge 1Password secret reference via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` → Vault). The two 1Password URLs are separate env vars on purpose -- each name says which credential it fetches -- and they differ in shape: the BofA one is an *item* URL (its `username`/`password` fields are both read), while the mibudge one is a full secret reference naming the field that holds the API key.
 
 If BofA requires 2FA, the scraper prompts for the code interactively via stdin. Run with `--no-headless` to watch the browser.
 
@@ -231,7 +231,7 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 | `--bofa-id` | BofA Online ID (env var: `BOFA_ID`, not `MIBUDGE_BOFA_ID`) |
 | `--bofa-passcode` | BofA passcode (env var: `BOFA_PASSCODE`, not `MIBUDGE_BOFA_PASSCODE`) |
 | `--bofa-onepassword-url` | 1Password item URL for BofA username/password (env var: `BOFA_ONEPASSWORD_URL`, not `MIBUDGE_BOFA_ONEPASSWORD_URL`) |
-| `--api-key-onepassword-url` | 1Password item URL for the API key used to authenticate to mibudge (env var: `MIBUDGE_API_KEY_ONEPASSWORD_URL`) |
+| `--api-key-onepassword-url` | 1Password secret reference (full field path) to the API key used to authenticate to mibudge (env var: `MIBUDGE_API_KEY_ONEPASSWORD_URL`) |
 | `--account, -a` | Filter by BofA account name substring (repeatable; omit for all accounts) |
 | `--headless / --no-headless` | Run Firefox headlessly (default) or visibly for debugging/2FA |
 | `--timeout` | Selenium page-load timeout in seconds (default: 5) |

@@ -1610,36 +1610,47 @@ def _resolve_vault_secrets(vault_path: str) -> dict[str, str]:
 
 ####################################################################
 #
-def _resolve_api_key_from_1password(onepassword_url: str) -> str:
+def _resolve_api_key_from_1password(secret_reference: str) -> str:
     """
-    Fetch the mibudge API key from a 1Password item.
+    Fetch the mibudge API key via a 1Password secret reference.
 
-    Expects the item to have a field labeled 'API key' -- typically
-    added alongside that item's normal username/password fields for a
-    mibudge login, so one item covers both interactive and machine
-    credentials. This is a *mibudge* item URL and is intentionally
-    distinct from any bank-specific 1Password item (e.g. the BofA
-    live scraper's own `--bofa-onepassword-url`) so each entity's
-    secret lives at its own, unambiguous env var.
+    The reference is passed to `op read` verbatim and must therefore
+    be the full path to the field holding the key:
+    'op://<vault>/<item>[/<section>]/<field>', e.g.
+    'op://Personal/mibudge/API key'.  Naming the field in the
+    reference (rather than hardcoding a field label here) lets one
+    item hold several API keys under different section/field names.
+    This is a *mibudge* secret and is intentionally distinct from any
+    bank-specific 1Password option (e.g. the BofA live scraper's
+    `--bofa-onepassword-url`, an *item* URL whose username/password
+    fields are read) so each entity's secret lives at its own,
+    unambiguous env var.
 
-    Strips any trailing slash from *onepassword_url* before appending
-    the field name, so both `op://vault/item` and `op://vault/item/`
-    work correctly.
+    Strips any trailing slash so 'op://vault/item/field/' also works.
 
     Args:
-        onepassword_url: 1Password item URL, e.g. 'op://Personal/mibudge'.
+        secret_reference: Full 1Password secret reference to the
+            field holding the API key.
 
     Returns:
         The API key value.
 
     Raises:
-        click.ClickException: If the `op` CLI is not found or returns
-            a non-zero exit code.
+        click.ClickException: If the reference does not name a field,
+            the `op` CLI is not found, or `op read` returns a
+            non-zero exit code.
     """
-    url = onepassword_url.rstrip("/")
+    reference = secret_reference.rstrip("/")
+    if len(reference.removeprefix("op://").split("/")) < 3:
+        raise click.ClickException(
+            f"1Password reference {reference!r} must be the full path "
+            "to the field holding the API key: "
+            "'op://<vault>/<item>[/<section>]/<field>', e.g. "
+            "'op://Personal/mibudge/API key'."
+        )
     try:
         api_key = subprocess.run(
-            ["op", "read", f"{url}/API key"],
+            ["op", "read", reference],
             capture_output=True,
             text=True,
             check=True,
@@ -1652,7 +1663,7 @@ def _resolve_api_key_from_1password(onepassword_url: str) -> str:
     except subprocess.CalledProcessError as e:
         raise click.ClickException(
             f"Failed to read API key from 1Password "
-            f"({url!r}): {e.stderr.strip()}"
+            f"({reference!r}): {e.stderr.strip()}"
         ) from e
     return api_key
 
@@ -1677,8 +1688,8 @@ def _build_client(
     Resolve credentials + TLS settings and return an unauthenticated client.
 
     Credential resolution order: CLI/env > 1Password > Vault > error.
-    An API key (CLI/env `MIBUDGE_API_KEY`, the mibudge 1Password item's
-    'API key' field, or Vault key `api_key`) takes precedence over
+    An API key (CLI/env `MIBUDGE_API_KEY`, a 1Password secret
+    reference, or Vault key `api_key`) takes precedence over
     email/password.
     The returned client must be entered as a context manager and have
     `authenticate()` called on it before use.
@@ -1687,9 +1698,9 @@ def _build_client(
         url, email, password, api_key: From CLI/env.
         vault_path: Optional KV2 path; if present, fills in missing
             credentials.
-        api_key_onepassword_url: Optional 1Password item URL holding
-            the API key used to authenticate to mibudge (env var:
-            MIBUDGE_API_KEY_ONEPASSWORD_URL).
+        api_key_onepassword_url: Optional full 1Password secret
+            reference to the API key used to authenticate to mibudge
+            (env var: MIBUDGE_API_KEY_ONEPASSWORD_URL).
         ca_bundle: Explicit CA bundle path (overrides system CAs).
         trust_local_certs: If True, use the project-local mkcert bundle.
         console: Rich console for user-visible messages.
@@ -1891,11 +1902,12 @@ def _print_summary(
     "--api-key-onepassword-url",
     default=None,
     help=(
-        "1Password item URL holding the API key used to authenticate "
-        "to mibudge, in a field labeled 'API key' (e.g. "
-        "'op://Personal/mibudge'). Used when --api-key is not given. "
-        "Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct from any "
-        "bank-specific 1Password URL option."
+        "1Password secret reference to the API key used to "
+        "authenticate to mibudge -- the full field path "
+        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
+        "'op://Personal/mibudge/API key'. Used when --api-key is not "
+        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
+        "from any bank-specific 1Password URL option."
     ),
 )
 @click.option(

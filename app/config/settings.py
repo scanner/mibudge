@@ -441,6 +441,10 @@ REST_FRAMEWORK = {
 # imports (thousands of requests in minutes) do not write on every request.
 API_KEY_LAST_USED_THROTTLE = timedelta(minutes=5)
 
+# Owners of an expiring API key are notified once the expiry is within
+# this many days, giving them time to mint a replacement key.
+API_KEY_EXPIRY_NOTICE_DAYS = env.int("API_KEY_EXPIRY_NOTICE_DAYS", default=14)
+
 # drf-spectacular
 # ------------------------------------------------------------------------------
 SPECTACULAR_SETTINGS = {

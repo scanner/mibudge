@@ -74,6 +74,10 @@ MANAGED_PERIODIC_TASKS: dict = {
             "crontab": {"minute": "0", "hour": "4", "day_of_week": "0"}
         },
     },
+    "Notify expiring API keys": {
+        "task": "users.tasks.notify_expiring_api_keys",
+        "schedule": {"crontab": {"minute": "0", "hour": "15"}},
+    },
 }
 
 

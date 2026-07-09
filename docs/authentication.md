@@ -78,6 +78,10 @@ Settings -> API keys):
 - **Expiry**: `expiry_days` sets the key lifetime in days (UI presets:
   30 / 60 / 90 / 365, or any custom number); omit it for a key that never
   expires.
+- **Expiry notice**: a daily task emails the owner once when a key's
+  expiry falls within the next `API_KEY_EXPIRY_NOTICE_DAYS` days
+  (default 14), leaving time to mint and roll out a replacement. Keys
+  cannot be renewed -- create a new key and revoke the old one.
 - **Plaintext once**: the creation response is the only place the plaintext
   key appears. Only a SHA-256 hash is stored; a lost key cannot be
   recovered, only replaced.
@@ -99,7 +103,7 @@ Authorization: Api-Key mib_...
 ```
 
 The importer CLIs accept `--api-key`, the `MIBUDGE_API_KEY` environment
-variable, a 1Password item's `API key` field
+variable, a 1Password secret reference to the field holding the key
 (`--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`), or a
 Vault secret key `api_key` -- see
 [`docs/importers.md`](importers.md).

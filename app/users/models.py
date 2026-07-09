@@ -254,6 +254,9 @@ class APIKey(models.Model):
     # settings.API_KEY_LAST_USED_THROTTLE so bulk imports do not write
     # on every request.
     last_used_at = DateTimeField(null=True, blank=True)
+    # Set when the expiring-key notice has been sent, so the daily
+    # notify_expiring_api_keys task warns about each key exactly once.
+    expiry_notified_at = DateTimeField(null=True, blank=True)
     revoked_at = DateTimeField(null=True, blank=True)
     created_at = DateTimeField(auto_now_add=True)
     modified_at = DateTimeField(auto_now=True)

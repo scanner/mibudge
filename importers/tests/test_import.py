@@ -885,16 +885,38 @@ class TestLoadImporterEnv:
 ########################################################################
 #
 class TestResolveApiKeyFrom1Password:
-    """Tests for _resolve_api_key_from_1password (mibudge item, 'API key' field)."""
+    """Tests for _resolve_api_key_from_1password (full secret reference)."""
 
     ################################################################
     #
-    def test_reads_the_api_key_field(self, mocker: MockerFixture) -> None:
+    @pytest.mark.parametrize(
+        "reference,expected_read",
+        [
+            # Plain field path, passed to `op read` verbatim.
+            (
+                "op://Personal/mibudge/API key",
+                "op://Personal/mibudge/API key",
+            ),
+            # Section-qualified field (several keys in one item).
+            (
+                "op://Private/nuknuax4gtw4qnfiodt55g2frm/add more/API key",
+                "op://Private/nuknuax4gtw4qnfiodt55g2frm/add more/API key",
+            ),
+            # Trailing slash is tolerated.
+            (
+                "op://Personal/mibudge/API key/",
+                "op://Personal/mibudge/API key",
+            ),
+        ],
+    )
+    def test_reads_the_secret_reference(
+        self, mocker: MockerFixture, reference: str, expected_read: str
+    ) -> None:
         """
-        GIVEN: a 1Password item URL (with a trailing slash)
+        GIVEN: a full 1Password secret reference naming the field
         WHEN:  _resolve_api_key_from_1password() is called
-        THEN:  it reads the item's 'API key' field via `op read` and
-               returns the stripped value
+        THEN:  the reference is passed to `op read` verbatim (modulo a
+               trailing slash) and the stripped value is returned
         """
         run = mocker.patch.object(
             it.subprocess,
@@ -902,11 +924,11 @@ class TestResolveApiKeyFrom1Password:
             return_value=mocker.Mock(stdout="mib_secret\n"),
         )
 
-        result = it._resolve_api_key_from_1password("op://Personal/mibudge/")
+        result = it._resolve_api_key_from_1password(reference)
 
         assert result == "mib_secret"
         run.assert_called_once_with(
-            ["op", "read", "op://Personal/mibudge/API key"],
+            ["op", "read", expected_read],
             capture_output=True,
             text=True,
             check=True,
@@ -914,18 +936,36 @@ class TestResolveApiKeyFrom1Password:
 
     ################################################################
     #
-    def test_op_cli_not_found_raises_click_exception(
-        self, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        "scenario,reference,run_side_effect",
+        [
+            # Item-only URL (the pre-secret-reference semantics): the
+            # field path is missing, so we refuse before calling `op`.
+            ("missing field path", "op://Personal/mibudge", None),
+            ("op CLI not on PATH", "op://P/i/f", FileNotFoundError),
+        ],
+    )
+    def test_errors_raise_click_exception(
+        self,
+        mocker: MockerFixture,
+        scenario: str,
+        reference: str,
+        run_side_effect: type[Exception] | None,
     ) -> None:
         """
-        GIVEN: the `op` binary is not on PATH
+        GIVEN: an item-only reference, or the `op` binary missing
         WHEN:  _resolve_api_key_from_1password() is called
-        THEN:  a click.ClickException is raised (not a raw FileNotFoundError)
+        THEN:  a click.ClickException is raised (not a raw error)
         """
-        mocker.patch.object(it.subprocess, "run", side_effect=FileNotFoundError)
+        run = mocker.patch.object(
+            it.subprocess, "run", side_effect=run_side_effect
+        )
 
         with pytest.raises(click.ClickException):
-            it._resolve_api_key_from_1password("op://Personal/mibudge")
+            it._resolve_api_key_from_1password(reference)
+
+        if run_side_effect is None:
+            run.assert_not_called()
 
 
 ########################################################################
@@ -978,7 +1018,7 @@ class TestBuildClientCredentialPrecedence:
         client = self._call(
             mocker,
             api_key="mib_explicit",
-            api_key_onepassword_url="op://Personal/mibudge",
+            api_key_onepassword_url="op://Personal/mibudge/API key",
         )
 
         assert client._api_key == "mib_explicit"
@@ -1001,7 +1041,7 @@ class TestBuildClientCredentialPrecedence:
         )
 
         client = self._call(
-            mocker, api_key_onepassword_url="op://Personal/mibudge"
+            mocker, api_key_onepassword_url="op://Personal/mibudge/API key"
         )
 
         assert client._api_key == "mib_from_1password"

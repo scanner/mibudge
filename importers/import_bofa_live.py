@@ -19,11 +19,13 @@ set BOFA_ONEPASSWORD_URL (or --bofa-onepassword-url) to an `op://`
 item URL and credentials are fetched via `op read` -- useful in
 automated contexts where plaintext env vars are undesirable.  mibudge
 credentials follow the same resolution order as the CSV importer (CLI
-flags > env vars > .env > MIBUDGE_API_KEY_ONEPASSWORD_URL's 1Password
-item > Vault).  The two 1Password URLs are deliberately separate env
-vars -- BOFA_ONEPASSWORD_URL for the bank login,
-MIBUDGE_API_KEY_ONEPASSWORD_URL for the API key used to authenticate
-to mibudge -- so each secret's name says what it unlocks.
+flags > env vars > .env > the MIBUDGE_API_KEY_ONEPASSWORD_URL secret
+reference > Vault).  The two 1Password URLs are deliberately separate
+env vars -- BOFA_ONEPASSWORD_URL is an *item* URL for the bank login
+(username/password fields are read from it), while
+MIBUDGE_API_KEY_ONEPASSWORD_URL is a full secret reference (item plus
+field path) to the API key used to authenticate to mibudge -- so each
+secret's name says what it unlocks.
 
 2FA: if BofA requires it, the scraper prompts for the code
 interactively via stdin.  Run with --no-headless to watch the browser.
@@ -82,9 +84,10 @@ def _read_bofa_credentials_from_1password(base_url: str) -> tuple[str, str]:
     """Fetch BofA credentials from the 1Password CLI.
 
     This reads the BofA login item (BOFA_ONEPASSWORD_URL /
-    --bofa-onepassword-url) -- distinct from the mibudge API-key item
-    read by `_resolve_api_key_from_1password` in import_transactions.py
-    (MIBUDGE_API_KEY_ONEPASSWORD_URL / --api-key-onepassword-url).
+    --bofa-onepassword-url) -- distinct from the mibudge API-key
+    secret reference read by `_resolve_api_key_from_1password` in
+    import_transactions.py (MIBUDGE_API_KEY_ONEPASSWORD_URL /
+    --api-key-onepassword-url).
 
     Strips any trailing slash from `base_url` before appending the
     field names, so both `op://vault/item` and `op://vault/item/`
@@ -658,11 +661,13 @@ def _setup_logging(
     "--api-key-onepassword-url",
     default=None,
     help=(
-        "1Password item URL holding the API key used to authenticate "
-        "to mibudge, in a field labeled 'API key' (e.g. "
-        "'op://Personal/mibudge'). Used when --api-key is not given. "
-        "Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct from "
-        "--bofa-onepassword-url, which sources BofA login credentials."
+        "1Password secret reference to the API key used to "
+        "authenticate to mibudge -- the full field path "
+        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
+        "'op://Personal/mibudge/API key'. Used when --api-key is not "
+        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
+        "from --bofa-onepassword-url, an item URL sourcing BofA "
+        "login credentials."
     ),
 )
 @click.option(

@@ -1,0 +1,11 @@
+Your mibudge API key "{{ key_name }}" ({{ key_prefix }}...) will expire on {{ expires_at }}.
+
+Anything still authenticating with this key (transaction importers,
+scheduled jobs, 3rd-party services) will stop working at that time.
+
+To avoid interruption, create a replacement key and update the services
+using this one before it expires:
+{{ site_url }}/app/account/settings/
+
+API keys cannot be renewed -- create a new key and revoke this one once
+everything has been switched over.

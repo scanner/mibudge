@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Machine credentials are denied access to user/security endpoints (password/email change, invitations, user management, key management) — these require an interactive login; `GET /api/v1/users/me/` is exempt so importers can read the user's timezone
 - Importer CLIs accept `--api-key` / `MIBUDGE_API_KEY` (or Vault key `api_key`), preferred over email/password
 - Account settings page: manage API keys (create with expiry, one-time key display, revoke)
-- Importer CLIs can source the API key used to authenticate to mibudge from a 1Password item's `API key` field via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`
+- Email notice when an API key will expire within the next 14 days (configurable via `API_KEY_EXPIRY_NOTICE_DAYS`), sent once per key so a replacement can be minted before importers and other services lose access
+- Importer CLIs can source the API key used to authenticate to mibudge from a 1Password secret reference (`op://<vault>/<item>[/<section>]/<field>`) via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`
 
 ### Changed
 

@@ -1379,11 +1379,12 @@ def _run_backfill(
     "--api-key-onepassword-url",
     default=None,
     help=(
-        "1Password item URL holding the API key used to authenticate "
-        "to mibudge, in a field labeled 'API key' (e.g. "
-        "'op://Personal/mibudge'). Used when --api-key is not given. "
-        "Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct from any "
-        "bank-specific 1Password URL option."
+        "1Password secret reference to the API key used to "
+        "authenticate to mibudge -- the full field path "
+        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
+        "'op://Personal/mibudge/API key'. Used when --api-key is not "
+        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
+        "from any bank-specific 1Password URL option."
     ),
 )
 @click.option(
