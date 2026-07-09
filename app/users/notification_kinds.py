@@ -18,6 +18,7 @@ PASSWORD_CHANGED = "users.password_changed"
 EMAIL_CHANGED = "users.email_changed"
 EMAIL_CHANGE_REQUESTED = "users.email_change_requested"
 EMAIL_CHANGE_SECURITY_ALERT = "users.email_change_security_alert"
+API_KEY_EXPIRING = "users.api_key_expiring"
 
 
 ########################################################################
@@ -54,5 +55,12 @@ def register_all() -> None:
         display_name="Email change security alert",
         default_priority=NotificationPriority.CRITICAL,
         can_suppress=False,
+        default_delivery_mode=DeliveryMode.IMMEDIATE,
+    )
+    registry.register(
+        kind=API_KEY_EXPIRING,
+        display_name="API key expiring soon",
+        default_priority=NotificationPriority.NORMAL,
+        can_suppress=True,
         default_delivery_mode=DeliveryMode.IMMEDIATE,
     )

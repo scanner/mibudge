@@ -7,8 +7,10 @@ do not use the Django ORM, signals, or models directly.
 ## Why a separate directory?
 
 Importers are intentionally isolated from the Django application (`app/`).
-They authenticate via JWT (username/password to `/api/token/`) and
-communicate only through the public API. This enforces a clean boundary:
+They authenticate with a mibudge **API key** (preferred; create one under
+Settings -> API keys, sent as `Authorization: Api-Key <key>`) or via JWT
+(email/password to `/api/token/`, legacy) and communicate only through
+the public API. This enforces a clean boundary:
 the import concern stays separate from the core budgeting domain.
 
 This directory will eventually be extracted into its own project/repository
@@ -86,9 +88,13 @@ Two flags on `import_bofa_live` override this with explicit names:
 
 ## Usage examples
 
-Authentication variables (`MIBUDGE_URL`, `MIBUDGE_USERNAME`,
-`MIBUDGE_PASSWORD`) are typically set in a `.env` file at the repo root
-and loaded automatically; the examples below omit them for brevity.
+Authentication variables (`MIBUDGE_URL` and `MIBUDGE_API_KEY`; or the
+legacy `MIBUDGE_EMAIL`/`MIBUDGE_PASSWORD` pair) are typically set in a
+`.env` file at the repo root and loaded automatically; the examples
+below omit them for brevity.  An API key takes precedence over
+email/password when both are present.  Note: API keys cannot call the
+user/security endpoints (password/email change, invitations, key
+management) -- those require an interactive login.
 
 ### Follow-up OFX/QFX import -- zero flags
 
@@ -181,7 +187,34 @@ uv run python -m importers --vault-path mibudge/importer \
     import stmt.ofx
 ```
 
-The Vault secret must contain keys `url`, `username`, `password`.
+The Vault secret must contain `url` plus either `api_key` (preferred)
+or `email` and `password`.
+
+### Pulling the API key from 1Password
+
+```bash
+uv run python -m importers \
+    --api-key-onepassword-url "op://Personal/mibudge/API key" \
+    import stmt.ofx
+```
+
+Requires the [1Password CLI](https://developer.1password.com/docs/cli/) (`op`)
+signed in. The value is a full 1Password *secret reference* -- the
+complete path to the field holding the key,
+`op://<vault>/<item>[/<section>]/<field>` -- passed to `op read`
+verbatim. Naming the field yourself means one item can hold several API
+keys under different section/field names (e.g.
+`op://Private/mibudge/add more/API key`), typically alongside that
+item's normal username/password fields so one item covers both an
+interactive login and the importer's machine credentials.
+
+This is deliberately a separate env var
+(`MIBUDGE_API_KEY_ONEPASSWORD_URL`, the API key used to authenticate to
+mibudge) from the BofA live scraper's `--bofa-onepassword-url` /
+`BOFA_ONEPASSWORD_URL` -- an *item* URL, not a field reference, since
+its `username`/`password` fields are both read from it -- and each
+secret's name says what it fetches, so a future bank (Chase, etc.) can
+add `CHASE_ONEPASSWORD_URL` without colliding.
 
 ## Account resolution rules
 
@@ -295,7 +328,10 @@ Resolved in this order (first win):
 2. Environment variables -- every flag has a `MIBUDGE_FLAG_NAME` equivalent
    (see [Environment variables for every flag](#environment-variables-for-every-flag))
 3. `.env` file (loaded via python-dotenv)
-4. Vault KV2 secret (if `--vault-path` / `MIBUDGE_VAULT_PATH` is set)
+4. API key only: a 1Password secret reference (if
+   `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` is
+   set) -- the full field path, read via `op read`
+5. Vault KV2 secret (if `--vault-path` / `MIBUDGE_VAULT_PATH` is set)
 
 ## Adding a new bank parser
 

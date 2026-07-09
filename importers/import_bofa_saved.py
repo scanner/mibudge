@@ -145,9 +145,29 @@ def _setup_logging(
     help="mibudge API password (prefer env var or Vault over CLI flag).",
 )
 @click.option(
+    "--api-key",
+    default=None,
+    help=(
+        "mibudge API key (preferred over email/password; prefer env var "
+        "MIBUDGE_API_KEY or Vault over CLI flag)."
+    ),
+)
+@click.option(
     "--vault-path",
     default=None,
     help="Vault KV2 path for mibudge credentials (e.g. 'mibudge/importer').",
+)
+@click.option(
+    "--api-key-onepassword-url",
+    default=None,
+    help=(
+        "1Password secret reference to the API key used to "
+        "authenticate to mibudge -- the full field path "
+        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
+        "'op://Personal/mibudge/API key'. Used when --api-key is not "
+        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
+        "from any bank-specific 1Password URL option."
+    ),
 )
 @click.option(
     "--ca-bundle",
@@ -189,7 +209,9 @@ def cli_cmd(
     url: str | None,
     email: str | None,
     password: str | None,
+    api_key: str | None,
     vault_path: str | None,
+    api_key_onepassword_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     dry_run: bool,
@@ -231,7 +253,9 @@ def cli_cmd(
             url=url,
             email=email,
             password=password,
+            api_key=api_key,
             vault_path=vault_path,
+            api_key_onepassword_url=api_key_onepassword_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,

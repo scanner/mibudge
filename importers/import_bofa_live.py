@@ -15,11 +15,17 @@ Requires the importers-bofa optional dependency group::
 
 BofA credentials are read from BOFA_ID and BOFA_PASSCODE environment
 variables or the --bofa-id / --bofa-passcode flags.  Alternatively,
-set ONEPASSWORD_URL (or --onepassword-url) to an ``op://`` item URL
-and credentials are fetched via `op read` -- useful in automated
-contexts where plaintext env vars are undesirable.  mibudge
+set BOFA_ONEPASSWORD_URL (or --bofa-onepassword-url) to an `op://`
+item URL and credentials are fetched via `op read` -- useful in
+automated contexts where plaintext env vars are undesirable.  mibudge
 credentials follow the same resolution order as the CSV importer (CLI
-flags > env vars > .env > Vault).
+flags > env vars > .env > the MIBUDGE_API_KEY_ONEPASSWORD_URL secret
+reference > Vault).  The two 1Password URLs are deliberately separate
+env vars -- BOFA_ONEPASSWORD_URL is an *item* URL for the bank login
+(username/password fields are read from it), while
+MIBUDGE_API_KEY_ONEPASSWORD_URL is a full secret reference (item plus
+field path) to the API key used to authenticate to mibudge -- so each
+secret's name says what it unlocks.
 
 2FA: if BofA requires it, the scraper prompts for the code
 interactively via stdin.  Run with --no-headless to watch the browser.
@@ -74,15 +80,21 @@ SCRAPE_FORMAT_VERSION = 2
 ########################################################################
 ########################################################################
 #
-def _read_from_1password(base_url: str) -> tuple[str, str]:
+def _read_bofa_credentials_from_1password(base_url: str) -> tuple[str, str]:
     """Fetch BofA credentials from the 1Password CLI.
 
+    This reads the BofA login item (BOFA_ONEPASSWORD_URL /
+    --bofa-onepassword-url) -- distinct from the mibudge API-key
+    secret reference read by `_resolve_api_key_from_1password` in
+    import_transactions.py (MIBUDGE_API_KEY_ONEPASSWORD_URL /
+    --api-key-onepassword-url).
+
     Strips any trailing slash from `base_url` before appending the
-    field names, so both ``op://vault/item`` and ``op://vault/item/``
+    field names, so both `op://vault/item` and `op://vault/item/`
     work correctly.
 
     Args:
-        base_url: 1Password item URL (e.g. ``op://Personal/BofA``).
+        base_url: 1Password item URL (e.g. `op://Personal/BofA`).
 
     Returns:
         A ``(username, password)`` tuple.
@@ -608,15 +620,16 @@ def _setup_logging(
     help="BofA passcode (env var: BOFA_PASSCODE; prefer env over CLI flag).",
 )
 @click.option(
-    "--onepassword-url",
-    envvar="ONEPASSWORD_URL",
+    "--bofa-onepassword-url",
+    envvar="BOFA_ONEPASSWORD_URL",
     default=None,
     help=(
         "1Password item URL to source BofA credentials from "
         "(e.g. 'op://Personal/BofA').  When set, the CLI calls "
         "`op read <url>/username` and `op read <url>/password` "
         "instead of reading BOFA_ID / BOFA_PASSCODE.  "
-        "Env var: ONEPASSWORD_URL."
+        "Env var: BOFA_ONEPASSWORD_URL. Distinct from "
+        "--api-key-onepassword-url, which sources the mibudge API key."
     ),
 )
 @click.option(
@@ -632,9 +645,30 @@ def _setup_logging(
     help="mibudge API password (prefer env var or Vault over CLI flag).",
 )
 @click.option(
+    "--api-key",
+    default=None,
+    help=(
+        "mibudge API key (preferred over email/password; prefer env var "
+        "MIBUDGE_API_KEY or Vault over CLI flag)."
+    ),
+)
+@click.option(
     "--vault-path",
     default=None,
     help="Vault KV2 path for mibudge credentials (e.g. 'mibudge/importer').",
+)
+@click.option(
+    "--api-key-onepassword-url",
+    default=None,
+    help=(
+        "1Password secret reference to the API key used to "
+        "authenticate to mibudge -- the full field path "
+        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
+        "'op://Personal/mibudge/API key'. Used when --api-key is not "
+        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
+        "from --bofa-onepassword-url, an item URL sourcing BofA "
+        "login credentials."
+    ),
 )
 @click.option(
     "--ca-bundle",
@@ -723,11 +757,13 @@ def _setup_logging(
 def cli_cmd(
     bofa_id: str | None,
     bofa_passcode: str | None,
-    onepassword_url: str | None,
+    bofa_onepassword_url: str | None,
     url: str | None,
     email: str | None,
     password: str | None,
+    api_key: str | None,
     vault_path: str | None,
+    api_key_onepassword_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     headless: bool,
@@ -745,8 +781,10 @@ def cli_cmd(
     if save_only and save_dir is None:
         raise click.UsageError("--save-only requires --save-dir.")
 
-    if onepassword_url is not None:
-        bofa_id, bofa_passcode = _read_from_1password(onepassword_url)
+    if bofa_onepassword_url is not None:
+        bofa_id, bofa_passcode = _read_bofa_credentials_from_1password(
+            bofa_onepassword_url
+        )
     else:
         if bofa_id is None:
             bofa_id = click.prompt("BofA Online ID")
@@ -903,7 +941,9 @@ def cli_cmd(
             url=url,
             email=email,
             password=password,
+            api_key=api_key,
             vault_path=vault_path,
+            api_key_onepassword_url=api_key_onepassword_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,

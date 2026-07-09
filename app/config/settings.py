@@ -408,6 +408,9 @@ SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Machine credentials ('Authorization: Api-Key <key>').  Denied
+        # on user/security endpoints via RequiresInteractiveAuth.
+        "users.authentication.ApiKeyAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -431,6 +434,16 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 100,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+# API keys
+# ------------------------------------------------------------------------------
+# APIKey.last_used_at is updated at most once per this interval so bulk
+# imports (thousands of requests in minutes) do not write on every request.
+API_KEY_LAST_USED_THROTTLE = timedelta(minutes=5)
+
+# Owners of an expiring API key are notified once the expiry is within
+# this many days, giving them time to mint a replacement key.
+API_KEY_EXPIRY_NOTICE_DAYS = env.int("API_KEY_EXPIRY_NOTICE_DAYS", default=14)
 
 # drf-spectacular
 # ------------------------------------------------------------------------------
