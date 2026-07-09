@@ -34,7 +34,10 @@ from users.email_change import (
     revoke_request,
 )
 from users.models import APIKey
-from users.permissions import RequiresInteractiveAuth
+from users.permissions import (
+    RequiresInteractiveAuth,
+    RequiresInteractiveAuthForWrites,
+)
 
 from .serializers import (
     APIKeyCreatedSerializer,
@@ -103,13 +106,16 @@ class UserViewSet(
         description=(
             "GET returns the authenticated user's own profile. "
             "PATCH allows updating the name field. "
-            "Available to any authenticated user (not restricted to staff)."
+            "Available to any authenticated user (not restricted to "
+            "staff). GET is also available to machine credentials "
+            "(API keys) -- importers read the timezone field; PATCH "
+            "requires an interactive login session."
         ),
     )
     @action(
         detail=False,
         methods=["GET", "PATCH"],
-        permission_classes=[IsAuthenticated, RequiresInteractiveAuth],
+        permission_classes=[IsAuthenticated, RequiresInteractiveAuthForWrites],
     )
     def me(self, request):
         """Return or partially update the authenticated user's own profile."""

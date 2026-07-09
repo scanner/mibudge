@@ -13,6 +13,7 @@ from datetime import timedelta
 
 # 3rd party imports
 import pytest
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -23,8 +24,8 @@ pytestmark = pytest.mark.django_db
 
 # The gate-free endpoint used to exercise authentication: read-only,
 # available to any authenticated user, no fixtures required.
-BANKS_URL = "/api/v1/banks/"
-API_KEYS_URL = "/api/v1/users/me/api-keys/"
+BANKS_URL = reverse("api_v1:bank-list")
+API_KEYS_URL = reverse("api_v1:api-key-list")
 
 
 ####################################################################
@@ -201,7 +202,9 @@ class TestAPIKeyManagementAPI:
         assert response.status_code == 200
         assert [k["name"] for k in response.data["results"]] == ["mine"]
 
-        response = client.post(f"{API_KEYS_URL}{theirs.uuid}/revoke/")
+        response = client.post(
+            reverse("api_v1:api-key-revoke", kwargs={"uuid": theirs.uuid})
+        )
         assert response.status_code == 404
 
     ####################################################################
@@ -215,12 +218,15 @@ class TestAPIKeyManagementAPI:
         api_key, _ = APIKey.make(user, "doomed")
         client = APIClient()
         client.force_authenticate(user=user)
+        revoke_url = reverse(
+            "api_v1:api-key-revoke", kwargs={"uuid": api_key.uuid}
+        )
 
-        response = client.post(f"{API_KEYS_URL}{api_key.uuid}/revoke/")
+        response = client.post(revoke_url)
         assert response.status_code == 200
         assert response.data["revoked_at"] is not None
 
-        response = client.post(f"{API_KEYS_URL}{api_key.uuid}/revoke/")
+        response = client.post(revoke_url)
         assert response.status_code == 400
 
 
@@ -233,37 +239,46 @@ class TestRequiresInteractiveAuth:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "method,url",
+        "method,url_name,expected_status",
         [
-            ("get", "/api/v1/users/me/"),
-            ("post", "/api/v1/users/me/change-password/"),
-            ("post", "/api/v1/users/me/change-email/"),
-            ("get", "/api/v1/users/me/invitations/"),
-            ("get", API_KEYS_URL),
-            ("post", API_KEYS_URL),
+            # Sensitive user/security endpoints: machine creds denied.
+            ("patch", "api_v1:user-me", 403),
+            ("post", "api_v1:user-change-password", 403),
+            ("post", "api_v1:user-change-email", 403),
+            ("get", "api_v1:user-my-invitations", 403),
+            ("get", "api_v1:api-key-list", 403),
+            ("post", "api_v1:api-key-list", 403),
+            # Profile reads + budgeting domain: allowed.
+            ("get", "api_v1:user-me", 200),
+            ("get", "api_v1:bank-list", 200),
+            ("get", "api_v1:bankaccount-list", 200),
         ],
     )
-    def test_api_key_denied_on_sensitive_endpoints(
-        self, user: User, method: str, url: str
+    def test_api_key_access_by_endpoint(
+        self, user: User, method: str, url_name: str, expected_status: int
     ):
         """
         GIVEN: a valid API key
-        WHEN:  a user/security endpoint is accessed with it
-        THEN:  403 is returned by RequiresInteractiveAuth
+        WHEN:  a v1 endpoint is accessed with it
+        THEN:  user/security endpoints deny the machine credential
+               with 403, while profile reads and budgeting-domain
+               endpoints allow it
         """
         _, plaintext = APIKey.make(user, "importer")
-        response = getattr(key_client(plaintext), method)(url)
-        assert response.status_code == 403
+        response = getattr(key_client(plaintext), method)(reverse(url_name))
+        assert response.status_code == expected_status
 
     ####################################################################
     #
-    def test_api_key_allowed_on_domain_endpoints(self, user: User):
+    def test_api_key_can_read_own_profile(self, user: User):
         """
         GIVEN: a valid API key
-        WHEN:  non-sensitive domain endpoints are accessed with it
-        THEN:  the requests succeed (blanket access preserved)
+        WHEN:  GET /users/me/ is requested with it
+        THEN:  the profile body includes the fields machine consumers
+               rely on (importers read the timezone)
         """
         _, plaintext = APIKey.make(user, "importer")
-        client = key_client(plaintext)
-        assert client.get(BANKS_URL).status_code == 200
-        assert client.get("/api/v1/bank-accounts/").status_code == 200
+        response = key_client(plaintext).get(reverse("api_v1:user-me"))
+        assert response.status_code == 200
+        assert response.data["username"] == user.username
+        assert response.data["timezone"] == user.timezone

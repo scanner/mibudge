@@ -47,6 +47,7 @@ used to connect to Vault.
 # system imports
 import logging
 import os
+import subprocess
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -1607,6 +1608,55 @@ def _resolve_vault_secrets(vault_path: str) -> dict[str, str]:
     return response["data"]["data"]
 
 
+####################################################################
+#
+def _resolve_api_key_from_1password(onepassword_url: str) -> str:
+    """
+    Fetch the mibudge API key from a 1Password item.
+
+    Expects the item to have a field labeled 'API key' -- typically
+    added alongside that item's normal username/password fields for a
+    mibudge login, so one item covers both interactive and machine
+    credentials. This is a *mibudge* item URL and is intentionally
+    distinct from any bank-specific 1Password item (e.g. the BofA
+    live scraper's own `--bofa-onepassword-url`) so each entity's
+    secret lives at its own, unambiguous env var.
+
+    Strips any trailing slash from *onepassword_url* before appending
+    the field name, so both `op://vault/item` and `op://vault/item/`
+    work correctly.
+
+    Args:
+        onepassword_url: 1Password item URL, e.g. 'op://Personal/mibudge'.
+
+    Returns:
+        The API key value.
+
+    Raises:
+        click.ClickException: If the `op` CLI is not found or returns
+            a non-zero exit code.
+    """
+    url = onepassword_url.rstrip("/")
+    try:
+        api_key = subprocess.run(
+            ["op", "read", f"{url}/API key"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except FileNotFoundError as e:
+        raise click.ClickException(
+            "1Password CLI (op) not found in PATH. "
+            "Install it from https://1password.com/downloads/command-line/"
+        ) from e
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"Failed to read API key from 1Password "
+            f"({url!r}): {e.stderr.strip()}"
+        ) from e
+    return api_key
+
+
 ########################################################################
 ########################################################################
 #
@@ -1617,6 +1667,7 @@ def _build_client(
     password: str | None,
     api_key: str | None,
     vault_path: str | None,
+    api_key_onepassword_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     console: Console,
@@ -1625,23 +1676,27 @@ def _build_client(
     """
     Resolve credentials + TLS settings and return an unauthenticated client.
 
-    Credential resolution order: CLI/env > Vault > error.  An API key
-    (CLI/env ``MIBUDGE_API_KEY`` or Vault key ``api_key``) takes
-    precedence over email/password.
+    Credential resolution order: CLI/env > 1Password > Vault > error.
+    An API key (CLI/env `MIBUDGE_API_KEY`, the mibudge 1Password item's
+    'API key' field, or Vault key `api_key`) takes precedence over
+    email/password.
     The returned client must be entered as a context manager and have
-    ``authenticate()`` called on it before use.
+    `authenticate()` called on it before use.
 
     Args:
         url, email, password, api_key: From CLI/env.
         vault_path: Optional KV2 path; if present, fills in missing
             credentials.
+        api_key_onepassword_url: Optional 1Password item URL holding
+            the API key used to authenticate to mibudge (env var:
+            MIBUDGE_API_KEY_ONEPASSWORD_URL).
         ca_bundle: Explicit CA bundle path (overrides system CAs).
         trust_local_certs: If True, use the project-local mkcert bundle.
         console: Rich console for user-visible messages.
         interactive: Whether to render rich output.
 
     Returns:
-        A configured (but not yet authenticated) ``MibudgeClient``.
+        A configured (but not yet authenticated) `MibudgeClient`.
 
     Raises:
         click.ClickException: If required credentials cannot be resolved.
@@ -1653,6 +1708,14 @@ def _build_client(
                 f"[dim]Fetching credentials from Vault: {vault_path}[/dim]"
             )
         vault_data = _resolve_vault_secrets(vault_path)
+
+    if api_key_onepassword_url and not api_key:
+        if interactive:
+            console.print(
+                "[dim]Fetching API key from 1Password: "
+                f"{api_key_onepassword_url}[/dim]"
+            )
+        api_key = _resolve_api_key_from_1password(api_key_onepassword_url)
 
     url = url or vault_data.get("url") or "https://localhost:8000"
     api_key = api_key or vault_data.get("api_key")
@@ -1825,6 +1888,17 @@ def _print_summary(
     help="Vault KV2 path for credentials (e.g. 'mibudge/importer').",
 )
 @click.option(
+    "--api-key-onepassword-url",
+    default=None,
+    help=(
+        "1Password item URL holding the API key used to authenticate "
+        "to mibudge, in a field labeled 'API key' (e.g. "
+        "'op://Personal/mibudge'). Used when --api-key is not given. "
+        "Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct from any "
+        "bank-specific 1Password URL option."
+    ),
+)
+@click.option(
     "--ca-bundle",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -1948,6 +2022,7 @@ def cli_cmd(
     password: str | None,
     api_key: str | None,
     vault_path: str | None,
+    api_key_onepassword_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     dry_run: bool,
@@ -2051,6 +2126,7 @@ def cli_cmd(
             password=password,
             api_key=api_key,
             vault_path=vault_path,
+            api_key_onepassword_url=api_key_onepassword_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,
@@ -2203,7 +2279,6 @@ def cli_cmd(
 # it wholesale leaks app-only settings into the importer process (e.g.
 # SSL_CERT_FILE, which httpx would honor when building its SSL context).
 _DOTENV_ALLOWED_PREFIXES = ("MIBUDGE_", "BOFA_", "VAULT_")
-_DOTENV_ALLOWED_NAMES = frozenset({"ONEPASSWORD_URL"})
 
 
 ########################################################################
@@ -2214,20 +2289,18 @@ def load_importer_env() -> None:
     Load importer-relevant variables from the nearest .env file.
 
     Unlike a plain load_dotenv(), only variables the importer CLIs
-    actually consume are applied: MIBUDGE_* (click auto-envvar options),
-    BOFA_* (scraper credentials), VAULT_* (hvac connection), and
-    ONEPASSWORD_URL. Variables already present in the real environment
-    are never overridden, so a value exported in the shell always wins
-    over the .env file.
+    actually consume are applied: MIBUDGE_* (click auto-envvar options,
+    including MIBUDGE_API_KEY_ONEPASSWORD_URL), BOFA_* (scraper
+    credentials, including BOFA_ONEPASSWORD_URL), and VAULT_* (hvac
+    connection).
+    Variables already present in the real environment are never
+    overridden, so a value exported in the shell always wins over the
+    .env file.
     """
     for key, value in dotenv_values().items():
         if value is None or key in os.environ:
             continue
-        allowed = (
-            key.startswith(_DOTENV_ALLOWED_PREFIXES)
-            or key in _DOTENV_ALLOWED_NAMES
-        )
-        if allowed:
+        if key.startswith(_DOTENV_ALLOWED_PREFIXES):
             os.environ[key] = value
 
 

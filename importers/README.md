@@ -190,6 +190,28 @@ uv run python -m importers --vault-path mibudge/importer \
 The Vault secret must contain `url` plus either `api_key` (preferred)
 or `email` and `password`.
 
+### Pulling the API key from 1Password
+
+```bash
+uv run python -m importers \
+    --api-key-onepassword-url op://Personal/mibudge \
+    import stmt.ofx
+```
+
+Requires the [1Password CLI](https://developer.1password.com/docs/cli/) (`op`)
+signed in. The item at the given URL must have a field labeled `API key`
+-- typically added alongside that same item's normal username/password
+fields for a mibudge login, so one item covers both an interactive login
+and the importer's machine credential.
+
+This is deliberately a separate env var
+(`MIBUDGE_API_KEY_ONEPASSWORD_URL`, the API key used to authenticate to
+mibudge) from the BofA live scraper's `--bofa-onepassword-url` /
+`BOFA_ONEPASSWORD_URL`, which sources BofA's own username/password from
+a different 1Password item -- each secret's name says what it fetches,
+and a future bank (Chase, etc.) can add `CHASE_ONEPASSWORD_URL` without
+colliding.
+
 ## Account resolution rules
 
 The importer decides which `BankAccount` to POST transactions to
@@ -302,7 +324,10 @@ Resolved in this order (first win):
 2. Environment variables -- every flag has a `MIBUDGE_FLAG_NAME` equivalent
    (see [Environment variables for every flag](#environment-variables-for-every-flag))
 3. `.env` file (loaded via python-dotenv)
-4. Vault KV2 secret (if `--vault-path` / `MIBUDGE_VAULT_PATH` is set)
+4. API key only: a 1Password item (if `--api-key-onepassword-url` /
+   `MIBUDGE_API_KEY_ONEPASSWORD_URL` is set) -- reads the item's
+   `API key` field
+5. Vault KV2 secret (if `--vault-path` / `MIBUDGE_VAULT_PATH` is set)
 
 ## Adding a new bank parser
 

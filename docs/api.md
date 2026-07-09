@@ -2306,7 +2306,7 @@ Partial update of a user profile. Restricted to staff/admin users.
 
 **Operation:** `users_me_retrieve`
 
-GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff).
+GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff). GET is also available to machine credentials (API keys) -- importers read the timezone field; PATCH requires an interactive login session.
 
 **Response 200:** 
 
@@ -2322,7 +2322,7 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 
 **Operation:** `users_me_partial_update`
 
-GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff).
+GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff). GET is also available to machine credentials (API keys) -- importers read the timezone field; PATCH requires an interactive login session.
 
 **Request Body** (`application/json`):
 

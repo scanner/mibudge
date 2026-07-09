@@ -158,6 +158,17 @@ def _setup_logging(
     help="Vault KV2 path for mibudge credentials (e.g. 'mibudge/importer').",
 )
 @click.option(
+    "--api-key-onepassword-url",
+    default=None,
+    help=(
+        "1Password item URL holding the API key used to authenticate "
+        "to mibudge, in a field labeled 'API key' (e.g. "
+        "'op://Personal/mibudge'). Used when --api-key is not given. "
+        "Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct from any "
+        "bank-specific 1Password URL option."
+    ),
+)
+@click.option(
     "--ca-bundle",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -199,6 +210,7 @@ def cli_cmd(
     password: str | None,
     api_key: str | None,
     vault_path: str | None,
+    api_key_onepassword_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     dry_run: bool,
@@ -242,6 +254,7 @@ def cli_cmd(
             password=password,
             api_key=api_key,
             vault_path=vault_path,
+            api_key_onepassword_url=api_key_onepassword_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,

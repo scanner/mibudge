@@ -99,7 +99,9 @@ Authorization: Api-Key mib_...
 ```
 
 The importer CLIs accept `--api-key`, the `MIBUDGE_API_KEY` environment
-variable, or a Vault secret key `api_key` -- see
+variable, a 1Password item's `API key` field
+(`--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`), or a
+Vault secret key `api_key` -- see
 [`docs/importers.md`](importers.md).
 
 ### What API keys may not do
@@ -110,14 +112,23 @@ accounts, budgets, transactions, allocations, funding, ...) but are
 
 - password change, email change
 - co-ownership invitations (send, list, cancel)
-- user management (`/api/v1/users/`, including `/users/me/`)
+- user management (`/api/v1/users/`, including `PATCH /users/me/`)
 - API-key management itself (a key cannot mint or revoke keys)
 
+The one carve-out: `GET /api/v1/users/me/` **is** allowed for machine
+credentials. It returns only profile facts (no security levers), and the
+importers need the `timezone` field to anchor bank-statement dates
+correctly. Writes to the profile remain interactive-only.
+
 This is enforced by the `users.permissions.RequiresInteractiveAuth`
-permission -- a blocklist gate attached to those views. When fine-grained
-scopes are introduced, this gate becomes a scope no machine credential can
-hold. **When adding a new sensitive user/security endpoint, attach
-`RequiresInteractiveAuth` to it.**
+permission -- a blocklist gate attached to those views -- and its
+read-only variant `RequiresInteractiveAuthForWrites` (used on
+`/users/me/`, gating only mutating methods). When fine-grained scopes are
+introduced, these gates become scopes (e.g. the read carve-out maps to a
+`profile:read` scope). **When adding a new sensitive user/security
+endpoint, attach `RequiresInteractiveAuth` to it; use
+`RequiresInteractiveAuthForWrites` only when machine consumers genuinely
+need the reads.**
 
 ### Implementation
 

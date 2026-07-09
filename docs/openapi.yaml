@@ -2070,7 +2070,8 @@ paths:
       operationId: users_me_retrieve
       description: GET returns the authenticated user's own profile. PATCH allows
         updating the name field. Available to any authenticated user (not restricted
-        to staff).
+        to staff). GET is also available to machine credentials (API keys) -- importers
+        read the timezone field; PATCH requires an interactive login session.
       summary: Get or update current user profile
       tags:
       - users
@@ -2088,7 +2089,8 @@ paths:
       operationId: users_me_partial_update
       description: GET returns the authenticated user's own profile. PATCH allows
         updating the name field. Available to any authenticated user (not restricted
-        to staff).
+        to staff). GET is also available to machine credentials (API keys) -- importers
+        read the timezone field; PATCH requires an interactive login session.
       summary: Get or update current user profile
       tags:
       - users
