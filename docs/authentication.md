@@ -40,21 +40,24 @@ servers) is planned as the next phase of machine authentication.
 
 ### Passwordless accounts
 
-Users created via the bank-account co-ownership invitation flow are issued
-a JWT session immediately but have no password set
-(`has_usable_password() == False`). They can use the app normally but
-cannot use the change-password or change-email features until they set a
-password via `/accounts/password/reset/`. Both forms detect this state via
-the `has_usable_password` field on `GET /api/v1/users/me/` and prompt the
-user accordingly.
+Users created via the invitation flows (bank-account co-ownership or
+admin user invitations -- see [`invitations.md`](invitations.md)) start
+with no password set (`has_usable_password() == False`). Accepting an
+invitation activates the account and sends an allauth password-reset
+email so the user sets their first password via
+`/accounts/password/reset/`; acceptance never issues credentials
+directly. While an account has no usable password, the change-password
+and change-email endpoints refuse to operate. The SPA detects this
+state via the `has_usable_password` field on `GET /api/v1/users/me/`
+and prompts the user accordingly.
 
 ### Self-service email change
 
 Users can change their login email address via a verified two-step flow. A
 7-day post-confirmation revocation window lets the legitimate owner cancel
 even if an attacker confirmed the change first, with automatic session
-invalidation on revocation. See `users/email_change.py` for the security
-policy.
+invalidation on revocation. See [`email-change.md`](email-change.md) for
+the full flow and security policy.
 
 ---
 
