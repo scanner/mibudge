@@ -187,7 +187,6 @@ def _serialize_account(account: BankAccount) -> dict[str, Any]:
     owners = list(
         account.owners.values_list("username", flat=True).order_by("username")
     )
-    group_name = account.group.name if account.group else None
     return {
         "id": str(account.id),
         "name": account.name,
@@ -198,7 +197,6 @@ def _serialize_account(account: BankAccount) -> dict[str, Any]:
         "available_balance": _money(account.available_balance),
         "link_aliases": account.link_aliases,
         "owners": owners,
-        "group": group_name,
         "unallocated_budget_id": unalloc_id,
         "last_imported_at": (
             account.last_imported_at.isoformat()

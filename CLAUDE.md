@@ -113,7 +113,7 @@ The Vue `auth` Pinia store manages the access token lifecycle and provides an au
 All models extend `MoneyPoolBaseClass` (abstract), which provides `pkid` (BigAutoField PK), `id` (UUID), and `created_at`/`modified_at` timestamps.
 
 - **`Bank`** — financial institution (name, routing number, default currency).
-- **`BankAccount`** — checking/savings/credit card account; has `posted_balance` and `available_balance` (both `MoneyField`); M2M to `User`; FK to `auth.Group` for joint accounts; a signal auto-creates an "Unallocated" budget on creation.
+- **`BankAccount`** — checking/savings/credit card account; has `posted_balance` and `available_balance` (both `MoneyField`); M2M to `User` for ownership (including joint accounts); a signal auto-creates an "Unallocated" budget on creation.
 - **`Budget`** — virtual envelope (Goal / Recurring / Recurring-with-fill-up-goal types); has target amount, target date, and a `recurrence` funding schedule; signals handle automatic funding.
 - **`Transaction`** — bank event (purchase or deposit); has `pending`/`posted` status. Has an optional `linked_transaction` OneToOneField for pairing counterpart transactions across accounts (e.g. credit card payment on checking linked to the corresponding credit on the card). Links are populated opportunistically by the import pipeline.
 - **`InternalTransaction`** — budget-to-budget transfer within the same bank account (write-once). Records src/dst budget with balance snapshots. Users undo transfers by creating a reversing InternalTransaction, not by deleting. Hidden by default in the UI with a toggle to show.
