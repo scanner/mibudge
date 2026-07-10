@@ -233,6 +233,62 @@ class TestCreateInvitation:
         )
         assert inv2.status == BankAccountInvitation.Status.PENDING
 
+    ####################################################################
+    #
+    def test_rejects_when_rolling_window_exceeded(
+        self,
+        account: BankAccount,
+        owner: User,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+    ) -> None:
+        """
+        GIVEN: 5 invitations (any status) to the same email + account in
+               the last 30 days
+        WHEN:  create_invitation() targets the same email + account
+        THEN:  InvitationWindowExceededError raised
+        """
+        email = "flooded@example.com"
+        for _ in range(5):
+            bank_account_invitation_factory(
+                bank_account=account,
+                invitee_email=email,
+                status=BankAccountInvitation.Status.CANCELLED,
+            )
+
+        with pytest.raises(invitation_svc.InvitationWindowExceededError):
+            invitation_svc.create_invitation(account, owner, email)
+
+    ####################################################################
+    #
+    def test_window_count_is_scoped_per_account(
+        self,
+        account: BankAccount,
+        owner: User,
+        bank_account_factory: Callable[..., BankAccount],
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+        mock_send_notification_now: MagicMock,
+    ) -> None:
+        """
+        GIVEN: 5 invitations to an email against a *different* account,
+               exhausting that account's window
+        WHEN:  create_invitation() targets the same email on *this*
+               account, which has no invitations of its own
+        THEN:  succeeds -- the rolling window is scoped per account, not
+               globally per email (unlike the admin user-invitation flow,
+               which is email-only)
+        """
+        email = "flooded@example.com"
+        other_account = bank_account_factory(owners=[owner])
+        for _ in range(5):
+            bank_account_invitation_factory(
+                bank_account=other_account,
+                invitee_email=email,
+                status=BankAccountInvitation.Status.CANCELLED,
+            )
+
+        inv = invitation_svc.create_invitation(account, owner, email)
+        assert inv.status == BankAccountInvitation.Status.PENDING
+
 
 ########################################################################
 ########################################################################
@@ -302,6 +358,136 @@ class TestCancelInvitation:
         )
         with pytest.raises(exc_class):
             invitation_svc.cancel_invitation(inv)
+
+
+########################################################################
+########################################################################
+#
+class TestResendInvitation:
+    """Service: resend_invitation() -- rate limit enforcement."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "starting_send_count",
+        [
+            # Ordinary resend, nowhere near the cap.
+            1,
+            # send_count=3 is exactly at max_resends -- the block fires
+            # at send_count > 3, not >= 3, so this boundary case must
+            # still succeed (confirming 3 resends / 4 emails total are
+            # permitted).
+            3,
+        ],
+    )
+    def test_resend_increments_send_count_and_sends_email(
+        self,
+        starting_send_count: int,
+        account: BankAccount,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+    ) -> None:
+        """
+        GIVEN: a pending invitation with send_count within the resend cap
+               and last_sent_at > 1 hour ago
+        WHEN:  resend_invitation() is called
+        THEN:  send_count is incremented by one; email sent
+        """
+        inv = bank_account_invitation_factory(
+            bank_account=account,
+            send_count=starting_send_count,
+            last_sent_at=timezone.now() - timedelta(hours=2),
+        )
+
+        invitation_svc.resend_invitation(inv)
+
+        inv.refresh_from_db()
+        assert inv.send_count == starting_send_count + 1
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].to == [inv.invitee_email]
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "send_count,last_sent_minutes_ago,exc_class",
+        [
+            # send_count=4 exceeds max_resends=3; cooldown has passed
+            (4, 120, invitation_svc.ResendLimitReachedError),
+            # send_count within limit; last sent only 30 min ago (< 1 h cooldown)
+            (1, 30, invitation_svc.ResendCooldownActiveError),
+        ],
+    )
+    def test_raises_when_resend_is_blocked(
+        self,
+        send_count: int,
+        last_sent_minutes_ago: int,
+        exc_class: type,
+        account: BankAccount,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+    ) -> None:
+        """
+        GIVEN: a pending invitation that violates a rate-limit rule
+        WHEN:  resend_invitation() is called
+        THEN:  the appropriate rate-limit error is raised; no email sent
+        """
+        inv = bank_account_invitation_factory(
+            bank_account=account,
+            send_count=send_count,
+            last_sent_at=timezone.now()
+            - timedelta(minutes=last_sent_minutes_ago),
+        )
+
+        with pytest.raises(exc_class):
+            invitation_svc.resend_invitation(inv)
+
+        assert len(mail.outbox) == 0
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "terminal_status,exc_class",
+        [
+            (
+                BankAccountInvitation.Status.ACCEPTED,
+                invitation_svc.TokenAlreadyAcceptedError,
+            ),
+            (
+                BankAccountInvitation.Status.DECLINED,
+                invitation_svc.TokenAlreadyDeclinedError,
+            ),
+            (
+                BankAccountInvitation.Status.CANCELLED,
+                invitation_svc.TokenAlreadyCancelledError,
+            ),
+            (
+                BankAccountInvitation.Status.EXPIRED,
+                invitation_svc.TokenExpiredError,
+            ),
+        ],
+    )
+    def test_raises_on_terminal_status(
+        self,
+        terminal_status: str,
+        exc_class: type,
+        account: BankAccount,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+    ) -> None:
+        """
+        GIVEN: an invitation in a terminal state
+        WHEN:  resend_invitation() is called
+        THEN:  the appropriate error is raised; no email sent
+
+        This also pins the ordering guarantee: _validate_pending() fires
+        before check_resend(), so terminal-status short-circuits before
+        any rate-limit evaluation (the factory default leaves last_sent_at
+        within the cooldown window, so a wrong ordering would produce
+        ResendCooldownActiveError instead).
+        """
+        inv = bank_account_invitation_factory(
+            bank_account=account, status=terminal_status
+        )
+        with pytest.raises(exc_class):
+            invitation_svc.resend_invitation(inv)
+        assert len(mail.outbox) == 0
 
 
 ########################################################################
@@ -579,6 +765,34 @@ class TestInviteAPI:
             _invite_url(str(account.id)), {"invitee_email": email}
         )
         assert response.status_code == status.HTTP_409_CONFLICT
+
+    ####################################################################
+    #
+    def test_returns_429_when_rolling_window_exceeded(
+        self,
+        account: BankAccount,
+        auth_client: APIClient,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+    ) -> None:
+        """
+        GIVEN: the rolling-window cap is exhausted for this email + account
+        WHEN:  POST invite for the same email
+        THEN:  429 Too Many Requests (not a 500)
+        """
+        email = "flooded@example.com"
+        for _ in range(5):
+            bank_account_invitation_factory(
+                bank_account=account,
+                invitee_email=email,
+                status=BankAccountInvitation.Status.CANCELLED,
+            )
+
+        response = auth_client.post(
+            _invite_url(str(account.id)), {"invitee_email": email}
+        )
+
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert "Too many invitations" in response.data["detail"]
 
 
 ########################################################################

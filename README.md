@@ -60,6 +60,17 @@ Budgets are never hard-deleted once they have transaction history. The rule is:
 
 mibudge supports multiple bank accounts -- checking, savings, credit cards -- each with their own set of budgets. Accounts can be shared between users (family members) or private to one user.
 
+### Invitations
+
+Registration is closed -- new users join mibudge by invitation only, via one of two flows:
+
+- **Co-owner invitations**: any owner of a bank account can invite someone (by email) to become a co-owner of that account. If the invitee has no mibudge account yet, accepting the invitation creates one. Sent from the account page in the SPA (or `POST /api/v1/bank-accounts/{id}/invite/`).
+- **Admin user invitations**: staff can invite a new user via the Django admin, without granting access to any account.
+
+Both flows email the invitee a single-use tokenized link (valid 7 days). Brand-new users set their first password through an emailed password-reset link after accepting -- acceptance never issues credentials directly. Invitations are rate-limited per address (resend caps plus a rolling 30-day window) to prevent mailbox flooding. See [`docs/invitations.md`](docs/invitations.md) for the full mechanism, rate limiting, and protections.
+
+Users can later change their login email through a verified two-step flow with a 7-day revocation window -- see [`docs/email-change.md`](docs/email-change.md) for the flow and its security policy.
+
 ## Architecture
 
 ### Backend: Django + DRF
@@ -105,6 +116,7 @@ All resources are under `/api/v1/`. Full endpoint docs: [`docs/api.md`](docs/api
 | Email revoke          | `/api/v1/users/me/change-email/{token}/revoke/`  | Cancel a change within the 7-day revocation window (no auth required)                          |
 | Banks                 | `/api/v1/banks/`                                 | Read-only reference data                                                                       |
 | Bank Accounts         | `/api/v1/bank-accounts/`                         | Scoped to account owners; `sync-scrape` action reconciles a full bank-side snapshot atomically |
+| Co-owner invitations  | `/api/v1/bank-accounts/{id}/invite/` etc.        | Send/list/cancel per account; public accept/decline at `/api/v1/invitations/{token}/`          |
 | Budgets               | `/api/v1/budgets/`                               | Scoped to account owners                                                                       |
 | Transactions          | `/api/v1/transactions/`                          | Scoped to account owners                                                                       |
 | Allocations           | `/api/v1/allocations/`                           | Budget assignments for transactions                                                            |
@@ -305,13 +317,13 @@ The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backen
 |--------------------------------------------------------------|----------------------------------------------------------------------------|
 | [`docs/api.md`](docs/api.md)                                 | REST API reference (generated from OpenAPI schema)                         |
 | [`docs/authentication.md`](docs/authentication.md)          | Authentication: JWT two-token pattern, API keys, machine-credential policy |
+| [`docs/invitations.md`](docs/invitations.md)                 | Co-owner and admin invitations: mechanism, rate limiting, protections      |
+| [`docs/email-change.md`](docs/email-change.md)               | Self-service email change: flow, revocation window, security policy       |
 | [`docs/funding.md`](docs/funding.md)                         | Budget funding engine: rules, invariants, test scenarios                   |
 | [`docs/importers.md`](docs/importers.md)                     | Bank statement import tools                                                |
 | [`docs/management-commands.md`](docs/management-commands.md) | Django management commands                                                 |
 | [`docs/UI_SPEC.md`](docs/UI_SPEC.md)                         | Frontend screen inventory and component breakdown                          |
 | [`app/notifications/README.md`](app/notifications/README.md) | Notification service: kind registration, digest mechanics, adding channels |
-
-Detailed documentation for user account management (co-ownership invitations, email change flow, security policy) will be added to `docs/` as those features stabilise.
 
 ## License
 

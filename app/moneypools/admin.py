@@ -7,7 +7,7 @@ from typing import Any
 # 3rd party imports
 #
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -30,6 +30,7 @@ from .models import (
 from .service import bank_account as bank_account_svc
 from .service import budget as budget_svc
 from .service import internal_transaction as itx_svc
+from .service import invitation as invitation_svc
 
 ########################################################################
 ########################################################################
@@ -76,7 +77,6 @@ class BankAccountForm(forms.ModelForm):
             "account_type",
             "account_number",
             "owners",
-            "group",
             "link_aliases",
             "auto_funding_enabled",
         )
@@ -210,7 +210,6 @@ class BankAccountAdmin(admin.ModelAdmin):
         "currency",
         "account_number",
         "owners",
-        "group",
         "posted_balance",
         "available_balance",
         "unallocated_budget",
@@ -240,7 +239,6 @@ class BankAccountAdmin(admin.ModelAdmin):
             "account_type",
             "account_number",
             "owners",
-            "group",
             "link_aliases",
             "auto_funding_enabled",
         )
@@ -295,7 +293,6 @@ class BankAccountAdmin(admin.ModelAdmin):
                 field: cleaned[field]
                 for field in (
                     "account_number",
-                    "group",
                     "link_aliases",
                     "posted_balance",
                     "available_balance",
@@ -807,7 +804,7 @@ class BankAccountInvitationAdmin(admin.ModelAdmin):
     )
     search_fields = ("invitee_email", "bank_account__name")
     ordering = ("-created_at",)
-    actions = ["cancel_selected_invitations"]
+    actions = ["cancel_selected_invitations", "resend_selected_invitations"]
 
     ####################################################################
     #
@@ -832,8 +829,6 @@ class BankAccountInvitationAdmin(admin.ModelAdmin):
         queryset: Any,
     ) -> None:
         """Cancel all selected pending invitations via the service layer."""
-        from moneypools.service import invitation as invitation_svc
-
         cancelled = 0
         for inv in queryset.filter(status=BankAccountInvitation.Status.PENDING):
             try:
@@ -842,3 +837,36 @@ class BankAccountInvitationAdmin(admin.ModelAdmin):
             except invitation_svc.InvitationError:
                 pass
         self.message_user(request, f"Cancelled {cancelled} invitation(s).")
+
+    ####################################################################
+    #
+    @admin.action(description="Resend invitation email")
+    def resend_selected_invitations(
+        self,
+        request: HttpRequest,
+        queryset: Any,
+    ) -> None:
+        """Resend the invitation email for selected pending invitations.
+
+        Rate-limit errors (resend cap reached, cooldown active) are
+        surfaced per-invitation as warnings rather than aborting the
+        whole batch, since they are expected outcomes for staff-driven
+        bulk resends, not failures.
+        """
+        resent = 0
+        for inv in queryset.filter(status=BankAccountInvitation.Status.PENDING):
+            try:
+                invitation_svc.resend_invitation(inv)
+                resent += 1
+            except invitation_svc.InvitationError as exc:
+                self.message_user(
+                    request,
+                    f"Could not resend to {inv.invitee_email}: {exc}",
+                    messages.WARNING,
+                )
+        if resent:
+            self.message_user(
+                request,
+                f"Resent {resent} invitation(s).",
+                messages.SUCCESS,
+            )

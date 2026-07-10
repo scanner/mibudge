@@ -669,7 +669,7 @@ Cancel a pending co-ownership invitation by token. Only the user who sent the in
 
 **Operation:** `bank_accounts_invite_create`
 
-Send a co-ownership invitation to the given email address. If no mibudge account exists for that address, an inactive placeholder account is created; the invitee sets their password after accepting. Returns 409 if the address is already an owner or a pending invitation already exists.
+Send a co-ownership invitation to the given email address. If no mibudge account exists for that address, an inactive placeholder account is created; the invitee sets their password after accepting. Returns 409 if the address is already an owner or a pending invitation already exists; 429 if too many invitations have been sent to this address for this account in the rolling window.
 
 **Parameters:**
 

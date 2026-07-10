@@ -33,7 +33,6 @@ from uuid import UUID
 #
 import recurrence
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction as db_transaction
@@ -377,10 +376,6 @@ def _restore_account(d: dict[str, Any], bank: Bank) -> BankAccount:
     Returns:
         The BankAccount instance (unallocated_budget not yet set).
     """
-    group: Group | None = None
-    if d.get("group"):
-        group, _ = Group.objects.get_or_create(name=d["group"])
-
     account, created = BankAccount.objects.get_or_create(
         id=UUID(d["id"]),
         defaults={"bank": bank, "name": d["name"]},
@@ -394,7 +389,6 @@ def _restore_account(d: dict[str, Any], bank: Bank) -> BankAccount:
     account.currency = d.get("currency", "USD")
     account.account_number = d.get("account_number")
     account.link_aliases = d.get("link_aliases", [])
-    account.group = group
     account.unallocated_budget = None
 
     posted = _money(d.get("posted_balance"))

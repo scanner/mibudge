@@ -139,13 +139,6 @@ class BankAccount(MoneyPoolBaseClass):
         Bank, to_field="id", on_delete=models.CASCADE, editable=False
     )
     owners: "models.ManyToManyField[Any, Any]" = models.ManyToManyField(User)
-    group = models.ForeignKey(
-        "auth.Group",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="Joint ownership group for this account.",
-    )
 
     # max_length=32 comfortably covers OFX ACCTID (spec max A-22),
     # SWIFT account-identifier segments, and the longer internal IDs

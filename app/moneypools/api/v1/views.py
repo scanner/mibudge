@@ -615,7 +615,9 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             "placeholder account is created; the invitee sets their "
             "password after accepting. "
             "Returns 409 if the address is already an owner or a pending "
-            "invitation already exists."
+            "invitation already exists; 429 if too many invitations have "
+            "been sent to this address for this account in the rolling "
+            "window."
         ),
         request=InviteOwnerSerializer,
         responses={201: None},
@@ -653,6 +655,11 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
                     "detail": "A pending invitation for this address already exists."
                 },
                 status=status.HTTP_409_CONFLICT,
+            )
+        except invitation_svc.InvitationWindowExceededError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
         return Response(status=status.HTTP_201_CREATED)
 
