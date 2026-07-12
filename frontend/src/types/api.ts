@@ -61,6 +61,12 @@ export interface Budget {
   budget_type: BudgetType;
   balance: string;
   balance_currency: string;
+  // Running net of all internal transfers into the budget.  For Goal
+  // budgets this is the true goal progress: spending lowers balance but
+  // not funded_amount, so a pre-spent goal is measured by what has been
+  // funded, not by what remains in the envelope.
+  funded_amount: string;
+  funded_amount_currency: string;
   target_balance: string | null;
   target_balance_currency: string;
   funding_amount: string | null;

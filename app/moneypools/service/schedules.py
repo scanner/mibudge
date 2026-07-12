@@ -199,4 +199,20 @@ def count_occurrences(
         logger.warning("count_occurrences: recurrence error: %r", exc)
         return 1
 
-    return max(1, len(occurrences))
+    # Post-filter to [from_date, end_date].  between() returns dates in
+    # [start_dt, end_dt] (inc=True), which is one day too wide on the
+    # lower bound; worse, when the schedule has no stored DTSTART the
+    # fallback dtstart (start_dt) is itself emitted as an occurrence
+    # (django-recurrence include_dtstart), inflating the count by one
+    # and shrinking every per-event deposit.
+    results = set()
+    for occ in occurrences:
+        d = (
+            occ.date()
+            if hasattr(occ, "date")
+            else date(occ.year, occ.month, occ.day)
+        )
+        if from_date <= d <= end_date:
+            results.add(d)
+
+    return max(1, len(results))

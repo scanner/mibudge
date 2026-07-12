@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Goal budgets on a funding schedule without a DTSTART counted a phantom funding event when spreading the remaining gap, shrinking every deposit and leaving the goal under-funded at its target date (e.g. $366 per event instead of $549)
+- "Behind pace" badge now measures goal progress by the amount funded (matching the funding engine) instead of the current balance, so spending out of a goal no longer marks it behind pace; the Budget API exposes the new read-only `funded_amount` field
 - Importer CLIs crashed with `FileNotFoundError` when the repo-root `.env` set app-only variables like `SSL_CERT_FILE`; they now load only importer-related variables (`MIBUDGE_*`, `BOFA_*`, `VAULT_*`) from `.env`
 - `POST /api/v1/bank-accounts/{id}/invite/` returned a 500 when the per-address invitation rate limit was hit; it now returns 429 Too Many Requests with a descriptive message
 

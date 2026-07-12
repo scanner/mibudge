@@ -930,6 +930,8 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`bank_account`** (`string`) *(required)*
 - **`balance`** (`string`) *(required, read-only)*
 - **`balance_currency`** (`string`) *(required, read-only)*
+- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+- **`funded_amount_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
 - **`funding_amount`** (`string`)
@@ -989,6 +991,8 @@ Return a single budget by UUID.
 - **`bank_account`** (`string`) *(required)*
 - **`balance`** (`string`) *(required, read-only)*
 - **`balance_currency`** (`string`) *(required, read-only)*
+- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+- **`funded_amount_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
 - **`funding_amount`** (`string`)
@@ -1108,6 +1112,8 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`bank_account`** (`string`) *(required)*
 - **`balance`** (`string`) *(required, read-only)*
 - **`balance_currency`** (`string`) *(required, read-only)*
+- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+- **`funded_amount_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
 - **`funding_amount`** (`string`)
@@ -1227,6 +1233,8 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`bank_account`** (`string`) *(required)*
 - **`balance`** (`string`) *(required, read-only)*
 - **`balance_currency`** (`string`) *(required, read-only)*
+- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+- **`funded_amount_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
 - **`funding_amount`** (`string`)
@@ -1358,6 +1366,8 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`bank_account`** (`string`) *(required)*
 - **`balance`** (`string`) *(required, read-only)*
 - **`balance_currency`** (`string`) *(required, read-only)*
+- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+- **`funded_amount_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
 - **`funding_amount`** (`string`)
@@ -2748,6 +2758,8 @@ signal and is not accepted from the client.
 - **`bank_account`** (`string`) *(required)*
 - **`balance`** (`string`) *(required, read-only)*
 - **`balance_currency`** (`string`) *(required, read-only)*
+- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+- **`funded_amount_currency`** (`string`) *(required, read-only)*
 - **`target_balance`** (`string`) *(required)*
 - **`target_balance_currency`** (`string`) *(required, read-only)*
 - **`funding_amount`** (`string`)

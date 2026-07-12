@@ -55,6 +55,13 @@ _MONTHLY_FIRST = recurrence.Recurrence(
     rrules=[recurrence.Rule(recurrence.MONTHLY)],
 )
 
+# Fires on the 15th and last day of each month, with no DTSTART -- the
+# shape the SPA's schedule picker produces (a bare RRULE).  Regression
+# shape for the phantom-occurrence fencepost in count_occurrences.
+_SEMI_MONTHLY_NO_DTSTART = recurrence.Recurrence(
+    rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
+)
+
 
 ####################################################################
 #
@@ -209,6 +216,57 @@ class TestGoalStrategy:
         )
 
         assert result == Money(60, "USD")
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "event_date,funded,expected",
+        [
+            # Two events remain (Jul 15, Jul 31): $1,098 / 2 = $549.
+            (date(2026, 7, 15), Decimal("5602.00"), Decimal("549.00")),
+            # One event remains (Jul 31): the full remaining gap.
+            (date(2026, 7, 31), Decimal("6151.00"), Decimal("549.00")),
+        ],
+    )
+    def test_target_date_prespent_goal_no_dtstart_schedule(
+        self,
+        make_account: Callable[..., BankAccount],
+        event_date: date,
+        funded: Decimal,
+        expected: Decimal,
+    ) -> None:
+        """
+        GIVEN: a pre-spent TARGET_DATE Goal (spending drove balance below
+               funded_amount) on a semi-monthly schedule with no DTSTART,
+               matching a goal budget we saw: target $6,700 by Aug 1,
+               $5,602 funded, $2,053.02 spent
+        WHEN:  the strategy computes the intended amount for a fund event
+        THEN:  the remaining gap (target - funded_amount) is spread over
+               only the real occurrences left before the target date --
+               the schedule's synthetic dtstart anchor must not be
+               counted as an extra event
+        """
+        account = make_account()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Trip Abroad",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(Decimal("6700.00"), "USD"),
+            target_date=date(2026, 8, 1),
+            funding_schedule=_SEMI_MONTHLY_NO_DTSTART,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            balance=Money(funded - Decimal("2053.02"), "USD"),
+            funded_amount=Money(funded, "USD"),
+        )
+        budget.refresh_from_db()
+
+        result = GoalStrategy().intended_for_event(
+            budget, event_date, kind=EventKind.FUND
+        )
+
+        assert result == Money(expected, "USD")
 
     ####################################################################
     #

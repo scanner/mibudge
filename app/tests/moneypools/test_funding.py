@@ -10,6 +10,7 @@ mark-imported REST endpoint.
 #
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
 
@@ -72,6 +73,14 @@ _MONTHLY_FIRST = recurrence.Recurrence(
 # semi-monthly funding schedule used in the joint checking account.
 _TWICE_MONTHLY_15_EOM = recurrence.Recurrence(
     dtstart=datetime(2026, 1, 15),
+    rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
+)
+
+# The same semi-monthly rule with no DTSTART -- the shape the SPA's
+# schedule picker produces (a bare RRULE).  Exercises the fallback-anchor
+# path in the schedule helpers, where a phantom occurrence once inflated
+# the remaining-event count and shrank every per-event deposit.
+_TWICE_MONTHLY_15_EOM_NO_DTSTART = recurrence.Recurrence(
     rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
 )
 
@@ -213,6 +222,59 @@ class TestFundingEngineSingleEvent:
         budget.refresh_from_db()
         # 3 occurrences: Jan 1, Feb 1, Mar 1 → $300 / 3 = $100
         assert budget.balance == Money(100, "USD")
+
+    ####################################################################
+    #
+    def test_target_date_prespent_goal_no_dtstart_schedule(
+        self,
+        make_account: Callable[..., BankAccount],
+        system_user: User,
+    ) -> None:
+        """
+        GIVEN: a pre-spent TARGET_DATE Goal on a semi-monthly funding
+               schedule that has no DTSTART (the shape the SPA produces),
+               matching a goal budget we saw: target $6,700 by Aug 1,
+               $5,602 funded so far, $2,053.02 spent, so two funding
+               events remain (Jul 15 and Jul 31) to close a $1,098 gap
+        WHEN:  fund_account fires on the Jul 15 event
+        THEN:  $549 is transferred ($1,098 / 2 real remaining events) --
+               the schedule's synthetic dtstart anchor must not be
+               counted as a third event (which would shrink the deposit
+               to $366 and strand the goal under-funded at its deadline)
+        """
+        today = date(2026, 7, 15)
+        account = make_account(posted_through=today)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(2000, "USD")
+        )
+
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Trip Abroad",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(Decimal("6700.00"), "USD"),
+            target_date=date(2026, 8, 1),
+            funding_schedule=_TWICE_MONTHLY_15_EOM_NO_DTSTART,
+        )
+        Budget.objects.filter(pkid=budget.pkid).update(
+            balance=Money(Decimal("3548.98"), "USD"),
+            funded_amount=Money(Decimal("5602.00"), "USD"),
+            last_funded_on=date(2026, 6, 30),
+        )
+
+        report = funding_svc.fund_account(account, today, system_user)
+
+        assert report.transfers == 1
+        budget.refresh_from_db()
+        assert budget.last_funded_on == today
+        assert budget.balance == Money(Decimal("4097.98"), "USD")
+        assert budget.funded_amount == Money(Decimal("6151.00"), "USD")
+
+        unallocated.refresh_from_db()
+        assert unallocated.balance == Money(Decimal("1451.00"), "USD")
 
 
 ########################################################################
