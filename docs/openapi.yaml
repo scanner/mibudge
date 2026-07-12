@@ -505,21 +505,10 @@ paths:
         name: token
         schema:
           type: string
+        description: The invitation's opaque token.
         required: true
       tags:
       - bank-accounts
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BankAccountRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/BankAccountRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/BankAccountRequest'
-        required: true
       security:
       - jwtAuth: []
       - apiKeyAuth: []
@@ -1384,6 +1373,10 @@ paths:
       responses:
         '200':
           description: No response body
+        '400':
+          description: Invitation expired, cancelled, or already resolved.
+        '404':
+          description: Invitation not found.
   /api/v1/invitations/{token}/decline/:
     post:
       operationId: invitations_decline_create
@@ -1405,6 +1398,10 @@ paths:
       responses:
         '200':
           description: No response body
+        '400':
+          description: Invitation expired, cancelled, or already resolved.
+        '404':
+          description: Invitation not found.
   /api/v1/notification-preferences/:
     get:
       operationId: notification_preferences_list
@@ -2270,20 +2267,10 @@ paths:
         name: token
         schema:
           type: string
+        description: The email-change verification token.
         required: true
       tags:
       - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserRequest'
       security:
       - jwtAuth: []
       - apiKeyAuth: []
@@ -2306,20 +2293,10 @@ paths:
         name: token
         schema:
           type: string
+        description: The email-change revocation token.
         required: true
       tags:
       - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserRequest'
       security:
       - jwtAuth: []
       - apiKeyAuth: []
@@ -2698,7 +2675,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/Status58bEnum'
+          - $ref: '#/components/schemas/BankAccountInvitationStatusEnum'
           readOnly: true
         expires_at:
           type: string
@@ -2741,6 +2718,20 @@ components:
       - modified_at
       - status
       - token
+    BankAccountInvitationStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      - expired
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `cancelled` - Cancelled
+        * `expired` - Expired
     BankAccountRequest:
       type: object
       description: |-
@@ -3466,7 +3457,7 @@ components:
           description: Calendar date the event was scheduled to fire.
         status:
           allOf:
-          - $ref: '#/components/schemas/FundingEventOccurrenceStatusEnum'
+          - $ref: '#/components/schemas/FundingEventStatusEnum'
           readOnly: true
         completed_at:
           type: string
@@ -3492,7 +3483,7 @@ components:
       - modified_at
       - scheduled_date
       - status
-    FundingEventOccurrenceStatusEnum:
+    FundingEventStatusEnum:
       enum:
       - PENDING
       - PARTIAL
@@ -4167,7 +4158,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/Status58bEnum'
+          - $ref: '#/components/schemas/BankAccountInvitationStatusEnum'
           readOnly: true
         invitee_email:
           type: string
@@ -4330,20 +4321,6 @@ components:
       - is_pending
       - posted_date
       - raw_description
-    Status58bEnum:
-      enum:
-      - pending
-      - accepted
-      - declined
-      - cancelled
-      - expired
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `accepted` - Accepted
-        * `declined` - Declined
-        * `cancelled` - Cancelled
-        * `expired` - Expired
     TokenRefresh:
       type: object
       properties:

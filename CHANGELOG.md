@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Behind pace" badge now measures goal progress by the amount funded (matching the funding engine) instead of the current balance, so spending out of a goal no longer marks it behind pace; the Budget API exposes the new read-only `funded_amount` field
 - Importer CLIs crashed with `FileNotFoundError` when the repo-root `.env` set app-only variables like `SSL_CERT_FILE`; they now load only importer-related variables (`MIBUDGE_*`, `BOFA_*`, `VAULT_*`) from `.env`
 - `POST /api/v1/bank-accounts/{id}/invite/` returned a 500 when the per-address invitation rate limit was hit; it now returns 429 Too Many Requests with a descriptive message
+- The public invitation accept/decline endpoints were missing from the generated OpenAPI schema (`make api-docs` reported errors); they and the token-parameterized invitation/email-change endpoints are now fully documented, the no-body POST endpoints no longer advertise a bogus request body, and the three `status` enums have stable names instead of hash-suffixed ones
 
 ## [0.1.1] - 2026-07-03
 
