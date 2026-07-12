@@ -40,9 +40,7 @@ _ANCHORED_SEMI_MONTHLY = recurrence.Recurrence(
     rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
 )
 _EXPIRED_RULE = recurrence.Recurrence(
-    rrules=[
-        recurrence.Rule(recurrence.MONTHLY, until=datetime(2020, 1, 1))
-    ],
+    rrules=[recurrence.Rule(recurrence.MONTHLY, until=datetime(2020, 1, 1))],
 )
 
 

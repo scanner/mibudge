@@ -1,6 +1,6 @@
 [project]
 name = "mibudge"
-version = "0.1.1"
+version = "0.2.0"
 description = "Personal budgeting service inspired by Simple Bank"
 requires-python = ">=3.13"
 dependencies = [
@@ -83,7 +83,11 @@ dev = [
     # Type checking
     "django-stubs[compatible-mypy]>=5.2,<6",
     # Linting & formatting
-    "ruff",
+    # NOTE: ruff is pinned exactly and must match the ruff-pre-commit
+    # rev in .pre-commit-config.yaml -- otherwise 'make lint'
+    # (pre-commit's ruff) and CI ('uv run ruff format --check', the
+    # locked ruff) disagree on formatting.
+    "ruff==0.15.21",
     "pre-commit",
     # Debugging
     "ipdb",
