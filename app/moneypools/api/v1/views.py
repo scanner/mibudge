@@ -21,6 +21,7 @@ import recurrence as recurrence_lib
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
+    OpenApiParameter,
     OpenApiResponse,
     extend_schema,
     extend_schema_view,
@@ -704,6 +705,15 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
             "Cancel a pending co-ownership invitation by token. "
             "Only the user who sent the invitation may cancel it."
         ),
+        parameters=[
+            OpenApiParameter(
+                "token",
+                str,
+                OpenApiParameter.PATH,
+                description="The invitation's opaque token.",
+            ),
+        ],
+        request=None,
         responses={200: None},
     )
     @action(
@@ -1356,7 +1366,14 @@ def invitation_detail(request: Request, token: str) -> Response:
         "For brand-new users (no password set), a password-reset email "
         "is also dispatched. No authentication required."
     ),
-    responses={200: None},
+    request=None,
+    responses={
+        200: None,
+        400: OpenApiResponse(
+            description="Invitation expired, cancelled, or already resolved."
+        ),
+        404: OpenApiResponse(description="Invitation not found."),
+    },
 )
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -1399,7 +1416,14 @@ def invitation_accept(request: Request, token: str) -> Response:
         "Decline the co-ownership invitation identified by *token*. "
         "No authentication required."
     ),
-    responses={200: None},
+    request=None,
+    responses={
+        200: None,
+        400: OpenApiResponse(
+            description="Invitation expired, cancelled, or already resolved."
+        ),
+        404: OpenApiResponse(description="Invitation not found."),
+    },
 )
 @api_view(["POST"])
 @permission_classes([AllowAny])

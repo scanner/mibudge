@@ -398,7 +398,6 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 ACCOUNT_ALLOW_REGISTRATION = env("DJANGO_ACCOUNT_ALLOW_REGISTRATION")
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"
 SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
@@ -475,6 +474,20 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1/",
+    # Three models expose a 'status' field with different choice sets;
+    # name each component explicitly so spectacular does not fall back
+    # to hash-suffixed names like 'Status58bEnum'.  NOTE: no trailing
+    # '.choices' -- spectacular's deep_import_string resolves at most
+    # MODULE.OBJECT.ATTRIBUTE, and it unwraps Choices classes itself.
+    "ENUM_NAME_OVERRIDES": {
+        "FundingEventStatusEnum": (
+            "moneypools.models.FundingEventOccurrence.Status"
+        ),
+        "BankAccountInvitationStatusEnum": (
+            "moneypools.models.BankAccountInvitation.Status"
+        ),
+        "UserInvitationStatusEnum": "users.models.UserInvitation.Status",
+    },
 }
 
 # djangorestframework-simplejwt

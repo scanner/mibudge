@@ -6,7 +6,11 @@ from allauth.account.internal.flows.password_change import (
 from allauth.account.signals import password_changed
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
@@ -253,6 +257,15 @@ class UserViewSet(
             "(iOS) or App Link (Android) intercept that URL and call this "
             "endpoint instead, receiving JSON and controlling their own UI."
         ),
+        parameters=[
+            OpenApiParameter(
+                "token",
+                str,
+                OpenApiParameter.PATH,
+                description="The email-change verification token.",
+            ),
+        ],
+        request=None,
         responses={200: None},
     )
     @action(
@@ -303,6 +316,15 @@ class UserViewSet(
             "**Dual-path note:** See ``change_email_confirm`` -- the same "
             "Universal Link / App Link pattern applies here."
         ),
+        parameters=[
+            OpenApiParameter(
+                "token",
+                str,
+                OpenApiParameter.PATH,
+                description="The email-change revocation token.",
+            ),
+        ],
+        request=None,
         responses={200: None},
     )
     @action(

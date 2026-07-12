@@ -622,46 +622,7 @@ Cancel a pending co-ownership invitation by token. Only the user who sent the in
 **Parameters:**
 
 - `id` (path, required)
-- `token` (path, required)
-
-**Request Body** (`application/json`):
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
+- `token` (path, required) — The invitation's opaque token.
 
 **Response 200:** No response body
 
@@ -1678,6 +1639,10 @@ Accept the co-ownership invitation identified by *token*. Adds the invitee to th
 
 **Response 200:** No response body
 
+**Response 400:** Invitation expired, cancelled, or already resolved.
+
+**Response 404:** Invitation not found.
+
 #### `POST /api/v1/invitations/{token}/decline/`
 
 **Operation:** `invitations_decline_create`
@@ -1689,6 +1654,10 @@ Decline the co-ownership invitation identified by *token*. No authentication req
 - `token` (path, required)
 
 **Response 200:** No response body
+
+**Response 400:** Invitation expired, cancelled, or already resolved.
+
+**Response 404:** Invitation not found.
 
 ### notification-preferences
 
@@ -2484,25 +2453,7 @@ Verify a pending email change using the token from the verification link sent to
 
 **Parameters:**
 
-- `token` (path, required)
-
-**Request Body** (`application/json`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
+- `token` (path, required) — The email-change verification token.
 
 **Response 200:** No response body
 
@@ -2518,25 +2469,7 @@ On post-confirmation revocation the email is reverted and all active sessions ar
 
 **Parameters:**
 
-- `token` (path, required)
-
-**Request Body** (`application/json`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
+- `token` (path, required) — The email-change revocation token.
 
 **Response 200:** No response body
 
@@ -2711,6 +2644,15 @@ cross-account listing on the user's settings page (me/invitations/).
 - **`cancelled_at`** (`string`) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### BankAccountInvitationStatusEnum
+
+* `pending` - Pending
+* `accepted` - Accepted
+* `declined` - Declined
+* `cancelled` - Cancelled
+* `expired` - Expired
+
 
 ### BankAccountRequest
 
@@ -3074,7 +3016,7 @@ callers can cross-reference with the Budget endpoint.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
-### FundingEventOccurrenceStatusEnum
+### FundingEventStatusEnum
 
 * `PENDING` - Pending
 * `PARTIAL` - Partial
@@ -3445,15 +3387,6 @@ sanity walk; never persisted.
 - **`amount`** (`string`) *(required)*
 - **`transaction_type`** (`string`)
 - **`running_balance`** (`string`)
-
-### Status58bEnum
-
-* `pending` - Pending
-* `accepted` - Accepted
-* `declined` - Declined
-* `cancelled` - Cancelled
-* `expired` - Expired
-
 
 ### TokenRefresh
 
