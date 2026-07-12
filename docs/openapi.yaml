@@ -2825,6 +2825,16 @@ components:
         balance_currency:
           type: string
           readOnly: true
+        funded_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          description: 'For Goal budgets: running net of all ITX credits minus debits.
+            Unused for other types.'
+        funded_amount_currency:
+          type: string
+          readOnly: true
         target_balance:
           type: string
           format: decimal
@@ -2932,6 +2942,8 @@ components:
       - bank_account
       - complete
       - created_at
+      - funded_amount
+      - funded_amount_currency
       - funding_amount_currency
       - id
       - modified_at
