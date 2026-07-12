@@ -8,7 +8,7 @@ recurrence.Recurrence objects and plain date/datetime values.
 # system imports
 #
 import logging
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 # 3rd party imports
 #
@@ -216,3 +216,109 @@ def count_occurrences(
             results.add(d)
 
     return max(1, len(results))
+
+
+####################################################################
+#
+def normalize_dtstart(
+    sched: recurrence_lib.Recurrence | None,
+    anchor: date,
+) -> recurrence_lib.Recurrence | None:
+    """Anchor sched's DTSTART at its first real occurrence on/after anchor.
+
+    django-recurrence treats DTSTART itself as an occurrence (an implicit
+    RDATE via include_dtstart, which does not survive serialization
+    round-trips and so cannot simply be disabled on the stored value).
+    A DTSTART on a day the rule does not fire therefore becomes a
+    persisted phantom funding event.  This helper avoids that by setting
+    DTSTART to a date the rule genuinely fires on.
+
+    The rule pattern is preserved: when sched already has a DTSTART it is
+    kept as the rule anchor (a bare FREQ=MONTHLY rule takes its
+    day-of-month from it), and only the stored DTSTART moves forward to
+    the first occurrence on/after *anchor*.  When sched has no DTSTART,
+    *anchor* itself anchors the rule.
+
+    Args:
+        sched: The schedule to normalize (mutated in place), or None.
+        anchor: Earliest date the new DTSTART may fall on -- budget
+            creation date on create, the edit date on re-anchoring
+            updates.
+
+    Returns:
+        The same Recurrence instance with DTSTART set to a real
+        occurrence, or the input unchanged when there is nothing to
+        normalize (no schedule, no rules, or no occurrence found).
+    """
+    if not sched or not sched.rrules:
+        return sched
+
+    anchor_dt = datetime(anchor.year, anchor.month, anchor.day)
+    raw = sched.dtstart
+    rule_anchor = raw.replace(tzinfo=None) if raw is not None else anchor_dt
+
+    # Look far enough ahead for sparse rules (e.g. yearly).
+    look_ahead = datetime(anchor.year + 5, anchor.month, anchor.day)
+
+    # Temporarily disable include_dtstart so the rule anchor is not
+    # emitted as a synthetic occurrence on a day the rule does not fire.
+    saved_include = sched.include_dtstart
+    sched.include_dtstart = False
+    try:
+        occurrences = sched.between(
+            anchor_dt - timedelta(days=1),
+            look_ahead,
+            inc=True,
+            dtstart=rule_anchor,
+        )
+    except (recurrence_lib.RecurrenceError, TypeError, ValueError) as exc:
+        logger.warning("normalize_dtstart: recurrence error: %r", exc)
+        return sched
+    finally:
+        sched.include_dtstart = saved_include
+
+    for occ in occurrences:
+        d = (
+            occ.date()
+            if hasattr(occ, "date")
+            else date(occ.year, occ.month, occ.day)
+        )
+        if d >= anchor:
+            # Store as UTC midnight (serialized 'T000000Z'): a naive
+            # datetime would be treated as local time on serialization,
+            # shifting the calendar date in timezones east of UTC.
+            sched.dtstart = datetime(d.year, d.month, d.day, tzinfo=UTC)
+            return sched
+
+    logger.warning(
+        "normalize_dtstart: no occurrence on/after %s within %s years; "
+        "leaving DTSTART unchanged",
+        anchor,
+        5,
+    )
+    return sched
+
+
+####################################################################
+#
+def rules_fingerprint(sched: recurrence_lib.Recurrence | None) -> str:
+    """Return a comparable serialization of sched ignoring its DTSTART.
+
+    Used to decide whether an incoming schedule actually changes the
+    recurrence pattern (RRULE/EXRULE/RDATE/EXDATE parts) or merely
+    round-trips the stored one without its DTSTART anchor -- SPA clients
+    send bare RRULEs, so a field-level comparison would always differ.
+
+    Args:
+        sched: The schedule to fingerprint, or None.
+
+    Returns:
+        The serialized schedule with DTSTART/DTEND lines removed; empty
+        string for a null/empty schedule.
+    """
+    if not sched:
+        return ""
+    lines = recurrence_lib.serialize(sched).splitlines()
+    return "\n".join(
+        line for line in lines if not line.startswith(("DTSTART", "DTEND"))
+    )

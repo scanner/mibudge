@@ -87,6 +87,10 @@ export interface Budget {
   // Computed server-side from the schedule and last_recurrence_on;
   // the schedule's DTSTART is only the rule anchor, not the next date.
   next_recurrence: string | null;
+  // Server-computed funding pace for Goal budgets: funded_amount vs
+  // scheduled funding events elapsed.  Null when pace does not apply
+  // (non-goal, paused, archived, complete, or no target date).
+  funding_pace: "ahead" | "on_track" | "behind" | null;
   created_at: string;
   modified_at: string;
 }

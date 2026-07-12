@@ -303,6 +303,124 @@ def next_recurrence_date(
     return upcoming[0] if upcoming else None
 
 
+# funding_pace() return values.  Kept as plain strings (not model
+# TextChoices) because pace is computed, never stored.
+PACE_AHEAD = "ahead"
+PACE_ON_TRACK = "on_track"
+PACE_BEHIND = "behind"
+FUNDING_PACE_CHOICES = (PACE_AHEAD, PACE_ON_TRACK, PACE_BEHIND)
+
+# A budget within this fraction of the expected funded level (either
+# side) reads as on-track rather than flapping between states around
+# every funding event.
+_PACE_TOLERANCE = 0.05
+
+
+####################################################################
+#
+def funding_pace(
+    budget: Budget,
+    today: date | None = None,
+) -> str | None:
+    """Return how a Goal budget's funding compares to its plan.
+
+    Pace measures funded_amount -- the running total of deposits --
+    against the fraction of scheduled funding events that have elapsed
+    between the schedule's DTSTART anchor and the target date.  It is
+    deliberately independent of the current balance: spending out of a
+    goal (even driving the balance negative) does not reopen the funding
+    gap, so it must not read as falling behind.  A negative balance is
+    an overspend signal, surfaced separately.
+
+    Because the funding engine re-spreads the remaining gap over the
+    remaining events, a goal that falls behind still lands on target by
+    the deadline as long as future events complete -- 'behind' therefore
+    means the remaining per-event deposits have grown beyond the even
+    spread the plan started with (missed/partial events, or money moved
+    out of the goal).
+
+    Events are counted, not wall-clock time, so a goal funded on the
+    15th/EOM is not 'behind' on the 14th merely because days passed.
+    Schedules without a DTSTART (rows predating anchoring) count from
+    the creation date; budgets with no schedule at all fall back to
+    linear time between creation and the target date.
+
+    Returns None (pace not applicable) for:
+    - Non-GOAL budgets
+    - Paused or archived budgets
+    - Completed goals
+    - Goals without a target date or with a non-positive target
+
+    Args:
+        budget: The Budget to inspect.
+        today: Reference date (defaults to date.today()).
+
+    Returns:
+        One of FUNDING_PACE_CHOICES, or None when not applicable.
+    """
+    if today is None:
+        today = date.today()
+
+    if budget.budget_type != Budget.BudgetType.GOAL:
+        return None
+    if budget.paused or budget.archived or budget.complete:
+        return None
+    if budget.target_date is None:
+        return None
+    target = budget.target_balance.amount
+    if target <= 0:
+        return None
+
+    funded_fraction = float(budget.funded_amount.amount / target)
+    expected_fraction = _expected_funded_fraction(budget, today)
+
+    if funded_fraction < expected_fraction - _PACE_TOLERANCE:
+        return PACE_BEHIND
+    if funded_fraction > expected_fraction + _PACE_TOLERANCE:
+        return PACE_AHEAD
+    return PACE_ON_TRACK
+
+
+####################################################################
+#
+def _expected_funded_fraction(budget: Budget, today: date) -> float:
+    """Return the fraction of the target the plan should have funded by now.
+
+    Event-proportional: elapsed funding events / total funding events,
+    counted on the funding schedule from its DTSTART anchor (or the
+    creation date for un-anchored rows) through the target date.
+
+    Args:
+        budget: A GOAL budget with a target_date (caller guarantees).
+        today: Reference date.
+
+    Returns:
+        Expected funded fraction in [0.0, 1.0].
+    """
+    assert budget.target_date is not None
+    if today >= budget.target_date:
+        return 1.0
+
+    sched = budget.funding_schedule
+    created = budget.created_at.date()
+
+    if not sched:
+        # No schedule: fall back to linear time.
+        span = (budget.target_date - created).days
+        if span <= 0:
+            return 1.0
+        return min(1.0, (today - created).days / span)
+
+    anchor = sched.dtstart.date() if sched.dtstart is not None else created
+    # enumerate_schedule's lower bound is exclusive; include the anchor.
+    after = anchor - timedelta(days=1)
+    total = len(enumerate_schedule(sched, after, budget.target_date))
+    if total == 0:
+        return 1.0
+    elapsed = len(enumerate_schedule(sched, after, today))
+    return min(1.0, elapsed / total)
+
+
 ####################################################################
 #
 def fund_account(

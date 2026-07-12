@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-12
+
 ### Added
 
 - API keys: long-lived machine credentials for importers and 3rd-party services (`Authorization: Api-Key <key>`), managed at `/api/v1/users/me/api-keys/` with optional expiry (30/60/90/365 days, custom, or never); the plaintext key is shown only once at creation
@@ -17,10 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Importer CLIs can source the API key used to authenticate to mibudge from a 1Password secret reference (`op://<vault>/<item>[/<section>]/<field>`) via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`
 - Bank-account co-ownership invitations: staff can resend a pending invitation from the Django admin (previously only cancel was available)
 - Documentation for the invitation flows (`docs/invitations.md`) and the self-service email-change flow (`docs/email-change.md`): mechanism, rate limiting, and security policy
+- Server-computed `funding_pace` field on the Budget API (`ahead` / `on_track` / `behind`, null when not applicable): goal pace measured by amount funded against scheduled funding events elapsed, so spending out of a goal (even into a negative balance) never reads as behind pace
 
 ### Changed
 
 - BofA live scraper's 1Password credential flag renamed `--onepassword-url` → `--bofa-onepassword-url` (env var `ONEPASSWORD_URL` → `BOFA_ONEPASSWORD_URL`), so its name says which credential it fetches instead of a generic name
+- Funding schedules are now anchored server-side with a DTSTART on the first date the schedule actually fires (set at budget creation; re-figured when the funding dates or goal date are edited), making funding-event enumeration deterministic; a django migration will update existing budgets that need a DTSTART
 
 ### Fixed
 

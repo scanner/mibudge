@@ -9,7 +9,7 @@ These helpers do no database access, so no django_db mark is needed.
 
 # system imports
 #
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 # 3rd party imports
 #
@@ -18,7 +18,32 @@ import recurrence
 
 # Project imports
 #
-from moneypools.service.schedules import count_occurrences
+from moneypools.service.schedules import (
+    count_occurrences,
+    normalize_dtstart,
+    rules_fingerprint,
+)
+
+
+####################################################################
+#
+def _semi_monthly(dtstart: datetime | None = None) -> recurrence.Recurrence:
+    """Return a fresh 15th/last-day schedule (normalize mutates in place)."""
+    return recurrence.Recurrence(
+        dtstart=dtstart,
+        rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
+    )
+
+
+####################################################################
+#
+def _bare_monthly(dtstart: datetime | None = None) -> recurrence.Recurrence:
+    """Return a fresh bare FREQ=MONTHLY schedule (fire day from DTSTART)."""
+    return recurrence.Recurrence(
+        dtstart=dtstart,
+        rrules=[recurrence.Rule(recurrence.MONTHLY)],
+    )
+
 
 # Fires on the 15th and last day of each month, anchored at Jan 15.
 _SEMI_MONTHLY = recurrence.Recurrence(
@@ -123,3 +148,147 @@ class TestCountOccurrences:
         THEN:  returns the floor of 1 so gap division never divides by zero
         """
         assert count_occurrences(sched, from_date, end_date) == 1
+
+
+########################################################################
+########################################################################
+#
+class TestNormalizeDtstart:
+    """Tests for anchoring a schedule's DTSTART on a real occurrence."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "sched,anchor,expected",
+        [
+            # Bare RRULE, anchor between fire days: snap forward to the
+            # next real occurrence (not the anchor itself, which the
+            # rule does not fire on).
+            (
+                _semi_monthly(),
+                date(2026, 5, 19),
+                datetime(2026, 5, 31, tzinfo=UTC),
+            ),
+            # Anchor lands exactly on a fire day: keep it.
+            (
+                _semi_monthly(),
+                date(2026, 5, 15),
+                datetime(2026, 5, 15, tzinfo=UTC),
+            ),
+            # Bare FREQ=MONTHLY has no fire day without an anchor; the
+            # anchor itself defines it and is the first occurrence.
+            (
+                _bare_monthly(),
+                date(2026, 5, 19),
+                datetime(2026, 5, 19, tzinfo=UTC),
+            ),
+            # Existing DTSTART is kept as the rule anchor (fire day 19)
+            # while the stored DTSTART moves forward past the new
+            # anchor date.
+            (
+                _bare_monthly(dtstart=datetime(2026, 5, 19)),
+                date(2026, 7, 20),
+                datetime(2026, 8, 19, tzinfo=UTC),
+            ),
+            # Existing DTSTART on a semi-monthly rule: pattern comes
+            # from BYMONTHDAY, anchor just moves forward.
+            (
+                _semi_monthly(dtstart=datetime(2026, 1, 15)),
+                date(2026, 7, 16),
+                datetime(2026, 7, 31, tzinfo=UTC),
+            ),
+        ],
+    )
+    def test_anchors_on_first_real_occurrence(
+        self,
+        sched: recurrence.Recurrence,
+        anchor: date,
+        expected: datetime,
+    ) -> None:
+        """
+        GIVEN: a funding schedule (bare or already anchored) and an
+               anchor date
+        WHEN:  normalize_dtstart is called
+        THEN:  DTSTART is set to the first date the rule genuinely fires
+               on/after the anchor, preserving the rule's fire pattern,
+               and the include_dtstart flag (disabled internally during
+               the search) is restored
+        """
+        result = normalize_dtstart(sched, anchor)
+
+        assert result is sched
+        assert result.dtstart == expected
+        assert result.include_dtstart is True
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "sched",
+        [
+            # No schedule at all.
+            None,
+            # A schedule without recurrence rules.
+            recurrence.Recurrence(),
+            # A rule that never fires on/after the anchor (UNTIL in the
+            # past): DTSTART must not point at a date the rule does not
+            # fire on.
+            recurrence.Recurrence(
+                rrules=[
+                    recurrence.Rule(
+                        recurrence.MONTHLY, until=datetime(2020, 1, 1)
+                    )
+                ],
+            ),
+        ],
+    )
+    def test_left_unchanged_when_nothing_to_anchor(
+        self,
+        sched: recurrence.Recurrence | None,
+    ) -> None:
+        """
+        GIVEN: no schedule, a rule-less schedule, or a rule with no
+               occurrence on/after the anchor
+        WHEN:  normalize_dtstart is called
+        THEN:  the input is returned unchanged with DTSTART left unset
+        """
+        result = normalize_dtstart(sched, date(2026, 1, 1))
+
+        assert result is sched
+        if sched is not None:
+            assert sched.dtstart is None
+
+
+########################################################################
+########################################################################
+#
+class TestRulesFingerprint:
+    """Tests for the DTSTART-insensitive schedule comparison."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "sched_a,sched_b,expect_equal",
+        [
+            # A client echoing the stored pattern without its anchor is
+            # not a pattern change.
+            (_semi_monthly(), _semi_monthly(datetime(2026, 1, 15)), True),
+            # Different recurrence patterns must differ.
+            (_semi_monthly(), _bare_monthly(), False),
+            # Null and rule-less schedules fingerprint alike (empty).
+            (None, recurrence.Recurrence(), True),
+        ],
+    )
+    def test_fingerprint_equality(
+        self,
+        sched_a: recurrence.Recurrence | None,
+        sched_b: recurrence.Recurrence | None,
+        expect_equal: bool,
+    ) -> None:
+        """
+        GIVEN: two schedules
+        WHEN:  both are fingerprinted
+        THEN:  fingerprints match exactly when the recurrence patterns
+               match, ignoring the DTSTART anchor
+        """
+        equal = rules_fingerprint(sched_a) == rules_fingerprint(sched_b)
+        assert equal is expect_equal

@@ -932,6 +932,7 @@ Args:
 
 Returns:
     ISO date string, or None.
+- **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -993,6 +994,7 @@ Args:
 
 Returns:
     ISO date string, or None.
+- **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1114,6 +1116,7 @@ Args:
 
 Returns:
     ISO date string, or None.
+- **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1235,6 +1238,7 @@ Args:
 
 Returns:
     ISO date string, or None.
+- **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -1368,6 +1372,7 @@ Args:
 
 Returns:
     ISO date string, or None.
+- **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -2741,6 +2746,7 @@ Args:
 
 Returns:
     ISO date string, or None.
+- **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
@@ -3024,6 +3030,13 @@ callers can cross-reference with the Budget endpoint.
 * `SKIPPED` - Skipped
 
 
+### FundingPaceEnum
+
+* `ahead` - ahead
+* `on_track` - on_track
+* `behind` - behind
+
+
 ### FundingTypeEnum
 
 * `D` - Target Date
@@ -3100,6 +3113,9 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 - **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
 * `immediate` - Immediate
 * `off` - Off Enum: ['digest', 'immediate', 'off']
+
+### NullEnum
+
 
 ### PaginatedAPIKeyList
 

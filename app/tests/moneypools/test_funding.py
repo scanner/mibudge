@@ -21,6 +21,7 @@ import recurrence
 from django.conf import settings
 from django.urls import reverse
 from djmoney.money import Money
+from freezegun import freeze_time
 
 # Project imports
 #
@@ -73,14 +74,6 @@ _MONTHLY_FIRST = recurrence.Recurrence(
 # semi-monthly funding schedule used in the joint checking account.
 _TWICE_MONTHLY_15_EOM = recurrence.Recurrence(
     dtstart=datetime(2026, 1, 15),
-    rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
-)
-
-# The same semi-monthly rule with no DTSTART -- the shape the SPA's
-# schedule picker produces (a bare RRULE).  Exercises the fallback-anchor
-# path in the schedule helpers, where a phantom occurrence once inflated
-# the remaining-event count and shrank every per-event deposit.
-_TWICE_MONTHLY_15_EOM_NO_DTSTART = recurrence.Recurrence(
     rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
 )
 
@@ -225,22 +218,22 @@ class TestFundingEngineSingleEvent:
 
     ####################################################################
     #
-    def test_target_date_prespent_goal_no_dtstart_schedule(
+    def test_target_date_prespent_goal_funds_remaining_gap(
         self,
         make_account: Callable[..., BankAccount],
         system_user: User,
     ) -> None:
         """
         GIVEN: a pre-spent TARGET_DATE Goal on a semi-monthly funding
-               schedule that has no DTSTART (the shape the SPA produces),
-               matching a goal budget we saw: target $6,700 by Aug 1,
-               $5,602 funded so far, $2,053.02 spent, so two funding
-               events remain (Jul 15 and Jul 31) to close a $1,098 gap
+               schedule, matching a goal budget we saw: target $6,700 by
+               Aug 1, $5,602 funded so far, $2,053.02 spent, so two
+               funding events remain (Jul 15 and Jul 31) to close a
+               $1,098 gap
         WHEN:  fund_account fires on the Jul 15 event
-        THEN:  $549 is transferred ($1,098 / 2 real remaining events) --
-               the schedule's synthetic dtstart anchor must not be
-               counted as a third event (which would shrink the deposit
-               to $366 and strand the goal under-funded at its deadline)
+        THEN:  $549 is transferred ($1,098 / 2 remaining events) --
+               spending out of the goal must not widen the gap, and no
+               extra event may be counted (either error would skew the
+               deposit and strand the goal off-target at its deadline)
         """
         today = date(2026, 7, 15)
         account = make_account(posted_through=today)
@@ -257,7 +250,7 @@ class TestFundingEngineSingleEvent:
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(Decimal("6700.00"), "USD"),
             target_date=date(2026, 8, 1),
-            funding_schedule=_TWICE_MONTHLY_15_EOM_NO_DTSTART,
+            funding_schedule=_TWICE_MONTHLY_15_EOM,
         )
         Budget.objects.filter(pkid=budget.pkid).update(
             balance=Money(Decimal("3548.98"), "USD"),
@@ -2555,6 +2548,167 @@ class TestNextRecurrenceDate:
             budget, today=date(2026, 7, 3)
         )
         assert result is None
+
+
+########################################################################
+########################################################################
+#
+class TestFundingPace:
+    """funding_pace() -- server-side goal pace, measured on funded_amount.
+
+    Fixture shape mirrors a real pre-spent goal: target $6,700 by Aug 1
+    on a 15th/EOM schedule anchored May 15 (6 events total).  Pace must
+    track deposits against events elapsed and ignore the balance
+    entirely -- spending (even into a negative balance) is not 'behind'.
+    """
+
+    ####################################################################
+    #
+    @pytest.fixture
+    def make_goal(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> Callable[..., Budget]:
+        """Return a factory for the reference goal budget."""
+
+        def _make(with_schedule: bool = True) -> Budget:
+            kwargs: dict[str, object] = {}
+            if with_schedule:
+                kwargs["funding_schedule"] = recurrence.Recurrence(
+                    dtstart=datetime(2026, 5, 15),
+                    rrules=[
+                        recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])
+                    ],
+                )
+            with freeze_time("2026-05-15"):
+                return budget_svc.create(
+                    bank_account=bank_account_factory(),
+                    name="Trip Abroad",
+                    budget_type=Budget.BudgetType.GOAL,
+                    funding_type=Budget.FundingType.TARGET_DATE,
+                    target_balance=Money(Decimal("6700.00"), "USD"),
+                    target_date=date(2026, 8, 1),
+                    **kwargs,
+                )
+
+        return _make
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "with_schedule,funded,today,expected",
+        [
+            # 4 of 6 events elapsed (expected 66.7%); 83.6% funded --
+            # the pre-spent real-world budget that motivated this: its
+            # balance is far below target but its deposits are ahead.
+            pytest.param(
+                True,
+                "5602.00",
+                date(2026, 7, 11),
+                "ahead",
+                id="prespent/ahead",
+            ),
+            # Same point in time, deposits well short of 4/6.
+            pytest.param(
+                True, "3000.00", date(2026, 7, 11), "behind", id="behind"
+            ),
+            # Deposits within the 5% band around 4/6.
+            pytest.param(
+                True,
+                "4467.00",
+                date(2026, 7, 11),
+                "on_track",
+                id="on_track",
+            ),
+            # Past the target date anything short of the target is
+            # behind, regardless of the schedule.
+            pytest.param(
+                True,
+                "5602.00",
+                date(2026, 8, 2),
+                "behind",
+                id="past_deadline",
+            ),
+            # Before the first event nothing is expected yet.
+            pytest.param(
+                True, "0.00", date(2026, 5, 1), "on_track", id="no_events_yet"
+            ),
+            # No schedule: falls back to linear time (created May 15,
+            # target Aug 1); ~62% elapsed by Jul 3 vs 45% funded.
+            pytest.param(
+                False,
+                "3000.00",
+                date(2026, 7, 3),
+                "behind",
+                id="no_schedule_linear_fallback",
+            ),
+        ],
+    )
+    def test_pace_reflects_funded_vs_events_elapsed(
+        self,
+        with_schedule: bool,
+        funded: str,
+        today: date,
+        expected: str,
+        make_goal: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a Goal budget and a funded_amount at a point in time
+        WHEN:  funding_pace is computed
+        THEN:  deposits are compared to the fraction of funding events
+               elapsed (or linear time without a schedule); the balance
+               plays no part
+        """
+        budget = make_goal(with_schedule=with_schedule)
+        Budget.objects.filter(pkid=budget.pkid).update(
+            funded_amount=Money(Decimal(funded), "USD"),
+            # A deeply overspent balance must not affect pace.
+            balance=Money(Decimal("-100.00"), "USD"),
+        )
+        budget.refresh_from_db()
+
+        assert funding_svc.funding_pace(budget, today=today) == expected
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "updates",
+        [
+            pytest.param(
+                # funding_type and target_date flip too: DB constraints
+                # require capped budgets to be FIXED_AMOUNT with no
+                # target date.
+                {
+                    "budget_type": Budget.BudgetType.CAPPED,
+                    "funding_type": Budget.FundingType.FIXED_AMOUNT,
+                    "target_date": None,
+                },
+                id="non_goal",
+            ),
+            pytest.param({"paused": True}, id="paused"),
+            pytest.param({"archived": True}, id="archived"),
+            pytest.param({"complete": True}, id="complete"),
+            pytest.param({"target_date": None}, id="no_target_date"),
+            pytest.param({"target_balance": Money(0, "USD")}, id="zero_target"),
+        ],
+    )
+    def test_pace_not_applicable_returns_none(
+        self,
+        updates: dict[str, object],
+        make_goal: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a budget where pace has no meaning (wrong type, paused,
+               archived, complete, or lacking a target/date)
+        WHEN:  funding_pace is computed
+        THEN:  returns None so clients can distinguish 'not applicable'
+               from any pace value
+        """
+        budget = make_goal()
+        Budget.objects.filter(pkid=budget.pkid).update(**updates)
+        budget.refresh_from_db()
+
+        assert funding_svc.funding_pace(budget, today=date(2026, 7, 11)) is None
 
 
 ########################################################################

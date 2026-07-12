@@ -30,6 +30,7 @@ from decimal import Decimal
 import recurrence
 from django.db.models import Sum
 from djmoney.contrib.django_rest_framework import MoneyField as DRFMoneyField
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 # Project imports
@@ -397,6 +398,7 @@ class BudgetSerializer(serializers.ModelSerializer):
 
     next_funding = serializers.SerializerMethodField()
     next_recurrence = serializers.SerializerMethodField()
+    funding_pace = serializers.SerializerMethodField()
 
     class Meta:
         model = Budget
@@ -426,6 +428,7 @@ class BudgetSerializer(serializers.ModelSerializer):
             "auto_spend",
             "next_funding",
             "next_recurrence",
+            "funding_pace",
             "created_at",
             "modified_at",
         ]
@@ -482,6 +485,31 @@ class BudgetSerializer(serializers.ModelSerializer):
         """
         d = funding_svc.next_recurrence_date(obj)
         return d.isoformat() if d is not None else None
+
+    ####################################################################
+    #
+    @extend_schema_field(
+        serializers.ChoiceField(
+            choices=list(funding_svc.FUNDING_PACE_CHOICES),
+            allow_null=True,
+        )
+    )
+    def get_funding_pace(self, obj: Budget) -> str | None:
+        """Return how the goal's funding compares to its plan, or null.
+
+        Computed server-side from funded_amount against the fraction of
+        scheduled funding events elapsed -- independent of the balance,
+        so pre-spending a goal does not read as behind pace.  Null for
+        non-goal budgets and goals where pace does not apply (paused,
+        archived, complete, no target date).
+
+        Args:
+            obj: The Budget instance being serialized.
+
+        Returns:
+            'ahead', 'on_track', 'behind', or None.
+        """
+        return funding_svc.funding_pace(obj)
 
     ####################################################################
     #

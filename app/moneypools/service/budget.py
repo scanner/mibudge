@@ -42,7 +42,11 @@ from djmoney.money import Money
 from common.locks import acquire_lock
 from moneypools.models import BankAccount, Budget
 from moneypools.service import internal_transaction as internal_transaction_svc
-from moneypools.service.schedules import enumerate_schedule
+from moneypools.service.schedules import (
+    enumerate_schedule,
+    normalize_dtstart,
+    rules_fingerprint,
+)
 from moneypools.service.shared import funding_system_user
 from users.models import User
 
@@ -133,6 +137,8 @@ def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
         The warnings list is empty on normal (non-unpause) updates.
     """
     warnings: list[str] = []
+
+    _reanchor_funding_schedule(budget, changes)
 
     # Detect pause->unpause before applying changes.
     was_paused = budget.paused
@@ -336,6 +342,66 @@ def delete(budget: Budget, actor: User) -> None:
 _FILLUP_SYNCED_FIELDS: frozenset[str] = frozenset(
     {"target_balance", "funding_schedule", "name"}
 )
+
+
+########################################################################
+########################################################################
+#
+def _reanchor_funding_schedule(
+    budget: Budget,
+    changes: dict[str, Any],
+) -> None:
+    """Re-anchor or preserve the funding schedule's DTSTART on update.
+
+    Mutates *changes* in place.  Policy: editing the funding dates (the
+    schedule's recurrence pattern) or the goal date re-figures the
+    schedule -- DTSTART moves to the first real occurrence on/after
+    today, resetting the pace baseline.  An update that touches neither
+    keeps the stored anchor, even though SPA clients always send the
+    schedule back as a bare RRULE on full-object PUTs.
+
+    When only the target date changes, the stored DTSTART is kept as the
+    rule anchor so bare-FREQ rules (whose fire day comes from DTSTART)
+    keep firing on the same day while the anchor moves forward.
+
+    Args:
+        budget: The Budget being updated (holds the stored schedule).
+        changes: The update's field-value pairs; 'funding_schedule' is
+            added or replaced as needed.
+    """
+    if "funding_schedule" not in changes and "target_date" not in changes:
+        return
+
+    incoming = changes.get("funding_schedule", budget.funding_schedule)
+    if not incoming or not incoming.rrules:
+        return
+
+    stored = budget.funding_schedule
+    rule_changed = "funding_schedule" in changes and rules_fingerprint(
+        incoming
+    ) != rules_fingerprint(stored)
+    date_changed = (
+        "target_date" in changes
+        and changes["target_date"] != budget.target_date
+    )
+
+    if rule_changed or date_changed:
+        if not rule_changed and stored and stored.dtstart is not None:
+            # Same pattern, new goal date: keep the stored anchor as the
+            # rule anchor; normalize_dtstart moves it forward from today.
+            incoming.dtstart = stored.dtstart
+        changes["funding_schedule"] = normalize_dtstart(incoming, date.today())
+    elif incoming.dtstart is None:
+        # Pattern and date unchanged; the client just echoed the stored
+        # schedule without its anchor.  Preserve it -- or backfill from
+        # the creation date for rows predating DTSTART anchoring.
+        if stored is not None and stored.dtstart is not None:
+            incoming.dtstart = stored.dtstart
+            changes["funding_schedule"] = incoming
+        else:
+            changes["funding_schedule"] = normalize_dtstart(
+                incoming, budget.created_at.date()
+            )
 
 
 ########################################################################

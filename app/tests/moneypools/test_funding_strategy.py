@@ -55,10 +55,12 @@ _MONTHLY_FIRST = recurrence.Recurrence(
     rrules=[recurrence.Rule(recurrence.MONTHLY)],
 )
 
-# Fires on the 15th and last day of each month, with no DTSTART -- the
-# shape the SPA's schedule picker produces (a bare RRULE).  Regression
-# shape for the phantom-occurrence fencepost in count_occurrences.
-_SEMI_MONTHLY_NO_DTSTART = recurrence.Recurrence(
+# Fires on the 15th and last day of each month, anchored at May 15.
+# (Bare no-DTSTART schedules can no longer reach the database: the
+# budget_pre_save signal anchors them; the fallback-anchor code paths
+# are covered by the pure tests in test_schedules.py.)
+_SEMI_MONTHLY_15_EOM = recurrence.Recurrence(
+    dtstart=datetime(2026, 5, 15),
     rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
 )
 
@@ -228,7 +230,7 @@ class TestGoalStrategy:
             (date(2026, 7, 31), Decimal("6151.00"), Decimal("549.00")),
         ],
     )
-    def test_target_date_prespent_goal_no_dtstart_schedule(
+    def test_target_date_prespent_goal_spreads_remaining_gap(
         self,
         make_account: Callable[..., BankAccount],
         event_date: date,
@@ -237,14 +239,14 @@ class TestGoalStrategy:
     ) -> None:
         """
         GIVEN: a pre-spent TARGET_DATE Goal (spending drove balance below
-               funded_amount) on a semi-monthly schedule with no DTSTART,
-               matching a goal budget we saw: target $6,700 by Aug 1,
-               $5,602 funded, $2,053.02 spent
+               funded_amount) on a semi-monthly schedule, matching a goal
+               budget we saw: target $6,700 by Aug 1, $5,602 funded,
+               $2,053.02 spent
         WHEN:  the strategy computes the intended amount for a fund event
         THEN:  the remaining gap (target - funded_amount) is spread over
-               only the real occurrences left before the target date --
-               the schedule's synthetic dtstart anchor must not be
-               counted as an extra event
+               exactly the occurrences left before the target date --
+               spending never widens the gap, and no extra event is
+               counted
         """
         account = make_account()
         budget = budget_svc.create(
@@ -254,7 +256,7 @@ class TestGoalStrategy:
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(Decimal("6700.00"), "USD"),
             target_date=date(2026, 8, 1),
-            funding_schedule=_SEMI_MONTHLY_NO_DTSTART,
+            funding_schedule=_SEMI_MONTHLY_15_EOM,
         )
         Budget.objects.filter(pkid=budget.pkid).update(
             balance=Money(funded - Decimal("2053.02"), "USD"),

@@ -1,4 +1,6 @@
-exclude: 'docs|node_modules|migrations|.git|.tox'
+# NOTE: entries must match path segments, not bare substrings -- a bare
+# 'migrations' would also exclude files like tests/.../test_migrations.py.
+exclude: 'docs|node_modules|(^|/)migrations/|\.git|\.tox'
 default_stages: [pre-commit]
 
 repos:
@@ -9,8 +11,11 @@ repos:
       - id: end-of-file-fixer
       - id: check-added-large-files
 
+  # NOTE: rev must match the exact ruff pin in pyproject.toml's dev
+  # group -- 'make lint' (this hook) and CI ('uv run ruff format
+  # --check', the locked ruff) otherwise disagree on formatting.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.10
+    rev: v0.15.21
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]

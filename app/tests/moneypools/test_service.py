@@ -12,12 +12,14 @@ demonstrates Redis lock serialization.
 #
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 # 3rd party imports
 #
 import pytest
+import recurrence
 from djmoney.money import Money
+from freezegun import freeze_time
 
 # Project imports
 #
@@ -192,6 +194,126 @@ class TestBudgetService:
 
         budget.fillup_goal.refresh_from_db()
         assert budget.fillup_goal.modified_at == fillup_before
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "dtstart,expected",
+        [
+            # Bare schedule (the SPA shape): anchored at the first real
+            # rule occurrence on/after today (frozen to 2026-06-01).
+            (None, datetime(2026, 6, 15)),
+            # Explicit DTSTART (e.g. an account import): trusted as-is.
+            # Supplied UTC-aware, the storage convention; a naive value
+            # would be reinterpreted as local time on serialization.
+            (datetime(2026, 1, 15, tzinfo=UTC), datetime(2026, 1, 15)),
+        ],
+    )
+    @freeze_time("2026-06-01")
+    def test_create_anchors_funding_schedule_dtstart(
+        self,
+        dtstart: datetime | None,
+        expected: datetime,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a new budget whose funding schedule arrives bare or with
+               an explicit DTSTART
+        WHEN:  the budget is created
+        THEN:  a bare schedule is anchored on its first real occurrence
+               from today; an explicit DTSTART is preserved
+        """
+        account = bank_account_factory()
+        budget = budget_svc.create(
+            bank_account=account,
+            name="Trip",
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(1000, "USD"),
+            target_date=date(2026, 12, 1),
+            funding_schedule=recurrence.Recurrence(
+                dtstart=dtstart,
+                rrules=[
+                    recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])
+                ],
+            ),
+        )
+
+        budget.refresh_from_db()
+        assert budget.funding_schedule.dtstart is not None
+        assert budget.funding_schedule.dtstart.replace(tzinfo=None) == expected
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "new_bymonthday,new_target_date,expected_dtstart",
+        [
+            # Funding dates changed (new pattern, sent bare as the SPA
+            # does): re-anchor on the new rule's first occurrence from
+            # the edit date (frozen to 2026-07-20).
+            ([1], None, datetime(2026, 8, 1)),
+            # Goal date changed, same pattern echoed bare: re-anchor
+            # forward from the edit date, keeping the stored anchor as
+            # the rule anchor.
+            ([15, -1], date(2027, 1, 1), datetime(2026, 7, 31)),
+            # Nothing schedule-relevant changed; the client just echoed
+            # the pattern without its anchor: stored DTSTART preserved.
+            ([15, -1], None, datetime(2026, 6, 15)),
+        ],
+    )
+    def test_update_reanchors_funding_schedule(
+        self,
+        new_bymonthday: list[int],
+        new_target_date: date | None,
+        expected_dtstart: datetime,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a Goal budget created 2026-06-01 with a semi-monthly
+               schedule anchored at Jun 15, target date Dec 1
+        WHEN:  budget_svc.update runs on 2026-07-20 with a changed
+               funding pattern, a changed goal date, or a mere bare echo
+               of the stored schedule
+        THEN:  pattern/date changes re-figure the schedule (DTSTART moves
+               to the first real occurrence from the edit date) while a
+               bare echo keeps the stored anchor
+        """
+        account = bank_account_factory()
+        with freeze_time("2026-06-01"):
+            budget = budget_svc.create(
+                bank_account=account,
+                name="Trip",
+                budget_type=Budget.BudgetType.GOAL,
+                funding_type=Budget.FundingType.TARGET_DATE,
+                target_balance=Money(1000, "USD"),
+                target_date=date(2026, 12, 1),
+                funding_schedule=recurrence.Recurrence(
+                    rrules=[
+                        recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])
+                    ],
+                ),
+            )
+
+        changes: dict[str, object] = {
+            # SPA full-object updates always send the schedule bare.
+            "funding_schedule": recurrence.Recurrence(
+                rrules=[
+                    recurrence.Rule(
+                        recurrence.MONTHLY, bymonthday=new_bymonthday
+                    )
+                ],
+            ),
+        }
+        if new_target_date is not None:
+            changes["target_date"] = new_target_date
+
+        with freeze_time("2026-07-20"):
+            budget_svc.update(budget, **changes)
+
+        budget.refresh_from_db()
+        dtstart = budget.funding_schedule.dtstart
+        assert dtstart is not None
+        assert dtstart.replace(tzinfo=None) == expected_dtstart
 
 
 ########################################################################
