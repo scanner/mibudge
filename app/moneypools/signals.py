@@ -1,6 +1,6 @@
 # system imports
 #
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 # 3rd party imports
@@ -11,6 +11,7 @@ from django.dispatch import receiver
 # Project imports
 #
 from .models import BankAccount, Budget, Transaction
+from .service.schedules import normalize_dtstart
 
 
 ####################################################################
@@ -76,6 +77,15 @@ def budget_pre_save(
     acct_currency = instance.bank_account.currency
     instance.balance_currency = acct_currency  # type: ignore[attr-defined]
     instance.target_balance_currency = acct_currency  # type: ignore[attr-defined]
+
+    # Invariant: a funding schedule never leaves save() without a
+    # DTSTART anchored on a real rule occurrence.  Enforced here (not
+    # only in the budget service) so the admin and import paths cannot
+    # write bare RRULEs whose fire days would depend on the query
+    # window.  Re-anchoring policy on edits lives in budget_svc.update.
+    sched = instance.funding_schedule
+    if sched and sched.rrules and sched.dtstart is None:
+        instance.funding_schedule = normalize_dtstart(sched, date.today())
 
     # Set archived_at the first time a budget is archived.
     if instance.archived and instance.archived_at is None:

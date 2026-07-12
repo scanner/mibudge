@@ -2917,6 +2917,12 @@ components:
             Returns:
                 ISO date string, or None.
           readOnly: true
+        funding_pace:
+          nullable: true
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/FundingPaceEnum'
+          - $ref: '#/components/schemas/NullEnum'
         created_at:
           type: string
           format: date-time
@@ -2936,6 +2942,7 @@ components:
       - funded_amount
       - funded_amount_currency
       - funding_amount_currency
+      - funding_pace
       - id
       - modified_at
       - name
@@ -3495,6 +3502,16 @@ components:
         * `PARTIAL` - Partial
         * `COMPLETE` - Complete
         * `SKIPPED` - Skipped
+    FundingPaceEnum:
+      enum:
+      - ahead
+      - on_track
+      - behind
+      type: string
+      description: |-
+        * `ahead` - ahead
+        * `on_track` - on_track
+        * `behind` - behind
     FundingTypeEnum:
       enum:
       - D
@@ -3654,6 +3671,9 @@ components:
       - delivery_mode
       - display_name
       - kind
+    NullEnum:
+      enum:
+      - null
     PaginatedAPIKeyList:
       type: object
       required:

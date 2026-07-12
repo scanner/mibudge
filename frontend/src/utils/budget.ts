@@ -45,21 +45,9 @@ export function budgetStatus(budget: Budget): BudgetStatus {
   if (budget.complete) return "funded";
   if (target > 0 && balance >= target) return "funded";
 
-  // For goal budgets with a target date, flag if we're behind pace.
-  // Pace is measured by funded_amount, the same metric the funding
-  // engine uses: spending out of the envelope lowers balance but does
-  // not reopen the funding gap, so a pre-spent goal is not "behind".
-  if (budget.budget_type === "G" && budget.target_date && target > 0) {
-    const funded = parseFloat(budget.funded_amount ?? budget.balance);
-    const now = Date.now();
-    const created = new Date(budget.created_at).getTime();
-    const end = parseLocalDate(budget.target_date).getTime();
-    const span = end - created;
-    if (span > 0) {
-      const expectedFraction = Math.min(1, (now - created) / span);
-      if (funded / target < expectedFraction - 0.05) return "warn";
-    }
-  }
+  // Behind-pace is computed server-side (funded_amount vs funding
+  // events elapsed on the schedule); the UI only presents it.
+  if (budget.funding_pace === "behind") return "warn";
 
   return "progress";
 }
