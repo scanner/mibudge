@@ -567,6 +567,52 @@ class TestAcceptInvitation:
 
     ####################################################################
     #
+    def test_new_user_password_reset_email_links_to_site_url(
+        self,
+        bank_account_invitation_factory: Callable[..., BankAccountInvitation],
+        account: BankAccount,
+        owner: User,
+        user_factory: Callable[..., User],
+        mock_send_notification_now: MagicMock,
+        rf,
+        settings,
+    ) -> None:
+        """
+        GIVEN: a pending invitation for a brand-new user, accepted via a
+               request whose Host header is an internal deployment name
+               (proxies rewrite Host, so the public domain never reaches
+               Django)
+        WHEN:  accept_invitation() runs with that request
+        THEN:  the set-your-first-password email links to SITE_URL, not
+               to the request's internal host
+        """
+        settings.SITE_URL = "https://public.mibudge.test"
+        settings.ALLOWED_HOSTS = ["internal.mibudge.test"]
+
+        invitee = user_factory(email="brandnew@example.com")
+        invitee.is_active = False
+        invitee.set_unusable_password()
+        invitee.save()
+
+        inv = bank_account_invitation_factory(
+            bank_account=account,
+            invited_by=owner,
+            invitee_email=invitee.email,
+            invitee_user=invitee,
+        )
+        request = rf.post("/", HTTP_HOST="internal.mibudge.test")
+
+        invitation_svc.accept_invitation(inv.token, request=request)
+
+        assert len(mail.outbox) == 1
+        body = mail.outbox[0].body
+        assert (
+            "https://public.mibudge.test/accounts/password/reset/key/" in body
+        )
+        assert "internal.mibudge.test" not in body
+
+    ####################################################################
+    #
     def test_raises_on_wall_clock_expiry_marks_status(
         self,
         bank_account_invitation_factory: Callable[..., BankAccountInvitation],
