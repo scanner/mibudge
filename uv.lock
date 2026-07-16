@@ -133,8 +133,8 @@ wheels = [
 
 [[package]]
 name = "bofa-scraper"
-version = "1.0.4"
-source = { git = "https://github.com/scanner/bofa_scraper?tag=v1.0.4#961d1017d9c4be1d9fd1e21fcbeb7f6db36296c3" }
+version = "1.1.0"
+source = { git = "https://github.com/scanner/bofa_scraper?tag=v1.1.0#679f9a12417a2e5824769a606d54c1fb21362dea" }
 dependencies = [
     { name = "selenium" },
 ]
@@ -1558,7 +1558,7 @@ dev = [
     { name = "werkzeug" },
 ]
 importers-bofa = [
-    { name = "bofa-scraper", git = "https://github.com/scanner/bofa_scraper?tag=v1.0.4" },
+    { name = "bofa-scraper", git = "https://github.com/scanner/bofa_scraper?tag=v1.1.0" },
     { name = "selenium" },
 ]
 

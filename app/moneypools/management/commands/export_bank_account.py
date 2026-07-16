@@ -143,7 +143,8 @@ def _build_export(account: BankAccount) -> dict[str, Any]:
     budgets = list(Budget.objects.filter(bank_account=account).order_by("pkid"))
     transactions = list(
         Transaction.objects.filter(bank_account=account)
-        .prefetch_related("allocations__budget")
+        .select_related("category")
+        .prefetch_related("allocations__budget", "allocations__category")
         .order_by("pkid")
     )
     internal_txs = list(
@@ -261,6 +262,10 @@ def _serialize_transaction(tx: Transaction) -> dict[str, Any]:
         "raw_description": tx.raw_description,
         "description": tx.description,
         "party": tx.party,
+        # Category as its portable full name ('{group} : {name}'), not a
+        # UUID -- UUIDs are not stable across deployments.  Null when
+        # unassigned.
+        "category": tx.category.full_name if tx.category is not None else None,
         "bank_account_posted_balance": _money(tx.bank_account_posted_balance),
         "bank_account_available_balance": _money(
             tx.bank_account_available_balance
@@ -279,7 +284,8 @@ def _serialize_allocation(a: Any) -> dict[str, Any]:
         "budget_id": budget_id,
         "amount": _money(a.amount),
         "budget_balance": _money(a.budget_balance),
-        "category": a.category,
+        # Portable full name ('{group} : {name}'); null when unassigned.
+        "category": a.category.full_name if a.category_id else None,
         "memo": a.memo,
     }
 

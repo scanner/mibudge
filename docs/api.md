@@ -97,10 +97,12 @@ Return allocations belonging to the authenticated user's transactions. Filterabl
 - `bank_account` (query, optional)
 - `budget` (query, optional)
 - `category` (query, optional)
+- `category_group` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
 - `page_size` (query, optional) — Number of results to return per page.
 - `transaction` (query, optional)
+- `uncategorized` (query, optional)
 
 **Response 200:** 
 
@@ -128,157 +130,8 @@ Return a single transaction allocation by UUID.
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`budget_balance`** (`string`) *(required, read-only)*
 - **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`memo`** (`string`)
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
@@ -842,7 +695,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -862,7 +715,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`multipart/form-data`):
 
@@ -882,7 +735,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Response 201:** 
 
@@ -912,7 +765,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
 
 Args:
@@ -974,7 +827,7 @@ Return a single budget by UUID.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
 
 Args:
@@ -1026,7 +879,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -1046,7 +899,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`multipart/form-data`):
 
@@ -1066,7 +919,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Response 200:** 
 
@@ -1096,7 +949,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
 
 Args:
@@ -1148,7 +1001,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -1168,7 +1021,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`multipart/form-data`):
 
@@ -1188,7 +1041,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Response 200:** 
 
@@ -1218,7 +1071,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
 
 Args:
@@ -1282,7 +1135,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`application/x-www-form-urlencoded`):
 
@@ -1302,7 +1155,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Request Body** (`multipart/form-data`):
 
@@ -1322,7 +1175,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 **Response 200:** 
 
@@ -1352,7 +1205,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
 
 Args:
@@ -1721,6 +1574,193 @@ Set delivery_mode ('digest', 'immediate', or 'off') for a single notification ki
 * `immediate` - Immediate
 * `off` - Off Enum: ['digest', 'immediate', 'off']
 
+### transaction-categories
+
+#### `GET /api/v1/transaction-categories/`
+
+**Operation:** `transaction_categories_list`
+
+Return the transaction categories visible to the authenticated user: the global base set, the user's own custom categories, categories owned by users they co-own a bank account with, and categories still referenced by the user's transactions after sharing ended.  Filterable by group, archived, and scope (global|mine|shared).  Searchable by group and name.
+
+**Parameters:**
+
+- `archived` (query, optional)
+- `group` (query, optional)
+- `ordering` (query, optional) — Which field to use when ordering the results.
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+- `scope` (query, optional) — * `global` - Global
+* `mine` - Mine
+* `shared` - Shared
+- `search` (query, optional) — A search term.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `POST /api/v1/transaction-categories/`
+
+**Operation:** `transaction_categories_create`
+
+Create a custom category owned by the authenticated user (global categories are managed via the admin).  Group and name are whitespace-normalized; case-insensitive duplicates of global rows or the user's own rows are rejected.
+
+**Request Body** (`application/json`):
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+
+**Response 201:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
+- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
+- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `GET /api/v1/transaction-categories/{id}/`
+
+**Operation:** `transaction_categories_retrieve`
+
+Return a single visible category by UUID.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
+- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
+- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `PUT /api/v1/transaction-categories/{id}/`
+
+**Operation:** `transaction_categories_update`
+
+Full update of a category.  Only the owner may update; global categories are managed via the admin.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
+- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
+- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `PATCH /api/v1/transaction-categories/{id}/`
+
+**Operation:** `transaction_categories_partial_update`
+
+Partial update of a category.  Only the owner may update; global categories are managed via the admin.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`group`** (`string`)
+- **`name`** (`string`)
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`group`** (`string`)
+- **`name`** (`string`)
+
+**Request Body** (`multipart/form-data`):
+
+- **`group`** (`string`)
+- **`name`** (`string`)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
+- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
+- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+#### `DELETE /api/v1/transaction-categories/{id}/`
+
+**Operation:** `transaction_categories_destroy`
+
+Delete a category.  Only the owner may delete; global categories are managed via the admin.  A category still referenced by transactions or allocations cannot be deleted (409) -- archive it instead.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 204:** No response body
+
+**Response 409:** The category is referenced by transactions or allocations; archive it instead.
+
+#### `POST /api/v1/transaction-categories/{id}/archive/`
+
+**Operation:** `transaction_categories_archive_create`
+
+Archive a category so pickers hide it while existing references stay valid.  Only the owner may archive; global categories are managed via the admin.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Response 200:** 
+
+- **`id`** (`string`) *(required, read-only)*
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
+- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
+- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
 ### transactions
 
 #### `GET /api/v1/transactions/`
@@ -1732,6 +1772,8 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 **Parameters:**
 
 - `bank_account` (query, optional)
+- `category` (query, optional)
+- `category_group` (query, optional)
 - `date_from` (query, optional)
 - `date_to` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
@@ -1765,6 +1807,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 * `signature_return` - Signature return
 * `fx_order` - FX Order
 * `` - --------
+- `uncategorized` (query, optional)
 
 **Response 200:** 
 
@@ -1790,6 +1833,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1805,6 +1849,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1820,6 +1865,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1838,6 +1884,8 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -1873,6 +1921,8 @@ Return a single transaction by UUID.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -1905,6 +1955,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1920,6 +1971,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1935,6 +1987,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1953,6 +2006,8 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -1985,6 +2040,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2000,6 +2056,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2015,6 +2072,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2033,6 +2091,8 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2095,6 +2155,8 @@ Transition a pending transaction to posted status. Supplies the bank-confirmed p
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2115,6 +2177,8 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 **Parameters:**
 
 - `bank_account` (query, optional)
+- `category` (query, optional)
+- `category_group` (query, optional)
 - `date_from` (query, optional)
 - `date_to` (query, optional)
 - `id` (path, required)
@@ -2149,6 +2213,7 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 * `signature_return` - Signature return
 * `fx_order` - FX Order
 * `` - --------
+- `uncategorized` (query, optional)
 
 **Request Body** (`application/json`):
 
@@ -2726,7 +2791,7 @@ signal and is not accepted from the client.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 - **`next_funding`** (`object`) *(required, read-only)* — Return the next scheduled funding event for this budget, or null.
 
 Args:
@@ -2778,7 +2843,7 @@ signal and is not accepted from the client.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 ### BudgetTypeEnum
 
@@ -2786,161 +2851,6 @@ signal and is not accepted from the client.
 * `R` - Recurring
 * `A` - Associated Fill-up Goal
 * `C` - Capped
-
-
-### CategoryEnum
-
-* `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer
 
 
 ### ChangePasswordRequest
@@ -3187,6 +3097,13 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+### PaginatedTransactionCategoryList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
 ### PaginatedTransactionList
 
 - **`count`** (`integer`) *(required)*
@@ -3255,7 +3172,7 @@ signal and is not accepted from the client.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
 - **`memo`** (`string`)
-- **`auto_spend`** (``)
+- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
 
 ### PatchedChannelPreferenceRequest
 
@@ -3282,6 +3199,20 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 * `immediate` - Immediate
 * `off` - Off Enum: ['digest', 'immediate', 'off']
 
+### PatchedTransactionCategoryRequest
+
+Serializer for transaction categories.
+
+On create the caller supplies group and name; the view forces the
+owner to the requesting user (global rows are managed via the
+django-admin only).  Group and name are whitespace-normalized and
+checked case-insensitively against the global rows and the user's
+own rows for duplicates.  'archived' is toggled via the archive
+action, not writable here.
+
+- **`group`** (`string`)
+- **`name`** (`string`)
+
 ### PatchedTransactionRequest
 
 Serializer for bank transactions.
@@ -3307,6 +3238,7 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -3441,6 +3373,8 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -3481,160 +3415,45 @@ field declaration is needed.
 - **`amount_currency`** (`string`) *(required, read-only)*
 - **`budget_balance`** (`string`) *(required, read-only)*
 - **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`) — * `Business:Business Clothing` - Business Clothing
-* `Business:Business Services` - Business Services
-* `Business:Business Supplies` - Business Supplies
-* `Business:Meals` - Meals
-* `Business:Travel` - Travel
-* `Children:Activities` - Activities
-* `Children:Allowance` - Allowance
-* `Children:Baby Supplies` - Baby Supplies
-* `Children:Childcare` - Childcare
-* `Children:Kids Clothing` - Kids Clothing
-* `Children:Kids Education` - Kids Education
-* `Children:Toys` - Toys
-* `Culture:Art` - Art
-* `Culture:Books` - Books
-* `Culture:Dance` - Dance
-* `Culture:Games` - Games
-* `Culture:Movies` - Movies
-* `Culture:Music` - Music
-* `Culture:News` - News
-* `Culture:Random Fun` - Random Fun
-* `Culture:TV` - TV
-* `Education:Books & Supplies` - Books & Supplies
-* `Education:Room & Board` - Room & Board
-* `Education:Student Loans` - Student Loans
-* `Education: Tuition & Fees` -  Tuition & Fees
-* `Fees:ATM Fees` - ATM Fees
-* `Fees:Investment Fees` - Investment Fees
-* `Fees:Other Fees` - Other Fees
-* `Financial:Accounting` - Accounting
-* `Financial:Credit Card Payment` - Credit Card Payment
-* `Financial:Financial Advice` - Financial Advice
-* `Financial:Life Insurance` - Life Insurance
-* `Financial:Loan` - Loan
-* `Financial:Loan Payment` - Loan Payment
-* `Financial:Money Transfers` - Money Transfers
-* `Financial:Other Financial` - Other Financial
-* `Financial:Tax Preparation` - Tax Preparation
-* `Financial:Taxes, Federal` - Taxes, Federal
-* `Financial:Taxes, Other` - Taxes, Other
-* `Financial:Taxes, State` - Taxes, State
-* `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-* `Food & Drink:Coffee & Tea` - Coffee & Tea
-* `Food & Drink:Dessert` - Dessert
-* `Food & Drink:Fast Food` - Fast Food
-* `Food & Drink:Groceries` - Groceries
-* `Food & Drink:Other Food & Drink` - Other Food & Drink
-* `Food & Drink:Restaurants` - Restaurants
-* `Food & Drink:Snacks` - Snacks
-* `Food & Drink:Tobacco & Like` - Tobacco & Like
-* `Gifts & Donations:Charities` - Charities
-* `Gifts & Donations:Gifts` - Gifts
-* `Health & Medical:Care Facilities` - Care Facilities
-* `Health & Medical:Dentist` - Dentist
-* `Health & Medical:Doctor` - Doctor
-* `Health & Medical:Equipment` - Equipment
-* `Health & Medical:Eyes` - Eyes
-* `Health & Medical:Health Insurance` - Health Insurance
-* `Health & Medical:Other Health & Medical` - Other Health & Medical
-* `Health & Medical:Pharmacies` - Pharmacies
-* `Health & Medical:Prescriptions` - Prescriptions
-* `Home:Furnishings` - Furnishings
-* `Home:Home Insurance` - Home Insurance
-* `Home:Home Purchase` - Home Purchase
-* `Home:Home Services` - Home Services
-* `Home:Home Supplies` - Home Supplies
-* `Home:Lawn & Garden` - Lawn & Garden
-* `Home:Mortgage` - Mortgage
-* `Home:Moving` - Moving
-* `Home:Other Home` - Other Home
-* `Home:Property Tax` - Property Tax
-* `Home:Rent` - Rent
-* `Home:Renter's Insurance` - Renter's Insurance
-* `Income:Bonus` - Bonus
-* `Income:Commission` - Commission
-* `Income:Interest` - Interest
-* `Income:Other Income` - Other Income
-* `Income:Paycheck` - Paycheck
-* `Income:Reimbursement` - Reimbursement
-* `Income:Rental Income` - Rental Income
-* `Investment:Education Investment` - Education Investment
-* `Investment:Other Investments` - Other Investments
-* `Investment:Retirement` - Retirement
-* `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-* `Legal:Legal Fees` - Legal Fees
-* `Legal:Legal Services` - Legal Services
-* `Legal:Other Legal Costs` - Other Legal Costs
-* `Office:Equipment` - Equipment
-* `Office:Office Supplies` - Office Supplies
-* `Office:Other Office` - Other Office
-* `Office:Postage & Shipping` - Postage & Shipping
-* `Personal:Accessories` - Accessories
-* `Personal:Beauty` - Beauty
-* `Personal:Body Enhancement` - Body Enhancement
-* `Personal:Clothing` - Clothing
-* `Personal:Counseling` - Counseling
-* `Personal:Hair` - Hair
-* `Personal:Hobbies` - Hobbies
-* `Personal:Jewelry` - Jewelry
-* `Personal:Laundry` - Laundry
-* `Personal:Other Personal` - Other Personal
-* `Personal:Religion` - Religion
-* `Personal:Shoes` - Shoes
-* `Pets:Pet Food` - Pet Food
-* `Pets:Pet Grooming` - Pet Grooming
-* `Pets:Pet Medicine` - Pet Medicine
-* `Pets:Pet Supplies` - Pet Supplies
-* `Pets:Veterinarian` - Veterinarian
-* `Sports & Fitness:Camping` - Camping
-* `Sports & Fitness:Fitness Gear` - Fitness Gear
-* `Sports & Fitness:Golf` - Golf
-* `Sports & Fitness:Memberships` - Memberships
-* `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-* `Sports & Fitness:Sporting Events` - Sporting Events
-* `Sports & Fitness:Sporting Goods` - Sporting Goods
-* `Technology:Domains & Hosting` - Domains & Hosting
-* `Technology:Hardware` - Hardware
-* `Technology:Online Services` - Online Services
-* `Technology:Software` - Software
-* `Transportation:Auto Insurance` - Auto Insurance
-* `Transportation:Auto Payment` - Auto Payment
-* `Transportation:Auto Services` - Auto Services
-* `Transportation:Auto Supplies` - Auto Supplies
-* `Transportation:Bicycle` - Bicycle
-* `Transportation:Boats & Marine` - Boats & Marine
-* `Transportation:Gas` - Gas
-* `Transportation:Other Transportation` - Other Transportation
-* `Transportation:Parking & Tolls` - Parking & Tolls
-* `Transportation:Parking Tickets` - Parking Tickets
-* `Transportation:Public Transit` - Public Transit
-* `Transportation:Shipping` - Shipping
-* `Transportation:Taxies` - Taxies
-* `Travel:Car Rental` - Car Rental
-* `Travel:Flights` - Flights
-* `Travel:Hotels` - Hotels
-* `Travel:Tours & Cruises` - Tours & Cruises
-* `Travel:Train` - Train
-* `Travel:Travel Buses` - Travel Buses
-* `Travel:Travel Dining` - Travel Dining
-* `Travel:Travel Entertainment` - Travel Entertainment
-* `Uncategorized:Cash` - Cash
-* `Uncategorized:Other Shopping` - Other Shopping
-* `Uncategorized:Unknown` - Unknown
-* `Uncategorized:Unassigned` - -------
-* `Utilities:Cable` - Cable
-* `Utilities:Electricity` - Electricity
-* `Utilities:Gas & Fuel` - Gas & Fuel
-* `Utilities:Internet` - Internet
-* `Utilities:Other Utilities` - Other Utilities
-* `Utilities:Phone` - Phone
-* `Utilities:Trash` - Trash
-* `Utilities:Water & Sewer` - Water & Sewer Enum: ['Business:Business Clothing', 'Business:Business Services', 'Business:Business Supplies', 'Business:Meals', 'Business:Travel', 'Children:Activities', 'Children:Allowance', 'Children:Baby Supplies', 'Children:Childcare', 'Children:Kids Clothing', 'Children:Kids Education', 'Children:Toys', 'Culture:Art', 'Culture:Books', 'Culture:Dance', 'Culture:Games', 'Culture:Movies', 'Culture:Music', 'Culture:News', 'Culture:Random Fun', 'Culture:TV', 'Education:Books & Supplies', 'Education:Room & Board', 'Education:Student Loans', 'Education: Tuition & Fees', 'Fees:ATM Fees', 'Fees:Investment Fees', 'Fees:Other Fees', 'Financial:Accounting', 'Financial:Credit Card Payment', 'Financial:Financial Advice', 'Financial:Life Insurance', 'Financial:Loan', 'Financial:Loan Payment', 'Financial:Money Transfers', 'Financial:Other Financial', 'Financial:Tax Preparation', 'Financial:Taxes, Federal', 'Financial:Taxes, Other', 'Financial:Taxes, State', 'Food & Drink:Alcohol & Bars', 'Food & Drink:Coffee & Tea', 'Food & Drink:Dessert', 'Food & Drink:Fast Food', 'Food & Drink:Groceries', 'Food & Drink:Other Food & Drink', 'Food & Drink:Restaurants', 'Food & Drink:Snacks', 'Food & Drink:Tobacco & Like', 'Gifts & Donations:Charities', 'Gifts & Donations:Gifts', 'Health & Medical:Care Facilities', 'Health & Medical:Dentist', 'Health & Medical:Doctor', 'Health & Medical:Equipment', 'Health & Medical:Eyes', 'Health & Medical:Health Insurance', 'Health & Medical:Other Health & Medical', 'Health & Medical:Pharmacies', 'Health & Medical:Prescriptions', 'Home:Furnishings', 'Home:Home Insurance', 'Home:Home Purchase', 'Home:Home Services', 'Home:Home Supplies', 'Home:Lawn & Garden', 'Home:Mortgage', 'Home:Moving', 'Home:Other Home', 'Home:Property Tax', 'Home:Rent', "Home:Renter's Insurance", 'Income:Bonus', 'Income:Commission', 'Income:Interest', 'Income:Other Income', 'Income:Paycheck', 'Income:Reimbursement', 'Income:Rental Income', 'Investment:Education Investment', 'Investment:Other Investments', 'Investment:Retirement', 'Investment:Stocks & Mutual Funds', 'Legal:Legal Fees', 'Legal:Legal Services', 'Legal:Other Legal Costs', 'Office:Equipment', 'Office:Office Supplies', 'Office:Other Office', 'Office:Postage & Shipping', 'Personal:Accessories', 'Personal:Beauty', 'Personal:Body Enhancement', 'Personal:Clothing', 'Personal:Counseling', 'Personal:Hair', 'Personal:Hobbies', 'Personal:Jewelry', 'Personal:Laundry', 'Personal:Other Personal', 'Personal:Religion', 'Personal:Shoes', 'Pets:Pet Food', 'Pets:Pet Grooming', 'Pets:Pet Medicine', 'Pets:Pet Supplies', 'Pets:Veterinarian', 'Sports & Fitness:Camping', 'Sports & Fitness:Fitness Gear', 'Sports & Fitness:Golf', 'Sports & Fitness:Memberships', 'Sports & Fitness:Other Sports & Fitness', 'Sports & Fitness:Sporting Events', 'Sports & Fitness:Sporting Goods', 'Technology:Domains & Hosting', 'Technology:Hardware', 'Technology:Online Services', 'Technology:Software', 'Transportation:Auto Insurance', 'Transportation:Auto Payment', 'Transportation:Auto Services', 'Transportation:Auto Supplies', 'Transportation:Bicycle', 'Transportation:Boats & Marine', 'Transportation:Gas', 'Transportation:Other Transportation', 'Transportation:Parking & Tolls', 'Transportation:Parking Tickets', 'Transportation:Public Transit', 'Transportation:Shipping', 'Transportation:Taxies', 'Travel:Car Rental', 'Travel:Flights', 'Travel:Hotels', 'Travel:Tours & Cruises', 'Travel:Train', 'Travel:Travel Buses', 'Travel:Travel Dining', 'Travel:Travel Entertainment', 'Uncategorized:Cash', 'Uncategorized:Other Shopping', 'Uncategorized:Unknown', 'Uncategorized:Unassigned', 'Utilities:Cable', 'Utilities:Electricity', 'Utilities:Gas & Fuel', 'Utilities:Internet', 'Utilities:Other Utilities', 'Utilities:Phone', 'Utilities:Trash', 'Utilities:Water & Sewer']
+- **`category`** (`string`)
+- **`category_full_name`** (`string`) *(required, read-only)*
 - **`memo`** (`string`)
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### TransactionCategory
+
+Serializer for transaction categories.
+
+On create the caller supplies group and name; the view forces the
+owner to the requesting user (global rows are managed via the
+django-admin only).  Group and name are whitespace-normalized and
+checked case-insensitively against the global rows and the user's
+own rows for duplicates.  'archived' is toggled via the archive
+action, not writable here.
+
+- **`id`** (`string`) *(required, read-only)*
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
+- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
+- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
+- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
+- **`created_at`** (`string`) *(required, read-only)*
+- **`modified_at`** (`string`) *(required, read-only)*
+
+### TransactionCategoryRequest
+
+Serializer for transaction categories.
+
+On create the caller supplies group and name; the view forces the
+owner to the requesting user (global rows are managed via the
+django-admin only).  Group and name are whitespace-normalized and
+checked case-insensitively against the global rows and the user's
+own rows for duplicates.  'archived' is toggled via the archive
+action, not writable here.
+
+- **`group`** (`string`) *(required)*
+- **`name`** (`string`) *(required)*
 
 ### TransactionRequest
 
@@ -3661,6 +3480,7 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`category`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)

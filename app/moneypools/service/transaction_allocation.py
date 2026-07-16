@@ -81,6 +81,11 @@ def create(
         raise ValueError(
             "No budget specified and account has no unallocated budget."
         )
+    # An allocation copies the transaction's category at creation time
+    # (unless the caller supplies one).  This is the single copy hook;
+    # edits never propagate between transaction and allocation
+    # afterwards, in either direction.
+    kwargs.setdefault("category", transaction.category)
     with acquire_lock(budget.lock_key):
         with db_transaction.atomic():
             budget.refresh_from_db()

@@ -13,6 +13,7 @@ These tools will eventually live in their own repository. For now they share the
 | Statement importer | `python -m importers import` | Parse bank statement files (OFX/QFX or BofA CSV) and POST new transactions to mibudge |
 | BofA live scraper | `python -m importers.import_bofa_live` | Log in to Bank of America, scrape all accessible accounts, and sync each one into mibudge via the `sync-scrape` endpoint |
 | BofA saved-scrape replayer | `python -m importers.import_bofa_saved` | Replay saved BofA scrape JSON files through the same `sync-scrape` endpoint without re-logging in to BofA |
+| BofA category harvester | `python -m importers.harvest_bofa_categories` | Discover BofA's transaction-category vocabulary and propose a mapping onto mibudge categories |
 | Budget backfill | `python -m importers backfill_budget` | Interactively allocate historical transactions to a budget, month by month |
 
 ---
@@ -241,6 +242,77 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 | `--run-funding` | Run the funding engine after each successful account sync |
 | `--verbose, -v` | Debug logging |
 | `--plain` | Disable rich terminal output |
+
+---
+
+## BofA Category Harvester
+
+`python -m importers.harvest_bofa_categories` discovers the vocabulary of
+`Transaction category` strings that Bank of America assigns to
+transactions, and proposes a mapping onto mibudge's own categories. It
+needs no mibudge server connection — the proposal is computed locally
+against the planned global category list. Its output feeds the
+`seed_category_aliases` management command (see
+[management-commands.md](management-commands.md)); the category model and
+resolution rules are documented in
+[transaction-categories.md](transaction-categories.md).
+
+Requires the `importers-bofa` group and bofa-scraper >= 1.1.0 (for
+`get_transaction_details`). Credentials resolve exactly like the live
+scraper (`BOFA_ID`/`BOFA_PASSCODE`, flags, or `BOFA_ONEPASSWORD_URL`).
+
+```bash
+uv run --group importers-bofa python -m importers.harvest_bofa_categories \
+    --no-headless --max-details 15 --save-details bofa-details.json
+```
+
+It opens each posted transaction's View/Edit dialog, reads the
+`transaction_category`, and writes a review YAML (proposed mapping +
+confidence per distinct category). Review and edit the `category:`
+targets, then load with `seed_category_aliases`.
+
+### Rate limiting and incremental harvesting
+
+BofA rate-limits detail-dialog opens **aggressively** — a burst of a few
+dozen wedges the page, and a large burst can terminate the login session
+entirely. The harvester defends against this and is built to run
+**incrementally** across many gentle sessions rather than one long run:
+
+- **Persistent accumulator** (`--state`, default
+  `bofa-harvest-state.json`): loaded at startup, saved at the end and on
+  interrupt. Each run skips everything already gathered — known merchants
+  and already-processed transactions — and spends its fetch budget only
+  on transactions never seen before. Run repeatedly with the same file to
+  build up the full vocabulary over time.
+- **Merchant skip**: once a merchant's category is known, later
+  transactions at the same merchant are credited without re-opening the
+  dialog (categories are stable per merchant).
+- **Pacing and recovery**: `--delay` between fetches, a proactive pause
+  every `--batch-size` fetches, and wedge detection that cools down and
+  reloads the page (`--wedge-*`); a logged-out session ends the run
+  cleanly with partial results saved.
+- **`--import-details`** bootstraps the accumulator from a prior
+  `--save-details` JSON so those transactions are never re-fetched.
+
+> **PII:** the review YAML, details JSON, and state file contain real
+> transaction descriptions (payroll strings, names, account fragments)
+> and are gitignored. The committed alias seed file must contain only
+> `provider`/`alias_key`/`category` mappings — no `samples:`.
+
+| Option | Description |
+|--------|-------------|
+| `-a, --account SUBSTR` | Harvest only matching accounts (repeatable) |
+| `--state FILE` | Persistent accumulator (default `bofa-harvest-state.json`) |
+| `--reset-state` | Ignore any existing state file and start fresh |
+| `--import-details FILE` | Seed the accumulator from a prior `--save-details` JSON |
+| `--max-details N` | Cap detail fetches per account (0 = unlimited) |
+| `--delay SECONDS` | Sleep between fetches (default 3.0) |
+| `--batch-size N` / `--batch-pause SECONDS` | Proactive pause every N fetches |
+| `--wedge-threshold N` / `--wedge-cooldown SECONDS` / `--max-recoveries N` | Wedge detection and recovery |
+| `--skip-known-merchants / --no-skip-known-merchants` | Toggle the merchant skip (default on) |
+| `--save-details FILE` | Append every fetched details dict (enrichment test data) |
+| `-o, --output FILE` | Review YAML destination (default timestamped) |
+| `--no-headless` | Show the browser (needed for 2FA) |
 
 ---
 

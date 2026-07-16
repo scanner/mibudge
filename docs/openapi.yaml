@@ -99,6 +99,11 @@ paths:
         name: category
         schema:
           type: string
+          format: uuid
+      - in: query
+        name: category_group
+        schema:
+          type: string
       - name: ordering
         required: false
         in: query
@@ -122,6 +127,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: uncategorized
+        schema:
+          type: boolean
       tags:
       - allocations
       security:
@@ -1471,6 +1480,247 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationPreference'
           description: ''
+  /api/v1/transaction-categories/:
+    get:
+      operationId: transaction_categories_list
+      description: 'Return the transaction categories visible to the authenticated
+        user: the global base set, the user''s own custom categories, categories owned
+        by users they co-own a bank account with, and categories still referenced
+        by the user''s transactions after sharing ended.  Filterable by group, archived,
+        and scope (global|mine|shared).  Searchable by group and name.'
+      summary: List transaction categories
+      parameters:
+      - in: query
+        name: archived
+        schema:
+          type: boolean
+      - in: query
+        name: group
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: scope
+        schema:
+          type: string
+          enum:
+          - global
+          - mine
+          - shared
+        description: |-
+          * `global` - Global
+          * `mine` - Mine
+          * `shared` - Shared
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - transaction-categories
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransactionCategoryList'
+          description: ''
+    post:
+      operationId: transaction_categories_create
+      description: Create a custom category owned by the authenticated user (global
+        categories are managed via the admin).  Group and name are whitespace-normalized;
+        case-insensitive duplicates of global rows or the user's own rows are rejected.
+      summary: Create a transaction category
+      tags:
+      - transaction-categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionCategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionCategory'
+          description: ''
+  /api/v1/transaction-categories/{id}/:
+    get:
+      operationId: transaction_categories_retrieve
+      description: Return a single visible category by UUID.
+      summary: Get transaction category details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transaction-categories
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionCategory'
+          description: ''
+    put:
+      operationId: transaction_categories_update
+      description: Full update of a category.  Only the owner may update; global categories
+        are managed via the admin.
+      summary: Update a transaction category
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transaction-categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionCategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionCategory'
+          description: ''
+    patch:
+      operationId: transaction_categories_partial_update
+      description: Partial update of a category.  Only the owner may update; global
+        categories are managed via the admin.
+      summary: Partially update a transaction category
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transaction-categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTransactionCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTransactionCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTransactionCategoryRequest'
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionCategory'
+          description: ''
+    delete:
+      operationId: transaction_categories_destroy
+      description: Delete a category.  Only the owner may delete; global categories
+        are managed via the admin.  A category still referenced by transactions or
+        allocations cannot be deleted (409) -- archive it instead.
+      summary: Delete a transaction category
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transaction-categories
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '204':
+          description: No response body
+        '409':
+          description: The category is referenced by transactions or allocations;
+            archive it instead.
+  /api/v1/transaction-categories/{id}/archive/:
+    post:
+      operationId: transaction_categories_archive_create
+      description: Archive a category so pickers hide it while existing references
+        stay valid.  Only the owner may archive; global categories are managed via
+        the admin.
+      summary: Archive a transaction category
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transaction-categories
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionCategory'
+          description: ''
   /api/v1/transactions/:
     get:
       operationId: transactions_list
@@ -1485,6 +1735,15 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: category
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: category_group
+        schema:
+          type: string
       - in: query
         name: date_from
         schema:
@@ -1587,6 +1846,10 @@ paths:
           * `signature_return` - Signature return
           * `fx_order` - FX Order
           * `` - --------
+      - in: query
+        name: uncategorized
+        schema:
+          type: boolean
       tags:
       - transactions
       security:
@@ -1802,6 +2065,15 @@ paths:
           type: string
           format: uuid
       - in: query
+        name: category
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: category_group
+        schema:
+          type: string
+      - in: query
         name: date_from
         schema:
           type: string
@@ -1909,6 +2181,10 @@ paths:
           * `signature_return` - Signature return
           * `fx_order` - FX Order
           * `` - --------
+      - in: query
+        name: uncategorized
+        schema:
+          type: boolean
       tags:
       - transactions
       requestBody:
@@ -2886,7 +3162,10 @@ components:
           type: string
           nullable: true
           maxLength: 512
-        auto_spend: {}
+        auto_spend:
+          description: 'List of matcher strings; currently transaction-category full
+            names (''{group} : {name}'').  Spend matching an entry is auto-routed
+            to this budget.'
         next_funding:
           type: object
           additionalProperties: {}
@@ -3010,7 +3289,10 @@ components:
           type: string
           nullable: true
           maxLength: 512
-        auto_spend: {}
+        auto_spend:
+          description: 'List of matcher strings; currently transaction-category full
+            names (''{group} : {name}'').  Spend matching an entry is auto-routed
+            to this budget.'
       required:
       - bank_account
       - name
@@ -3027,312 +3309,6 @@ components:
         * `R` - Recurring
         * `A` - Associated Fill-up Goal
         * `C` - Capped
-    CategoryEnum:
-      enum:
-      - Business:Business Clothing
-      - Business:Business Services
-      - Business:Business Supplies
-      - Business:Meals
-      - Business:Travel
-      - Children:Activities
-      - Children:Allowance
-      - Children:Baby Supplies
-      - Children:Childcare
-      - Children:Kids Clothing
-      - Children:Kids Education
-      - Children:Toys
-      - Culture:Art
-      - Culture:Books
-      - Culture:Dance
-      - Culture:Games
-      - Culture:Movies
-      - Culture:Music
-      - Culture:News
-      - Culture:Random Fun
-      - Culture:TV
-      - Education:Books & Supplies
-      - Education:Room & Board
-      - Education:Student Loans
-      - 'Education: Tuition & Fees'
-      - Fees:ATM Fees
-      - Fees:Investment Fees
-      - Fees:Other Fees
-      - Financial:Accounting
-      - Financial:Credit Card Payment
-      - Financial:Financial Advice
-      - Financial:Life Insurance
-      - Financial:Loan
-      - Financial:Loan Payment
-      - Financial:Money Transfers
-      - Financial:Other Financial
-      - Financial:Tax Preparation
-      - Financial:Taxes, Federal
-      - Financial:Taxes, Other
-      - Financial:Taxes, State
-      - Food & Drink:Alcohol & Bars
-      - Food & Drink:Coffee & Tea
-      - Food & Drink:Dessert
-      - Food & Drink:Fast Food
-      - Food & Drink:Groceries
-      - Food & Drink:Other Food & Drink
-      - Food & Drink:Restaurants
-      - Food & Drink:Snacks
-      - Food & Drink:Tobacco & Like
-      - Gifts & Donations:Charities
-      - Gifts & Donations:Gifts
-      - Health & Medical:Care Facilities
-      - Health & Medical:Dentist
-      - Health & Medical:Doctor
-      - Health & Medical:Equipment
-      - Health & Medical:Eyes
-      - Health & Medical:Health Insurance
-      - Health & Medical:Other Health & Medical
-      - Health & Medical:Pharmacies
-      - Health & Medical:Prescriptions
-      - Home:Furnishings
-      - Home:Home Insurance
-      - Home:Home Purchase
-      - Home:Home Services
-      - Home:Home Supplies
-      - Home:Lawn & Garden
-      - Home:Mortgage
-      - Home:Moving
-      - Home:Other Home
-      - Home:Property Tax
-      - Home:Rent
-      - Home:Renter's Insurance
-      - Income:Bonus
-      - Income:Commission
-      - Income:Interest
-      - Income:Other Income
-      - Income:Paycheck
-      - Income:Reimbursement
-      - Income:Rental Income
-      - Investment:Education Investment
-      - Investment:Other Investments
-      - Investment:Retirement
-      - Investment:Stocks & Mutual Funds
-      - Legal:Legal Fees
-      - Legal:Legal Services
-      - Legal:Other Legal Costs
-      - Office:Equipment
-      - Office:Office Supplies
-      - Office:Other Office
-      - Office:Postage & Shipping
-      - Personal:Accessories
-      - Personal:Beauty
-      - Personal:Body Enhancement
-      - Personal:Clothing
-      - Personal:Counseling
-      - Personal:Hair
-      - Personal:Hobbies
-      - Personal:Jewelry
-      - Personal:Laundry
-      - Personal:Other Personal
-      - Personal:Religion
-      - Personal:Shoes
-      - Pets:Pet Food
-      - Pets:Pet Grooming
-      - Pets:Pet Medicine
-      - Pets:Pet Supplies
-      - Pets:Veterinarian
-      - Sports & Fitness:Camping
-      - Sports & Fitness:Fitness Gear
-      - Sports & Fitness:Golf
-      - Sports & Fitness:Memberships
-      - Sports & Fitness:Other Sports & Fitness
-      - Sports & Fitness:Sporting Events
-      - Sports & Fitness:Sporting Goods
-      - Technology:Domains & Hosting
-      - Technology:Hardware
-      - Technology:Online Services
-      - Technology:Software
-      - Transportation:Auto Insurance
-      - Transportation:Auto Payment
-      - Transportation:Auto Services
-      - Transportation:Auto Supplies
-      - Transportation:Bicycle
-      - Transportation:Boats & Marine
-      - Transportation:Gas
-      - Transportation:Other Transportation
-      - Transportation:Parking & Tolls
-      - Transportation:Parking Tickets
-      - Transportation:Public Transit
-      - Transportation:Shipping
-      - Transportation:Taxies
-      - Travel:Car Rental
-      - Travel:Flights
-      - Travel:Hotels
-      - Travel:Tours & Cruises
-      - Travel:Train
-      - Travel:Travel Buses
-      - Travel:Travel Dining
-      - Travel:Travel Entertainment
-      - Uncategorized:Cash
-      - Uncategorized:Other Shopping
-      - Uncategorized:Unknown
-      - Uncategorized:Unassigned
-      - Utilities:Cable
-      - Utilities:Electricity
-      - Utilities:Gas & Fuel
-      - Utilities:Internet
-      - Utilities:Other Utilities
-      - Utilities:Phone
-      - Utilities:Trash
-      - Utilities:Water & Sewer
-      type: string
-      description: |-
-        * `Business:Business Clothing` - Business Clothing
-        * `Business:Business Services` - Business Services
-        * `Business:Business Supplies` - Business Supplies
-        * `Business:Meals` - Meals
-        * `Business:Travel` - Travel
-        * `Children:Activities` - Activities
-        * `Children:Allowance` - Allowance
-        * `Children:Baby Supplies` - Baby Supplies
-        * `Children:Childcare` - Childcare
-        * `Children:Kids Clothing` - Kids Clothing
-        * `Children:Kids Education` - Kids Education
-        * `Children:Toys` - Toys
-        * `Culture:Art` - Art
-        * `Culture:Books` - Books
-        * `Culture:Dance` - Dance
-        * `Culture:Games` - Games
-        * `Culture:Movies` - Movies
-        * `Culture:Music` - Music
-        * `Culture:News` - News
-        * `Culture:Random Fun` - Random Fun
-        * `Culture:TV` - TV
-        * `Education:Books & Supplies` - Books & Supplies
-        * `Education:Room & Board` - Room & Board
-        * `Education:Student Loans` - Student Loans
-        * `Education: Tuition & Fees` -  Tuition & Fees
-        * `Fees:ATM Fees` - ATM Fees
-        * `Fees:Investment Fees` - Investment Fees
-        * `Fees:Other Fees` - Other Fees
-        * `Financial:Accounting` - Accounting
-        * `Financial:Credit Card Payment` - Credit Card Payment
-        * `Financial:Financial Advice` - Financial Advice
-        * `Financial:Life Insurance` - Life Insurance
-        * `Financial:Loan` - Loan
-        * `Financial:Loan Payment` - Loan Payment
-        * `Financial:Money Transfers` - Money Transfers
-        * `Financial:Other Financial` - Other Financial
-        * `Financial:Tax Preparation` - Tax Preparation
-        * `Financial:Taxes, Federal` - Taxes, Federal
-        * `Financial:Taxes, Other` - Taxes, Other
-        * `Financial:Taxes, State` - Taxes, State
-        * `Food & Drink:Alcohol & Bars` - Alcohol & Bars
-        * `Food & Drink:Coffee & Tea` - Coffee & Tea
-        * `Food & Drink:Dessert` - Dessert
-        * `Food & Drink:Fast Food` - Fast Food
-        * `Food & Drink:Groceries` - Groceries
-        * `Food & Drink:Other Food & Drink` - Other Food & Drink
-        * `Food & Drink:Restaurants` - Restaurants
-        * `Food & Drink:Snacks` - Snacks
-        * `Food & Drink:Tobacco & Like` - Tobacco & Like
-        * `Gifts & Donations:Charities` - Charities
-        * `Gifts & Donations:Gifts` - Gifts
-        * `Health & Medical:Care Facilities` - Care Facilities
-        * `Health & Medical:Dentist` - Dentist
-        * `Health & Medical:Doctor` - Doctor
-        * `Health & Medical:Equipment` - Equipment
-        * `Health & Medical:Eyes` - Eyes
-        * `Health & Medical:Health Insurance` - Health Insurance
-        * `Health & Medical:Other Health & Medical` - Other Health & Medical
-        * `Health & Medical:Pharmacies` - Pharmacies
-        * `Health & Medical:Prescriptions` - Prescriptions
-        * `Home:Furnishings` - Furnishings
-        * `Home:Home Insurance` - Home Insurance
-        * `Home:Home Purchase` - Home Purchase
-        * `Home:Home Services` - Home Services
-        * `Home:Home Supplies` - Home Supplies
-        * `Home:Lawn & Garden` - Lawn & Garden
-        * `Home:Mortgage` - Mortgage
-        * `Home:Moving` - Moving
-        * `Home:Other Home` - Other Home
-        * `Home:Property Tax` - Property Tax
-        * `Home:Rent` - Rent
-        * `Home:Renter's Insurance` - Renter's Insurance
-        * `Income:Bonus` - Bonus
-        * `Income:Commission` - Commission
-        * `Income:Interest` - Interest
-        * `Income:Other Income` - Other Income
-        * `Income:Paycheck` - Paycheck
-        * `Income:Reimbursement` - Reimbursement
-        * `Income:Rental Income` - Rental Income
-        * `Investment:Education Investment` - Education Investment
-        * `Investment:Other Investments` - Other Investments
-        * `Investment:Retirement` - Retirement
-        * `Investment:Stocks & Mutual Funds` - Stocks & Mutual Funds
-        * `Legal:Legal Fees` - Legal Fees
-        * `Legal:Legal Services` - Legal Services
-        * `Legal:Other Legal Costs` - Other Legal Costs
-        * `Office:Equipment` - Equipment
-        * `Office:Office Supplies` - Office Supplies
-        * `Office:Other Office` - Other Office
-        * `Office:Postage & Shipping` - Postage & Shipping
-        * `Personal:Accessories` - Accessories
-        * `Personal:Beauty` - Beauty
-        * `Personal:Body Enhancement` - Body Enhancement
-        * `Personal:Clothing` - Clothing
-        * `Personal:Counseling` - Counseling
-        * `Personal:Hair` - Hair
-        * `Personal:Hobbies` - Hobbies
-        * `Personal:Jewelry` - Jewelry
-        * `Personal:Laundry` - Laundry
-        * `Personal:Other Personal` - Other Personal
-        * `Personal:Religion` - Religion
-        * `Personal:Shoes` - Shoes
-        * `Pets:Pet Food` - Pet Food
-        * `Pets:Pet Grooming` - Pet Grooming
-        * `Pets:Pet Medicine` - Pet Medicine
-        * `Pets:Pet Supplies` - Pet Supplies
-        * `Pets:Veterinarian` - Veterinarian
-        * `Sports & Fitness:Camping` - Camping
-        * `Sports & Fitness:Fitness Gear` - Fitness Gear
-        * `Sports & Fitness:Golf` - Golf
-        * `Sports & Fitness:Memberships` - Memberships
-        * `Sports & Fitness:Other Sports & Fitness` - Other Sports & Fitness
-        * `Sports & Fitness:Sporting Events` - Sporting Events
-        * `Sports & Fitness:Sporting Goods` - Sporting Goods
-        * `Technology:Domains & Hosting` - Domains & Hosting
-        * `Technology:Hardware` - Hardware
-        * `Technology:Online Services` - Online Services
-        * `Technology:Software` - Software
-        * `Transportation:Auto Insurance` - Auto Insurance
-        * `Transportation:Auto Payment` - Auto Payment
-        * `Transportation:Auto Services` - Auto Services
-        * `Transportation:Auto Supplies` - Auto Supplies
-        * `Transportation:Bicycle` - Bicycle
-        * `Transportation:Boats & Marine` - Boats & Marine
-        * `Transportation:Gas` - Gas
-        * `Transportation:Other Transportation` - Other Transportation
-        * `Transportation:Parking & Tolls` - Parking & Tolls
-        * `Transportation:Parking Tickets` - Parking Tickets
-        * `Transportation:Public Transit` - Public Transit
-        * `Transportation:Shipping` - Shipping
-        * `Transportation:Taxies` - Taxies
-        * `Travel:Car Rental` - Car Rental
-        * `Travel:Flights` - Flights
-        * `Travel:Hotels` - Hotels
-        * `Travel:Tours & Cruises` - Tours & Cruises
-        * `Travel:Train` - Train
-        * `Travel:Travel Buses` - Travel Buses
-        * `Travel:Travel Dining` - Travel Dining
-        * `Travel:Travel Entertainment` - Travel Entertainment
-        * `Uncategorized:Cash` - Cash
-        * `Uncategorized:Other Shopping` - Other Shopping
-        * `Uncategorized:Unknown` - Unknown
-        * `Uncategorized:Unassigned` - -------
-        * `Utilities:Cable` - Cable
-        * `Utilities:Electricity` - Electricity
-        * `Utilities:Gas & Fuel` - Gas & Fuel
-        * `Utilities:Internet` - Internet
-        * `Utilities:Other Utilities` - Other Utilities
-        * `Utilities:Phone` - Phone
-        * `Utilities:Trash` - Trash
-        * `Utilities:Water & Sewer` - Water & Sewer
     ChangePasswordRequest:
       type: object
       description: |-
@@ -3904,6 +3880,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TransactionAllocation'
+    PaginatedTransactionCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionCategory'
     PaginatedTransactionList:
       type: object
       required:
@@ -4057,7 +4056,10 @@ components:
           type: string
           nullable: true
           maxLength: 512
-        auto_spend: {}
+        auto_spend:
+          description: 'List of matcher strings; currently transaction-category full
+            names (''{group} : {name}'').  Spend matching an entry is auto-routed
+            to this budget.'
     PatchedChannelPreferenceRequest:
       type: object
       description: |-
@@ -4078,6 +4080,26 @@ components:
       properties:
         delivery_mode:
           $ref: '#/components/schemas/DeliveryModeEnum'
+    PatchedTransactionCategoryRequest:
+      type: object
+      description: |-
+        Serializer for transaction categories.
+
+        On create the caller supplies group and name; the view forces the
+        owner to the requesting user (global rows are managed via the
+        django-admin only).  Group and name are whitespace-normalized and
+        checked case-insensitively against the global rows and the user's
+        own rows for duplicates.  'archived' is toggled via the archive
+        action, not writable here.
+      properties:
+        group:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
     PatchedTransactionRequest:
       type: object
       description: |-
@@ -4127,6 +4149,10 @@ components:
         description:
           type: string
           maxLength: 512
+        category:
+          type: string
+          format: uuid
+          nullable: true
         bank_transaction_id:
           type: string
           nullable: true
@@ -4419,6 +4445,14 @@ components:
         description:
           type: string
           maxLength: 512
+        category:
+          type: string
+          format: uuid
+          nullable: true
+        category_full_name:
+          type: string
+          nullable: true
+          readOnly: true
         bank_transaction_id:
           type: string
           nullable: true
@@ -4469,6 +4503,7 @@ components:
       - bank_account_available_balance_currency
       - bank_account_posted_balance
       - bank_account_posted_balance_currency
+      - category_full_name
       - created_at
       - id
       - linked_transaction
@@ -4527,7 +4562,13 @@ components:
           type: string
           readOnly: true
         category:
-          $ref: '#/components/schemas/CategoryEnum'
+          type: string
+          format: uuid
+          nullable: true
+        category_full_name:
+          type: string
+          nullable: true
+          readOnly: true
         memo:
           type: string
           nullable: true
@@ -4545,10 +4586,86 @@ components:
       - amount_currency
       - budget_balance
       - budget_balance_currency
+      - category_full_name
       - created_at
       - id
       - modified_at
       - transaction
+    TransactionCategory:
+      type: object
+      description: |-
+        Serializer for transaction categories.
+
+        On create the caller supplies group and name; the view forces the
+        owner to the requesting user (global rows are managed via the
+        django-admin only).  Group and name are whitespace-normalized and
+        checked case-insensitively against the global rows and the user's
+        own rows for duplicates.  'archived' is toggled via the archive
+        action, not writable here.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        group:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 64
+        full_name:
+          type: string
+          readOnly: true
+          description: 'Canonical display form: ''{group} : {name}''.'
+        owner:
+          type: string
+          description: Owner username; null for a global category.
+          readOnly: true
+        archived:
+          type: boolean
+          readOnly: true
+          description: Archived categories are hidden from pickers but remain valid
+            on existing transactions and allocations.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        modified_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - archived
+      - created_at
+      - full_name
+      - group
+      - id
+      - modified_at
+      - name
+      - owner
+    TransactionCategoryRequest:
+      type: object
+      description: |-
+        Serializer for transaction categories.
+
+        On create the caller supplies group and name; the view forces the
+        owner to the requesting user (global rows are managed via the
+        django-admin only).  Group and name are whitespace-normalized and
+        checked case-insensitively against the global rows and the user's
+        own rows for duplicates.  'archived' is toggled via the archive
+        action, not writable here.
+      properties:
+        group:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+      required:
+      - group
+      - name
     TransactionRequest:
       type: object
       description: |-
@@ -4598,6 +4715,10 @@ components:
         description:
           type: string
           maxLength: 512
+        category:
+          type: string
+          format: uuid
+          nullable: true
         bank_transaction_id:
           type: string
           nullable: true

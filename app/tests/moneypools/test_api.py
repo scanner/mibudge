@@ -48,24 +48,6 @@ _WEEKLY = recurrence.Recurrence(
 pytestmark = pytest.mark.django_db
 
 
-####################################################################
-#
-@pytest.fixture
-def api_client() -> APIClient:
-    """Return an unauthenticated DRF test client."""
-    return APIClient()
-
-
-####################################################################
-#
-@pytest.fixture
-def auth_client(user: User) -> APIClient:
-    """Return a DRF test client authenticated as the default user."""
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
-
-
 ########################################################################
 ########################################################################
 #

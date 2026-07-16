@@ -125,8 +125,8 @@ const budgetId = computed(() => props.allocation.budget);
     </div>
 
     <!-- Category -->
-    <div v-if="allocation.category" class="mt-1 text-xs text-secondary">
-      {{ allocation.category }}
+    <div v-if="allocation.category_full_name" class="mt-1 text-xs text-secondary">
+      {{ allocation.category_full_name }}
     </div>
   </div>
 </template>

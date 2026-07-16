@@ -184,6 +184,9 @@ export interface Transaction {
   memo: string | null;
   raw_description: string;
   description: string;
+  // Category UUID (write) + its "{group} : {name}" display form (read-only).
+  category: string | null;
+  category_full_name: string | null;
   bank_account_posted_balance: string;
   bank_account_posted_balance_currency: string;
   bank_account_available_balance: string;
@@ -196,11 +199,19 @@ export interface Transaction {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Matches `TransactionCategory.choices` on the backend.  Kept as an
-// opaque string for now; expand into a literal union once the category
-// picker UI is built.
+// A TransactionCategory as returned by /api/v1/transaction-categories/.
+// `owner` is null for the shared global base set.
 //
-export type CategoryEnum = string;
+export interface TransactionCategory {
+  id: string;
+  group: string;
+  name: string;
+  full_name: string;
+  owner: string | null;
+  archived: boolean;
+  created_at: string;
+  modified_at: string;
+}
 
 export interface TransactionAllocation {
   id: string;
@@ -210,7 +221,9 @@ export interface TransactionAllocation {
   amount_currency: string;
   budget_balance: string;
   budget_balance_currency: string;
-  category: CategoryEnum | null;
+  // Category UUID (write) + its "{group} : {name}" display form (read-only).
+  category: string | null;
+  category_full_name: string | null;
   memo: string | null;
   created_at: string;
   modified_at: string;
@@ -333,13 +346,18 @@ export interface TransactionListParams {
   search?: string;
   ordering?: string;
   page?: number;
+  category?: string; // category UUID
+  category_group?: string;
+  uncategorized?: boolean;
 }
 
 export interface AllocationListParams {
   bank_account?: string;
   transaction?: string;
   budget?: string;
-  category?: string;
+  category?: string; // category UUID (was the enum string)
+  category_group?: string;
+  uncategorized?: boolean;
 }
 
 export interface InternalTransactionListParams {

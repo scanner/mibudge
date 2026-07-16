@@ -250,6 +250,22 @@ class TransactionFactory(DjangoModelFactory):
 ########################################################################
 ########################################################################
 #
+class TransactionCategoryFactory(DjangoModelFactory):
+    class Meta:
+        model = TransactionCategory
+        # Sequence-based name keeps each built category unique under the
+        # case-insensitive (group, name) constraint.  owner defaults to
+        # None (a global category); pass owner=user for a custom one.
+        django_get_or_create = ("group", "name", "owner")
+
+    group = "Test Group"
+    name = factory.Sequence(lambda n: f"Category {n}")
+    owner = None
+
+
+########################################################################
+########################################################################
+#
 class TransactionAllocationFactory(DjangoModelFactory):
     class Meta:
         model = TransactionAllocation
@@ -259,7 +275,9 @@ class TransactionAllocationFactory(DjangoModelFactory):
     transaction = factory.SubFactory(TransactionFactory)
     budget = factory.SubFactory(BudgetFactory)
     amount = factory.LazyAttribute(lambda o: o.transaction.amount)
-    category = factory.fuzzy.FuzzyChoice(TransactionCategory.values)
+    # No default category: the service copies the transaction's category
+    # at creation (None by default = unassigned).  Pass category=<obj>
+    # to set one explicitly.
 
     @classmethod
     def _create(

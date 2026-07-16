@@ -22,6 +22,7 @@ from moneypools.api.v1.views import (
     FundingEventOccurrenceViewSet,
     InternalTransactionViewSet,
     TransactionAllocationViewSet,
+    TransactionCategoryViewSet,
     TransactionViewSet,
     currencies,
     invitation_accept,
@@ -57,6 +58,11 @@ router.register("banks", BankViewSet)
 router.register("bank-accounts", BankAccountViewSet)
 router.register("budgets", BudgetViewSet)
 router.register("transactions", TransactionViewSet)
+router.register(
+    "transaction-categories",
+    TransactionCategoryViewSet,
+    basename="transaction-category",
+)
 router.register("allocations", TransactionAllocationViewSet)
 router.register("internal-transactions", InternalTransactionViewSet)
 router.register(
