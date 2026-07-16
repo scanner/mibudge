@@ -49,8 +49,38 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
 )
+from moneypools.service import categories as categories_svc
 
 User = get_user_model()
+
+# Legacy exports stored this sentinel for "unassigned"; it now maps to a
+# null category rather than a real row (the sentinel was removed when
+# TransactionCategory became a model).
+_LEGACY_UNASSIGNED = ("uncategorized", "unassigned")
+
+
+####################################################################
+#
+def _resolve_category(raw: str | None) -> Any:
+    """Resolve an exported category string to a TransactionCategory or None.
+
+    Accepts both the current full-name form ('Food & Drink : Groceries')
+    and the legacy enum form ('Food & Drink:Groceries'); normalization
+    handles either.  Blank values and the legacy 'Uncategorized:Unassigned'
+    sentinel resolve to None (unassigned).
+
+    Args:
+        raw: The exported category string, or None.
+
+    Returns:
+        A TransactionCategory instance, or None.
+    """
+    if not raw:
+        return None
+    group, name = categories_svc.normalize_category(raw)
+    if (group.casefold(), name.casefold()) == _LEGACY_UNASSIGNED:
+        return None
+    return categories_svc.resolve_category_string(raw)
 
 
 ########################################################################
@@ -555,6 +585,7 @@ def _restore_transaction(
     tx.raw_description = d.get("raw_description", "")
     tx.description = d.get("description") or tx.raw_description
     tx.party = d.get("party")
+    tx.category = _resolve_category(d.get("category"))
     tx.linked_transaction = None
 
     posted_bal = _money(d.get("bank_account_posted_balance"))
@@ -599,7 +630,7 @@ def _restore_allocation(
 
     alloc.transaction = tx
     alloc.budget = budget
-    alloc.category = d.get("category", "Uncategorized:Unassigned")
+    alloc.category = _resolve_category(d.get("category"))
     alloc.memo = d.get("memo")
 
     if budget_balance is not None:

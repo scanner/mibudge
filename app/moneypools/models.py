@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
@@ -274,186 +275,169 @@ class BankAccount(MoneyPoolBaseClass):
 ########################################################################
 ########################################################################
 #
-class TransactionCategory(models.TextChoices):
-    BUSINESS_CLOTHING = "Business:Business Clothing", "Business Clothing"
-    BUSINESS_SERVICES = "Business:Business Services", "Business Services"
-    BUSINESS_SUPPLIES = "Business:Business Supplies", "Business Supplies"
-    MEALS = "Business:Meals", "Meals"
-    TRAVEL = "Business:Travel", "Travel"
-    ACTIVITIES = "Children:Activities", "Activities"
-    ALLOWANCE = "Children:Allowance", "Allowance"
-    BABY_SUPPLIES = "Children:Baby Supplies", "Baby Supplies"
-    CHILDCARE = "Children:Childcare", "Childcare"
-    KIDS_CLOTHING = "Children:Kids Clothing", "Kids Clothing"
-    KIDS_EDUCATION = "Children:Kids Education", "Kids Education"
-    TOYS = "Children:Toys", "Toys"
-    ART = "Culture:Art", "Art"
-    BOOKS = "Culture:Books", "Books"
-    DANCE = "Culture:Dance", "Dance"
-    GAMES = "Culture:Games", "Games"
-    MOVIES = "Culture:Movies", "Movies"
-    MUSIC = "Culture:Music", "Music"
-    NEWS = "Culture:News", "News"
-    RANDOM_FUN = "Culture:Random Fun", "Random Fun"
-    TV = "Culture:TV", "TV"
-    BOOKS_SUPPLIES = "Education:Books & Supplies", "Books & Supplies"
-    ROOM_BOARD = "Education:Room & Board", "Room & Board"
-    STUDENT_LOANS = "Education:Student Loans", "Student Loans"
-    TUITION_FEES = "Education: Tuition & Fees", " Tuition & Fees"
-    ATM_FEES = "Fees:ATM Fees", "ATM Fees"
-    INVESTMENT_FEES = "Fees:Investment Fees", "Investment Fees"
-    OTHER_FEES = "Fees:Other Fees", "Other Fees"
-    ACCOUNTING = "Financial:Accounting", "Accounting"
-    CREDIT_CARD_PAYMENT = "Financial:Credit Card Payment", "Credit Card Payment"
-    FINANCIAL_ADVICE = "Financial:Financial Advice", "Financial Advice"
-    LIFE_INSURANCE = "Financial:Life Insurance", "Life Insurance"
-    LOAN = "Financial:Loan", "Loan"
-    LOAN_PAYMENT = "Financial:Loan Payment", "Loan Payment"
-    MONEY_TRANSFERS = "Financial:Money Transfers", "Money Transfers"
-    OTHER_FINANCIAL = "Financial:Other Financial", "Other Financial"
-    TAX_PREPARATION = "Financial:Tax Preparation", "Tax Preparation"
-    TAXES_FEDERAL = "Financial:Taxes, Federal", "Taxes, Federal"
-    TAXES_OTHER = "Financial:Taxes, Other", "Taxes, Other"
-    TAXES_STATE = "Financial:Taxes, State", "Taxes, State"
-    ALCOHOL_BARS = "Food & Drink:Alcohol & Bars", "Alcohol & Bars"
-    COFFEE_TEA = "Food & Drink:Coffee & Tea", "Coffee & Tea"
-    DESSERT = "Food & Drink:Dessert", "Dessert"
-    FAST_FOOD = "Food & Drink:Fast Food", "Fast Food"
-    GROCERIES = "Food & Drink:Groceries", "Groceries"
-    OTHER_FOOD_DRINK = "Food & Drink:Other Food & Drink", "Other Food & Drink"
-    RESTAURANTS = "Food & Drink:Restaurants", "Restaurants"
-    SNACKS = "Food & Drink:Snacks", "Snacks"
-    TOBACCO_LIKE = "Food & Drink:Tobacco & Like", "Tobacco & Like"
-    CHARITIES = "Gifts & Donations:Charities", "Charities"
-    GIFTS = "Gifts & Donations:Gifts", "Gifts"
-    CARE_FACILITIES = "Health & Medical:Care Facilities", "Care Facilities"
-    DENTIST = "Health & Medical:Dentist", "Dentist"
-    DOCTOR = "Health & Medical:Doctor", "Doctor"
-    HEALTH_EQUIPMENT = "Health & Medical:Equipment", "Equipment"
-    EYES = "Health & Medical:Eyes", "Eyes"
-    HEALTH_INSURANCE = "Health & Medical:Health Insurance", "Health Insurance"
-    OTHER_HEALTH_MEDICAL = (
-        "Health & Medical:Other Health & Medical",
-        "Other Health & Medical",
-    )
-    PHARMACIES = "Health & Medical:Pharmacies", "Pharmacies"
-    PRESCRIPTIONS = "Health & Medical:Prescriptions", "Prescriptions"
-    FURNISHINGS = "Home:Furnishings", "Furnishings"
-    HOME_INSURANCE = "Home:Home Insurance", "Home Insurance"
-    HOME_PURCHASE = "Home:Home Purchase", "Home Purchase"
-    HOME_SERVICES = "Home:Home Services", "Home Services"
-    HOME_SUPPLIES = "Home:Home Supplies", "Home Supplies"
-    LAWN_GARDEN = "Home:Lawn & Garden", "Lawn & Garden"
-    MORTGAGE = "Home:Mortgage", "Mortgage"
-    MOVING = "Home:Moving", "Moving"
-    OTHER_HOME = "Home:Other Home", "Other Home"
-    PROPERTY_TAX = "Home:Property Tax", "Property Tax"
-    RENT = "Home:Rent", "Rent"
-    RENTERS_INSURANCE = "Home:Renter's Insurance", "Renter's Insurance"
-    BONUS = "Income:Bonus", "Bonus"
-    COMMISSION = "Income:Commission", "Commission"
-    INTEREST = "Income:Interest", "Interest"
-    OTHER_INCOME = "Income:Other Income", "Other Income"
-    PAYCHECK = "Income:Paycheck", "Paycheck"
-    REIMBURSEMENT = "Income:Reimbursement", "Reimbursement"
-    RENTAL_INCOME = "Income:Rental Income", "Rental Income"
-    EDUCATION_INVESTMENT = (
-        "Investment:Education Investment",
-        "Education Investment",
-    )
-    OTHER_INVESTMENTS = "Investment:Other Investments", "Other Investments"
-    RETIREMENT = "Investment:Retirement", "Retirement"
-    STOCKS_MUTUAL_FUNDS = (
-        "Investment:Stocks & Mutual Funds",
-        "Stocks & Mutual Funds",
-    )
-    LEGAL_FEES = "Legal:Legal Fees", "Legal Fees"
-    LEGAL_SERVICES = "Legal:Legal Services", "Legal Services"
-    OTHER_LEGAL_COSTS = "Legal:Other Legal Costs", "Other Legal Costs"
-    OFFICE_EQUIPMENT = "Office:Equipment", "Equipment"
-    OFFICE_SUPPLIES = "Office:Office Supplies", "Office Supplies"
-    OTHER_OFFICE = "Office:Other Office", "Other Office"
-    POSTAGE_SHIPPING = "Office:Postage & Shipping", "Postage & Shipping"
-    ACCESSORIES = "Personal:Accessories", "Accessories"
-    BEAUTY = "Personal:Beauty", "Beauty"
-    BODY_ENHANCEMENT = "Personal:Body Enhancement", "Body Enhancement"
-    CLOTHING = "Personal:Clothing", "Clothing"
-    COUNSELING = "Personal:Counseling", "Counseling"
-    HAIR = "Personal:Hair", "Hair"
-    HOBBIES = "Personal:Hobbies", "Hobbies"
-    JEWELRY = "Personal:Jewelry", "Jewelry"
-    LAUNDRY = "Personal:Laundry", "Laundry"
-    OTHER_PERSONAL = "Personal:Other Personal", "Other Personal"
-    RELIGION = "Personal:Religion", "Religion"
-    SHOES = "Personal:Shoes", "Shoes"
-    PET_FOOD = "Pets:Pet Food", "Pet Food"
-    PET_GROOMING = "Pets:Pet Grooming", "Pet Grooming"
-    PET_MEDICINE = "Pets:Pet Medicine", "Pet Medicine"
-    PET_SUPPLIES = "Pets:Pet Supplies", "Pet Supplies"
-    VETERINARIAN = "Pets:Veterinarian", "Veterinarian"
-    CAMPING = "Sports & Fitness:Camping", "Camping"
-    FITNESS_GEAR = "Sports & Fitness:Fitness Gear", "Fitness Gear"
-    GOLF = "Sports & Fitness:Golf", "Golf"
-    MEMBERSHIPS = "Sports & Fitness:Memberships", "Memberships"
-    OTHER_SPORTS_FITNESS = (
-        "Sports & Fitness:Other Sports & Fitness",
-        "Other Sports & Fitness",
-    )
-    SPORTING_EVENTS = "Sports & Fitness:Sporting Events", "Sporting Events"
-    SPORTING_GOODS = "Sports & Fitness:Sporting Goods", "Sporting Goods"
-    DOMAINS_HOSTING = "Technology:Domains & Hosting", "Domains & Hosting"
-    HARDWARE = "Technology:Hardware", "Hardware"
-    ONLINE_SERVICES = "Technology:Online Services", "Online Services"
-    SOFTWARE = "Technology:Software", "Software"
-    AUTO_INSURANCE = "Transportation:Auto Insurance", "Auto Insurance"
-    AUTO_PAYMENT = "Transportation:Auto Payment", "Auto Payment"
-    AUTO_SERVICES = "Transportation:Auto Services", "Auto Services"
-    AUTO_SUPPLIES = "Transportation:Auto Supplies", "Auto Supplies"
-    BICYCLE = "Transportation:Bicycle", "Bicycle"
-    BOATS_MARINE = "Transportation:Boats & Marine", "Boats & Marine"
-    GAS = "Transportation:Gas", "Gas"
-    OTHER_TRANSPORTATION = (
-        "Transportation:Other Transportation",
-        "Other Transportation",
-    )
-    PARKING_TOLLS = "Transportation:Parking & Tolls", "Parking & Tolls"
-    PARKING_TICKETS = "Transportation:Parking Tickets", "Parking Tickets"
-    PUBLIC_TRANSIT = "Transportation:Public Transit", "Public Transit"
-    SHIPPING = "Transportation:Shipping", "Shipping"
-    TAXIES = "Transportation:Taxies", "Taxies"
-    CAR_RENTAL = "Travel:Car Rental", "Car Rental"
-    FLIGHTS = "Travel:Flights", "Flights"
-    HOTELS = "Travel:Hotels", "Hotels"
-    TOURS_CRUISES = "Travel:Tours & Cruises", "Tours & Cruises"
-    TRAIN = "Travel:Train", "Train"
-    TRAVEL_BUSES = "Travel:Travel Buses", "Travel Buses"
-    TRAVEL_DINING = "Travel:Travel Dining", "Travel Dining"
-    TRAVEL_ENTERTAINMENT = (
-        "Travel:Travel Entertainment",
-        "Travel Entertainment",
-    )
-    CASH = "Uncategorized:Cash", "Cash"
-    OTHER_SHOPPING = "Uncategorized:Other Shopping", "Other Shopping"
-    UNKNOWN = "Uncategorized:Unknown", "Unknown"
-    UNASSIGNED = "Uncategorized:Unassigned", "-------"
-    CABLE = "Utilities:Cable", "Cable"
-    ELECTRICITY = "Utilities:Electricity", "Electricity"
-    GAS_FUEL = "Utilities:Gas & Fuel", "Gas & Fuel"
-    INTERNET = "Utilities:Internet", "Internet"
-    OTHER_UTILITIES = "Utilities:Other Utilities", "Other Utilities"
-    PHONE = "Utilities:Phone", "Phone"
-    TRASH = "Utilities:Trash", "Trash"
-    WATER_SEWER = "Utilities:Water & Sewer", "Water & Sewer"
+class TransactionCategoryQuerySet(models.QuerySet):
+    """QuerySet for TransactionCategory with visibility filtering."""
 
-    @property
-    def group(self) -> str:
-        """The top-level category group (e.g. 'Business', 'Food & Drink')."""
-        return self.value.split(":")[0]
+    ####################################################################
+    #
+    def visible_to(self, user: Any) -> "models.QuerySet[Any]":
+        """Return the categories the given user may see.
 
+        A category is visible when any of these hold:
+
+        1. It is a global category (owner is NULL).
+        2. The user owns it.
+        3. Its owner co-owns at least one bank account with the user
+           (custom categories are shared across joint accounts).
+        4. It is referenced by a Transaction or TransactionAllocation
+           on an account the user owns -- the "grandfather" clause that
+           keeps referenced categories readable after account sharing
+           ends, without tombstones or snapshots.
+
+        Args:
+            user: The requesting User.
+
+        Returns:
+            A distinct queryset of visible categories.
+        """
+        return self.filter(
+            models.Q(owner__isnull=True)
+            | models.Q(owner=user)
+            | models.Q(owner__bankaccount__owners=user)
+            | models.Q(transactions__bank_account__owners=user)
+            | models.Q(allocations__transaction__bank_account__owners=user)
+        ).distinct()
+
+
+########################################################################
+########################################################################
+#
+class TransactionCategory(MoneyPoolBaseClass):
+    """What a transaction (or a split of one) was spent on.
+
+    A flat, two-part taxonomy: 'group' is the top-level bucket (e.g.
+    'Food & Drink') and 'name' is the leaf (e.g. 'Groceries').  Every
+    row is a leaf -- "group-level" semantics are expressed as
+    'category__group' filters, and a provider's single-level category
+    ("Travel : Travel") maps to a row whose group equals its name.
+
+    Rows with owner NULL are the global base set shared by all users
+    (seeded by migration, managed via the django-admin).  Rows with an
+    owner are user-created custom categories, visible to the owner and
+    to anyone who co-owns a bank account with them (see
+    TransactionCategoryQuerySet.visible_to).
+
+    A NULL category FK on Transaction / TransactionAllocation means
+    "unassigned" -- there is no sentinel row.
+
+    Uniqueness is case-insensitive on (group, name), enforced once for
+    the global namespace and once per owner.  full_name is derived from
+    the columns; there is no stored full_name.
+    """
+
+    group = models.CharField(max_length=64)
+    name = models.CharField(max_length=64)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        default=None,
+        related_name="transaction_categories",
+        help_text="NULL for a global category shared by all users.",
+    )
+    archived = models.BooleanField(
+        default=False,
+        help_text=(
+            "Archived categories are hidden from pickers but remain "
+            "valid on existing transactions and allocations."
+        ),
+    )
+
+    objects = TransactionCategoryQuerySet.as_manager()
+
+    class Meta:
+        verbose_name_plural = "transaction categories"
+        ordering = ["group", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("group"),
+                Lower("name"),
+                condition=models.Q(owner__isnull=True),
+                name="transaction_category_unique_global",
+            ),
+            models.UniqueConstraint(
+                Lower("group"),
+                Lower("name"),
+                models.F("owner"),
+                condition=models.Q(owner__isnull=False),
+                name="transaction_category_unique_per_owner",
+            ),
+        ]
+
+    ####################################################################
+    #
     @property
-    def display_name(self) -> str:
-        """The sub-category name portion of the value (e.g. 'Business Clothing')."""
-        return self.value.split(":")[1]
+    def full_name(self) -> str:
+        """The canonical display form: '{group} : {name}'."""
+        return f"{self.group} : {self.name}"
+
+    ####################################################################
+    #
+    def __str__(self) -> str:
+        scope = "global" if self.owner_id is None else str(self.owner)
+        return f"{self.full_name} [{scope}]"
+
+
+########################################################################
+########################################################################
+#
+class TransactionCategoryAlias(MoneyPoolBaseClass):
+    """Maps a provider's raw category string to a TransactionCategory.
+
+    Providers (e.g. the BofA scraper) supply category hints in their
+    own vocabulary.  The resolver (moneypools.service.categories)
+    consults this table first; rows are written both by the reviewed
+    seed file (seed_category_aliases command) and automatically on
+    every successful non-alias resolution, so a bad auto-mapping can be
+    re-pointed in the admin without touching transaction data.
+
+    alias_key is the normalized form of the provider string:
+    'group:name', casefolded, whitespace collapsed (see
+    service.categories.alias_key).
+    """
+
+    provider = models.CharField(
+        max_length=32,
+        help_text='Source of the raw category string (e.g. "bofa").',
+    )
+    alias_key = models.CharField(
+        max_length=140,
+        help_text=(
+            'Normalized provider category ("group:name", casefolded, '
+            "whitespace collapsed)."
+        ),
+    )
+    category = models.ForeignKey(
+        TransactionCategory,
+        to_field="id",
+        on_delete=models.CASCADE,
+        related_name="aliases",
+    )
+
+    class Meta:
+        verbose_name_plural = "transaction category aliases"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "alias_key"],
+                name="transaction_category_alias_unique_per_provider",
+            ),
+        ]
+
+    ####################################################################
+    #
+    def __str__(self) -> str:
+        return f"{self.provider}:{self.alias_key} -> {self.category}"
 
 
 ########################################################################
@@ -684,10 +668,36 @@ class Budget(MoneyPoolBaseClass):
     image_width = models.IntegerField(null=True, editable=False, blank=True)
     memo = models.TextField(max_length=512, null=True, blank=True)
 
-    # NOTE: Need to enforce in pre-save that only one budget in an
-    #       account has the given fields selected.
+    # Auto-spend rules: a JSON list of matcher strings.  When a new
+    # transaction allocation matches one of a budget's entries, the
+    # spend is automatically routed to that budget.
     #
-    auto_spend = models.JSONField(default=list, blank=True)
+    # Each entry is currently a transaction-category full name in the
+    # canonical '{group} : {name}' form (e.g. 'Food & Drink :
+    # Groceries').  Matching is case-insensitive and
+    # whitespace-normalized via service.categories.  Strings rather
+    # than category UUIDs so that export/import files stay portable
+    # across deployments.
+    #
+    # The string form deliberately leaves room for other matcher kinds
+    # later without a schema change -- e.g. a future 'tag:groceries'
+    # entry matching merchants tagged '#groceries' once merchants and
+    # tags exist.  The planned budget auto-allocation-rules feature
+    # (match on merchant name / category / MCC) will replace or
+    # formalize this field; keep it loose until then.
+    #
+    # NOTE: Need to enforce in pre-save that only one budget in an
+    #       account has a given entry selected.
+    #
+    auto_spend = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "List of matcher strings; currently transaction-category "
+            "full names ('{group} : {name}').  Spend matching an entry "
+            "is auto-routed to this budget."
+        ),
+    )
 
     ####################################################################
     #
@@ -1086,6 +1096,26 @@ class Transaction(TransactionBaseClass):
         related_name="linked_from",
     )
 
+    # What this transaction was spent on.  NULL means unassigned.
+    # Seeded from the provider's category hint by the import pipeline
+    # (via the resolver in service.categories) and user-editable
+    # afterwards.  Allocations copy this value at allocation-creation
+    # time; edits never propagate in either direction (a split
+    # transaction's per-portion categories live on its allocations).
+    #
+    # SET_NULL is the DB-level safety net -- the API refuses to delete
+    # a referenced category (409) and points at archiving instead.
+    #
+    category = models.ForeignKey(
+        TransactionCategory,
+        models.SET_NULL,
+        to_field="id",
+        null=True,
+        blank=True,
+        default=None,
+        related_name="transactions",
+    )
+
     # Budget assignment is handled through TransactionAllocation objects.
     # A non-split transaction has one allocation; a split transaction has
     # multiple allocations whose amounts sum to the transaction amount.
@@ -1292,18 +1322,25 @@ class TransactionAllocation(MoneyPoolBaseClass):
         default_currency=get_default_currency,
         editable=False,
     )
-    # What this portion of the transaction was spent on. Lives here
-    # rather than on Transaction because a single purchase (e.g. Costco)
+    # What this portion of the transaction was spent on.  Lives here
+    # as well as on Transaction because a single purchase (e.g. Costco)
     # can contain groceries and home supplies allocated to different
-    # budgets with different categories.
+    # budgets with different categories.  Copied from the transaction's
+    # category at allocation-creation time (see
+    # service.transaction_allocation.create); edits never propagate in
+    # either direction afterwards.  NULL means unassigned.
     #
-    # XXX Probably should make category its own object class and
-    #     pre-create a bunch of those in the initial migration.
+    # SET_NULL is the DB-level safety net -- the API refuses to delete
+    # a referenced category (409) and points at archiving instead.
     #
-    category = models.CharField(
-        max_length=64,
-        choices=TransactionCategory.choices,
-        default=TransactionCategory.UNASSIGNED,
+    category = models.ForeignKey(
+        TransactionCategory,
+        models.SET_NULL,
+        to_field="id",
+        null=True,
+        blank=True,
+        default=None,
+        related_name="allocations",
     )
     memo = models.TextField(max_length=512, null=True, blank=True)
 

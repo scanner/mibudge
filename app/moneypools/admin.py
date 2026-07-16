@@ -26,6 +26,8 @@ from .models import (
     InternalTransaction,
     Transaction,
     TransactionAllocation,
+    TransactionCategory,
+    TransactionCategoryAlias,
 )
 from .service import bank_account as bank_account_svc
 from .service import budget as budget_svc
@@ -161,6 +163,7 @@ class TransactionAllocationInline(admin.TabularInline):
     extra = 0
     fields = ("budget", "amount", "category", "budget_balance", "memo")
     readonly_fields = ("amount", "budget_balance")
+    autocomplete_fields = ("category",)
 
 
 ########################################################################
@@ -506,6 +509,7 @@ class TransactionAdmin(admin.ModelAdmin):
         "description",
         "raw_description",
         "party",
+        "category",
         "memo",
         "bank_account_posted_balance",
         "bank_account_available_balance",
@@ -513,6 +517,7 @@ class TransactionAdmin(admin.ModelAdmin):
         "image",
         "document",
     )
+    autocomplete_fields = ("category",)
     readonly_fields = (
         "id",
         "amount",
@@ -542,8 +547,11 @@ class TransactionAllocationAdmin(admin.ModelAdmin):
         "category",
         "id",
     )
-    list_filter = ("category", "budget")
+    # category is now an FK to 150+ rows; filter by its group rather
+    # than listing every category as a filter link.
+    list_filter = ("category__group", "budget")
     search_fields = ("memo",)
+    autocomplete_fields = ("category",)
     fields = (
         "id",
         "transaction",
@@ -560,6 +568,73 @@ class TransactionAllocationAdmin(admin.ModelAdmin):
         "transaction",
         "amount",
         "budget_balance",
+        "created_at",
+        "modified_at",
+    )
+
+
+########################################################################
+########################################################################
+#
+@admin.register(TransactionCategory)
+class TransactionCategoryAdmin(admin.ModelAdmin):
+    """Admin for transaction categories.
+
+    Global rows (owner NULL) are the shared base set and are managed
+    here; per-user custom rows also show up and can be corrected.
+    """
+
+    list_display = (
+        "group",
+        "name",
+        "owner",
+        "archived",
+        "id",
+    )
+    list_filter = ("archived", "group")
+    # search_fields powers the autocomplete widgets on Transaction /
+    # TransactionAllocation / TransactionCategoryAlias admins.
+    search_fields = ("group", "name")
+    ordering = ("group", "name")
+    readonly_fields = ("id", "created_at", "modified_at")
+    fields = (
+        "id",
+        "group",
+        "name",
+        "owner",
+        "archived",
+        "created_at",
+        "modified_at",
+    )
+
+
+########################################################################
+########################################################################
+#
+@admin.register(TransactionCategoryAlias)
+class TransactionCategoryAliasAdmin(admin.ModelAdmin):
+    """Admin for provider category aliases.
+
+    Re-point a bad auto-mapping by editing its 'category' here -- the
+    resolver consults this table first, so the correction takes effect
+    on the next import without touching transaction data.
+    """
+
+    list_display = (
+        "provider",
+        "alias_key",
+        "category",
+        "id",
+    )
+    list_filter = ("provider",)
+    search_fields = ("alias_key", "category__group", "category__name")
+    autocomplete_fields = ("category",)
+    readonly_fields = ("id", "created_at", "modified_at")
+    fields = (
+        "id",
+        "provider",
+        "alias_key",
+        "category",
         "created_at",
         "modified_at",
     )

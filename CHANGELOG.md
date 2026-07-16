@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use — archive instead). See `docs/transaction-categories.md`
+- Transactions and their splits each carry a category; a split inherits the transaction's category when it's created and can then be changed independently
+- Category hints from bank imports (e.g. the BofA scraper) are mapped onto your categories automatically, with an admin-editable alias table so a mapping can be corrected without re-importing
+- `harvest_bofa_categories` importer discovers BofA's category vocabulary incrementally (resumable across runs, gentle on BofA's rate limits) and `seed_category_aliases` loads the reviewed mapping
+
+### Changed
+
+- Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
+- `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
+
 ### Fixed
 
 - Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links

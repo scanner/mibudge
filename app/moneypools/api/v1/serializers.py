@@ -28,7 +28,7 @@ from decimal import Decimal
 
 # 3rd party imports
 import recurrence
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from djmoney.contrib.django_rest_framework import MoneyField as DRFMoneyField
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -48,6 +48,7 @@ from moneypools.models import (
     TransactionCategory,
     get_default_currency,
 )
+from moneypools.service import categories as categories_svc
 from moneypools.service import funding as funding_svc
 
 
@@ -340,6 +341,134 @@ class BankAccountSerializer(serializers.ModelSerializer):
 ########################################################################
 ########################################################################
 #
+class TransactionCategorySerializer(serializers.ModelSerializer):
+    """Serializer for transaction categories.
+
+    On create the caller supplies group and name; the view forces the
+    owner to the requesting user (global rows are managed via the
+    django-admin only).  Group and name are whitespace-normalized and
+    checked case-insensitively against the global rows and the user's
+    own rows for duplicates.  'archived' is toggled via the archive
+    action, not writable here.
+    """
+
+    owner = serializers.SlugRelatedField(
+        slug_field="username",
+        read_only=True,
+        help_text="Owner username; null for a global category.",
+    )
+    full_name = serializers.CharField(
+        read_only=True,
+        help_text="Canonical display form: '{group} : {name}'.",
+    )
+
+    class Meta:
+        model = TransactionCategory
+        fields = [
+            "id",
+            "group",
+            "name",
+            "full_name",
+            "owner",
+            "archived",
+            "created_at",
+            "modified_at",
+        ]
+        read_only_fields = [
+            "id",
+            "full_name",
+            "owner",
+            "archived",
+            "created_at",
+            "modified_at",
+        ]
+
+    ####################################################################
+    #
+    def validate_group(self, value: str) -> str:
+        """Normalize whitespace and reject colons in the group.
+
+        A colon in the group would break the first-colon split used
+        everywhere full names are parsed (export/import, resolver).
+
+        Args:
+            value: The proposed group string.
+
+        Returns:
+            The whitespace-normalized group.
+
+        Raises:
+            ValidationError: If the group is empty or contains a colon.
+        """
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Group must not be empty.")
+        if ":" in value:
+            raise serializers.ValidationError("Group must not contain a colon.")
+        return value
+
+    ####################################################################
+    #
+    def validate_name(self, value: str) -> str:
+        """Normalize whitespace in the name.
+
+        Args:
+            value: The proposed name string.
+
+        Returns:
+            The whitespace-normalized name.
+
+        Raises:
+            ValidationError: If the name is empty.
+        """
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Name must not be empty.")
+        return value
+
+    ####################################################################
+    #
+    def validate(self, attrs: dict) -> dict:
+        """Reject case-insensitive duplicates of global or own rows.
+
+        Duplicates of other users' shared categories are allowed --
+        those live in the other user's namespace.
+
+        Args:
+            attrs: The validated field data.
+
+        Returns:
+            The validated attrs dict.
+
+        Raises:
+            ValidationError: If an equivalent global or own category
+                already exists.
+        """
+        group = attrs.get(
+            "group", self.instance.group if self.instance else None
+        )
+        name = attrs.get("name", self.instance.name if self.instance else None)
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+
+        dup_scope = Q(owner__isnull=True)
+        if user is not None:
+            dup_scope |= Q(owner=user)
+        duplicates = TransactionCategory.objects.filter(
+            dup_scope, group__iexact=group, name__iexact=name
+        )
+        if self.instance is not None:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise serializers.ValidationError(
+                f"A category '{group} : {name}' already exists."
+            )
+        return attrs
+
+
+########################################################################
+########################################################################
+#
 class BudgetSerializer(serializers.ModelSerializer):
     """Serializer for budgets.
 
@@ -597,6 +726,54 @@ class BudgetSerializer(serializers.ModelSerializer):
 
     ####################################################################
     #
+    def validate_auto_spend(self, value: list) -> list:
+        """Validate and canonicalize auto-spend matcher entries.
+
+        Each entry must be a string that resolves (case-insensitively,
+        whitespace-normalized) to a transaction category visible to
+        the requesting user.  Entries are rewritten to the matched
+        category's canonical full name ('{group} : {name}').
+
+        Args:
+            value: The auto_spend list from the request.
+
+        Returns:
+            The list with entries canonicalized.
+
+        Raises:
+            ValidationError: If an entry is not a string or does not
+                resolve to a visible category.
+        """
+        request = self.context.get("request")
+        if request is not None:
+            visible = TransactionCategory.objects.visible_to(request.user)
+        else:
+            visible = TransactionCategory.objects.all()
+
+        canonical: list[str] = []
+        for entry in value:
+            if not isinstance(entry, str):
+                raise serializers.ValidationError(
+                    "auto_spend entries must be strings."
+                )
+            group, name = categories_svc.normalize_category(entry)
+            if not group:
+                raise serializers.ValidationError(
+                    "auto_spend entries must not be empty."
+                )
+            category = visible.filter(
+                group__iexact=group, name__iexact=name
+            ).first()
+            if category is None:
+                raise serializers.ValidationError(
+                    f"'{entry}' does not match any transaction category "
+                    "visible to you."
+                )
+            canonical.append(category.full_name)
+        return canonical
+
+    ####################################################################
+    #
     def validate_bank_account(self, value: BankAccount) -> BankAccount:
         """Prevent changing the bank account after creation.
 
@@ -730,6 +907,18 @@ class TransactionSerializer(serializers.ModelSerializer):
         slug_field="id", read_only=True
     )
 
+    # What the transaction was spent on.  Nullable (null = unassigned);
+    # user-editable.  Exposed as the category UUID; the read-only
+    # category_full_name saves the UI a lookup for display.
+    #
+    category = serializers.SlugRelatedField(
+        slug_field="id",
+        queryset=TransactionCategory.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    category_full_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = [
@@ -745,6 +934,8 @@ class TransactionSerializer(serializers.ModelSerializer):
             "memo",
             "raw_description",
             "description",
+            "category",
+            "category_full_name",
             "bank_transaction_id",
             "linked_transaction",
             "bank_account_posted_balance",
@@ -760,6 +951,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "id",
             "amount_currency",
             "party",
+            "category_full_name",
             "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
@@ -768,6 +960,41 @@ class TransactionSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
         ]
+
+    ####################################################################
+    #
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_category_full_name(self, obj: Transaction) -> str | None:
+        """Return the category's '{group} : {name}' display form, or null."""
+        return obj.category.full_name if obj.category is not None else None
+
+    ####################################################################
+    #
+    def validate_category(
+        self, value: TransactionCategory | None
+    ) -> TransactionCategory | None:
+        """Require the category to be visible to the requesting user.
+
+        Args:
+            value: The TransactionCategory resolved from the UUID, or
+                None when clearing.
+
+        Returns:
+            The validated category (or None).
+
+        Raises:
+            ValidationError: If the category is not visible to the
+                requesting user.
+        """
+        request = self.context.get("request")
+        if value is None or request is None:
+            return value
+        visible = TransactionCategory.objects.visible_to(request.user)
+        if not visible.filter(pk=value.pk).exists():
+            raise serializers.ValidationError(
+                "Not a transaction category visible to you."
+            )
+        return value
 
     ####################################################################
     #
@@ -945,6 +1172,19 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
+    # What this portion was spent on.  Nullable (null = unassigned).
+    # Defaults to the transaction's category at creation (service-layer
+    # copy hook); edits never propagate between transaction and
+    # allocation afterwards.
+    #
+    category = serializers.SlugRelatedField(
+        slug_field="id",
+        queryset=TransactionCategory.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    category_full_name = serializers.SerializerMethodField()
+
     class Meta:
         model = TransactionAllocation
         fields = [
@@ -956,6 +1196,7 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
             "budget_balance",
             "budget_balance_currency",
             "category",
+            "category_full_name",
             "memo",
             "created_at",
             "modified_at",
@@ -965,9 +1206,17 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
             "amount_currency",
             "budget_balance",
             "budget_balance_currency",
+            "category_full_name",
             "created_at",
             "modified_at",
         ]
+
+    ####################################################################
+    #
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_category_full_name(self, obj: TransactionAllocation) -> str | None:
+        """Return the category's '{group} : {name}' display form, or null."""
+        return obj.category.full_name if obj.category is not None else None
 
     ####################################################################
     #
@@ -1022,22 +1271,29 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
 
     ####################################################################
     #
-    def validate_category(self, value: str) -> str:
-        """Validate the category is a known TransactionCategory value.
+    def validate_category(
+        self, value: TransactionCategory | None
+    ) -> TransactionCategory | None:
+        """Require the category to be visible to the requesting user.
 
         Args:
-            value: The category string.
+            value: The TransactionCategory resolved from the UUID, or
+                None when clearing.
 
         Returns:
-            The validated category string.
+            The validated category (or None).
 
         Raises:
-            ValidationError: If the category is not a valid choice.
+            ValidationError: If the category is not visible to the
+                requesting user.
         """
-        valid = {c.value for c in TransactionCategory}
-        if value not in valid:
+        request = self.context.get("request")
+        if value is None or request is None:
+            return value
+        visible = TransactionCategory.objects.visible_to(request.user)
+        if not visible.filter(pk=value.pk).exists():
             raise serializers.ValidationError(
-                f"'{value}' is not a valid transaction category."
+                "Not a transaction category visible to you."
             )
         return value
 

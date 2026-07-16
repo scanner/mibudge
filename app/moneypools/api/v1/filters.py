@@ -21,7 +21,53 @@ from moneypools.models import (
     InternalTransaction,
     Transaction,
     TransactionAllocation,
+    TransactionCategory,
 )
+
+
+########################################################################
+########################################################################
+#
+class TransactionCategoryFilter(filters.FilterSet):
+    """Filter transaction categories by group, archived state, and scope.
+
+    'scope' narrows the visibility-filtered queryset: 'global' (shared
+    base set), 'mine' (owned by the requesting user), or 'shared'
+    (owned by someone the user co-owns a bank account with, including
+    grandfathered rows).
+    """
+
+    group = filters.CharFilter(lookup_expr="iexact")
+    archived = filters.BooleanFilter()
+    scope = filters.ChoiceFilter(
+        choices=[
+            ("global", "Global"),
+            ("mine", "Mine"),
+            ("shared", "Shared"),
+        ],
+        method="filter_by_scope",
+    )
+
+    def filter_by_scope(self, queryset, name, value):
+        """Narrow to global, own, or other-owner (shared) categories."""
+        match value:
+            case "global":
+                return queryset.filter(owner__isnull=True)
+            case "mine":
+                return queryset.filter(owner=self.request.user)
+            case "shared":
+                return queryset.filter(owner__isnull=False).exclude(
+                    owner=self.request.user
+                )
+        return queryset
+
+    class Meta:
+        model = TransactionCategory
+        fields = [
+            "group",
+            "archived",
+            "scope",
+        ]
 
 
 ########################################################################
@@ -74,6 +120,15 @@ class TransactionFilter(filters.FilterSet):
         field_name="posted_date",
         lookup_expr="lte",
     )
+    category = filters.UUIDFilter(field_name="category__id")
+    category_group = filters.CharFilter(
+        field_name="category__group",
+        lookup_expr="iexact",
+    )
+    uncategorized = filters.BooleanFilter(
+        field_name="category",
+        lookup_expr="isnull",
+    )
 
     class Meta:
         model = Transaction
@@ -85,6 +140,9 @@ class TransactionFilter(filters.FilterSet):
             "date_to",
             "posted_date_from",
             "posted_date_to",
+            "category",
+            "category_group",
+            "uncategorized",
         ]
 
 
@@ -92,14 +150,27 @@ class TransactionFilter(filters.FilterSet):
 ########################################################################
 #
 class TransactionAllocationFilter(filters.FilterSet):
-    """Filter allocations by bank account, transaction, budget, and category."""
+    """Filter allocations by bank account, transaction, budget, and category.
+
+    NOTE: 'category' changed from the old enum string to the category
+    UUID when TransactionCategory became a model (breaking change);
+    'category_group' and 'uncategorized' were added alongside.
+    """
 
     bank_account = filters.UUIDFilter(
         field_name="transaction__bank_account__id",
     )
     transaction = filters.UUIDFilter(field_name="transaction__id")
     budget = filters.UUIDFilter(field_name="budget__id")
-    category = filters.CharFilter()
+    category = filters.UUIDFilter(field_name="category__id")
+    category_group = filters.CharFilter(
+        field_name="category__group",
+        lookup_expr="iexact",
+    )
+    uncategorized = filters.BooleanFilter(
+        field_name="category",
+        lookup_expr="isnull",
+    )
 
     class Meta:
         model = TransactionAllocation
@@ -108,6 +179,8 @@ class TransactionAllocationFilter(filters.FilterSet):
             "transaction",
             "budget",
             "category",
+            "category_group",
+            "uncategorized",
         ]
 
 
