@@ -76,7 +76,6 @@ BOFA_PASSCODE env vars, --bofa-id / --bofa-passcode flags, or a
 # system imports
 import json
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -90,8 +89,17 @@ from rich.console import Console
 from rich.table import Table
 
 # Project imports
+# The scraping primitives (signature/identity keys, wedge recovery)
+# live in bofa_common, shared with import_bofa_live's details fetch.
+from importers.bofa_common import (
+    BofASessionLost,
+    merchant_signature,
+    normalize_description,
+    recover_session,
+    session_is_logged_out,
+    txn_identity,
+)
 from importers.import_bofa_live import (
-    _normalize_description,
     _read_bofa_credentials_from_1password,
     _setup_logging,
 )
@@ -342,31 +350,6 @@ def dry_run_resolve(group: str, name: str) -> tuple[str, str, str | None]:
         return "subname", "medium", f"{g} : {n}"
 
     return "create", "new", f"{group} : {name}"
-
-
-########################################################################
-########################################################################
-#
-def merchant_signature(desc: str) -> str:
-    """Reduce an activity-row description to a stable merchant key.
-
-    Two transactions at the same merchant differ mostly in embedded
-    dates, store numbers, card digits, and amounts.  Uppercase the
-    description, drop every digit and punctuation character, collapse
-    whitespace -- what survives ('COSTCO WHSE PURCHASE SPRINGFIELD IL')
-    is stable per merchant, so detail fetches can be skipped once one
-    transaction for the merchant has been harvested.  Occasional
-    over-merging is fine here; this only trades accuracy of the counts
-    for a much shorter harvest run.
-
-    Args:
-        desc: The normalized activity-row description.
-
-    Returns:
-        The merchant signature string (may be empty).
-    """
-    s = re.sub(r"[^A-Z&' ]", " ", desc.upper())
-    return " ".join(s.split())
 
 
 ########################################################################
@@ -635,100 +618,6 @@ def write_review_yaml(
 ########################################################################
 ########################################################################
 #
-def _txn_identity(txn: Any) -> tuple[str, str, float]:
-    """Stable identity for a scraped transaction across page reloads and runs.
-
-    txn_hash is regenerated on every page render so it cannot be used
-    to remember which rows were already processed across a recovery
-    reload (or a later run); (date, normalized description, amount) is
-    stable.  The amount is rounded to cents so it round-trips cleanly
-    through the JSON state file.
-    """
-    return (txn.date, _normalize_description(txn.desc), round(txn.amount, 2))
-
-
-########################################################################
-########################################################################
-#
-class BofASessionLost(Exception):
-    """BofA terminated the login session (anti-automation or timeout).
-
-    Once this happens every tab is logged out, so the whole run should
-    stop cleanly and write out whatever was harvested.
-    """
-
-
-########################################################################
-########################################################################
-#
-def _session_is_logged_out(driver: Any) -> bool:
-    """Best-effort check whether the browser landed on a logged-out page.
-
-    After BofA kills a session, page loads redirect to the marketing /
-    sign-in page, which carries the Online ID login field (id='oid')
-    or a sign-off marker in the URL.
-
-    Args:
-        driver: The selenium WebDriver.
-
-    Returns:
-        True when the current page looks logged-out.
-    """
-    from selenium.webdriver.common.by import By
-
-    url = driver.current_url or ""
-    if "signOff" in url or "sign-off" in url.lower():
-        return True
-    return bool(driver.find_elements(By.ID, "oid"))
-
-
-########################################################################
-########################################################################
-#
-def _recover_session(session: Any, load_more: int, cooldown: float) -> None:
-    """Try to un-wedge a scrape session after repeated dialog failures.
-
-    BofA stops serving the details dialog after a burst of opens
-    (anti-automation).  Cool down, reload the account page, clear any
-    blocking overlay, re-expand the transaction history (a reload
-    resets it to the initial rows), and re-scrape so transactions get
-    fresh session-scoped txn hashes.
-
-    Args:
-        session: The wedged ScrapeSession.
-        load_more: How many times to re-click 'View more transactions'
-            after the reload.
-        cooldown: Seconds to sleep before reloading.
-
-    Raises:
-        BofASessionLost: When the reload lands on a logged-out page --
-            BofA revoked the session, so recovery is impossible.
-    """
-    from selenium.common.exceptions import NoSuchElementException
-
-    logger.warning(
-        "Details dialog wedged; cooling down %.0fs then reloading the page",
-        cooldown,
-    )
-    time.sleep(cooldown)
-    session.driver.refresh()
-    time.sleep(5)
-    if _session_is_logged_out(session.driver):
-        raise BofASessionLost(
-            "BofA logged the session out during the wedge cooldown."
-        )
-    session.dismiss_dialog()
-    for _ in range(load_more):
-        try:
-            session.load_more_transactions()
-        except NoSuchElementException:
-            break
-    session.scrape_transactions()
-
-
-########################################################################
-########################################################################
-#
 def harvest_account(
     session: Any,
     account: Any,
@@ -831,7 +720,7 @@ def harvest_account(
         txns = [
             t
             for t in account.get_transactions()
-            if t.has_details and _txn_identity(t) not in processed
+            if t.has_details and txn_identity(t) not in processed
         ]
         if not txns:
             break
@@ -851,7 +740,7 @@ def harvest_account(
                 )
                 return fetched, failed, skipped
 
-            desc = _normalize_description(txn.desc)
+            desc = normalize_description(txn.desc)
             signature = merchant_signature(desc)
 
             # Same merchant, same category -- skip the dialog
@@ -859,7 +748,7 @@ def harvest_account(
             # category.
             if seen_merchants is not None and signature in seen_merchants:
                 skipped += 1
-                processed.add(_txn_identity(txn))
+                processed.add(txn_identity(txn))
                 known_key = seen_merchants[signature]
                 if known_key is not None and known_key in vocab:
                     vocab[known_key].add_sample(desc)
@@ -903,7 +792,7 @@ def harvest_account(
                         )
                         return fetched, failed, skipped
                     recoveries += 1
-                    _recover_session(session, load_more, wedge_cooldown)
+                    recover_session(session, load_more, wedge_cooldown)
                     failure_streak = 0
                     since_batch_pause = 0
                     done = False  # rebuild the worklist and resume
@@ -914,7 +803,7 @@ def harvest_account(
             fetched += 1
             since_batch_pause += 1
             failure_streak = 0
-            processed.add(_txn_identity(txn))
+            processed.add(txn_identity(txn))
 
             if details_log is not None:
                 details_log.append(
@@ -1354,7 +1243,7 @@ def cli_cmd(
                     None,
                 )
                 if account is None:
-                    if _session_is_logged_out(scraper.driver):
+                    if session_is_logged_out(scraper.driver):
                         raise BofASessionLost(
                             "The overview page is logged out."
                         )

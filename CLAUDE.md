@@ -77,8 +77,8 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 
 **Django apps:**
 
-- **`moneypools/`** — core budgeting domain (see Models below)
-- **`users/`** — custom user model (`AbstractUser` + `name` field), JWT auth views, allauth integration
+- **`moneypools/`** -- core budgeting domain (see Models below)
+- **`users/`** -- custom user model (`AbstractUser` + `name` field), JWT auth views, allauth integration
 
 **URL routing summary:**
 
@@ -87,12 +87,12 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 | `/admin/` | Django admin (URL configurable via `DJANGO_ADMIN_URL` env var) |
 | `/accounts/` | django-allauth (password reset only; SPA owns login at `/app/login/`; registration disabled by default) |
 | `/api/v1/` | DRF REST API v1 (JWT-authenticated) |
-| `/api/token/` | `TokenObtainPairView` — JWT access+refresh pair (cross-version) |
-| `/api/token/refresh/` | `CookieTokenRefreshView` — silent JWT refresh from httpOnly cookie (cross-version) |
-| `/api/v1/schema/` | drf-spectacular — OpenAPI schema for v1 (YAML) |
-| `/api/v1/schema/swagger-ui/` | drf-spectacular — Swagger UI (interactive docs) |
-| `/api/v1/schema/redoc/` | drf-spectacular — ReDoc (interactive docs) |
-| `/app/*` | `SpaShellView` — serves `index.html`; Vue Router handles all sub-routes |
+| `/api/token/` | `TokenObtainPairView` -- JWT access+refresh pair (cross-version) |
+| `/api/token/refresh/` | `CookieTokenRefreshView` -- silent JWT refresh from httpOnly cookie (cross-version) |
+| `/api/v1/schema/` | drf-spectacular -- OpenAPI schema for v1 (YAML) |
+| `/api/v1/schema/swagger-ui/` | drf-spectacular -- Swagger UI (interactive docs) |
+| `/api/v1/schema/redoc/` | drf-spectacular -- ReDoc (interactive docs) |
+| `/app/*` | `SpaShellView` -- serves `index.html`; Vue Router handles all sub-routes |
 
 ### Authentication
 
@@ -102,9 +102,9 @@ Two-token JWT pattern:
 
 The Vue `auth` Pinia store manages the access token lifecycle and provides an authenticated `apiFetch` wrapper that silently refreshes before expiry.
 
-**API keys (machine credentials).** 3rd-party services and the importers authenticate with a long-lived API key (`Authorization: Api-Key <key>`) instead of a password/JWT. The `APIKey` model lives in `users/models.py` (SHA-256 hash stored, plaintext shown once at creation, soft-revoked for audit); `users/authentication.py` provides the DRF authentication class; management endpoints are at `/api/v1/users/me/api-keys/`. Machine credentials get blanket access to the budgeting domain but are denied on user/security endpoints (password/email change, invitations, user management, API-key management) via `users.permissions.RequiresInteractiveAuth` — a blocklist gate that will become a scope check when fine-grained scopes land. Exception: `GET /api/v1/users/me/` is allowed for machine credentials (importers read `timezone`); the `me` action uses the read-only variant `RequiresInteractiveAuthForWrites`, which gates only mutating methods. When adding a new sensitive user/security endpoint, remember to attach `RequiresInteractiveAuth` (or the ForWrites variant if machine consumers need the reads).
+**API keys (machine credentials).** 3rd-party services and the importers authenticate with a long-lived API key (`Authorization: Api-Key <key>`) instead of a password/JWT. The `APIKey` model lives in `users/models.py` (SHA-256 hash stored, plaintext shown once at creation, soft-revoked for audit); `users/authentication.py` provides the DRF authentication class; management endpoints are at `/api/v1/users/me/api-keys/`. Machine credentials get blanket access to the budgeting domain but are denied on user/security endpoints (password/email change, invitations, user management, API-key management) via `users.permissions.RequiresInteractiveAuth` -- a blocklist gate that will become a scope check when fine-grained scopes land. Exception: `GET /api/v1/users/me/` is allowed for machine credentials (importers read `timezone`); the `me` action uses the read-only variant `RequiresInteractiveAuthForWrites`, which gates only mutating methods. When adding a new sensitive user/security endpoint, remember to attach `RequiresInteractiveAuth` (or the ForWrites variant if machine consumers need the reads).
 
-**No-usable-password state.** Accounts created via the invitation flows (bank-account co-ownership or admin user invitations) start with `User.has_usable_password()` returning `False`. Invitation acceptance activates the account and triggers allauth's password-reset flow at `/accounts/password/reset/`, which emails a one-time link so the user sets their first password — acceptance never issues a session or credentials directly. While an account has no usable password, the change-password and change-email endpoints refuse to operate (400/403). The `has_usable_password` boolean is exposed on `GET /api/v1/users/me/` so the SPA can show appropriate guidance rather than silently disabling forms. See `docs/invitations.md` and `docs/email-change.md`.
+**No-usable-password state.** Accounts created via the invitation flows (bank-account co-ownership or admin user invitations) start with `User.has_usable_password()` returning `False`. Invitation acceptance activates the account and triggers allauth's password-reset flow at `/accounts/password/reset/`, which emails a one-time link so the user sets their first password -- acceptance never issues a session or credentials directly. While an account has no usable password, the change-password and change-email endpoints refuse to operate (400/403). The `has_usable_password` boolean is exposed on `GET /api/v1/users/me/` so the SPA can show appropriate guidance rather than silently disabling forms. See `docs/invitations.md` and `docs/email-change.md`.
 
 **Self-service email change.** Users can change their login email via `POST /api/v1/users/me/change-email/`. Requires `has_usable_password == True`. The flow sends a verification link to the new address and a revocation link to the old address; the revocation link remains valid for 7 days after confirmation so the legitimate owner can cancel even if an attacker confirmed the change first. See `users/email_change.py` for the full security policy (dual-path design, session invalidation, lockout during revocation window).
 
@@ -112,13 +112,13 @@ The Vue `auth` Pinia store manages the access token lifecycle and provides an au
 
 All models extend `MoneyPoolBaseClass` (abstract), which provides `pkid` (BigAutoField PK), `id` (UUID), and `created_at`/`modified_at` timestamps.
 
-- **`Bank`** — financial institution (name, routing number, default currency).
-- **`BankAccount`** — checking/savings/credit card account; has `posted_balance` and `available_balance` (both `MoneyField`); M2M to `User` for ownership (including joint accounts); a signal auto-creates an "Unallocated" budget on creation.
-- **`Budget`** — virtual envelope (Goal / Recurring / Recurring-with-fill-up-goal types); has target amount, target date, and a `recurrence` funding schedule; signals handle automatic funding.
-- **`Transaction`** — bank event (purchase or deposit); has `pending`/`posted` status. Has an optional `linked_transaction` OneToOneField for pairing counterpart transactions across accounts (e.g. credit card payment on checking linked to the corresponding credit on the card). Links are populated opportunistically by the import pipeline. Carries a nullable `category` FK (NULL = unassigned).
-- **`InternalTransaction`** — budget-to-budget transfer within the same bank account (write-once). Records src/dst budget with balance snapshots. Users undo transfers by creating a reversing InternalTransaction, not by deleting. Hidden by default in the UI with a toggle to show.
-- **`TransactionAllocation`** — maps a portion of a Transaction's amount to a Budget. Every transaction has at least one allocation; split transactions have multiple allocations summing to the transaction total. Budget balance adjustments flow through allocations. Has its own nullable `category` FK, copied from the transaction's category at allocation-creation (edits never propagate afterward).
-- **`TransactionCategory`** — shared category model (flat `group` + `name`; `full_name` = "{group} : {name}"). Global rows (`owner` NULL) are the seeded base set; user-created rows are visible to bank-account co-owners. NULL FK = unassigned. **`TransactionCategoryAlias`** maps a provider's raw category string (e.g. from the BofA scraper) onto a `TransactionCategory` via the resolver in `service/categories.py`. See [docs/transaction-categories.md](docs/transaction-categories.md).
+- **`Bank`** -- financial institution (name, routing number, default currency).
+- **`BankAccount`** -- checking/savings/credit card account; has `posted_balance` and `available_balance` (both `MoneyField`); M2M to `User` for ownership (including joint accounts); a signal auto-creates an "Unallocated" budget on creation.
+- **`Budget`** -- virtual envelope (Goal / Recurring / Recurring-with-fill-up-goal types); has target amount, target date, and a `recurrence` funding schedule; signals handle automatic funding.
+- **`Transaction`** -- bank event (purchase or deposit); has `pending`/`posted` status. Has an optional `linked_transaction` OneToOneField for pairing counterpart transactions across accounts (e.g. credit card payment on checking linked to the corresponding credit on the card). Links are populated opportunistically by the import pipeline. Carries a nullable `category` FK (NULL = unassigned). Posted transactions can be enriched with merchant details (`service/transaction_details.py`, fed by the BofA live importer): scraper-owned `merchant_name`/`merchant_category`/`merchant_category_code`(MCC)/`virtual_card_number` plus the raw `details` JSON (NULL = never enriched), and six user-editable location fields (`merchant_address`, `merchant_city`, `merchant_region`, `merchant_country`, `merchant_latitude`, `merchant_longitude`) that enrichment fills only when empty. Enrichment seeds `category` (and NULL-category allocations) via the resolver, and recomposes `description` unless `description_user_edited`. No Merchant model yet -- flat columns by design; see `docs/transaction-categories.md`.
+- **`InternalTransaction`** -- budget-to-budget transfer within the same bank account (write-once). Records src/dst budget with balance snapshots. Users undo transfers by creating a reversing InternalTransaction, not by deleting. Hidden by default in the UI with a toggle to show.
+- **`TransactionAllocation`** -- maps a portion of a Transaction's amount to a Budget. Every transaction has at least one allocation; split transactions have multiple allocations summing to the transaction total. Budget balance adjustments flow through allocations. Has its own nullable `category` FK, copied from the transaction's category at allocation-creation (edits never propagate afterward).
+- **`TransactionCategory`** -- shared category model (flat `group` + `name`; `full_name` = "{group} : {name}"). Global rows (`owner` NULL) are the seeded base set; user-created rows are visible to bank-account co-owners. NULL FK = unassigned. **`TransactionCategoryAlias`** maps a provider's raw category string (e.g. from the BofA scraper) onto a `TransactionCategory` via the resolver in `service/categories.py`. See [docs/transaction-categories.md](docs/transaction-categories.md).
 
 Money values everywhere use `djmoney` `MoneyField` (14 digits, 2 decimal places, USD default). Sensitive fields (e.g., account numbers) use `django-fernet-encrypted-fields` with `SALT_KEY` rotation support.
 
@@ -204,7 +204,7 @@ The mypy config disables the `django-manager-missing` error due to a `django-mon
 
 Local dev uses **two** env files:
 
-- **`.env`** (repo root, gitignored) — read by the local shell (`uv run manage.py`, `pytest`, linters). Uses `localhost` with published ports: postgres on `localhost:6432`, redis on `localhost:7379`. Generate with `make env` (copies `deployment/dot-env.dev`).
-- **`deployment/local-dev-docker.env`** (gitignored) — read by docker-compose via `env_file:`. Uses docker-internal hostnames (`postgres`, `redis`) and internal port numbers. Generate with `make env` (copies `deployment/dot-env.docker-dev`).
+- **`.env`** (repo root, gitignored) -- read by the local shell (`uv run manage.py`, `pytest`, linters). Uses `localhost` with published ports: postgres on `localhost:6432`, redis on `localhost:7379`. Generate with `make env` (copies `deployment/dot-env.dev`).
+- **`deployment/local-dev-docker.env`** (gitignored) -- read by docker-compose via `env_file:`. Uses docker-internal hostnames (`postgres`, `redis`) and internal port numbers. Generate with `make env` (copies `deployment/dot-env.docker-dev`).
 
 Key variables (both files): `DEBUG`, `DJANGO_SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `SALT_KEY`.

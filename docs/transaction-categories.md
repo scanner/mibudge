@@ -1,4 +1,4 @@
-# Transaction Categories — Implementation Reference
+# Transaction Categories -- Implementation Reference
 
 This document describes how mibudge models transaction categories, how a
 transaction or split gets a category, and how categories from external
@@ -9,11 +9,11 @@ for contributors; every claim is tied to a specific file and function.
 
 ## 1. Overview
 
-A **transaction category** answers "what was this spent on?" — e.g.
+A **transaction category** answers "what was this spent on?" -- e.g.
 `Food & Drink : Groceries`.  Categories are a flat, two-part taxonomy:
 
-- **group** — the top-level bucket (`Food & Drink`).
-- **name** — the leaf (`Groceries`).
+- **group** -- the top-level bucket (`Food & Drink`).
+- **name** -- the leaf (`Groceries`).
 
 There is no parent/child nesting. Every row is a leaf; "group-level"
 questions are answered with a `category__group` filter, not a separate
@@ -21,7 +21,7 @@ group object. A provider's single-level category (`Travel : Travel`)
 maps to a row whose group equals its name.
 
 The model is `TransactionCategory` in `app/moneypools/models.py`. It
-replaced a 151-member `TextChoices` enum — categories needed to be
+replaced a 151-member `TextChoices` enum -- categories needed to be
 shared, user-extensible, and queryable, which an enum cannot be.
 
 Key rules:
@@ -31,7 +31,7 @@ Key rules:
   two columns are the source of truth.
 - **NULL means unassigned.** A `Transaction.category` or
   `TransactionAllocation.category` of `NULL` is the "no category yet"
-  state. There is no sentinel row — the old `Uncategorized:Unassigned`
+  state. There is no sentinel row -- the old `Uncategorized:Unassigned`
   placeholder was removed. (`Uncategorized : Unknown` survives as a real
   category for genuinely unknowable spend.)
 - **Case-insensitive uniqueness** on `(group, name)`, enforced by two
@@ -46,10 +46,10 @@ Key rules:
 
 Every category has an `owner` FK to a user, which may be `NULL`:
 
-- **Global categories** (`owner IS NULL`) — the shared base set, seeded
+- **Global categories** (`owner IS NULL`) -- the shared base set, seeded
   by migration `0038_seed_global_categories` (150 rows) and managed
   through the django-admin. Everyone sees them.
-- **Custom categories** (`owner = <user>`) — created by a user via the
+- **Custom categories** (`owner = <user>`) -- created by a user via the
   API. Visible to the owner and to anyone the owner shares a bank
   account with.
 
@@ -69,7 +69,7 @@ Visibility is computed per request by
 Clause 4 is the **grandfather** rule: if you shared an account, the
 co-owner categorized some transactions with a custom category, and then
 you stopped sharing, those transactions stay readable. This needs no
-tombstones or snapshots — the reverse join through the referencing rows
+tombstones or snapshots -- the reverse join through the referencing rows
 keeps a used category visible for exactly as long as it is used.
 
 The API viewset (`TransactionCategoryViewSet`) applies `visible_to` in
@@ -82,16 +82,16 @@ set automatically.
 
 A category is stored in **two** places, on purpose:
 
-- **`Transaction.category`** — the transaction's overall category,
+- **`Transaction.category`** -- the transaction's overall category,
   seeded from the provider hint and user-editable.
-- **`TransactionAllocation.category`** — the category of one portion of
+- **`TransactionAllocation.category`** -- the category of one portion of
   the transaction.
 
 Both are nullable FKs with `on_delete=SET_NULL` (a DB-level safety net;
-the API refuses to delete a referenced category — see §6).
+the API refuses to delete a referenced category -- see §6).
 
 Why both? A single purchase can be split across budgets with different
-categories — a Costco run that is part `Groceries`, part `Home
+categories -- a Costco run that is part `Groceries`, part `Home
 Supplies`. The per-portion category lives on the allocation; the
 transaction keeps the single "headline" category. **Multiple categories
 per transaction = multiple allocations. There is no M2M anywhere.**
@@ -148,11 +148,11 @@ without touching any transaction data.
 
 `resolve_provider_category(provider, raw)` runs, in order:
 
-1. **Alias lookup** on `(provider, alias_key)` — if present, use it.
+1. **Alias lookup** on `(provider, alias_key)` -- if present, use it.
    This is FIRST so reviewed/corrected mappings always win.
 2. **Exact full-name match** on global rows (case-insensitive on both
    group and name).
-3. **Unique sub-name match** on global rows — but **guarded**: only when
+3. **Unique sub-name match** on global rows -- but **guarded**: only when
    the name is not *also* an existing global group name. Without the
    guard, BofA's single-level `Travel : Travel` would sub-name match
    `Business : Travel` instead of creating the intended top-level
@@ -186,7 +186,7 @@ migration**:
    rows (see [docs/management-commands.md](management-commands.md)).
 
 The committed seed file should contain only `provider` / `alias_key` /
-`category` — never the `samples:` the harvester emits, which carry raw
+`category` -- never the `samples:` the harvester emits, which carry raw
 transaction descriptions (PII).
 
 ---
@@ -209,7 +209,7 @@ categories visible to the requester and rewrites it to the matched
 category's canonical full name.
 
 The string form intentionally leaves room for **other matcher kinds**
-without a schema change — e.g. a future `tag:groceries` entry matching
+without a schema change -- e.g. a future `tag:groceries` entry matching
 merchants tagged `#groceries`, once merchants and tags exist (see §7).
 Keep the field loose until the auto-allocation-rules feature formalizes
 it.
@@ -220,16 +220,16 @@ it.
 
 `TransactionCategoryViewSet` (`/api/v1/transaction-categories/`):
 
-- **list / retrieve** — the visible set (§2). Filters: `group`,
+- **list / retrieve** -- the visible set (§2). Filters: `group`,
   `archived`, `scope` (`global` | `mine` | `shared`); search over group
   and name.
-- **create** — owner is forced to the requesting user; global rows are
+- **create** -- owner is forced to the requesting user; global rows are
   admin-only. Case-insensitive duplicates of a global or own category
   are rejected.
-- **update / delete** — owner-only. Deleting a category that is still
+- **update / delete** -- owner-only. Deleting a category that is still
   referenced by any transaction or allocation returns **409** and points
   at archiving instead.
-- **`archive` action** — sets `archived=True` (hidden from pickers,
+- **`archive` action** -- sets `archived=True` (hidden from pickers,
   existing references stay valid), mirroring `BudgetViewSet.archive`.
 
 On `Transaction` and `TransactionAllocation` serializers, `category` is
@@ -246,7 +246,7 @@ Filters: `TransactionFilter` and `TransactionAllocationFilter` gained
 ## 7. Future direction: merchants as first-class objects
 
 Scraping per-transaction detail from providers is expensive and fragile
-— BofA rate-limits the detail dialog hard and changes its DOM. The
+-- BofA rate-limits the detail dialog hard and changes its DOM. The
 intended longer-term answer is to make **merchants** first-class Django
 objects and drive categorization from the merchant, not the provider:
 
@@ -255,16 +255,18 @@ objects and drive categorization from the merchant, not the provider:
   harvester is an early sketch of that matching).
 - A merchant carries a default category. When a transaction is matched
   to a known merchant, we set the transaction's category from the
-  merchant association — no provider round-trip required.
-- A merchant also carries its **Merchant Category Code (MCC)** — the
-  ISO 18245 4-digit code — resolved via the `iso18245` Python package
-  (a planned dependency) to a human-readable description. MCC is a second
+  merchant association -- no provider round-trip required.
+- A merchant also carries its **Merchant Category Code (MCC)** -- the
+  ISO 18245 4-digit code -- resolved via the `iso18245` Python package
+  (now a main dependency; the transaction-details enrichment already
+  stores per-transaction MCCs under exactly this warn-only policy) to a
+  human-readable description. MCC is a second
   identity signal: it can seed or corroborate a merchant's default
   category (e.g. MCC `5411` → grocery), and it gives the future
   auto-allocation rules a stable, provider-independent thing to match on.
   Where a provider supplies an MCC on a transaction (BofA does, on the
   detail dialog), we store the raw 4-digit code and use `iso18245` only
-  to look up / warn — the package lags the registry, so an unknown code
+  to look up / warn -- the package lags the registry, so an unknown code
   is still stored, never rejected.
 - Merchant **tags** (`#groceries`) feeding `auto_spend` matchers
   (`tag:groceries`, §5), so budgets can target categories of merchants
@@ -277,7 +279,7 @@ mechanism for turning whatever hint we *do* get into one of our
 categories; the merchant layer sits on top, deciding a category from
 identity when a provider hint is missing or not worth fetching.
 
-Related future work — budget auto-allocation rules — will match on
+Related future work -- budget auto-allocation rules -- will match on
 merchant name / transaction category / merchant category code (MCC), so
 those columns are kept queryable as they are added. MCC is stored as the
 raw 4-digit code (indexed) and interpreted through the `iso18245`

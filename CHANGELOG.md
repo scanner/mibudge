@@ -9,10 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use — archive instead). See `docs/transaction-categories.md`
+- Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use -- archive instead). See `docs/transaction-categories.md`
 - Transactions and their splits each carry a category; a split inherits the transaction's category when it's created and can then be changed independently
 - Category hints from bank imports (e.g. the BofA scraper) are mapped onto your categories automatically, with an admin-editable alias table so a mapping can be corrected without re-importing
 - `harvest_bofa_categories` importer discovers BofA's category vocabulary incrementally (resumable across runs, gentle on BofA's rate limits) and `seed_category_aliases` loads the reviewed mapping
+- Transactions can carry merchant details: merchant name, structured location (street address, city, region, country, and map coordinates -- the location fields are user-editable so you can refine or supply a merchant's actual address), the ISO 18245 merchant category code, and the masked virtual card number used. New transaction filters: `merchant_name`, `merchant_city`, `merchant_region`, `merchant_category_code`, `virtual_card_last4`, `has_details`
+- The BofA live importer enriches posted transactions from BofA's per-transaction detail dialog: the bank's category hint auto-categorizes the transaction (and its unassigned splits), and the display description becomes "Merchant -- City, ST (Category)". Detail fetches are budgeted (`--details-limit`, default 30 dialog opens per run) and each merchant is fetched only once per run -- its other transactions get a free provenance-marked copy -- so a backfill converges over a couple of weeks of runs without tripping BofA's rate limits
+- `POST /api/v1/bank-accounts/{id}/transaction-details/` applies scraped detail records; `sync-scrape` responses report `details_needed` so importers know exactly which rows still need enrichment
+- Saved scrape files (format v3) include fetched details and `import_bofa_saved` replays them; `--save-only --details-all` captures every detail dialog for offline import
+- Editing a transaction's description now marks it user-edited, so detail enrichment never overwrites your text
 
 ### Changed
 
@@ -28,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - API keys: long-lived machine credentials for importers and 3rd-party services (`Authorization: Api-Key <key>`), managed at `/api/v1/users/me/api-keys/` with optional expiry (30/60/90/365 days, custom, or never); the plaintext key is shown only once at creation
-- Machine credentials are denied access to user/security endpoints (password/email change, invitations, user management, key management) — these require an interactive login; `GET /api/v1/users/me/` is exempt so importers can read the user's timezone
+- Machine credentials are denied access to user/security endpoints (password/email change, invitations, user management, key management) -- these require an interactive login; `GET /api/v1/users/me/` is exempt so importers can read the user's timezone
 - Importer CLIs accept `--api-key` / `MIBUDGE_API_KEY` (or Vault key `api_key`), preferred over email/password
 - Account settings page: manage API keys (create with expiry, one-time key display, revoke)
 - Email notice when an API key will expire within the next 14 days (configurable via `API_KEY_EXPIRY_NOTICE_DAYS`), sent once per key so a replacement can be minted before importers and other services lose access

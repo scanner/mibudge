@@ -601,6 +601,40 @@ Reconcile this account against a fresh snapshot from a live bank scraper.  All e
 - **`posting_order_mismatches`** (`array`) *(required)*
 - **`last_posted_through`** (`string`) *(required)*
 - **`new_transaction_ids`** (`array`) *(required)*
+- **`details_needed`** (`array`) *(required)*
+
+#### `POST /api/v1/bank-accounts/{id}/transaction-details/`
+
+**Operation:** `bank_accounts_transaction_details_create`
+
+Apply per-transaction detail records (merchant name, location, MCC, the bank's category hint, virtual card number) fetched by a live scraper to posted transactions on this account.  Each raw details dict is stored verbatim on its transaction; merchant columns are extracted, the category hint seeds the transaction's category (and its unassigned allocations) when NULL, and the display description is recomposed on first enrichment unless the user has edited it.  Rows already enriched are skipped unless `overwrite` is true; pending rows are always skipped.  Per-item outcomes are returned in submission order.
+
+**Parameters:**
+
+- `id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`overwrite`** (`boolean`)
+- **`details`** (`array`) *(required)*
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`overwrite`** (`boolean`)
+- **`details`** (`array`) *(required)*
+
+**Request Body** (`multipart/form-data`):
+
+- **`overwrite`** (`boolean`)
+- **`details`** (`array`) *(required)*
+
+**Response 200:** 
+
+- **`applied`** (`integer`) *(required)*
+- **`skipped_has_details`** (`integer`) *(required)*
+- **`skipped_pending`** (`integer`) *(required)*
+- **`not_found`** (`integer`) *(required)*
+- **`results`** (`array`) *(required)*
 
 ### banks
 
@@ -1776,6 +1810,11 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 - `category_group` (query, optional)
 - `date_from` (query, optional)
 - `date_to` (query, optional)
+- `has_details` (query, optional)
+- `merchant_category_code` (query, optional)
+- `merchant_city` (query, optional)
+- `merchant_name` (query, optional)
+- `merchant_region` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
 - `page_size` (query, optional) — Number of results to return per page.
@@ -1808,6 +1847,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 * `fx_order` - FX Order
 * `` - --------
 - `uncategorized` (query, optional)
+- `virtual_card_last4` (query, optional)
 
 **Response 200:** 
 
@@ -1834,6 +1874,12 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1850,6 +1896,12 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1866,6 +1918,12 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1884,8 +1942,20 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`description_user_edited`** (`boolean`) *(required, read-only)*
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
+- **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
+- **`merchant_category`** (`string`) *(required, read-only)*
+- **`merchant_category_code`** (`string`) *(required, read-only)*
+- **`virtual_card_number`** (`string`) *(required, read-only)*
+- **`has_details`** (`boolean`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -1921,8 +1991,20 @@ Return a single transaction by UUID.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`description_user_edited`** (`boolean`) *(required, read-only)*
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
+- **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
+- **`merchant_category`** (`string`) *(required, read-only)*
+- **`merchant_category_code`** (`string`) *(required, read-only)*
+- **`virtual_card_number`** (`string`) *(required, read-only)*
+- **`has_details`** (`boolean`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -1956,6 +2038,12 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1972,6 +2060,12 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -1988,6 +2082,12 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2006,8 +2106,20 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`description_user_edited`** (`boolean`) *(required, read-only)*
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
+- **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
+- **`merchant_category`** (`string`) *(required, read-only)*
+- **`merchant_category_code`** (`string`) *(required, read-only)*
+- **`virtual_card_number`** (`string`) *(required, read-only)*
+- **`has_details`** (`boolean`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2041,6 +2153,12 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2057,6 +2175,12 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2073,6 +2197,12 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -2091,8 +2221,20 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`description_user_edited`** (`boolean`) *(required, read-only)*
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
+- **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
+- **`merchant_category`** (`string`) *(required, read-only)*
+- **`merchant_category_code`** (`string`) *(required, read-only)*
+- **`virtual_card_number`** (`string`) *(required, read-only)*
+- **`has_details`** (`boolean`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2155,8 +2297,20 @@ Transition a pending transaction to posted status. Supplies the bank-confirmed p
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`description_user_edited`** (`boolean`) *(required, read-only)*
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
+- **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
+- **`merchant_category`** (`string`) *(required, read-only)*
+- **`merchant_category_code`** (`string`) *(required, read-only)*
+- **`virtual_card_number`** (`string`) *(required, read-only)*
+- **`has_details`** (`boolean`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2181,7 +2335,12 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 - `category_group` (query, optional)
 - `date_from` (query, optional)
 - `date_to` (query, optional)
+- `has_details` (query, optional)
 - `id` (path, required)
+- `merchant_category_code` (query, optional)
+- `merchant_city` (query, optional)
+- `merchant_name` (query, optional)
+- `merchant_region` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
 - `page` (query, optional) — A page number within the paginated result set.
 - `page_size` (query, optional) — Number of results to return per page.
@@ -2214,6 +2373,7 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 * `fx_order` - FX Order
 * `` - --------
 - `uncategorized` (query, optional)
+- `virtual_card_last4` (query, optional)
 
 **Request Body** (`application/json`):
 
@@ -3239,6 +3399,12 @@ field declaration is needed.
 - **`raw_description`** (`string`)
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)
@@ -3285,6 +3451,18 @@ Requires ``transaction`` in the serializer context for sign validation.
 - **`posted_date`** (`string`) *(required)*
 - **`amount`** (`string`)
 
+### ScrapeSyncDetailsNeeded
+
+One posted scrape row still needing a transaction-details fetch.
+
+`index` is the row's position in the SUBMITTED transactions array
+(exact correlation back to the scraper's own rows); `transaction`
+is the DB row the fetched details should be applied to via the
+transaction-details action.
+
+- **`index`** (`integer`) *(required)*
+- **`transaction`** (`string`) *(required)*
+
 ### ScrapeSyncReport
 
 Output serializer for the bank-account scrape-sync action.
@@ -3301,6 +3479,7 @@ validation warnings.
 - **`posting_order_mismatches`** (`array`) *(required)*
 - **`last_posted_through`** (`string`) *(required)*
 - **`new_transaction_ids`** (`array`) *(required)*
+- **`details_needed`** (`array`) *(required)*
 
 ### ScrapeSyncRequest
 
@@ -3373,8 +3552,20 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
+- **`description_user_edited`** (`boolean`) *(required, read-only)*
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
+- **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
+- **`merchant_category`** (`string`) *(required, read-only)*
+- **`merchant_category_code`** (`string`) *(required, read-only)*
+- **`virtual_card_number`** (`string`) *(required, read-only)*
+- **`has_details`** (`boolean`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -3455,6 +3646,57 @@ action, not writable here.
 - **`group`** (`string`) *(required)*
 - **`name`** (`string`) *(required)*
 
+### TransactionDetailsItemRequest
+
+One (transaction, raw details dict) pair to apply.
+
+The details dict is stored verbatim on the transaction (it is the
+provenance record); the service extracts the merchant columns and
+the category hint from it.
+
+- **`transaction`** (`string`) *(required)*
+- **`details`** (`object`) *(required)*
+
+### TransactionDetailsReport
+
+Output serializer for the bank-account transaction-details action.
+
+- **`applied`** (`integer`) *(required)*
+- **`skipped_has_details`** (`integer`) *(required)*
+- **`skipped_pending`** (`integer`) *(required)*
+- **`not_found`** (`integer`) *(required)*
+- **`results`** (`array`) *(required)*
+
+### TransactionDetailsRequest
+
+Input serializer for the bank-account transaction-details action.
+
+`overwrite` re-applies scraper-owned fields on rows already
+enriched (location fields and an assigned category are still
+never clobbered).
+
+- **`overwrite`** (`boolean`)
+- **`details`** (`array`) *(required)*
+
+### TransactionDetailsResult
+
+Per-item outcome of the transaction-details action.
+
+- **`transaction`** (`string`) *(required)*
+- **`status`** (`string`) *(required)* — * `applied` - applied
+* `skipped_has_details` - skipped_has_details
+* `skipped_pending` - skipped_pending
+* `not_found` - not_found Enum: ['applied', 'skipped_has_details', 'skipped_pending', 'not_found']
+- **`warnings`** (`array`) *(required)*
+
+### TransactionDetailsResultStatusEnum
+
+* `applied` - applied
+* `skipped_has_details` - skipped_has_details
+* `skipped_pending` - skipped_pending
+* `not_found` - not_found
+
+
 ### TransactionRequest
 
 Serializer for bank transactions.
@@ -3481,6 +3723,12 @@ field declaration is needed.
 - **`raw_description`** (`string`) *(required)*
 - **`description`** (`string`)
 - **`category`** (`string`)
+- **`merchant_address`** (`string`)
+- **`merchant_city`** (`string`)
+- **`merchant_region`** (`string`)
+- **`merchant_country`** (`string`)
+- **`merchant_latitude`** (`string`)
+- **`merchant_longitude`** (`string`)
 - **`bank_transaction_id`** (`string`)
 - **`image`** (`string`)
 - **`document`** (`string`)

@@ -129,6 +129,24 @@ class TransactionFilter(filters.FilterSet):
         field_name="category",
         lookup_expr="isnull",
     )
+    merchant_name = filters.CharFilter(lookup_expr="icontains")
+    merchant_city = filters.CharFilter(lookup_expr="icontains")
+    merchant_region = filters.CharFilter(lookup_expr="iexact")
+    merchant_category_code = filters.CharFilter()
+    # The stored value is pre-masked ("XXXX-XXXX-XXXX-1439"), so a
+    # last-4 endswith is the only meaningful lookup.
+    virtual_card_last4 = filters.CharFilter(
+        field_name="virtual_card_number",
+        lookup_expr="endswith",
+    )
+    # `exclude` inverts the isnull lookup so has_details=true returns
+    # enriched rows (details IS NOT NULL) and has_details=false the
+    # never-enriched ones.
+    has_details = filters.BooleanFilter(
+        field_name="details",
+        lookup_expr="isnull",
+        exclude=True,
+    )
 
     class Meta:
         model = Transaction
@@ -143,6 +161,12 @@ class TransactionFilter(filters.FilterSet):
             "category",
             "category_group",
             "uncategorized",
+            "merchant_name",
+            "merchant_city",
+            "merchant_region",
+            "merchant_category_code",
+            "virtual_card_last4",
+            "has_details",
         ]
 
 

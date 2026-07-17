@@ -1043,6 +1043,15 @@ wheels = [
 ]
 
 [[package]]
+name = "importlib-resources"
+version = "5.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/f1/8711c49ffd121083007a24c1bff0d324c9ff621d4fdf8b4ffcb8d9e60330/importlib_resources-5.13.0.tar.gz", hash = "sha256:82d5c6cca930697dbbd86c93333bb2c2e72861d4789a11c2662b933e5ad2b528", size = 36550, upload-time = "2023-07-07T16:21:00.171Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/68/bd9dd6bbf06772c7accce77d0354d783333fbe712a60b08fc13540c05422/importlib_resources-5.13.0-py3-none-any.whl", hash = "sha256:9f7bd0c97b79972a6cce36a366356d16d5e13b09679c11a58f1014bfdf8e64b2", size = 32912, upload-time = "2023-07-07T16:20:58.128Z" },
+]
+
+[[package]]
 name = "inflection"
 version = "0.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1104,6 +1113,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ef/4c/5dd1d8af08107f88c7f741ead7a40854b8ac24ddf9ae850afbcf698aa552/ipython_pygments_lexers-1.1.1.tar.gz", hash = "sha256:09c0138009e56b6854f9535736f4171d855c8c08a563a0dcd8022f78355c7e81", size = 8393, upload-time = "2025-01-17T11:24:34.505Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/33/1f075bf72b0b747cb3288d011319aaf64083cf2efef8354174e3ed4540e2/ipython_pygments_lexers-1.1.1-py3-none-any.whl", hash = "sha256:a9462224a505ade19a605f71f8fa63c2048833ce50abc86768a0d81d876dc81c", size = 8074, upload-time = "2025-01-17T11:24:33.271Z" },
+]
+
+[[package]]
+name = "iso18245"
+version = "1.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "importlib-resources" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5c/de/e8095ac5ac026e4ad23c07d1cb35bc1495051d2ae32c863b246d43e1d9a1/iso18245-1.4.1.tar.gz", hash = "sha256:1ee69d2b6b6334e29d9131371970a171649a969fe319ae7b09afcfc2ecb02720", size = 50749, upload-time = "2025-09-03T09:23:07.299Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/5e/ef3e709668014b9ebabb86d05f4848f96ffac406e202c7207b773b3ccc2f/iso18245-1.4.1-py3-none-any.whl", hash = "sha256:07fcac02b22044e5f188a7683684f2166900a36d39119eb6ca0f4ef5f0df5772", size = 66746, upload-time = "2025-09-03T09:23:05.833Z" },
 ]
 
 [[package]]
@@ -1443,6 +1464,7 @@ dependencies = [
     { name = "flower" },
     { name = "httpx" },
     { name = "hvac" },
+    { name = "iso18245" },
     { name = "markdown" },
     { name = "ofxparse" },
     { name = "pillow" },
@@ -1517,6 +1539,7 @@ requires-dist = [
     { name = "flower" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "hvac", specifier = ">=2.4.0" },
+    { name = "iso18245", specifier = ">=1.4.1" },
     { name = "markdown" },
     { name = "ofxparse", specifier = ">=0.21" },
     { name = "pillow" },

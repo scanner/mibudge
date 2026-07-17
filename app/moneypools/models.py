@@ -1,12 +1,18 @@
 import enum
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 
 import recurrence.fields
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.validators import (
+    MaxValueValidator,
+    MinValueValidator,
+    RegexValidator,
+)
 from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -1115,6 +1121,81 @@ class Transaction(TransactionBaseClass):
         default=None,
         related_name="transactions",
     )
+
+    # --- Merchant / transaction-details enrichment --------------------
+    #
+    # Populated by the transaction-details import pipeline (see
+    # service/transaction_details.py).  The merchant identity fields
+    # (name, category, MCC, virtual card, raw details) are
+    # scraper-owned and read-only through the API.  The location
+    # fields are user-editable: providers rarely supply more than
+    # "CITY, ST", so users may refine or supply the merchant's actual
+    # street address / map coordinates.  Enrichment writes location
+    # fields only when they are empty -- user values always win.
+    #
+    # NOTE: a future Merchant model (the `party` TODO above) will be
+    # backfilled from these columns; keep them queryable.
+    #
+    merchant_name = models.CharField(
+        max_length=128, null=True, blank=True, editable=False
+    )
+    merchant_address = models.CharField(max_length=256, null=True, blank=True)
+    merchant_city = models.CharField(max_length=128, null=True, blank=True)
+    merchant_region = models.CharField(max_length=64, null=True, blank=True)
+    merchant_country = models.CharField(
+        max_length=2,
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r"^[A-Z]{2}$",
+                "Must be an ISO 3166-1 alpha-2 country code.",
+            )
+        ],
+    )
+    merchant_latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[
+            MinValueValidator(Decimal("-90")),
+            MaxValueValidator(Decimal("90")),
+        ],
+    )
+    merchant_longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[
+            MinValueValidator(Decimal("-180")),
+            MaxValueValidator(Decimal("180")),
+        ],
+    )
+    # The provider's human-readable MCC description (e.g. "Grocery
+    # Stores and Supermarkets") -- kept verbatim because the iso18245
+    # package's description can lag the provider's.
+    merchant_category = models.CharField(
+        max_length=128, null=True, blank=True, editable=False
+    )
+    # ISO 18245 Merchant Category Code.  Any ^\d{4}$ value is stored
+    # (the provider is authoritative); iso18245 validation only warns.
+    merchant_category_code = models.CharField(
+        max_length=4, null=True, blank=True, editable=False, db_index=True
+    )
+    # Arrives pre-masked from the provider ("XXXX-XXXX-XXXX-1439");
+    # stored as-is, searchable by last-4 endswith.
+    virtual_card_number = models.CharField(
+        max_length=32, null=True, blank=True, editable=False
+    )
+    # Raw provider details dict, stored verbatim for provenance.
+    # NULL means "never enriched" -- the sync-scrape details_needed
+    # list is driven by this being NULL on a posted row.
+    details = models.JSONField(null=True, blank=True, editable=False)
+    # Set server-side when the user edits `description`; enrichment
+    # never recomposes a user-edited description.
+    description_user_edited = models.BooleanField(default=False)
 
     # Budget assignment is handled through TransactionAllocation objects.
     # A non-split transaction has one allocation; a split transaction has

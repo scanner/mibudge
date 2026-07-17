@@ -210,16 +210,25 @@ BofA credentials are read from `BOFA_ID` and `BOFA_PASSCODE` environment variabl
 
 If BofA requires 2FA, the scraper prompts for the code interactively via stdin. Run with `--no-headless` to watch the browser.
 
+### Transaction details enrichment
+
+For posted transactions BofA can serve a per-transaction detail record (merchant name, "CITY, ST" location, category, ISO 18245 MCC, masked virtual card number). After each account's `sync-scrape` POST, the server reports `details_needed` -- the rows whose DB transaction has never been enriched -- and the importer fetches those details while the scrape session is still open, then POSTs them to the `transaction-details` endpoint. The server stores the raw dict, extracts the merchant columns, seeds the transaction's category (and its unassigned splits) from the bank's hint, and recomposes the display description ("Trader Joes -- Menlo Park, CA (Grocery Stores and Supermarkets)") unless the user has edited it.
+
+Two things keep this under BofA's rate limit (a burst of ~40-50 detail-dialog opens wedges the page and can kill the login session):
+
+- **A run-wide fetch budget.** `--details-limit` (default 30) counts dialog opens across all accounts in the run, paced with the same delays and wedge recovery as the category harvester. Rows left over stay unenriched server-side and are re-reported by the next sync, so a backfill converges over successive runs. `--details-limit 0` disables detail fetching.
+- **Merchant-copy.** BofA's details are stable per merchant, so each merchant is fetched only once per run; the merchant's other rows get a synthesized copy at zero dialog cost (provenance-marked `details_source: merchant-copy`, and without the per-transaction `virtual_card_number`). In practice a backfill costs one fetch per *merchant*, not per transaction.
+
 ### Saving scrape output
 
-Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file (`YYYY-MM-DD-HHMMSS-<last4>.json`). This lets you re-import from the saved file later without re-logging in to BofA. Combine with `--save-only` to capture the data on a machine that can reach BofA but not mibudge:
+Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file (`YYYY-MM-DD-HHMMSS-<last4>.json`, format v3 -- fetched transaction details are included). This lets you re-import from the saved file later without re-logging in to BofA. Combine with `--save-only` to capture the data on a machine that can reach BofA but not mibudge; add `--details-all` to force-capture the real detail dialog for every posted transaction (paced, no merchant-copy shortcut) so the file carries the full data:
 
 ```bash
 # Capture on BofA-accessible machine:
 uv run --group importers-bofa python -m importers.import_bofa_live \
-    --save-dir ./saved --save-only
+    --save-dir ./saved --save-only --details-all
 
-# Replay later:
+# Replay later (also replays any saved details):
 uv run python -m importers.import_bofa_saved saved/*.json
 ```
 
@@ -238,6 +247,8 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 | `--timeout` | Selenium page-load timeout in seconds (default: 5) |
 | `--save-dir` | Directory to write raw scrape JSON files |
 | `--save-only` | Scrape and save without importing; requires `--save-dir` |
+| `--details-limit` | Max detail-dialog opens per run across all accounts (default: 30; 0 disables detail fetching) |
+| `--details-all` | With `--save-only`: capture the real detail dialog for every posted transaction, ignoring `--details-limit` |
 | `--dry-run, -n` | Show what would be synced without making any changes |
 | `--run-funding` | Run the funding engine after each successful account sync |
 | `--verbose, -v` | Debug logging |
@@ -250,7 +261,7 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 `python -m importers.harvest_bofa_categories` discovers the vocabulary of
 `Transaction category` strings that Bank of America assigns to
 transactions, and proposes a mapping onto mibudge's own categories. It
-needs no mibudge server connection — the proposal is computed locally
+needs no mibudge server connection -- the proposal is computed locally
 against the planned global category list. Its output feeds the
 `seed_category_aliases` management command (see
 [management-commands.md](management-commands.md)); the category model and
@@ -273,15 +284,15 @@ targets, then load with `seed_category_aliases`.
 
 ### Rate limiting and incremental harvesting
 
-BofA rate-limits detail-dialog opens **aggressively** — a burst of a few
+BofA rate-limits detail-dialog opens **aggressively** -- a burst of a few
 dozen wedges the page, and a large burst can terminate the login session
 entirely. The harvester defends against this and is built to run
 **incrementally** across many gentle sessions rather than one long run:
 
 - **Persistent accumulator** (`--state`, default
   `bofa-harvest-state.json`): loaded at startup, saved at the end and on
-  interrupt. Each run skips everything already gathered — known merchants
-  and already-processed transactions — and spends its fetch budget only
+  interrupt. Each run skips everything already gathered -- known merchants
+  and already-processed transactions -- and spends its fetch budget only
   on transactions never seen before. Run repeatedly with the same file to
   build up the full vocabulary over time.
 - **Merchant skip**: once a merchant's category is known, later
@@ -297,7 +308,7 @@ entirely. The harvester defends against this and is built to run
 > **PII:** the review YAML, details JSON, and state file contain real
 > transaction descriptions (payroll strings, names, account fragments)
 > and are gitignored. The committed alias seed file must contain only
-> `provider`/`alias_key`/`category` mappings — no `samples:`.
+> `provider`/`alias_key`/`category` mappings -- no `samples:`.
 
 | Option | Description |
 |--------|-------------|
@@ -320,16 +331,16 @@ entirely. The harvester defends against this and is built to run
 
 Banks often surface in-flight transactions (authorizations not yet settled) before they post. mibudge supports this natively: a transaction can be imported with `pending=True`, which affects `available_balance` immediately but not `posted_balance` until it settles.
 
-The BofA live scraper is the current importer that produces pending transactions — BofA shows "Processing" in the date column for unsettled items. Any future importer that can distinguish pending from posted transactions can use the same mechanism.
+The BofA live scraper is the current importer that produces pending transactions -- BofA shows "Processing" in the date column for unsettled items. Any future importer that can distinguish pending from posted transactions can use the same mechanism.
 
 ### What you can and cannot do with pending transactions
 
 - **Pending transactions are display-only.** They are imported with a single allocation to the account's Unallocated budget, and that allocation cannot be changed while the transaction is pending. Attempting to split a pending transaction is rejected.
-- Once a pending transaction settles, it transitions to posted status and behaves like any other transaction — you can split it, allocate it, and so on.
+- Once a pending transaction settles, it transitions to posted status and behaves like any other transaction -- you can split it, allocate it, and so on.
 
 ### How the scrapers handle pending transactions
 
-The BofA live and saved scrapers use the `sync-scrape` endpoint (`POST /api/v1/bank-accounts/<id>/sync-scrape/`). On every run, the scraper hands the server the full current bank-side snapshot — posted and pending transactions together. The server reconciles atomically:
+The BofA live and saved scrapers use the `sync-scrape` endpoint (`POST /api/v1/bank-accounts/<id>/sync-scrape/`). On every run, the scraper hands the server the full current bank-side snapshot -- posted and pending transactions together. The server reconciles atomically:
 
 1. **Wipe pending**: all existing pending rows for the account are deleted (along with their Unallocated allocations).
 2. **Dedup posted**: new settled transactions are compared against existing posted rows by (date, amount, raw description). Already-known rows are skipped; genuinely new ones are inserted.
@@ -360,7 +371,7 @@ uv run python -m importers backfill_budget \
 
 The tool fetches all transactions for the account, groups them into monthly periods, and steps through each unallocated transaction asking whether it belongs to the budget. Vendor names are extracted from raw bank descriptions, and you can save yes/no rules per vendor so repeat merchants are handled automatically in future runs.
 
-Transactions, allocations, and internal transactions are all fetched once at startup. Any transactions imported while the script is running will not appear in the current session — re-run after importing new transactions to pick them up.
+Transactions, allocations, and internal transactions are all fetched once at startup. Any transactions imported while the script is running will not appear in the current session -- re-run after importing new transactions to pick them up.
 
 ### Prompts
 

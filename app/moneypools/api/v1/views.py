@@ -54,6 +54,7 @@ from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import invitation as invitation_svc
 from moneypools.service import sync_scrape as sync_scrape_svc
 from moneypools.service import transaction as transaction_svc
+from moneypools.service import transaction_details as transaction_details_svc
 from moneypools.service.shared import funding_system_user
 from users.permissions import RequiresInteractiveAuth
 
@@ -79,6 +80,8 @@ from .serializers import (
     ScrapeSyncSerializer,
     TransactionAllocationSerializer,
     TransactionCategorySerializer,
+    TransactionDetailsReportSerializer,
+    TransactionDetailsSerializer,
     TransactionSerializer,
     TransactionSplitsSerializer,
 )
@@ -322,6 +325,83 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
                 "posting_order_mismatches": report.posting_order_mismatches,
                 "last_posted_through": report.last_posted_through,
                 "new_transaction_ids": report.new_transaction_ids,
+                "details_needed": [
+                    {"index": row.index, "transaction": row.transaction_id}
+                    for row in report.details_needed
+                ],
+            }
+        )
+        return Response(out.data)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Apply scraped transaction details",
+        description=(
+            "Apply per-transaction detail records (merchant name, "
+            "location, MCC, the bank's category hint, virtual card "
+            "number) fetched by a live scraper to posted transactions "
+            "on this account.  Each raw details dict is stored "
+            "verbatim on its transaction; merchant columns are "
+            "extracted, the category hint seeds the transaction's "
+            "category (and its unassigned allocations) when NULL, and "
+            "the display description is recomposed on first "
+            "enrichment unless the user has edited it.  Rows already "
+            "enriched are skipped unless `overwrite` is true; pending "
+            "rows are always skipped.  Per-item outcomes are returned "
+            "in submission order."
+        ),
+        request=TransactionDetailsSerializer,
+        responses={200: TransactionDetailsReportSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="transaction-details")
+    def transaction_details(self, request: Request, id: str = "") -> Response:
+        """Apply scraped per-transaction details to this account's rows."""
+        account: BankAccount = self.get_object()
+
+        serializer = TransactionDetailsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        overwrite = validated["overwrite"]
+
+        results = []
+        counts = {
+            transaction_details_svc.STATUS_APPLIED: 0,
+            transaction_details_svc.STATUS_SKIPPED_HAS_DETAILS: 0,
+            transaction_details_svc.STATUS_SKIPPED_PENDING: 0,
+            transaction_details_svc.STATUS_NOT_FOUND: 0,
+        }
+        for item in validated["details"]:
+            tx = Transaction.objects.filter(
+                bank_account=account, id=item["transaction"]
+            ).first()
+            if tx is None:
+                item_status = transaction_details_svc.STATUS_NOT_FOUND
+                warnings: list[str] = []
+            else:
+                item_status, warnings = transaction_details_svc.apply_details(
+                    tx, item["details"], overwrite=overwrite
+                )
+            counts[item_status] += 1
+            results.append(
+                {
+                    "transaction": item["transaction"],
+                    "status": item_status,
+                    "warnings": warnings,
+                }
+            )
+
+        out = TransactionDetailsReportSerializer(
+            {
+                "applied": counts[transaction_details_svc.STATUS_APPLIED],
+                "skipped_has_details": counts[
+                    transaction_details_svc.STATUS_SKIPPED_HAS_DETAILS
+                ],
+                "skipped_pending": counts[
+                    transaction_details_svc.STATUS_SKIPPED_PENDING
+                ],
+                "not_found": counts[transaction_details_svc.STATUS_NOT_FOUND],
+                "results": results,
             }
         )
         return Response(out.data)
@@ -1185,8 +1265,20 @@ class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
 
         Routes through the service so that a pending → posted transition
         correctly updates the bank account's posted_balance.
+
+        A user changing `description` sets `description_user_edited`,
+        which stops the details-import pipeline from ever recomposing
+        the description over the user's text.
         """
-        transaction_svc.update(serializer.instance, **serializer.validated_data)
+        changes = dict(serializer.validated_data)
+        instance = serializer.instance
+        new_description = changes.get("description")
+        if (
+            new_description is not None
+            and new_description != instance.description
+        ):
+            changes["description_user_edited"] = True
+        transaction_svc.update(instance, **changes)
         serializer.instance.refresh_from_db()
 
     ####################################################################

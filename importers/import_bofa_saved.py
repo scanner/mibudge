@@ -6,6 +6,12 @@ and submits each one through the same scrape-sync endpoint the live
 importer uses.  No browser, no BofA credentials -- just the saved
 snapshot rolling forward into the database.
 
+Files with per-transaction details (format_version 3, captured live or
+via --save-only --details-all) also replay the enrichment: rows the
+server reports in `details_needed` that carry saved details are POSTed
+to the transaction-details endpoint -- no fetch budget applies since
+no browser dialog is involved.
+
 Useful for:
 - Re-importing after fixing an issue without re-scraping
 - Comparing coverage against CSV exports before committing an import
@@ -40,6 +46,7 @@ from importers.import_bofa_live import (
     _build_sync_payload,
     _extract_last_four,
     _post_sync_scrape,
+    _post_transaction_details,
     load_saved_scrape,
 )
 from importers.import_transactions import (
@@ -336,7 +343,7 @@ def cli_cmd(
                 payload, posted_count, pending_count = _build_sync_payload(
                     account, scraped_at, user_timezone
                 )
-                ok = _post_sync_scrape(
+                ok, report = _post_sync_scrape(
                     client,
                     bank_account_id,
                     payload,
@@ -349,6 +356,35 @@ def cli_cmd(
                 )
                 if not ok:
                     any_error = True
+
+                # --- Replay saved per-transaction details (v3 files) ---
+                # The payload's transaction order is exactly
+                # saved.transactions (via _ReplayAccount), so the
+                # server's details_needed indexes map straight back to
+                # the saved rows.
+                if report is not None:
+                    details_items = []
+                    for row in report.get("details_needed", []):
+                        idx = row["index"]
+                        if 0 <= idx < len(saved.transactions):
+                            details = saved.transactions[idx].details
+                            if details is not None:
+                                details_items.append(
+                                    {
+                                        "transaction": row["transaction"],
+                                        "details": details,
+                                    }
+                                )
+                    if details_items:
+                        if not _post_transaction_details(
+                            client,
+                            bank_account_id,
+                            details_items,
+                            acct_name,
+                            console,
+                            interactive,
+                        ):
+                            any_error = True
 
                 if not dry_run and run_funding and posted_count > 0:
                     _run_funding(

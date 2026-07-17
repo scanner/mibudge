@@ -58,6 +58,7 @@ dependencies = [
     "zxcvbn>=4.5.0",
     "django-crispy-forms>=2.6",
     "crispy-bootstrap5>=2026.3",
+    "iso18245>=1.4.1",
 ]
 
 [build-system]
