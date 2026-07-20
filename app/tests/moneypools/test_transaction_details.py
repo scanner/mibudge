@@ -4,10 +4,11 @@
 Tests for the transaction-details enrichment pipeline.
 
 Covers the location parser, the description composition helper, the
-apply_details service (MCC policy, category + allocation seeding,
-location preservation, overwrite semantics), the bank-account
-transaction-details REST action, the new merchant filters, and the
-serializer's writable/read-only split for merchant fields.
+apply_details service (MCC policy, caller-supplied category +
+allocation seeding, location preservation, overwrite semantics), the
+bank-account transaction-details REST action (including category
+full-name resolution), the merchant filters, and the serializer's
+writable/read-only split for merchant fields.
 """
 
 # system imports
@@ -94,7 +95,7 @@ def posted_tx(
 def dining_category(
     transaction_category_factory: Callable[..., TransactionCategory],
 ) -> TransactionCategory:
-    """A global category that 'Dining : Restaurants' resolves to exactly."""
+    """The global category the importer submits as 'Dining : Restaurants'."""
     return transaction_category_factory(group="Dining", name="Restaurants")
 
 
@@ -211,14 +212,17 @@ class TestApplyDetails:
         """
         GIVEN: a posted, never-enriched transaction with an unassigned
                category and a default allocation
-        WHEN:  a full BofA details dict is applied
+        WHEN:  a full BofA details dict is applied with a resolved
+               category
         THEN:  the raw dict is stored verbatim, merchant columns are
                extracted, the category is seeded (and copied onto the
                NULL-category allocation), and the description is
                recomposed
         """
         raw = bofa_details()
-        status, warnings = details_svc.apply_details(posted_tx, raw)
+        status, warnings = details_svc.apply_details(
+            posted_tx, raw, category=dining_category
+        )
 
         assert status == details_svc.STATUS_APPLIED
         assert warnings == []
@@ -302,7 +306,9 @@ class TestApplyDetails:
         THEN:  scraper-owned fields update, but the assigned category,
                the location fields, and the composed description stay
         """
-        details_svc.apply_details(posted_tx, bofa_details())
+        details_svc.apply_details(
+            posted_tx, bofa_details(), category=dining_category
+        )
         posted_tx.refresh_from_db()
         original_description = posted_tx.description
 
@@ -318,6 +324,7 @@ class TestApplyDetails:
                 merchant_name="Trader Joes #123",
                 merchant_information="PALO ALTO, CA",
             ),
+            category=dining_category,
             overwrite=True,
         )
 
@@ -362,57 +369,47 @@ class TestApplyDetails:
 
     ################################################################
     #
-    def test_category_seeds_only_null_allocations(
+    @pytest.mark.parametrize("preset_on", ["allocation", "transaction"])
+    def test_category_seeding_guards(
         self,
         account: BankAccount,
         transaction_factory: Callable[..., Transaction],
         transaction_category_factory: Callable[..., TransactionCategory],
         dining_category: TransactionCategory,
         bofa_details: Callable[..., dict[str, Any]],
+        preset_on: str,
     ) -> None:
         """
-        GIVEN: a transaction whose default allocation already has a
-               category
-        WHEN:  details seed the transaction's NULL category
-        THEN:  the pre-categorized allocation is left alone
+        GIVEN: a transaction already categorized on one level -- its
+               allocation, or the transaction itself
+        WHEN:  details are applied with a different category
+        THEN:  seeding fills only the NULL slots; an assigned category
+               is never overwritten and never triggers a backfill
         """
         tx = transaction_factory(bank_account=account, pending=False)
         pre_set = transaction_category_factory(group="Home", name="Rent")
         allocation = tx.allocations.get()
-        allocation.category = pre_set
-        allocation.save()
+        if preset_on == "allocation":
+            allocation.category = pre_set
+            allocation.save()
+        else:
+            tx.category = pre_set
+            tx.save()
 
-        details_svc.apply_details(tx, bofa_details())
+        details_svc.apply_details(tx, bofa_details(), category=dining_category)
 
         tx.refresh_from_db()
         allocation.refresh_from_db()
-        assert tx.category == dining_category
-        assert allocation.category == pre_set
-
-    ################################################################
-    #
-    def test_assigned_category_is_never_reseeded(
-        self,
-        posted_tx: Transaction,
-        dining_category: TransactionCategory,
-        transaction_category_factory: Callable[..., TransactionCategory],
-        bofa_details: Callable[..., dict[str, Any]],
-    ) -> None:
-        """
-        GIVEN: a transaction that already has a category
-        WHEN:  details with a different category hint are applied
-        THEN:  the existing category (and its allocations) are untouched
-        """
-        existing = transaction_category_factory(group="Travel", name="Travel")
-        posted_tx.category = existing
-        posted_tx.save()
-
-        details_svc.apply_details(posted_tx, bofa_details())
-
-        posted_tx.refresh_from_db()
-        assert posted_tx.category == existing
-        # The allocation was NOT backfilled -- seeding never fired.
-        assert posted_tx.allocations.get().category is None
+        if preset_on == "allocation":
+            # The transaction's NULL slot seeds; the pre-categorized
+            # allocation is left alone.
+            assert tx.category == dining_category
+            assert allocation.category == pre_set
+        else:
+            # An assigned transaction never re-seeds, and seeding not
+            # firing means its allocation is not backfilled either.
+            assert tx.category == pre_set
+            assert allocation.category is None
 
     ################################################################
     #
@@ -494,18 +491,27 @@ class TestTransactionDetailsEndpoint:
         auth_client: APIClient,
         account: BankAccount,
         posted_tx: Transaction,
+        bank_account_factory: Callable[..., BankAccount],
         transaction_factory: Callable[..., Transaction],
+        user_factory: Callable[..., User],
         dining_category: TransactionCategory,
         bofa_details: Callable[..., dict[str, Any]],
     ) -> None:
         """
-        GIVEN: a batch with an unenriched posted row, a pending row,
-               and an unknown transaction id
+        GIVEN: a batch with an unenriched posted row, a pending row, an
+               already-enriched row, and a real transaction on someone
+               else's account
         WHEN:  POSTed to the transaction-details action
-        THEN:  per-item statuses and summary counts reflect each case
+        THEN:  every per-item status and summary count is exercised in
+               one submission, and the foreign row is untouched
         """
         pending = transaction_factory(bank_account=account, pending=True)
-        unknown = "00000000-0000-0000-0000-000000000000"
+        enriched = transaction_factory(bank_account=account, pending=False)
+        details_svc.apply_details(enriched, bofa_details())
+        other_tx = transaction_factory(
+            bank_account=bank_account_factory(owners=[user_factory()]),
+            pending=False,
+        )
 
         response = auth_client.post(
             f"/api/v1/bank-accounts/{account.id}/transaction-details/",
@@ -514,12 +520,23 @@ class TestTransactionDetailsEndpoint:
                     {
                         "transaction": str(posted_tx.id),
                         "details": bofa_details(),
+                        "category": "Dining : Restaurants",
                     },
                     {
                         "transaction": str(pending.id),
                         "details": bofa_details(),
                     },
-                    {"transaction": unknown, "details": bofa_details()},
+                    {
+                        "transaction": str(enriched.id),
+                        "details": bofa_details(),
+                    },
+                    # A real row on another user's account answers
+                    # exactly like an unknown id -- no information
+                    # leak about foreign transactions.
+                    {
+                        "transaction": str(other_tx.id),
+                        "details": bofa_details(),
+                    },
                 ]
             },
             format="json",
@@ -529,51 +546,19 @@ class TestTransactionDetailsEndpoint:
         data = response.json()
         assert data["applied"] == 1
         assert data["skipped_pending"] == 1
+        assert data["skipped_has_details"] == 1
         assert data["not_found"] == 1
-        assert data["skipped_has_details"] == 0
         statuses = [r["status"] for r in data["results"]]
-        assert statuses == ["applied", "skipped_pending", "not_found"]
+        assert statuses == [
+            "applied",
+            "skipped_pending",
+            "skipped_has_details",
+            "not_found",
+        ]
 
         posted_tx.refresh_from_db()
         assert posted_tx.merchant_name == "Trader Joes"
         assert posted_tx.category == dining_category
-
-    ################################################################
-    #
-    def test_transactions_on_other_accounts_are_not_found(
-        self,
-        auth_client: APIClient,
-        account: BankAccount,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        user_factory: Callable[..., User],
-        bofa_details: Callable[..., dict[str, Any]],
-    ) -> None:
-        """
-        GIVEN: a transaction id belonging to a different bank account
-        WHEN:  POSTed against this account's transaction-details action
-        THEN:  it reports not_found and the row is untouched
-        """
-        other_account = bank_account_factory(owners=[user_factory()])
-        other_tx = transaction_factory(
-            bank_account=other_account, pending=False
-        )
-
-        response = auth_client.post(
-            f"/api/v1/bank-accounts/{account.id}/transaction-details/",
-            {
-                "details": [
-                    {
-                        "transaction": str(other_tx.id),
-                        "details": bofa_details(),
-                    }
-                ]
-            },
-            format="json",
-        )
-
-        assert response.status_code == 200
-        assert response.json()["not_found"] == 1
         other_tx.refresh_from_db()
         assert other_tx.details is None
 
@@ -634,6 +619,47 @@ class TestTransactionDetailsEndpoint:
         assert response.json()["applied"] == 1
         posted_tx.refresh_from_db()
         assert posted_tx.merchant_name == "Trader Joes #123"
+
+    ################################################################
+    #
+    def test_unknown_category_warns_and_leaves_unassigned(
+        self,
+        auth_client: APIClient,
+        account: BankAccount,
+        posted_tx: Transaction,
+        bofa_details: Callable[..., dict[str, Any]],
+    ) -> None:
+        """
+        GIVEN: an item naming a category the caller cannot see
+        WHEN:  POSTed to the transaction-details action
+        THEN:  the item still applies, a per-item warning reports the
+               unknown name, the transaction stays unassigned, and no
+               category is created
+        """
+        before = TransactionCategory.objects.count()
+
+        response = auth_client.post(
+            f"/api/v1/bank-accounts/{account.id}/transaction-details/",
+            {
+                "details": [
+                    {
+                        "transaction": str(posted_tx.id),
+                        "details": bofa_details(),
+                        "category": "No Such : Category",
+                    }
+                ]
+            },
+            format="json",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["applied"] == 1
+        warnings = data["results"][0]["warnings"]
+        assert any("unknown category" in w for w in warnings)
+        posted_tx.refresh_from_db()
+        assert posted_tx.category is None
+        assert TransactionCategory.objects.count() == before
 
 
 ########################################################################

@@ -72,11 +72,13 @@ from zoneinfo import ZoneInfo
 
 # 3rd party imports
 import click
+import yaml
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
 # Project imports
+from importers.bofa_categories import category_for, load_overlay_map
 from importers.bofa_common import (
     DEFAULT_DETAILS_LIMIT,
     BofASessionLost,
@@ -596,8 +598,17 @@ def _post_transaction_details(
     account_label: str,
     console: Console,
     interactive: bool,
+    overlay: dict[str, str | None] | None = None,
+    unmapped: set[str] | None = None,
 ) -> bool:
     """POST fetched transaction details to mibudge and render the result.
+
+    Each item's BofA ``transaction_category`` string is translated to
+    a mibudge category full name (BOFA_CATEGORY_MAP plus the overlay)
+    and submitted as the item's ``category`` -- the mapping is the
+    importer's job; mibudge only understands its own category names.
+    Strings in neither map are collected into `unmapped` so the run
+    can report them at the end.
 
     Args:
         client: Authenticated `MibudgeClient`.
@@ -607,15 +618,29 @@ def _post_transaction_details(
         account_label: Display label for the account.
         console: Rich console for interactive output.
         interactive: Whether to render via Rich.
+        overlay: Optional overlay category map (--category-map).
+        unmapped: Run-wide accumulator for unmapped BofA category
+            strings; appended to in place.
 
     Returns:
         True when the POST succeeded (individual skips are reported
         but do not fail the run); False when it raised.
     """
+    payload_items = []
+    for item in items:
+        raw_category = str(item["details"].get("transaction_category") or "")
+        lookup = category_for(raw_category, overlay)
+        if not lookup.known and unmapped is not None:
+            unmapped.add(raw_category)
+        entry = dict(item)
+        if lookup.full_name is not None:
+            entry["category"] = lookup.full_name
+        payload_items.append(entry)
+
     try:
         report = client.post(
             f"/api/v1/bank-accounts/{bank_account_id}/transaction-details/",
-            {"details": items},
+            {"details": payload_items},
         )
     except Exception as exc:
         if interactive:
@@ -865,6 +890,18 @@ def _setup_logging(
         "pauses on large histories."
     ),
 )
+@click.option(
+    "--category-map",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "YAML overlay for the built-in BofA-to-mibudge category map: "
+        "normalized 'group:name' keys to mibudge category full names "
+        "(or null for 'leave unassigned').  Overlay entries win over "
+        "the built-ins; use it to map BofA categories discovered "
+        "after this importer shipped.  [env var: MIBUDGE_CATEGORY_MAP]"
+    ),
+)
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -893,6 +930,7 @@ def cli_cmd(
     save_only: bool,
     details_limit: int,
     details_all: bool,
+    category_map: Path | None,
     verbose: bool,
     plain: bool,
     theme_name: str,
@@ -905,6 +943,21 @@ def cli_cmd(
             "--details-all only applies to --save-only offline captures."
         )
 
+    # --- Category translation setup ---
+    # Mapping BofA's category vocabulary onto mibudge categories is
+    # the importer's job (mibudge only understands its own category
+    # full names).  The optional overlay extends/overrides the
+    # built-in BOFA_CATEGORY_MAP; any BofA string found in neither is
+    # collected here and reported at the end of the run.
+    overlay: dict[str, str | None] | None = None
+    if category_map is not None:
+        try:
+            overlay = load_overlay_map(category_map)
+        except (ValueError, yaml.YAMLError) as e:
+            raise click.ClickException(str(e)) from e
+    unmapped_categories: set[str] = set()
+
+    # --- BofA credentials ---
     if bofa_onepassword_url is not None:
         bofa_id, bofa_passcode = _read_bofa_credentials_from_1password(
             bofa_onepassword_url
@@ -915,6 +968,7 @@ def cli_cmd(
         if bofa_passcode is None:
             bofa_passcode = click.prompt("BofA Passcode", hide_input=True)
 
+    # --- Output & logging setup ---
     console = Console(theme=get_theme(theme_name).rich, stderr=True)
     interactive = console.is_terminal and not plain
     _setup_logging(verbose, interactive, console=console)
@@ -1304,6 +1358,8 @@ def cli_cmd(
                         acct_name,
                         console,
                         interactive,
+                        overlay=overlay,
+                        unmapped=unmapped_categories,
                     ):
                         any_error = True
 
@@ -1324,11 +1380,24 @@ def cli_cmd(
     except KeyboardInterrupt as e:
         raise click.Abort() from e
 
+    # --- Run summary & exit status ---
     if session_lost:
         logger.warning(
             "BofA terminated the login session mid-run; unfetched details "
             "stay pending server-side and will be retried next run."
         )
+    if unmapped_categories:
+        listing = ", ".join(repr(c) for c in sorted(unmapped_categories))
+        msg = (
+            "BofA categories with no mapping (their transactions were "
+            "left unassigned): "
+            f"{listing}.  Add them to a --category-map overlay file or "
+            "extend BOFA_CATEGORY_MAP in importers/bofa_categories.py."
+        )
+        if interactive:
+            console.print(f"[warning]{msg}[/warning]")
+        else:
+            logger.warning("%s", msg)
     if any_error:
         raise SystemExit(1)
 

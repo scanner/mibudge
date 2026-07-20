@@ -13,7 +13,6 @@ These tools will eventually live in their own repository. For now they share the
 | Statement importer | `python -m importers import` | Parse bank statement files (OFX/QFX or BofA CSV) and POST new transactions to mibudge |
 | BofA live scraper | `python -m importers.import_bofa_live` | Log in to Bank of America, scrape all accessible accounts, and sync each one into mibudge via the `sync-scrape` endpoint |
 | BofA saved-scrape replayer | `python -m importers.import_bofa_saved` | Replay saved BofA scrape JSON files through the same `sync-scrape` endpoint without re-logging in to BofA |
-| BofA category harvester | `python -m importers.harvest_bofa_categories` | Discover BofA's transaction-category vocabulary and propose a mapping onto mibudge categories |
 | Budget backfill | `python -m importers backfill_budget` | Interactively allocate historical transactions to a budget, month by month |
 
 ---
@@ -212,11 +211,11 @@ If BofA requires 2FA, the scraper prompts for the code interactively via stdin. 
 
 ### Transaction details enrichment
 
-For posted transactions BofA can serve a per-transaction detail record (merchant name, "CITY, ST" location, category, ISO 18245 MCC, masked virtual card number). After each account's `sync-scrape` POST, the server reports `details_needed` -- the rows whose DB transaction has never been enriched -- and the importer fetches those details while the scrape session is still open, then POSTs them to the `transaction-details` endpoint. The server stores the raw dict, extracts the merchant columns, seeds the transaction's category (and its unassigned splits) from the bank's hint, and recomposes the display description ("Trader Joes -- Menlo Park, CA (Grocery Stores and Supermarkets)") unless the user has edited it.
+For posted transactions BofA can serve a per-transaction detail record (merchant name, "CITY, ST" location, category, ISO 18245 MCC, masked virtual card number). After each account's `sync-scrape` POST, the server reports `details_needed` -- the rows whose DB transaction has never been enriched -- and the importer fetches those details while the scrape session is still open, then POSTs them to the `transaction-details` endpoint. The importer translates BofA's category string into a mibudge category full name (see Category mapping below) and submits it with each item; the server stores the raw dict, extracts the merchant columns, seeds the transaction's category (and its unassigned splits) when unassigned, and recomposes the display description ("Trader Joes -- Menlo Park, CA (Grocery Stores and Supermarkets)") unless the user has edited it.
 
 Two things keep this under BofA's rate limit (a burst of ~40-50 detail-dialog opens wedges the page and can kill the login session):
 
-- **A run-wide fetch budget.** `--details-limit` (default 30) counts dialog opens across all accounts in the run, paced with the same delays and wedge recovery as the category harvester. Rows left over stay unenriched server-side and are re-reported by the next sync, so a backfill converges over successive runs. `--details-limit 0` disables detail fetching.
+- **A run-wide fetch budget.** `--details-limit` (default 30) counts dialog opens across all accounts in the run, paced with empirically tuned delays and wedge recovery. Rows left over stay unenriched server-side and are re-reported by the next sync, so a backfill converges over successive runs. `--details-limit 0` disables detail fetching.
 - **Merchant-copy.** BofA's details are stable per merchant, so each merchant is fetched only once per run; the merchant's other rows get a synthesized copy at zero dialog cost (provenance-marked `details_source: merchant-copy`, and without the per-transaction `virtual_card_number`). In practice a backfill costs one fetch per *merchant*, not per transaction.
 
 ### Saving scrape output
@@ -256,76 +255,42 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 
 ---
 
-## BofA Category Harvester
+## BofA Category Mapping
 
-`python -m importers.harvest_bofa_categories` discovers the vocabulary of
-`Transaction category` strings that Bank of America assigns to
-transactions, and proposes a mapping onto mibudge's own categories. It
-needs no mibudge server connection -- the proposal is computed locally
-against the planned global category list. Its output feeds the
-`seed_category_aliases` management command (see
-[management-commands.md](management-commands.md)); the category model and
-resolution rules are documented in
-[transaction-categories.md](transaction-categories.md).
+Translating BofA's category vocabulary (`Groceries : Groceries`,
+`Shopping & Entertainment : Electronics`, ...) into mibudge categories
+is the **importer's job** -- mibudge only understands its own category
+full names (`"{group} : {name}"`), submitted with each
+transaction-details item. See
+[transaction-categories.md](transaction-categories.md) for the model
+side.
 
-Requires the `importers-bofa` group and bofa-scraper >= 1.1.0 (for
-`get_transaction_details`). Credentials resolve exactly like the live
-scraper (`BOFA_ID`/`BOFA_PASSCODE`, flags, or `BOFA_ONEPASSWORD_URL`).
+Three layers, all in `importers/bofa_categories.py`:
 
-```bash
-uv run --group importers-bofa python -m importers.harvest_bofa_categories \
-    --no-headless --max-details 15 --save-details bofa-details.json
-```
+- **`BOFA_CATEGORY_MAP`** -- the built-in reviewed mapping, covering
+  every category string BofA has been observed to use. A `null` target
+  means "deliberately leave the transaction unassigned" (the user
+  categorizes it).
+- **Overlay map** -- `--category-map FILE` (env var
+  `MIBUDGE_CATEGORY_MAP`) on both the live scraper and the saved-scrape
+  replayer loads a flat YAML mapping that merges over the built-ins.
+  This is how a newly discovered BofA category gets mapped without a
+  code release:
 
-It opens each posted transaction's View/Edit dialog, reads the
-`transaction_category`, and writes a review YAML (proposed mapping +
-confidence per distinct category). Review and edit the `category:`
-targets, then load with `seed_category_aliases`.
+  ```yaml
+  # bofa-category-overlay.yaml
+  'some new bofa group:its name': 'Food & Drink : Groceries'
+  'another one:thing': null   # leave unassigned on purpose
+  ```
 
-### Rate limiting and incremental harvesting
-
-BofA rate-limits detail-dialog opens **aggressively** -- a burst of a few
-dozen wedges the page, and a large burst can terminate the login session
-entirely. The harvester defends against this and is built to run
-**incrementally** across many gentle sessions rather than one long run:
-
-- **Persistent accumulator** (`--state`, default
-  `bofa-harvest-state.json`): loaded at startup, saved at the end and on
-  interrupt. Each run skips everything already gathered -- known merchants
-  and already-processed transactions -- and spends its fetch budget only
-  on transactions never seen before. Run repeatedly with the same file to
-  build up the full vocabulary over time.
-- **Merchant skip**: once a merchant's category is known, later
-  transactions at the same merchant are credited without re-opening the
-  dialog (categories are stable per merchant).
-- **Pacing and recovery**: `--delay` between fetches, a proactive pause
-  every `--batch-size` fetches, and wedge detection that cools down and
-  reloads the page (`--wedge-*`); a logged-out session ends the run
-  cleanly with partial results saved.
-- **`--import-details`** bootstraps the accumulator from a prior
-  `--save-details` JSON so those transactions are never re-fetched.
-
-> **PII:** the review YAML, details JSON, and state file contain real
-> transaction descriptions (payroll strings, names, account fragments)
-> and are gitignored. The committed alias seed file must contain only
-> `provider`/`alias_key`/`category` mappings -- no `samples:`.
-
-| Option | Description |
-|--------|-------------|
-| `-a, --account SUBSTR` | Harvest only matching accounts (repeatable) |
-| `--state FILE` | Persistent accumulator (default `bofa-harvest-state.json`) |
-| `--reset-state` | Ignore any existing state file and start fresh |
-| `--import-details FILE` | Seed the accumulator from a prior `--save-details` JSON |
-| `--max-details N` | Cap detail fetches per account (0 = unlimited) |
-| `--delay SECONDS` | Sleep between fetches (default 3.0) |
-| `--batch-size N` / `--batch-pause SECONDS` | Proactive pause every N fetches |
-| `--wedge-threshold N` / `--wedge-cooldown SECONDS` / `--max-recoveries N` | Wedge detection and recovery |
-| `--skip-known-merchants / --no-skip-known-merchants` | Toggle the merchant skip (default on) |
-| `--save-details FILE` | Append every fetched details dict (enrichment test data) |
-| `-o, --output FILE` | Review YAML destination (default timestamped) |
-| `--no-headless` | Show the browser (needed for 2FA) |
-
----
+  Keys are normalized provider strings (split on the first colon,
+  whitespace collapsed, casefolded); values are mibudge category full
+  names or `null`.
+- **End-of-run report** -- any BofA category found in neither map is
+  listed at the end of the run (its transactions land unassigned).
+  Add those keys to the overlay, or extend `BOFA_CATEGORY_MAP` and
+  open a PR -- a unit test verifies every built-in target names a
+  seeded canonical category.
 
 ## Pending Transactions
 

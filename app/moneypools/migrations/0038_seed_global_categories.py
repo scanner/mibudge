@@ -1,12 +1,27 @@
-# Seed the 150 global TransactionCategory rows.
+# Seed the canonical global TransactionCategory base set (155 rows).
 #
-# The pairs are the old TransactionCategory TextChoices enum values
-# (deleted in this change set, hence inlined here as a literal),
-# split on the first colon with whitespace stripped, minus the
-# "Uncategorized:Unassigned" sentinel -- NULL now means unassigned.
+# Categories are flat (group, name) pairs; a NULL category on a
+# transaction or allocation means unassigned.  Conventions embodied by
+# the list:
 #
-# importers/harvest_bofa_categories.py carries a copy of this list for
-# its standalone dry-run resolution; keep the two in sync.
+# - Insurance rows live in their domain group (Auto Insurance under
+#   Transportation, Health Insurance under Health & Medical, ...) so
+#   domain rollups include premiums, and every insurance row's NAME
+#   ends in "Insurance" so a name-contains query answers "what is all
+#   my insurance spend".
+# - The Uncategorized group is the triage bucket for transactions the
+#   user should look at and reassign: its rows record what KIND of
+#   payment something was (Cash, Checks, Insurance, Other Shopping)
+#   when the data cannot say what domain it belongs to.
+#
+# Users create their own categories via the API; this list is only the
+# shared base set.  Provider vocabularies are the IMPORTERS' concern:
+# an importer translates its provider's category strings to these full
+# names before submitting transaction details -- mibudge itself
+# carries no provider mappings.
+#
+# app/tests/moneypools/test_categories.py verifies that the BofA
+# importer's category-map targets exist among the seeded rows.
 
 from django.db import migrations
 
@@ -51,7 +66,7 @@ GLOBAL_CATEGORIES: list[tuple[str, str]] = [
     ("Financial", "Taxes, Federal"),
     ("Financial", "Taxes, Other"),
     ("Financial", "Taxes, State"),
-    ("Food & Drink", "Alcohol & Bars"),
+    ("Food & Drink", "Alcohol"),
     ("Food & Drink", "Coffee & Tea"),
     ("Food & Drink", "Dessert"),
     ("Food & Drink", "Fast Food"),
@@ -71,6 +86,7 @@ GLOBAL_CATEGORIES: list[tuple[str, str]] = [
     ("Health & Medical", "Other Health & Medical"),
     ("Health & Medical", "Pharmacies"),
     ("Health & Medical", "Prescriptions"),
+    ("Home", "Appliances"),
     ("Home", "Furnishings"),
     ("Home", "Home Insurance"),
     ("Home", "Home Purchase"),
@@ -141,16 +157,20 @@ GLOBAL_CATEGORIES: list[tuple[str, str]] = [
     ("Transportation", "Parking Tickets"),
     ("Transportation", "Public Transit"),
     ("Transportation", "Shipping"),
-    ("Transportation", "Taxies"),
+    ("Transportation", "Taxis & Rideshare"),
     ("Travel", "Car Rental"),
     ("Travel", "Flights"),
     ("Travel", "Hotels"),
+    ("Travel", "Other Travel"),
     ("Travel", "Tours & Cruises"),
     ("Travel", "Train"),
     ("Travel", "Travel Buses"),
     ("Travel", "Travel Dining"),
     ("Travel", "Travel Entertainment"),
+    ("Travel", "Travel Insurance"),
     ("Uncategorized", "Cash"),
+    ("Uncategorized", "Checks"),
+    ("Uncategorized", "Insurance"),
     ("Uncategorized", "Other Shopping"),
     ("Uncategorized", "Unknown"),
     ("Utilities", "Cable"),
@@ -181,12 +201,17 @@ def seed_categories(apps, schema_editor):
 
 
 def unseed_categories(apps, schema_editor):
-    """Delete the seeded global rows (custom user rows are untouched)."""
+    """Delete ALL global rows (custom user-owned rows are untouched).
+
+    Deliberately not limited to the seed list: reversing past this
+    migration means removing the category feature's base set, and any
+    extra owner-NULL rows (e.g. historical auto-created ones) would
+    otherwise linger and pollute a later re-seed.  Safe because 0038
+    can only be reversed after 0039+ have been reversed, which drop
+    every FK column that could reference these rows.
+    """
     TransactionCategory = apps.get_model("moneypools", "TransactionCategory")
-    seeded = {(g.casefold(), n.casefold()) for g, n in GLOBAL_CATEGORIES}
-    for category in TransactionCategory.objects.filter(owner__isnull=True):
-        if (category.group.casefold(), category.name.casefold()) in seeded:
-            category.delete()
+    TransactionCategory.objects.filter(owner__isnull=True).delete()
 
 
 class Migration(migrations.Migration):

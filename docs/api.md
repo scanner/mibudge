@@ -607,7 +607,7 @@ Reconcile this account against a fresh snapshot from a live bank scraper.  All e
 
 **Operation:** `bank_accounts_transaction_details_create`
 
-Apply per-transaction detail records (merchant name, location, MCC, the bank's category hint, virtual card number) fetched by a live scraper to posted transactions on this account.  Each raw details dict is stored verbatim on its transaction; merchant columns are extracted, the category hint seeds the transaction's category (and its unassigned allocations) when NULL, and the display description is recomposed on first enrichment unless the user has edited it.  Rows already enriched are skipped unless `overwrite` is true; pending rows are always skipped.  Per-item outcomes are returned in submission order.
+Apply per-transaction detail records (merchant name, location, MCC, virtual card number) fetched by a live scraper to posted transactions on this account.  Each raw details dict is stored verbatim on its transaction and the merchant columns are extracted from it.  An item's optional `category` is a mibudge category full name ('{group} : {name}') -- importers translate their provider's category vocabulary before submitting.  It seeds the transaction's category (and its unassigned allocations) when NULL; an unknown name yields a per-item warning and leaves the transaction unassigned.  The display description is recomposed on first enrichment unless the user has edited it.  Rows already enriched are skipped unless `overwrite` is true; pending rows are always skipped.  Per-item outcomes are returned in submission order.
 
 **Parameters:**
 
@@ -3651,11 +3651,17 @@ action, not writable here.
 One (transaction, raw details dict) pair to apply.
 
 The details dict is stored verbatim on the transaction (it is the
-provenance record); the service extracts the merchant columns and
-the category hint from it.
+provenance record); the service extracts the merchant columns from
+it.  `category` is a mibudge category full name ('{group} :
+{name}') -- the IMPORTER translates its provider's vocabulary
+before submitting; mibudge carries no provider mappings.  The name
+is resolved case-insensitively among the categories visible to the
+caller; an unknown name yields a per-item warning and the
+transaction stays unassigned.
 
 - **`transaction`** (`string`) *(required)*
 - **`details`** (`object`) *(required)*
+- **`category`** (`string`)
 
 ### TransactionDetailsReport
 

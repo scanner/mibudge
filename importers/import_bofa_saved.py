@@ -34,11 +34,13 @@ from pathlib import Path
 # 3rd party imports
 #
 import click
+import yaml
 from rich.console import Console
 from rich.logging import RichHandler
 
 # Project imports
 #
+from importers.bofa_categories import load_overlay_map
 from importers.client import AuthenticationError
 from importers.import_bofa_live import (
     SavedScrape,
@@ -204,6 +206,17 @@ def _setup_logging(
         "Skipped on --dry-run."
     ),
 )
+@click.option(
+    "--category-map",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "YAML overlay for the built-in BofA-to-mibudge category map: "
+        "normalized 'group:name' keys to mibudge category full names "
+        "(or null for 'leave unassigned').  Overlay entries win over "
+        "the built-ins.  [env var: MIBUDGE_CATEGORY_MAP]"
+    ),
+)
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -223,21 +236,39 @@ def cli_cmd(
     trust_local_certs: bool,
     dry_run: bool,
     run_funding: bool,
+    category_map: Path | None,
     verbose: bool,
     plain: bool,
     theme_name: str,
 ) -> None:
     """CLI entry point for replaying saved BofA scrape files."""
+    # --- Output & logging setup ---
     console = Console(theme=get_theme(theme_name).rich, stderr=True)
     interactive = console.is_terminal and not plain
     _setup_logging(verbose, interactive, console=console)
+
+    # --- Category translation setup ---
+    # Mapping BofA's category vocabulary onto mibudge categories is
+    # the importer's job (mibudge only understands its own category
+    # full names).  The optional overlay extends/overrides the
+    # built-in BOFA_CATEGORY_MAP; any BofA string found in neither is
+    # collected here and reported at the end of the run.
+    overlay: dict[str, str | None] | None = None
+    if category_map is not None:
+        try:
+            overlay = load_overlay_map(category_map)
+        except (ValueError, yaml.YAMLError) as e:
+            raise click.ClickException(str(e)) from e
+    unmapped_categories: set[str] = set()
 
     if dry_run and interactive:
         console.print(
             "[bold warning]DRY RUN[/bold warning] -- no changes will be made."
         )
 
-    # Load and validate all files up front so we fail fast before auth.
+    # --- Load & validate the saved scrape files ---
+    # All files are parsed up front so a bad file fails the run before
+    # any authentication or imports happen.
     saved_accounts: list[tuple[Path, SavedScrape]] = []
     for path in files:
         try:
@@ -255,6 +286,7 @@ def cli_cmd(
 
     any_error = False
 
+    # --- Connect and authenticate to mibudge ---
     try:
         with _build_client(
             url=url,
@@ -276,11 +308,14 @@ def cli_cmd(
                 client.authenticate()
                 logger.info("Authenticated to mibudge.")
 
+            # Scraped transaction dates are naive; the sync payload
+            # interprets them in the account owner's timezone.
             user_timezone: str = client.get("/api/v1/users/me/").get(
                 "timezone", "UTC"
             )
             logger.info("User timezone: %s", user_timezone)
 
+            # --- Replay each saved account snapshot ---
             for path, saved in saved_accounts:
                 acct_name = saved.account_name
                 if interactive:
@@ -294,6 +329,9 @@ def cli_cmd(
 
                 account = _ReplayAccount(saved)
 
+                # The mibudge bank account is located by the last-4
+                # digits embedded in the BofA account name -- the only
+                # stable identifier a saved snapshot carries.
                 last_four = _extract_last_four(acct_name)
                 if last_four is None:
                     if interactive:
@@ -340,6 +378,10 @@ def cli_cmd(
                 except ValueError:
                     scraped_at = datetime.now(UTC)
 
+                # --- Submit the snapshot through scrape-sync ---
+                # Same endpoint and payload as the live importer; the
+                # server dedups against existing rows and reports
+                # which posted rows still need details.
                 payload, posted_count, pending_count = _build_sync_payload(
                     account, scraped_at, user_timezone
                 )
@@ -383,9 +425,15 @@ def cli_cmd(
                             acct_name,
                             console,
                             interactive,
+                            overlay=overlay,
+                            unmapped=unmapped_categories,
                         ):
                             any_error = True
 
+                # Funding only fires when the snapshot contained at
+                # least one posted transaction -- pending-only replays
+                # do not advance last_posted_through and should not
+                # trigger funding.
                 if not dry_run and run_funding and posted_count > 0:
                     _run_funding(
                         client,
@@ -398,6 +446,20 @@ def cli_cmd(
         raise click.ClickException(str(e)) from e
     except KeyboardInterrupt as e:
         raise click.Abort() from e
+
+    # --- Run summary & exit status ---
+    if unmapped_categories:
+        listing = ", ".join(repr(c) for c in sorted(unmapped_categories))
+        msg = (
+            "BofA categories with no mapping (their transactions were "
+            "left unassigned): "
+            f"{listing}.  Add them to a --category-map overlay file or "
+            "extend BOFA_CATEGORY_MAP in importers/bofa_categories.py."
+        )
+        if interactive:
+            console.print(f"[warning]{msg}[/warning]")
+        else:
+            logger.warning("%s", msg)
 
     if any_error:
         raise SystemExit(1)

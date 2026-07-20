@@ -49,6 +49,7 @@ from moneypools.models import (
 from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
 from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
+from moneypools.service import categories as categories_svc
 from moneypools.service import funding as funding_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service import invitation as invitation_svc
@@ -339,13 +340,17 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         summary="Apply scraped transaction details",
         description=(
             "Apply per-transaction detail records (merchant name, "
-            "location, MCC, the bank's category hint, virtual card "
-            "number) fetched by a live scraper to posted transactions "
-            "on this account.  Each raw details dict is stored "
-            "verbatim on its transaction; merchant columns are "
-            "extracted, the category hint seeds the transaction's "
-            "category (and its unassigned allocations) when NULL, and "
-            "the display description is recomposed on first "
+            "location, MCC, virtual card number) fetched by a live "
+            "scraper to posted transactions on this account.  Each "
+            "raw details dict is stored verbatim on its transaction "
+            "and the merchant columns are extracted from it.  An "
+            "item's optional `category` is a mibudge category full "
+            "name ('{group} : {name}') -- importers translate their "
+            "provider's category vocabulary before submitting.  It "
+            "seeds the transaction's category (and its unassigned "
+            "allocations) when NULL; an unknown name yields a "
+            "per-item warning and leaves the transaction unassigned.  "
+            "The display description is recomposed on first "
             "enrichment unless the user has edited it.  Rows already "
             "enriched are skipped unless `overwrite` is true; pending "
             "rows are always skipped.  Per-item outcomes are returned "
@@ -379,9 +384,25 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
                 item_status = transaction_details_svc.STATUS_NOT_FOUND
                 warnings: list[str] = []
             else:
+                category = None
+                category_warnings: list[str] = []
+                category_name = item.get("category")
+                if category_name:
+                    category = categories_svc.find_category_for_user(
+                        request.user, category_name
+                    )
+                    if category is None:
+                        category_warnings.append(
+                            f"unknown category {category_name!r}; "
+                            "transaction left unassigned"
+                        )
                 item_status, warnings = transaction_details_svc.apply_details(
-                    tx, item["details"], overwrite=overwrite
+                    tx,
+                    item["details"],
+                    category=category,
+                    overwrite=overwrite,
                 )
+                warnings = category_warnings + warnings
             counts[item_status] += 1
             results.append(
                 {

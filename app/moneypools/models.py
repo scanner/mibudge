@@ -398,57 +398,6 @@ class TransactionCategory(MoneyPoolBaseClass):
 ########################################################################
 ########################################################################
 #
-class TransactionCategoryAlias(MoneyPoolBaseClass):
-    """Maps a provider's raw category string to a TransactionCategory.
-
-    Providers (e.g. the BofA scraper) supply category hints in their
-    own vocabulary.  The resolver (moneypools.service.categories)
-    consults this table first; rows are written both by the reviewed
-    seed file (seed_category_aliases command) and automatically on
-    every successful non-alias resolution, so a bad auto-mapping can be
-    re-pointed in the admin without touching transaction data.
-
-    alias_key is the normalized form of the provider string:
-    'group:name', casefolded, whitespace collapsed (see
-    service.categories.alias_key).
-    """
-
-    provider = models.CharField(
-        max_length=32,
-        help_text='Source of the raw category string (e.g. "bofa").',
-    )
-    alias_key = models.CharField(
-        max_length=140,
-        help_text=(
-            'Normalized provider category ("group:name", casefolded, '
-            "whitespace collapsed)."
-        ),
-    )
-    category = models.ForeignKey(
-        TransactionCategory,
-        to_field="id",
-        on_delete=models.CASCADE,
-        related_name="aliases",
-    )
-
-    class Meta:
-        verbose_name_plural = "transaction category aliases"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["provider", "alias_key"],
-                name="transaction_category_alias_unique_per_provider",
-            ),
-        ]
-
-    ####################################################################
-    #
-    def __str__(self) -> str:
-        return f"{self.provider}:{self.alias_key} -> {self.category}"
-
-
-########################################################################
-########################################################################
-#
 # NOTE: we must make sure that there is always a 'safe to spend'
 # budget. It is displayed somewhat specially.
 #

@@ -12,7 +12,9 @@ dict to a Transaction:
 * the provider's location string is parsed into structured
   city/region/country columns (location fields are only written when
   currently empty -- user-entered values always win),
-* the provider's category hint seeds `Transaction.category` (and the
+* the caller-supplied category (importers translate their provider's
+  vocabulary into a mibudge category before submitting; mibudge
+  carries no provider mappings) seeds `Transaction.category` (and the
   transaction's still-NULL allocations) when unassigned,
 * on first enrichment the display `description` is recomposed unless
   the user has edited it.
@@ -38,8 +40,11 @@ from django.db import transaction as db_transaction
 
 # Project imports
 from moneypools.description_utils import compose_enriched_description
-from moneypools.models import Transaction, TransactionAllocation
-from moneypools.service.categories import resolve_provider_category
+from moneypools.models import (
+    Transaction,
+    TransactionAllocation,
+    TransactionCategory,
+)
 
 logger = logging.getLogger("moneypools.service.transaction_details")
 
@@ -171,8 +176,8 @@ def _extract_mcc(value: Any, warnings: list[str]) -> str | None:
 def apply_details(
     tx: Transaction,
     raw: dict[str, Any],
+    category: TransactionCategory | None = None,
     overwrite: bool = False,
-    provider: str = "bofa",
 ) -> tuple[str, list[str]]:
     """Apply one raw provider details dict to a Transaction.
 
@@ -196,9 +201,11 @@ def apply_details(
     Args:
         tx: The Transaction to enrich.
         raw: The provider's raw details dict (stored verbatim).
+        category: The already-resolved category to seed, or None.  The
+            caller resolves the importer-supplied full name (see
+            service.categories.find_category_for_user).
         overwrite: Re-apply scraper-owned fields over an existing
             enrichment.
-        provider: Provider key for category alias resolution.
 
     Returns:
         A (status, warnings) tuple; status is one of the STATUS_*
@@ -243,14 +250,11 @@ def apply_details(
             if country and not tx.merchant_country:
                 tx.merchant_country = country
 
-        category_raw = raw.get("transaction_category")
-        if category_raw and tx.category is None:
-            category = resolve_provider_category(provider, str(category_raw))
-            if category is not None:
-                tx.category = category
-                TransactionAllocation.objects.filter(
-                    transaction=tx, category__isnull=True
-                ).update(category=category)
+        if category is not None and tx.category is None:
+            tx.category = category
+            TransactionAllocation.objects.filter(
+                transaction=tx, category__isnull=True
+            ).update(category=category)
 
         if first_enrichment and not tx.description_user_edited:
             composed = compose_enriched_description(
@@ -265,8 +269,7 @@ def apply_details(
         tx.save()
 
     logger.info(
-        "Applied %s transaction details to %s (%s warnings)",
-        provider,
+        "Applied transaction details to %s (%s warnings)",
         tx.id,
         len(warnings),
     )

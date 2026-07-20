@@ -1736,12 +1736,24 @@ class TransactionDetailsItemSerializer(serializers.Serializer):
     """One (transaction, raw details dict) pair to apply.
 
     The details dict is stored verbatim on the transaction (it is the
-    provenance record); the service extracts the merchant columns and
-    the category hint from it.
+    provenance record); the service extracts the merchant columns from
+    it.  `category` is a mibudge category full name ('{group} :
+    {name}') -- the IMPORTER translates its provider's vocabulary
+    before submitting; mibudge carries no provider mappings.  The name
+    is resolved case-insensitively among the categories visible to the
+    caller; an unknown name yields a per-item warning and the
+    transaction stays unassigned.
     """
 
     transaction = serializers.UUIDField()
     details = serializers.DictField()
+    category = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        default=None,
+        max_length=140,
+    )
 
 
 ########################################################################

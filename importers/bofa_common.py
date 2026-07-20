@@ -1,13 +1,11 @@
 """
 Shared BofA scraping primitives for the importers.
 
-Used by both `import_bofa_live` (transaction import + details
-enrichment) and `harvest_bofa_categories` (offline category-vocabulary
-harvesting).  Everything here exists because BofA rate-limits
-detail-dialog opens aggressively: a burst of ~40-50 opens in quick
-succession wedges the page (the dialog stops opening) and can
-terminate the login session entirely.  The machinery in this module
-paces fetches, detects the wedge, and recovers when possible:
+Everything here exists because BofA rate-limits detail-dialog opens
+aggressively: a burst of ~40-50 opens in quick succession wedges the
+page (the dialog stops opening) and can terminate the login session
+entirely.  The machinery in this module paces fetches, detects the
+wedge, and recovers when possible:
 
 * `normalize_description` / `merchant_signature` / `txn_identity` --
   stable keys derived from scraped activity rows.
@@ -23,11 +21,11 @@ paces fetches, detects the wedge, and recovers when possible:
   per-transaction virtual_card_number) for the merchant's other rows
   at zero dialog cost.
 
-Empirical pacing defaults (from harvest_bofa_categories field runs):
-3s between fetches, a 120s pause every 15 fetches, wedge recovery
-after 3 consecutive failures with a 300s cooldown, give up after 2
-recoveries.  The default per-run fetch budget of 30 keeps a run at
-two batches -- comfortably under the observed wedge burst.
+Empirical pacing defaults (from 2026-07 field runs against real
+accounts): 3s between fetches, a 120s pause every 15 fetches, wedge
+recovery after 3 consecutive failures with a 300s cooldown, give up
+after 2 recoveries.  The default per-run fetch budget of 30 keeps a
+run at two batches -- comfortably under the observed wedge burst.
 """
 
 # system imports
@@ -111,9 +109,9 @@ def merchant_signature(desc: str) -> str:
     is stable per merchant, so detail fetches can be skipped once one
     transaction for the merchant has been handled.  Occasional
     over-merging is possible (digits are stripped, though the city
-    usually survives); consumers must tolerate it -- the harvester
-    only miscounts, and the importer marks copies with provenance so
-    a mis-copy is visible and correctable.
+    usually survives); consumers must tolerate it -- the importer
+    marks merchant copies with provenance so a mis-copy is visible
+    and correctable.
 
     Args:
         desc: The normalized activity-row description.
@@ -357,7 +355,7 @@ def fetch_details_for_account(
     unfetched when the budget runs out stay details-NULL server-side
     and are re-reported by the next sync's details_needed.
 
-    Wedge handling mirrors the harvester: after `wedge_threshold`
+    Wedge handling: after `wedge_threshold`
     consecutive failures the page is cooled down, reloaded, and
     re-scraped via `recover_session`; the remaining worklist is then
     re-resolved against the fresh scrape by `txn_identity` (the old

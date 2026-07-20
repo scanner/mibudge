@@ -27,7 +27,6 @@ from .models import (
     Transaction,
     TransactionAllocation,
     TransactionCategory,
-    TransactionCategoryAlias,
 )
 from .service import bank_account as bank_account_svc
 from .service import budget as budget_svc
@@ -593,7 +592,7 @@ class TransactionCategoryAdmin(admin.ModelAdmin):
     )
     list_filter = ("archived", "group")
     # search_fields powers the autocomplete widgets on Transaction /
-    # TransactionAllocation / TransactionCategoryAlias admins.
+    # TransactionAllocation admins.
     search_fields = ("group", "name")
     ordering = ("group", "name")
     readonly_fields = ("id", "created_at", "modified_at")
@@ -603,38 +602,6 @@ class TransactionCategoryAdmin(admin.ModelAdmin):
         "name",
         "owner",
         "archived",
-        "created_at",
-        "modified_at",
-    )
-
-
-########################################################################
-########################################################################
-#
-@admin.register(TransactionCategoryAlias)
-class TransactionCategoryAliasAdmin(admin.ModelAdmin):
-    """Admin for provider category aliases.
-
-    Re-point a bad auto-mapping by editing its 'category' here -- the
-    resolver consults this table first, so the correction takes effect
-    on the next import without touching transaction data.
-    """
-
-    list_display = (
-        "provider",
-        "alias_key",
-        "category",
-        "id",
-    )
-    list_filter = ("provider",)
-    search_fields = ("alias_key", "category__group", "category__name")
-    autocomplete_fields = ("category",)
-    readonly_fields = ("id", "created_at", "modified_at")
-    fields = (
-        "id",
-        "provider",
-        "alias_key",
-        "category",
         "created_at",
         "modified_at",
     )

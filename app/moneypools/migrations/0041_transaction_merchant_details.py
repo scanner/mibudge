@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("moneypools", "0042_transaction_category_backfill_auto_spend"),
+        ("moneypools", "0040_transaction_category_and_auto_spend"),
     ]
 
     operations = [
