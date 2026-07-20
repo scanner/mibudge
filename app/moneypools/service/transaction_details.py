@@ -8,7 +8,10 @@ dict to a Transaction:
 
 * the raw dict is stored verbatim in `Transaction.details` for
   provenance (NULL details == "never enriched"),
-* merchant identity fields are extracted into queryable columns,
+* merchant identity fields are extracted into queryable columns, with
+  a cleanup pass (service/merchant_enrichment.py) that recovers the
+  real store behind a payment-platform prefix (Square, Toast,
+  DoorDash, ...) or extends a truncated provider-resolved name,
 * the provider's location string is parsed into structured
   city/region/country columns (location fields are only written when
   currently empty -- user-entered values always win),
@@ -45,6 +48,7 @@ from moneypools.models import (
     TransactionAllocation,
     TransactionCategory,
 )
+from moneypools.service import merchant_enrichment as merchant_enrichment_svc
 
 logger = logging.getLogger("moneypools.service.transaction_details")
 
@@ -178,6 +182,7 @@ def apply_details(
     raw: dict[str, Any],
     category: TransactionCategory | None = None,
     overwrite: bool = False,
+    recompose_description: bool = False,
 ) -> tuple[str, list[str]]:
     """Apply one raw provider details dict to a Transaction.
 
@@ -195,8 +200,15 @@ def apply_details(
       fire for scraped transactions -- their default allocation
       exists before details arrive.  This is initial seeding only,
       never edit propagation.
-    * The display description is recomposed only on FIRST enrichment
-      and only when the user has not edited it.
+    * The display description is recomposed on first enrichment, or
+      on a later `overwrite` when `recompose_description` is also set
+      -- both gated on the user not having edited it.
+      `recompose_description` defaults off so a routine importer
+      overwrite (re-applying a fresher scrape) does not churn a
+      description the user has come to expect; the
+      reenrich_merchant_identity management command sets it because
+      refreshing stale display text for historical rows is its entire
+      purpose.
 
     Args:
         tx: The Transaction to enrich.
@@ -206,6 +218,8 @@ def apply_details(
             service.categories.find_category_for_user).
         overwrite: Re-apply scraper-owned fields over an existing
             enrichment.
+        recompose_description: Also recompose the description on an
+            `overwrite` pass (not just first enrichment).
 
     Returns:
         A (status, warnings) tuple; status is one of the STATUS_*
@@ -225,6 +239,31 @@ def apply_details(
         tx.merchant_name = _clean_str(
             raw.get("merchant_name"), 128, "merchant_name", warnings
         )
+
+        # Merchant identity cleanup (service/merchant_enrichment.py):
+        # detect a known payment-platform prefix and recover the real
+        # store behind it, or -- for direct purchases -- try
+        # extend-only DBA-name recovery from the raw description (e.g.
+        # BofA's "COSTCO" -> "COSTCO GAS").  Always recomputed from raw
+        # so an overwrite re-derives it fresh.
+        intermediary = merchant_enrichment_svc.split_intermediary(
+            tx.merchant_name, tx.raw_description
+        )
+        if intermediary is not None:
+            tx.merchant_intermediary = intermediary.token
+            if intermediary.store_name:
+                tx.merchant_name = _clean_str(
+                    intermediary.store_name, 128, "merchant_name", warnings
+                )
+        else:
+            tx.merchant_intermediary = None
+            refined = merchant_enrichment_svc.refine_merchant_name(
+                tx.merchant_name, tx.raw_description
+            )
+            tx.merchant_name = _clean_str(
+                refined, 128, "merchant_name", warnings
+            )
+
         tx.merchant_category = _clean_str(
             raw.get("merchant_category"), 128, "merchant_category", warnings
         )
@@ -256,12 +295,19 @@ def apply_details(
                 transaction=tx, category__isnull=True
             ).update(category=category)
 
-        if first_enrichment and not tx.description_user_edited:
+        if (
+            first_enrichment or recompose_description
+        ) and not tx.description_user_edited:
             composed = compose_enriched_description(
                 merchant_name=tx.merchant_name,
                 city=tx.merchant_city,
                 region=tx.merchant_region,
                 merchant_category=tx.merchant_category,
+                intermediary_display_name=(
+                    intermediary.display_name
+                    if intermediary is not None
+                    else None
+                ),
             )
             if composed:
                 tx.description = composed

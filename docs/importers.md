@@ -213,6 +213,13 @@ If BofA requires 2FA, the scraper prompts for the code interactively via stdin. 
 
 For posted transactions BofA can serve a per-transaction detail record (merchant name, "CITY, ST" location, category, ISO 18245 MCC, masked virtual card number). After each account's `sync-scrape` POST, the server reports `details_needed` -- the rows whose DB transaction has never been enriched -- and the importer fetches those details while the scrape session is still open, then POSTs them to the `transaction-details` endpoint. The importer translates BofA's category string into a mibudge category full name (see Category mapping below) and submits it with each item; the server stores the raw dict, extracts the merchant columns, seeds the transaction's category (and its unassigned splits) when unassigned, and recomposes the display description ("Trader Joes -- Menlo Park, CA (Grocery Stores and Supermarkets)") unless the user has edited it.
 
+**Merchant identity cleanup.** Card networks hide the real store behind a "soft descriptor" prefix for purchases routed through a payment platform (Square "SQ *", Toast "TST*", DoorDash "DD *DOORDASH ...", and others -- see `MerchantIntermediaryPattern` in the django-admin, admin-editable so a newly observed platform needs no code release). The server (`moneypools.service.merchant_enrichment`) recovers the real store into `merchant_name` and records the platform token in `merchant_intermediary`; the composed description appends the platform ("Blue Bottle Coffee -- Menlo Park, CA (Restaurants, via DoorDash)"). For direct purchases with no platform prefix, an extend-only pass recovers a DBA-name distinction BofA's own resolution can erase (e.g. "COSTCO GAS #10" recovering to "COSTCO GAS" rather than staying "COSTCO"). Rows enriched before this landed can be refreshed in place, from their stored `details` JSON, with no re-scrape:
+
+```bash
+uv run python app/manage.py reenrich_merchant_identity
+uv run python app/manage.py reenrich_merchant_identity --account "Chase Checking" --dry-run
+```
+
 Two things keep this under BofA's rate limit (a burst of ~40-50 detail-dialog opens wedges the page and can kill the login session):
 
 - **A run-wide fetch budget.** `--details-limit` (default 30) counts dialog opens across all accounts in the run, paced with empirically tuned delays and wedge recovery. Rows left over stay unenriched server-side and are re-reported by the next sync, so a backfill converges over successive runs. `--details-limit 0` disables detail fetching.

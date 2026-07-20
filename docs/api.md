@@ -1813,6 +1813,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 - `has_details` (query, optional)
 - `merchant_category_code` (query, optional)
 - `merchant_city` (query, optional)
+- `merchant_intermediary` (query, optional)
 - `merchant_name` (query, optional)
 - `merchant_region` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
@@ -1946,6 +1947,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
 - **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_intermediary`** (`string`) *(required, read-only)*
 - **`merchant_address`** (`string`)
 - **`merchant_city`** (`string`)
 - **`merchant_region`** (`string`)
@@ -1995,6 +1997,7 @@ Return a single transaction by UUID.
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
 - **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_intermediary`** (`string`) *(required, read-only)*
 - **`merchant_address`** (`string`)
 - **`merchant_city`** (`string`)
 - **`merchant_region`** (`string`)
@@ -2110,6 +2113,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
 - **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_intermediary`** (`string`) *(required, read-only)*
 - **`merchant_address`** (`string`)
 - **`merchant_city`** (`string`)
 - **`merchant_region`** (`string`)
@@ -2225,6 +2229,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
 - **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_intermediary`** (`string`) *(required, read-only)*
 - **`merchant_address`** (`string`)
 - **`merchant_city`** (`string`)
 - **`merchant_region`** (`string`)
@@ -2301,6 +2306,7 @@ Transition a pending transaction to posted status. Supplies the bank-confirmed p
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
 - **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_intermediary`** (`string`) *(required, read-only)*
 - **`merchant_address`** (`string`)
 - **`merchant_city`** (`string`)
 - **`merchant_region`** (`string`)
@@ -2339,6 +2345,7 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 - `id` (path, required)
 - `merchant_category_code` (query, optional)
 - `merchant_city` (query, optional)
+- `merchant_intermediary` (query, optional)
 - `merchant_name` (query, optional)
 - `merchant_region` (query, optional)
 - `ordering` (query, optional) — Which field to use when ordering the results.
@@ -3556,6 +3563,7 @@ field declaration is needed.
 - **`category`** (`string`)
 - **`category_full_name`** (`string`) *(required, read-only)*
 - **`merchant_name`** (`string`) *(required, read-only)*
+- **`merchant_intermediary`** (`string`) *(required, read-only)*
 - **`merchant_address`** (`string`)
 - **`merchant_city`** (`string`)
 - **`merchant_region`** (`string`)

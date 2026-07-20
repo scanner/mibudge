@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.http import HttpRequest
 from djmoney.money import Money
+from ordered_model.admin import OrderedModelAdmin
 
 # Project imports
 #
@@ -24,6 +25,7 @@ from .models import (
     BankAccountInvitation,
     Budget,
     InternalTransaction,
+    MerchantIntermediaryPattern,
     Transaction,
     TransactionAllocation,
     TransactionCategory,
@@ -602,6 +604,42 @@ class TransactionCategoryAdmin(admin.ModelAdmin):
         "name",
         "owner",
         "archived",
+        "created_at",
+        "modified_at",
+    )
+
+
+########################################################################
+########################################################################
+#
+@admin.register(MerchantIntermediaryPattern)
+class MerchantIntermediaryPatternAdmin(OrderedModelAdmin):
+    """Admin for payment-platform prefix patterns.
+
+    Ordered via django-ordered-model: use the move-up/move-down links
+    (`move_up_down_links`) rather than hand-editing `order` -- the
+    first pattern (in list order) that matches a transaction's raw
+    description wins. Add a row here (or correct one) to extend the
+    vocabulary with no code release; see
+    moneypools.service.merchant_enrichment.
+    """
+
+    list_display = (
+        "token",
+        "display_name",
+        "pattern",
+        "active",
+        "move_up_down_links",
+    )
+    list_filter = ("active",)
+    search_fields = ("token", "display_name", "pattern")
+    readonly_fields = ("id", "created_at", "modified_at")
+    fields = (
+        "id",
+        "token",
+        "display_name",
+        "pattern",
+        "active",
         "created_at",
         "modified_at",
     )

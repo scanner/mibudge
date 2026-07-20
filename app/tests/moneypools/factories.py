@@ -18,6 +18,7 @@ from moneypools.models import (
     EventKind,
     FundingEventOccurrence,
     InternalTransaction,
+    MerchantIntermediaryPattern,
     Transaction,
     TransactionAllocation,
     TransactionCategory,
@@ -261,6 +262,24 @@ class TransactionCategoryFactory(DjangoModelFactory):
     group = "Test Group"
     name = factory.Sequence(lambda n: f"Category {n}")
     owner = None
+
+
+########################################################################
+########################################################################
+#
+class MerchantIntermediaryPatternFactory(DjangoModelFactory):
+    class Meta:
+        model = MerchantIntermediaryPattern
+        # Sequence-based token keeps each built row unique under the
+        # unique=True constraint; order is left unset so django-ordered-
+        # model assigns the next slot (real save(), not the migration's
+        # historical-model path).
+        django_get_or_create = ("token",)
+
+    token = factory.Sequence(lambda n: f"test-platform-{n}")
+    display_name = factory.Sequence(lambda n: f"Test Platform {n}")
+    pattern = r"^TESTPFX\*\s*(?P<store>.+)$"
+    active = True
 
 
 ########################################################################

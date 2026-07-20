@@ -133,6 +133,7 @@ class TransactionFilter(filters.FilterSet):
     merchant_city = filters.CharFilter(lookup_expr="icontains")
     merchant_region = filters.CharFilter(lookup_expr="iexact")
     merchant_category_code = filters.CharFilter()
+    merchant_intermediary = filters.CharFilter(lookup_expr="iexact")
     # The stored value is pre-masked ("XXXX-XXXX-XXXX-1439"), so a
     # last-4 endswith is the only meaningful lookup.
     virtual_card_last4 = filters.CharFilter(
@@ -165,6 +166,7 @@ class TransactionFilter(filters.FilterSet):
             "merchant_city",
             "merchant_region",
             "merchant_category_code",
+            "merchant_intermediary",
             "virtual_card_last4",
             "has_details",
         ]

@@ -342,6 +342,36 @@ class TestApplyDetails:
 
     ################################################################
     #
+    def test_recompose_description_forces_refresh_on_overwrite(
+        self,
+        posted_tx: Transaction,
+        bofa_details: Callable[..., dict[str, Any]],
+    ) -> None:
+        """
+        GIVEN: an enriched transaction with an unedited description
+        WHEN:  overwrite is applied with recompose_description=True
+        THEN:  the description DOES refresh (used by the
+               reenrich_merchant_identity command to fix stale display
+               text on historical rows)
+        """
+        details_svc.apply_details(posted_tx, bofa_details())
+        posted_tx.refresh_from_db()
+
+        details_svc.apply_details(
+            posted_tx,
+            bofa_details(merchant_name="Trader Joes #123"),
+            overwrite=True,
+            recompose_description=True,
+        )
+
+        posted_tx.refresh_from_db()
+        # The refreshed merchant_name reaches the description; location
+        # is unaffected (never clobbered by overwrite either way).
+        assert "Trader Joes #123" in posted_tx.description
+        assert "MENLO PARK" in posted_tx.description
+
+    ################################################################
+    #
     def test_user_location_wins_over_enrichment(
         self,
         posted_tx: Transaction,
@@ -454,6 +484,68 @@ class TestApplyDetails:
         # The raw value always survives in the stored details JSON.
         assert posted_tx.details is not None
         assert posted_tx.details["merchant_category_code"] == raw_mcc
+
+    ################################################################
+    #
+    def test_intermediary_purchase_sets_token_and_composes_via_platform(
+        self,
+        account: BankAccount,
+        transaction_factory: Callable[..., Transaction],
+        bofa_details: Callable[..., dict[str, Any]],
+    ) -> None:
+        """
+        GIVEN: a transaction routed through a known payment platform
+               (Toast), unresolved by the provider's own merchant_name
+        WHEN:  details are applied
+        THEN:  the real store is recovered into merchant_name,
+               merchant_intermediary records the platform token, and
+               the composed description appends "via <Platform>"
+        """
+        tx = transaction_factory(
+            bank_account=account,
+            pending=False,
+            posted_date=datetime(2026, 7, 10, tzinfo=UTC),
+            raw_description=(
+                "TST*ACME BISTRO 07/09 MOBILE PURCHASE Palo Alto CA"
+            ),
+        )
+        raw = bofa_details(
+            merchant_name="TST*ACME BISTRO",
+            merchant_information="Palo Alto, CA",
+            merchant_category="Eating Places and Restaurants",
+        )
+
+        status, warnings = details_svc.apply_details(tx, raw)
+
+        assert status == details_svc.STATUS_APPLIED
+        assert warnings == []
+        tx.refresh_from_db()
+        assert tx.merchant_name == "ACME BISTRO"
+        assert tx.merchant_intermediary == "toast"
+        assert tx.description == (
+            "ACME BISTRO -- Palo Alto, CA "
+            "(Eating Places and Restaurants, via Toast)"
+        )
+
+    ################################################################
+    #
+    def test_direct_purchase_leaves_intermediary_null(
+        self,
+        posted_tx: Transaction,
+        bofa_details: Callable[..., dict[str, Any]],
+    ) -> None:
+        """
+        GIVEN: a transaction with no known platform prefix
+        WHEN:  details are applied
+        THEN:  merchant_intermediary stays NULL and the description has
+               no "via" clause
+        """
+        status, _ = details_svc.apply_details(posted_tx, bofa_details())
+
+        assert status == details_svc.STATUS_APPLIED
+        posted_tx.refresh_from_db()
+        assert posted_tx.merchant_intermediary is None
+        assert "via" not in posted_tx.description
 
     ################################################################
     #
@@ -715,6 +807,44 @@ class TestTransactionMerchantAPI:
         assert response.status_code == 200
         ids = [row["id"] for row in response.json()["results"]]
         assert (str(enriched_tx.id) in ids) is expect_match
+
+    ################################################################
+    #
+    @pytest.mark.parametrize(
+        "query,expect_match",
+        [
+            ("merchant_intermediary=toast", True),
+            ("merchant_intermediary=TOAST", True),
+            ("merchant_intermediary=grubhub", False),
+        ],
+    )
+    def test_merchant_intermediary_filter(
+        self,
+        auth_client: APIClient,
+        account: BankAccount,
+        transaction_factory: Callable[..., Transaction],
+        bofa_details: Callable[..., dict[str, Any]],
+        query: str,
+        expect_match: bool,
+    ) -> None:
+        """
+        GIVEN: a transaction enriched through a known payment platform
+        WHEN:  the transaction list is filtered by merchant_intermediary
+        THEN:  the row matches case-insensitively by token
+        """
+        tx = transaction_factory(
+            bank_account=account,
+            pending=False,
+            raw_description="TST*ACME BISTRO 07/09 MOBILE PURCHASE Palo Alto CA",
+        )
+        details_svc.apply_details(
+            tx, bofa_details(merchant_name="TST*ACME BISTRO")
+        )
+
+        response = auth_client.get(f"/api/v1/transactions/?{query}")
+        assert response.status_code == 200
+        ids = [row["id"] for row in response.json()["results"]]
+        assert (str(tx.id) in ids) is expect_match
 
     ################################################################
     #

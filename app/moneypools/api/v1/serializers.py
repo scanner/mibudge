@@ -943,6 +943,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "category",
             "category_full_name",
             "merchant_name",
+            "merchant_intermediary",
             "merchant_address",
             "merchant_city",
             "merchant_region",

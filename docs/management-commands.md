@@ -27,6 +27,7 @@ These commands require direct access to the Django application -- they are not e
 | `export_bank_account`        | Dump an account to a JSON backup                  | Data management    |
 | `import_bank_account`        | Restore an account from a JSON backup             | Data management    |
 | `backfill_transaction_dates` | Re-derive purchase dates embedded in descriptions | Data management    |
+| `reenrich_merchant_identity` | Re-derive merchant name/platform/description from stored details | Data management |
 | `recompute_running_balances` | Recalculate allocation balance snapshots          | Data management    |
 | `define_budgets`             | Create or update budgets from a YAML file         | Budget setup       |
 | `extract_budgets`            | Export budget definitions to YAML                 | Budget setup       |
@@ -154,6 +155,23 @@ Use `--force` after a user sets or corrects their timezone, or after any run tha
 | `--account UUID` | Restrict to a single bank account |
 | `--dry-run` | Print what would change without writing |
 | `--force` | Reprocess all transactions and re-anchor to owner's timezone |
+
+### reenrich_merchant_identity
+
+Re-derives `merchant_name`, `merchant_intermediary`, and the composed `description` for already-enriched Transaction rows, from their stored `details` JSON -- no BofA re-scrape needed. Rows enriched before the merchant-identity cleanup pass landed (see [transaction-categories.md](transaction-categories.md) / [importers.md](importers.md)) will have raw or platform-prefixed names in `merchant_name`; this command re-runs the current logic against the provider dict that was already saved for provenance.
+
+```bash
+uv run python app/manage.py reenrich_merchant_identity
+uv run python app/manage.py reenrich_merchant_identity --account "Chase Checking"
+uv run python app/manage.py reenrich_merchant_identity --dry-run
+```
+
+Category assignment is untouched (seeding only fires when `category` is NULL) and user-entered location fields are preserved (enrichment only fills empty location fields, even under overwrite).
+
+| Option | Description |
+|--------|-------------|
+| `--account PATTERN` | Restrict to a single bank account |
+| `--dry-run` | Report what would change without writing to the database |
 
 ### recompute_running_balances
 

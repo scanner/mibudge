@@ -19,6 +19,7 @@ from django.utils import timezone
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
 from encrypted_fields.fields import EncryptedCharField
+from ordered_model.models import OrderedModel
 
 from common.tokens import generate_token
 
@@ -393,6 +394,66 @@ class TransactionCategory(MoneyPoolBaseClass):
     def __str__(self) -> str:
         scope = "global" if self.owner_id is None else str(self.owner)
         return f"{self.full_name} [{scope}]"
+
+
+########################################################################
+########################################################################
+#
+class MerchantIntermediaryPattern(MoneyPoolBaseClass, OrderedModel):
+    """A regex identifying one payment platform's card-descriptor prefix.
+
+    Card networks render "soft descriptors" as `PREFIX*detail` (Square
+    "SQ *", Toast "TST*", DoorDash "DD *DOORDASH ..."); some prefixes
+    belong to a POS processor (you were physically at the store) and
+    some to a marketplace/aggregator (the store is elsewhere), but
+    either way the raw descriptor hides the real store behind a
+    platform token. Rows here are tried in `order` against a
+    transaction's raw description by
+    moneypools.service.merchant_enrichment; the first match wins.
+    Seeded from platforms observed in real BofA data (migration);
+    admin-editable so a new platform or a correction needs no code
+    release -- see the module docstring in service/merchant_enrichment
+    for why this stays a plain lookup table rather than growing
+    resolution-order/visibility rules like TransactionCategory once
+    had.
+
+    `order` (django-ordered-model) is a real, gap-free sequence rather
+    than a sparse priority integer -- reordered from the django-admin
+    (drag/move-up-down) instead of hand-editing numbers.
+    """
+
+    pattern = models.CharField(
+        max_length=200,
+        help_text=(
+            "Case-insensitive regex matched against the transaction's "
+            "raw_description. An optional named group 'store' captures "
+            "the text following the platform's prefix."
+        ),
+    )
+    token = models.CharField(
+        max_length=32,
+        unique=True,
+        help_text=(
+            "Stable slug stored in Transaction.merchant_intermediary "
+            "(e.g. 'square')."
+        ),
+    )
+    display_name = models.CharField(
+        max_length=64,
+        help_text=(
+            "Human-readable platform name used in the composed "
+            "description (e.g. 'Square')."
+        ),
+    )
+    active = models.BooleanField(default=True)
+
+    class Meta(OrderedModel.Meta):
+        verbose_name_plural = "merchant intermediary patterns"
+
+    ####################################################################
+    #
+    def __str__(self) -> str:
+        return f"{self.token} ({self.pattern})"
 
 
 ########################################################################
@@ -1087,6 +1148,12 @@ class Transaction(TransactionBaseClass):
     #
     merchant_name = models.CharField(
         max_length=128, null=True, blank=True, editable=False
+    )
+    # Token of the payment platform/POS this purchase was routed
+    # through (e.g. 'square', 'doordash'); NULL for a direct purchase.
+    # See MerchantIntermediaryPattern / service/merchant_enrichment.
+    merchant_intermediary = models.CharField(
+        max_length=32, null=True, blank=True, editable=False, db_index=True
     )
     merchant_address = models.CharField(max_length=256, null=True, blank=True)
     merchant_city = models.CharField(max_length=128, null=True, blank=True)

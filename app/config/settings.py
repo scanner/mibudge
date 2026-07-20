@@ -135,6 +135,7 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "guardian",
     "django_vite",
+    "ordered_model",
 ]
 LOCAL_APPS = [
     "users.apps.UsersConfig",

@@ -1813,6 +1813,10 @@ paths:
         schema:
           type: string
       - in: query
+        name: merchant_intermediary
+        schema:
+          type: string
+      - in: query
         name: merchant_name
         schema:
           type: string
@@ -2169,6 +2173,10 @@ paths:
           type: string
       - in: query
         name: merchant_city
+        schema:
+          type: string
+      - in: query
+        name: merchant_intermediary
         schema:
           type: string
       - in: query
@@ -4604,6 +4612,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        merchant_intermediary:
+          type: string
+          readOnly: true
+          nullable: true
         merchant_address:
           type: string
           nullable: true
@@ -4704,6 +4716,7 @@ components:
       - linked_transaction
       - merchant_category
       - merchant_category_code
+      - merchant_intermediary
       - merchant_name
       - modified_at
       - party
