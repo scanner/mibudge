@@ -919,6 +919,11 @@ class TransactionSerializer(serializers.ModelSerializer):
     )
     category_full_name = serializers.SerializerMethodField()
 
+    # Whether the transaction-details import pipeline has enriched
+    # this row.  The raw details JSON itself is not exposed; the
+    # extracted merchant_* columns are.
+    has_details = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = [
@@ -934,8 +939,21 @@ class TransactionSerializer(serializers.ModelSerializer):
             "memo",
             "raw_description",
             "description",
+            "description_user_edited",
             "category",
             "category_full_name",
+            "merchant_name",
+            "merchant_intermediary",
+            "merchant_address",
+            "merchant_city",
+            "merchant_region",
+            "merchant_country",
+            "merchant_latitude",
+            "merchant_longitude",
+            "merchant_category",
+            "merchant_category_code",
+            "virtual_card_number",
+            "has_details",
             "bank_transaction_id",
             "linked_transaction",
             "bank_account_posted_balance",
@@ -947,11 +965,19 @@ class TransactionSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
         ]
+        # The merchant identity columns (merchant_name,
+        # merchant_category, merchant_category_code,
+        # virtual_card_number) are editable=False on the model, so the
+        # ModelSerializer maps them read-only automatically.  The six
+        # merchant location fields stay writable -- users may refine
+        # or supply the merchant's actual address / map coordinates.
         read_only_fields = [
             "id",
             "amount_currency",
             "party",
+            "description_user_edited",
             "category_full_name",
+            "has_details",
             "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",
@@ -960,6 +986,13 @@ class TransactionSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
         ]
+
+    ####################################################################
+    #
+    @extend_schema_field(serializers.BooleanField())
+    def get_has_details(self, obj: Transaction) -> bool:
+        """Return True when the details import has enriched this row."""
+        return obj.details is not None
 
     ####################################################################
     #
@@ -1656,6 +1689,22 @@ class ScrapeSyncSerializer(serializers.Serializer):
 ########################################################################
 ########################################################################
 #
+class ScrapeSyncDetailsNeededSerializer(serializers.Serializer):
+    """One posted scrape row still needing a transaction-details fetch.
+
+    `index` is the row's position in the SUBMITTED transactions array
+    (exact correlation back to the scraper's own rows); `transaction`
+    is the DB row the fetched details should be applied to via the
+    transaction-details action.
+    """
+
+    index = serializers.IntegerField()
+    transaction = serializers.UUIDField()
+
+
+########################################################################
+########################################################################
+#
 class ScrapeSyncReportSerializer(serializers.Serializer):
     """Output serializer for the bank-account scrape-sync action.
 
@@ -1678,6 +1727,80 @@ class ScrapeSyncReportSerializer(serializers.Serializer):
     )
     last_posted_through = serializers.DateField(allow_null=True)
     new_transaction_ids = serializers.ListField(child=serializers.UUIDField())
+    details_needed = ScrapeSyncDetailsNeededSerializer(many=True)
+
+
+########################################################################
+########################################################################
+#
+class TransactionDetailsItemSerializer(serializers.Serializer):
+    """One (transaction, raw details dict) pair to apply.
+
+    The details dict is stored verbatim on the transaction (it is the
+    provenance record); the service extracts the merchant columns from
+    it.  `category` is a mibudge category full name ('{group} :
+    {name}') -- the IMPORTER translates its provider's vocabulary
+    before submitting; mibudge carries no provider mappings.  The name
+    is resolved case-insensitively among the categories visible to the
+    caller; an unknown name yields a per-item warning and the
+    transaction stays unassigned.
+    """
+
+    transaction = serializers.UUIDField()
+    details = serializers.DictField()
+    category = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        default=None,
+        max_length=140,
+    )
+
+
+########################################################################
+########################################################################
+#
+class TransactionDetailsSerializer(serializers.Serializer):
+    """Input serializer for the bank-account transaction-details action.
+
+    `overwrite` re-applies scraper-owned fields on rows already
+    enriched (location fields and an assigned category are still
+    never clobbered).
+    """
+
+    overwrite = serializers.BooleanField(default=False)
+    details = TransactionDetailsItemSerializer(many=True)
+
+
+########################################################################
+########################################################################
+#
+class TransactionDetailsResultSerializer(serializers.Serializer):
+    """Per-item outcome of the transaction-details action."""
+
+    transaction = serializers.UUIDField()
+    status = serializers.ChoiceField(
+        choices=[
+            "applied",
+            "skipped_has_details",
+            "skipped_pending",
+            "not_found",
+        ]
+    )
+    warnings = serializers.ListField(child=serializers.CharField())
+
+
+########################################################################
+########################################################################
+#
+class TransactionDetailsReportSerializer(serializers.Serializer):
+    """Output serializer for the bank-account transaction-details action."""
+
+    applied = serializers.IntegerField()
+    skipped_has_details = serializers.IntegerField()
+    skipped_pending = serializers.IntegerField()
+    not_found = serializers.IntegerField()
+    results = TransactionDetailsResultSerializer(many=True)
 
 
 ########################################################################

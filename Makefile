@@ -10,7 +10,7 @@ DOCKER_BUILDKIT := 1
 # at runtime via .env / docker-compose.
 BUILD_SALT_KEY := $(shell openssl rand -hex 32)
 
-.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
 
 env: $(ROOT_DIR)/.env $(ROOT_DIR)/deployment/local-dev-docker.env	## Generate .env and deployment/local-dev-docker.env from their templates
 
@@ -41,8 +41,10 @@ deployment/ssl/$(HOSTNAME)-ssl_key.pem deployment/ssl/$(HOSTNAME)-ssl_crt.pem: |
 
 certs: ssl deployment/ssl/$(HOSTNAME)-ssl_key.pem deployment/ssl/$(HOSTNAME)-ssl_crt.pem	## uses `mkcert` to create certificates for local development.
 
-up: build dirs certs	## Build backend stack, bring it up, then run Vite in the foreground
+up-backend: build dirs certs	## Build the backend stack and bring it up detached (everything except the foreground Vite dev server)
 	@docker compose up --remove-orphans --detach
+
+up: up-backend	## Bring up the backend stack, then run Vite in the foreground
 	@echo "Backend stack running in the background. Starting Vite dev server..."
 	@echo "(Ctrl-C stops Vite; backend containers keep running -- use 'make down' to stop them.)"
 	@cd $(ROOT_DIR)/frontend && pnpm dev || (echo "\nVite failed to start -- is the dev server already running on port 5173?" && exit 1)

@@ -1,16 +1,18 @@
-# Create the TransactionCategory and TransactionCategoryAlias models.
+# Create the TransactionCategory model.
 #
-# First of the six-step conversion of TransactionCategory from a
-# TextChoices enum to a shared model (0037-0042):
-#   0037 create the models (this file)
-#   0038 seed the 150 global category rows
-#   0039 add TransactionAllocation.category_ref FK
-#   0040 data-migrate the old allocation CharField values onto the FK
-#   0041 drop the CharField, rename category_ref -> category
-#   0042 add Transaction.category FK, backfill from single-allocation
+# First of the transaction-category change set (0037-0041):
+#   0037 create the model (this file)
+#   0038 seed the canonical global category rows
+#   0039 convert TransactionAllocation.category from the old enum
+#        CharField to a FK
+#   0040 add Transaction.category FK, backfill from single-allocation
 #        transactions, canonicalize Budget.auto_spend entries
+#   0041 add the merchant-details enrichment columns
 #
-# Also updates Budget.auto_spend's help_text (documentation only).
+# Categories are flat (group, name) rows: global (owner NULL, shared
+# by everyone) or user-owned.  Case-insensitive uniqueness is enforced
+# per scope.  Also updates Budget.auto_spend's help_text
+# (documentation only).
 
 import uuid
 
@@ -80,51 +82,6 @@ class Migration(migrations.Migration):
                 "ordering": ["group", "name"],
             },
         ),
-        migrations.CreateModel(
-            name="TransactionCategoryAlias",
-            fields=[
-                (
-                    "pkid",
-                    models.BigAutoField(
-                        editable=False, primary_key=True, serialize=False
-                    ),
-                ),
-                (
-                    "id",
-                    models.UUIDField(
-                        default=uuid.uuid4, editable=False, unique=True
-                    ),
-                ),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-                ("modified_at", models.DateTimeField(auto_now=True)),
-                (
-                    "provider",
-                    models.CharField(
-                        help_text='Source of the raw category string (e.g. "bofa").',
-                        max_length=32,
-                    ),
-                ),
-                (
-                    "alias_key",
-                    models.CharField(
-                        help_text='Normalized provider category ("group:name", casefolded, whitespace collapsed).',
-                        max_length=140,
-                    ),
-                ),
-                (
-                    "category",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="aliases",
-                        to="moneypools.transactioncategory",
-                        to_field="id",
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name_plural": "transaction category aliases",
-            },
-        ),
         migrations.AddConstraint(
             model_name="transactioncategory",
             constraint=models.UniqueConstraint(
@@ -142,13 +99,6 @@ class Migration(migrations.Migration):
                 models.F("owner"),
                 condition=models.Q(("owner__isnull", False)),
                 name="transaction_category_unique_per_owner",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="transactioncategoryalias",
-            constraint=models.UniqueConstraint(
-                fields=("provider", "alias_key"),
-                name="transaction_category_alias_unique_per_provider",
             ),
         ),
     ]

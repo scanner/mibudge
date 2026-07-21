@@ -248,7 +248,7 @@ Local dev uses **two** env files with distinct purposes:
 
 | File                                           | Read by                                                                | Contains                                   |
 |------------------------------------------------|------------------------------------------------------------------------|--------------------------------------------|
-| `.env` (repo root, gitignored)                 | Local shell — `uv run manage.py`, `pytest`, linters, `make api-schema` | `localhost` URLs with published ports      |
+| `.env` (repo root, gitignored)                 | Local shell -- `uv run manage.py`, `pytest`, linters, `make api-schema` | `localhost` URLs with published ports      |
 | `deployment/local-dev-docker.env` (gitignored) | docker-compose (`env_file:`)                                           | Docker-internal hostnames and port numbers |
 
 The split lets you run `app/manage.py` directly from the native shell without docker-execing into a container, while docker-compose services still talk to each other over the docker network.

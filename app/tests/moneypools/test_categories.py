@@ -1,15 +1,12 @@
 #!/usr/bin/env python
 #
-"""Tests for TransactionCategory: model, resolver, visibility, and API."""
+"""Tests for TransactionCategory: model, resolution, visibility, and API."""
 
 # system imports
 from collections.abc import Callable
-from io import StringIO
 
 # 3rd party imports
 import pytest
-import yaml
-from django.core.management import call_command
 from django.db import IntegrityError
 from django.db import transaction as db_transaction
 from django.urls import reverse
@@ -17,6 +14,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 # Project imports
+from importers.bofa_categories import BOFA_CATEGORY_MAP
 from moneypools.management.commands.import_bank_account import (
     _resolve_category,
 )
@@ -25,7 +23,6 @@ from moneypools.models import (
     Budget,
     Transaction,
     TransactionCategory,
-    TransactionCategoryAlias,
 )
 from moneypools.service import categories as categories_svc
 from moneypools.service import (
@@ -232,60 +229,38 @@ class TestAllocationCopiesCategory:
 ########################################################################
 ########################################################################
 #
-class TestResolver:
-    """Tests for the provider category resolver.
+class TestResolveCategoryString:
+    """Tests for export/import category-string resolution.
 
-    The resolver relies on the global rows seeded by migration 0038.
+    Matching relies on the global rows seeded by migration 0038.
     """
 
     ################################################################
     #
-    def test_exact_full_name_match(self) -> None:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Food & Drink:Groceries", ("Food & Drink", "Groceries")),
+            # Legacy enum-era spellings map onto the renamed rows.
+            ("Food & Drink:Alcohol & Bars", ("Food & Drink", "Alcohol")),
+            (
+                "Transportation:Taxies",
+                ("Transportation", "Taxis & Rideshare"),
+            ),
+        ],
+    )
+    def test_matches_seeded_row(
+        self, raw: str, expected: tuple[str, str]
+    ) -> None:
         """
-        GIVEN: a raw string matching a seeded global full name
+        GIVEN: a category string from an export file
         WHEN:  it is resolved
-        THEN:  the existing global row is returned
+        THEN:  it maps onto the existing seeded global row (including
+               enum-era spellings of renamed rows)
         """
-        category = categories_svc.resolve_category_string(
-            "Food & Drink:Groceries"
-        )
+        category = categories_svc.resolve_category_string(raw)
         assert category is not None
-        assert (category.group, category.name) == (
-            "Food & Drink",
-            "Groceries",
-        )
-        assert category.owner_id is None
-
-    ################################################################
-    #
-    def test_unique_subname_match(self) -> None:
-        """
-        GIVEN: a raw string whose name uniquely matches one global row and
-               is not itself a group name
-        WHEN:  it is resolved
-        THEN:  that row is returned
-        """
-        category = categories_svc.resolve_category_string(
-            "Groceries : Groceries"
-        )
-        assert category is not None
-        assert (category.group, category.name) == (
-            "Food & Drink",
-            "Groceries",
-        )
-
-    ################################################################
-    #
-    def test_subname_guard_creates_top_level(self) -> None:
-        """
-        GIVEN: BofA's 'Travel : Travel' where 'Travel' is also a group name
-        WHEN:  it is resolved
-        THEN:  the sub-name guard fires and a new top-level 'Travel :
-               Travel' global row is created (NOT mapped to Business:Travel)
-        """
-        category = categories_svc.resolve_category_string("Travel : Travel")
-        assert category is not None
-        assert (category.group, category.name) == ("Travel", "Travel")
+        assert (category.group, category.name) == expected
         assert category.owner_id is None
 
     ################################################################
@@ -294,50 +269,12 @@ class TestResolver:
         """
         GIVEN: a raw string matching nothing
         WHEN:  it is resolved
-        THEN:  a new global row is created
+        THEN:  a new global row is created (an import never drops data)
         """
         category = categories_svc.resolve_category_string("Nonsense : Widget")
         assert category is not None
         assert category.owner_id is None
         assert (category.group, category.name) == ("Nonsense", "Widget")
-
-    ################################################################
-    #
-    def test_provider_alias_lookup_wins(self) -> None:
-        """
-        GIVEN: an alias mapping a provider string to a chosen category
-        WHEN:  the provider string is resolved
-        THEN:  the alias target is returned even though sub-name matching
-               would have chosen differently
-        """
-        target = TransactionCategory.objects.get(
-            owner__isnull=True, group="Uncategorized", name="Other Shopping"
-        )
-        TransactionCategoryAlias.objects.create(
-            provider="bofa",
-            alias_key="groceries:groceries",
-            category=target,
-        )
-        resolved = categories_svc.resolve_provider_category(
-            "bofa", "Groceries : Groceries"
-        )
-        assert resolved is not None
-        assert resolved.pkid == target.pkid
-
-    ################################################################
-    #
-    def test_provider_resolution_writes_alias(self) -> None:
-        """
-        GIVEN: no alias for a provider string
-        WHEN:  it is resolved via the provider resolver
-        THEN:  an alias row is written so it can be re-pointed later
-        """
-        categories_svc.resolve_provider_category(
-            "bofa", "Food & Drink : Groceries"
-        )
-        assert TransactionCategoryAlias.objects.filter(
-            provider="bofa", alias_key="food & drink:groceries"
-        ).exists()
 
     ################################################################
     #
@@ -349,6 +286,96 @@ class TestResolver:
         THEN:  None (unassigned) is returned
         """
         assert categories_svc.resolve_category_string(raw or "") is None
+
+
+########################################################################
+########################################################################
+#
+class TestFindCategoryForUser:
+    """Tests for resolving API-supplied category full names.
+
+    This is the lookup behind the transaction-details `category` field:
+    importers submit mibudge full names, matched among the categories
+    visible to the caller, never creating anything.
+    """
+
+    ################################################################
+    #
+    def test_global_match_is_case_insensitive(self, user: User) -> None:
+        """
+        GIVEN: a canonical full name in non-canonical case
+        WHEN:  it is resolved for a user
+        THEN:  the seeded global row is returned
+        """
+        category = categories_svc.find_category_for_user(
+            user, "food & drink : GROCERIES"
+        )
+        assert category is not None
+        assert (category.group, category.name) == (
+            "Food & Drink",
+            "Groceries",
+        )
+        assert category.owner_id is None
+
+    ################################################################
+    #
+    def test_custom_category_resolves_for_owner(self, user: User) -> None:
+        """
+        GIVEN: a user-owned custom category
+        WHEN:  its full name is resolved for that user
+        THEN:  the custom row is returned
+        """
+        custom = TransactionCategory.objects.create(
+            group="Ranch", name="Alpaca Feed", owner=user
+        )
+        found = categories_svc.find_category_for_user(
+            user, "Ranch : Alpaca Feed"
+        )
+        assert found is not None
+        assert found.pkid == custom.pkid
+
+    ################################################################
+    #
+    def test_global_preferred_over_custom_duplicate(self, user: User) -> None:
+        """
+        GIVEN: a custom category shadowing a global (group, name) pair
+        WHEN:  the full name is resolved
+        THEN:  the global row wins (canonical names mean the shared row)
+        """
+        TransactionCategory.objects.create(
+            group="Food & Drink", name="Groceries", owner=user
+        )
+        found = categories_svc.find_category_for_user(
+            user, "Food & Drink : Groceries"
+        )
+        assert found is not None
+        assert found.owner_id is None
+
+    ################################################################
+    #
+    def test_unknown_and_invisible_return_none(
+        self, user: User, user_factory: Callable[..., User]
+    ) -> None:
+        """
+        GIVEN: a name matching nothing, and another user's unshared
+               custom category
+        WHEN:  each is resolved for the user
+        THEN:  both return None -- nothing is ever created
+        """
+        other = user_factory()
+        TransactionCategory.objects.create(
+            group="Private", name="Thing", owner=other
+        )
+        before = TransactionCategory.objects.count()
+
+        assert (
+            categories_svc.find_category_for_user(user, "No Such : Row") is None
+        )
+        assert (
+            categories_svc.find_category_for_user(user, "Private : Thing")
+            is None
+        )
+        assert TransactionCategory.objects.count() == before
 
 
 ########################################################################
@@ -687,70 +714,35 @@ class TestImportCategoryResolution:
 ########################################################################
 ########################################################################
 #
-class TestSeedCategoryAliases:
-    """Tests for the seed_category_aliases management command."""
+class TestImporterMapTargets:
+    """The BofA importer's map must target real canonical categories.
+
+    Checked against the seeded global rows in the migrated test
+    database (not the migration source), so it survives migration
+    squashes.  A stray target is a typo in the importer map or a
+    canonical-list change the map has not caught up with -- either
+    way, that category would silently land unassigned on every
+    future import.
+    """
 
     ################################################################
     #
-    def _write(self, tmp_path, entries: list[dict]) -> str:
-        path = tmp_path / "aliases.yaml"
-        path.write_text(
-            yaml.safe_dump({"provider": "bofa", "categories": entries}),
-            encoding="utf-8",
-        )
-        return str(path)
-
-    ################################################################
-    #
-    def test_seeds_aliases_and_creates_missing_category(self, tmp_path) -> None:
+    def test_targets_exist_in_seeded_globals(self) -> None:
         """
-        GIVEN: a reviewed file mapping a provider string to a new category
-        WHEN:  seed_category_aliases loads it
-        THEN:  the alias is created and the target category is created global
+        GIVEN: the BofA importer's built-in category map
+        WHEN:  its non-null targets are checked against the seeded
+               global categories
+        THEN:  every target matches a canonical full name
         """
-        path = self._write(
-            tmp_path,
-            [
-                {
-                    "alias_key": "insurance:insurance",
-                    "category": "Insurance : Insurance",
-                }
-            ],
+        canonical = {
+            category.full_name.casefold()
+            for category in TransactionCategory.objects.filter(
+                owner__isnull=True
+            )
+        }
+        strays = sorted(
+            target
+            for target in BOFA_CATEGORY_MAP.values()
+            if target is not None and target.casefold() not in canonical
         )
-        call_command("seed_category_aliases", path, stdout=StringIO())
-
-        alias = TransactionCategoryAlias.objects.get(
-            provider="bofa", alias_key="insurance:insurance"
-        )
-        assert alias.category.full_name == "Insurance : Insurance"
-        assert alias.category.owner_id is None
-
-    ################################################################
-    #
-    def test_reload_is_idempotent(self, tmp_path) -> None:
-        """
-        GIVEN: an alias already seeded from a file
-        WHEN:  the same file is loaded again
-        THEN:  the alias is left unchanged (not spuriously re-saved)
-        """
-        path = self._write(
-            tmp_path,
-            [
-                {
-                    "alias_key": "groceries:groceries",
-                    "category": "Food & Drink : Groceries",
-                }
-            ],
-        )
-        call_command("seed_category_aliases", path, stdout=StringIO())
-        alias = TransactionCategoryAlias.objects.get(
-            provider="bofa", alias_key="groceries:groceries"
-        )
-        first_modified = alias.modified_at
-
-        out = StringIO()
-        call_command("seed_category_aliases", path, stdout=out)
-        alias.refresh_from_db()
-        # The unchanged path must be taken -- no re-save on reload.
-        assert alias.modified_at == first_modified
-        assert "1 unchanged" in out.getvalue()
+        assert strays == []

@@ -27,10 +27,10 @@ These commands require direct access to the Django application -- they are not e
 | `export_bank_account`        | Dump an account to a JSON backup                  | Data management    |
 | `import_bank_account`        | Restore an account from a JSON backup             | Data management    |
 | `backfill_transaction_dates` | Re-derive purchase dates embedded in descriptions | Data management    |
+| `reenrich_merchant_identity` | Re-derive merchant name/platform/description from stored details | Data management |
 | `recompute_running_balances` | Recalculate allocation balance snapshots          | Data management    |
 | `define_budgets`             | Create or update budgets from a YAML file         | Budget setup       |
 | `extract_budgets`            | Export budget definitions to YAML                 | Budget setup       |
-| `seed_category_aliases`      | Load reviewed provider category aliases from YAML | Data management    |
 | `clear_budget`               | Zero out a budget (dev and correction only)       | Data correction    |
 
 ---
@@ -139,25 +139,6 @@ uv run python app/manage.py verify_balances
 
 Dry-run validates the JSON structure and version, warns about missing owners and actors, but does not write anything.
 
-### seed_category_aliases
-
-Loads a reviewed provider-category alias file (YAML) and upserts `TransactionCategoryAlias` rows so the resolver maps each provider category string to the chosen mibudge category. Idempotent -- existing aliases are updated in place, unchanged ones left alone. Any target category that does not yet exist is created as a global row.
-
-This is a command, not a migration, because a provider's category vocabulary is discovered empirically and grows over time -- re-run it whenever the reviewed file changes. The typical flow is: harvest the vocabulary with `importers/harvest_bofa_categories.py` (see [importers.md](importers.md)), review and edit the proposed `category:` targets, then load the result here.
-
-```bash
-uv run python app/manage.py seed_category_aliases reviewed.yaml --dry-run
-uv run python app/manage.py seed_category_aliases reviewed.yaml
-```
-
-Input is a mapping with a top-level `provider` and a `categories` list; each entry needs a `category` (target full name) and either an `alias_key` (normalized `group:name`) or a `raw` string to derive it from. The `samples`/`count`/`match` keys the harvester emits are ignored. The committed seed file should carry only `provider`/`alias_key`/`category` -- never `samples:`, which contain raw transaction descriptions (PII). See [transaction-categories.md](transaction-categories.md) §4 for the resolution model.
-
-| Option | Description |
-|--------|-------------|
-| `FILE` | Path to the reviewed alias YAML file (required) |
-| `--provider NAME` | Override the provider for all entries (else the file's top-level `provider`) |
-| `--dry-run` | Report what would change without writing anything |
-
 ### backfill_transaction_dates
 
 Re-derives `transaction_date` for existing Transaction rows. In normal mode, only processes rows where `transaction_date == posted_date` (unenriched state). In `--force` mode, reprocesses all rows and re-anchors dates to midnight in the account owner's configured timezone.
@@ -174,6 +155,23 @@ Use `--force` after a user sets or corrects their timezone, or after any run tha
 | `--account UUID` | Restrict to a single bank account |
 | `--dry-run` | Print what would change without writing |
 | `--force` | Reprocess all transactions and re-anchor to owner's timezone |
+
+### reenrich_merchant_identity
+
+Re-derives `merchant_name`, `merchant_intermediary`, and the composed `description` for already-enriched Transaction rows, from their stored `details` JSON -- no BofA re-scrape needed. Rows enriched before the merchant-identity cleanup pass landed (see [transaction-categories.md](transaction-categories.md) / [importers.md](importers.md)) will have raw or platform-prefixed names in `merchant_name`; this command re-runs the current logic against the provider dict that was already saved for provenance.
+
+```bash
+uv run python app/manage.py reenrich_merchant_identity
+uv run python app/manage.py reenrich_merchant_identity --account "Chase Checking"
+uv run python app/manage.py reenrich_merchant_identity --dry-run
+```
+
+Category assignment is untouched (seeding only fires when `category` is NULL) and user-entered location fields are preserved (enrichment only fills empty location fields, even under overwrite).
+
+| Option | Description |
+|--------|-------------|
+| `--account PATTERN` | Restrict to a single bank account |
+| `--dry-run` | Report what would change without writing to the database |
 
 ### recompute_running_balances
 

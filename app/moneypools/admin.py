@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.http import HttpRequest
 from djmoney.money import Money
+from ordered_model.admin import OrderedModelAdmin
 
 # Project imports
 #
@@ -24,10 +25,10 @@ from .models import (
     BankAccountInvitation,
     Budget,
     InternalTransaction,
+    MerchantIntermediaryPattern,
     Transaction,
     TransactionAllocation,
     TransactionCategory,
-    TransactionCategoryAlias,
 )
 from .service import bank_account as bank_account_svc
 from .service import budget as budget_svc
@@ -593,7 +594,7 @@ class TransactionCategoryAdmin(admin.ModelAdmin):
     )
     list_filter = ("archived", "group")
     # search_fields powers the autocomplete widgets on Transaction /
-    # TransactionAllocation / TransactionCategoryAlias admins.
+    # TransactionAllocation admins.
     search_fields = ("group", "name")
     ordering = ("group", "name")
     readonly_fields = ("id", "created_at", "modified_at")
@@ -611,30 +612,34 @@ class TransactionCategoryAdmin(admin.ModelAdmin):
 ########################################################################
 ########################################################################
 #
-@admin.register(TransactionCategoryAlias)
-class TransactionCategoryAliasAdmin(admin.ModelAdmin):
-    """Admin for provider category aliases.
+@admin.register(MerchantIntermediaryPattern)
+class MerchantIntermediaryPatternAdmin(OrderedModelAdmin):
+    """Admin for payment-platform prefix patterns.
 
-    Re-point a bad auto-mapping by editing its 'category' here -- the
-    resolver consults this table first, so the correction takes effect
-    on the next import without touching transaction data.
+    Ordered via django-ordered-model: use the move-up/move-down links
+    (`move_up_down_links`) rather than hand-editing `order` -- the
+    first pattern (in list order) that matches a transaction's raw
+    description wins. Add a row here (or correct one) to extend the
+    vocabulary with no code release; see
+    moneypools.service.merchant_enrichment.
     """
 
     list_display = (
-        "provider",
-        "alias_key",
-        "category",
-        "id",
+        "token",
+        "display_name",
+        "pattern",
+        "active",
+        "move_up_down_links",
     )
-    list_filter = ("provider",)
-    search_fields = ("alias_key", "category__group", "category__name")
-    autocomplete_fields = ("category",)
+    list_filter = ("active",)
+    search_fields = ("token", "display_name", "pattern")
     readonly_fields = ("id", "created_at", "modified_at")
     fields = (
         "id",
-        "provider",
-        "alias_key",
-        "category",
+        "token",
+        "display_name",
+        "pattern",
+        "active",
         "created_at",
         "modified_at",
     )

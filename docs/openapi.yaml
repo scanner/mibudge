@@ -697,6 +697,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScrapeSyncReport'
           description: ''
+  /api/v1/bank-accounts/{id}/transaction-details/:
+    post:
+      operationId: bank_accounts_transaction_details_create
+      description: 'Apply per-transaction detail records (merchant name, location,
+        MCC, virtual card number) fetched by a live scraper to posted transactions
+        on this account.  Each raw details dict is stored verbatim on its transaction
+        and the merchant columns are extracted from it.  An item''s optional `category`
+        is a mibudge category full name (''{group} : {name}'') -- importers translate
+        their provider''s category vocabulary before submitting.  It seeds the transaction''s
+        category (and its unassigned allocations) when NULL; an unknown name yields
+        a per-item warning and leaves the transaction unassigned.  The display description
+        is recomposed on first enrichment unless the user has edited it.  Rows already
+        enriched are skipped unless `overwrite` is true; pending rows are always skipped.  Per-item
+        outcomes are returned in submission order.'
+      summary: Apply scraped transaction details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bank-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionDetailsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionDetailsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionDetailsRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetailsReport'
+          description: ''
   /api/v1/banks/:
     get:
       operationId: banks_list
@@ -1754,6 +1800,30 @@ paths:
         schema:
           type: string
           format: date-time
+      - in: query
+        name: has_details
+        schema:
+          type: boolean
+      - in: query
+        name: merchant_category_code
+        schema:
+          type: string
+      - in: query
+        name: merchant_city
+        schema:
+          type: string
+      - in: query
+        name: merchant_intermediary
+        schema:
+          type: string
+      - in: query
+        name: merchant_name
+        schema:
+          type: string
+      - in: query
+        name: merchant_region
+        schema:
+          type: string
       - name: ordering
         required: false
         in: query
@@ -1850,6 +1920,10 @@ paths:
         name: uncategorized
         schema:
           type: boolean
+      - in: query
+        name: virtual_card_last4
+        schema:
+          type: string
       tags:
       - transactions
       security:
@@ -2083,12 +2157,36 @@ paths:
         schema:
           type: string
           format: date-time
+      - in: query
+        name: has_details
+        schema:
+          type: boolean
       - in: path
         name: id
         schema:
           type: string
           format: uuid
         required: true
+      - in: query
+        name: merchant_category_code
+        schema:
+          type: string
+      - in: query
+        name: merchant_city
+        schema:
+          type: string
+      - in: query
+        name: merchant_intermediary
+        schema:
+          type: string
+      - in: query
+        name: merchant_name
+        schema:
+          type: string
+      - in: query
+        name: merchant_region
+        schema:
+          type: string
       - name: ordering
         required: false
         in: query
@@ -2185,6 +2283,10 @@ paths:
         name: uncategorized
         schema:
           type: boolean
+      - in: query
+        name: virtual_card_last4
+        schema:
+          type: string
       tags:
       - transactions
       requestBody:
@@ -4153,6 +4255,33 @@ components:
           type: string
           format: uuid
           nullable: true
+        merchant_address:
+          type: string
+          nullable: true
+          maxLength: 256
+        merchant_city:
+          type: string
+          nullable: true
+          maxLength: 128
+        merchant_region:
+          type: string
+          nullable: true
+          maxLength: 64
+        merchant_country:
+          type: string
+          nullable: true
+          pattern: ^[A-Z]{2}$
+          maxLength: 2
+        merchant_latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        merchant_longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
         bank_transaction_id:
           type: string
           nullable: true
@@ -4256,6 +4385,24 @@ components:
           nullable: true
       required:
       - posted_date
+    ScrapeSyncDetailsNeeded:
+      type: object
+      description: |-
+        One posted scrape row still needing a transaction-details fetch.
+
+        `index` is the row's position in the SUBMITTED transactions array
+        (exact correlation back to the scraper's own rows); `transaction`
+        is the DB row the fetched details should be applied to via the
+        transaction-details action.
+      properties:
+        index:
+          type: integer
+        transaction:
+          type: string
+          format: uuid
+      required:
+      - index
+      - transaction
     ScrapeSyncReport:
       type: object
       description: |-
@@ -4291,9 +4438,14 @@ components:
           items:
             type: string
             format: uuid
+        details_needed:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScrapeSyncDetailsNeeded'
       required:
       - balance_mismatch
       - deleted_pending
+      - details_needed
       - inserted_pending
       - inserted_posted
       - last_posted_through
@@ -4445,6 +4597,9 @@ components:
         description:
           type: string
           maxLength: 512
+        description_user_edited:
+          type: boolean
+          readOnly: true
         category:
           type: string
           format: uuid
@@ -4452,6 +4607,56 @@ components:
         category_full_name:
           type: string
           nullable: true
+          readOnly: true
+        merchant_name:
+          type: string
+          readOnly: true
+          nullable: true
+        merchant_intermediary:
+          type: string
+          readOnly: true
+          nullable: true
+        merchant_address:
+          type: string
+          nullable: true
+          maxLength: 256
+        merchant_city:
+          type: string
+          nullable: true
+          maxLength: 128
+        merchant_region:
+          type: string
+          nullable: true
+          maxLength: 64
+        merchant_country:
+          type: string
+          nullable: true
+          pattern: ^[A-Z]{2}$
+          maxLength: 2
+        merchant_latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        merchant_longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        merchant_category:
+          type: string
+          readOnly: true
+          nullable: true
+        merchant_category_code:
+          type: string
+          readOnly: true
+          nullable: true
+        virtual_card_number:
+          type: string
+          readOnly: true
+          nullable: true
+        has_details:
+          type: boolean
           readOnly: true
         bank_transaction_id:
           type: string
@@ -4505,13 +4710,20 @@ components:
       - bank_account_posted_balance_currency
       - category_full_name
       - created_at
+      - description_user_edited
+      - has_details
       - id
       - linked_transaction
+      - merchant_category
+      - merchant_category_code
+      - merchant_intermediary
+      - merchant_name
       - modified_at
       - party
       - posted_date
       - raw_description
       - transaction_type
+      - virtual_card_number
     TransactionAllocation:
       type: object
       description: |-
@@ -4666,6 +4878,102 @@ components:
       required:
       - group
       - name
+    TransactionDetailsItemRequest:
+      type: object
+      description: |-
+        One (transaction, raw details dict) pair to apply.
+
+        The details dict is stored verbatim on the transaction (it is the
+        provenance record); the service extracts the merchant columns from
+        it.  `category` is a mibudge category full name ('{group} :
+        {name}') -- the IMPORTER translates its provider's vocabulary
+        before submitting; mibudge carries no provider mappings.  The name
+        is resolved case-insensitively among the categories visible to the
+        caller; an unknown name yields a per-item warning and the
+        transaction stays unassigned.
+      properties:
+        transaction:
+          type: string
+          format: uuid
+        details:
+          type: object
+          additionalProperties: {}
+        category:
+          type: string
+          nullable: true
+          maxLength: 140
+      required:
+      - details
+      - transaction
+    TransactionDetailsReport:
+      type: object
+      description: Output serializer for the bank-account transaction-details action.
+      properties:
+        applied:
+          type: integer
+        skipped_has_details:
+          type: integer
+        skipped_pending:
+          type: integer
+        not_found:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionDetailsResult'
+      required:
+      - applied
+      - not_found
+      - results
+      - skipped_has_details
+      - skipped_pending
+    TransactionDetailsRequest:
+      type: object
+      description: |-
+        Input serializer for the bank-account transaction-details action.
+
+        `overwrite` re-applies scraper-owned fields on rows already
+        enriched (location fields and an assigned category are still
+        never clobbered).
+      properties:
+        overwrite:
+          type: boolean
+          default: false
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionDetailsItemRequest'
+      required:
+      - details
+    TransactionDetailsResult:
+      type: object
+      description: Per-item outcome of the transaction-details action.
+      properties:
+        transaction:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TransactionDetailsResultStatusEnum'
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+      - status
+      - transaction
+      - warnings
+    TransactionDetailsResultStatusEnum:
+      enum:
+      - applied
+      - skipped_has_details
+      - skipped_pending
+      - not_found
+      type: string
+      description: |-
+        * `applied` - applied
+        * `skipped_has_details` - skipped_has_details
+        * `skipped_pending` - skipped_pending
+        * `not_found` - not_found
     TransactionRequest:
       type: object
       description: |-
@@ -4718,6 +5026,33 @@ components:
         category:
           type: string
           format: uuid
+          nullable: true
+        merchant_address:
+          type: string
+          nullable: true
+          maxLength: 256
+        merchant_city:
+          type: string
+          nullable: true
+          maxLength: 128
+        merchant_region:
+          type: string
+          nullable: true
+          maxLength: 64
+        merchant_country:
+          type: string
+          nullable: true
+          pattern: ^[A-Z]{2}$
+          maxLength: 2
+        merchant_latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        merchant_longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
           nullable: true
         bank_transaction_id:
           type: string

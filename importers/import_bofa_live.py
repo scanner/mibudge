@@ -41,6 +41,20 @@ Scraper-output notes (verified against all four accounts via
   banks' markers if we ever wire one up here.
 * Account names follow the pattern `NAME - XXXX` where XXXX is the
   last 4 digits used to match the mibudge BankAccount.
+
+Details enrichment: after each account's sync-scrape POST, the server
+returns `details_needed` -- the posted rows (by submitted-array index
+and transaction UUID) whose DB row has never been enriched.  While the
+scrape session is still open (bofa_scraper txn hashes are
+session-scoped), the importer fetches BofA's per-transaction details
+for those rows and POSTs them to the transaction-details endpoint.
+Fetches are paced and budgeted run-wide (--details-limit, default 30
+dialog opens; the BofA burst limit wedges the page at ~40-50 opens per
+login session) and each merchant is fetched only once per run --
+repeat rows get a merchant-copy synthesized at zero dialog cost (see
+importers/bofa_common.py).  Rows left unfetched stay details-NULL
+server-side and are re-reported by the next run's sync, so a backfill
+converges over successive runs.
 """
 
 # system imports
@@ -48,6 +62,7 @@ import json
 import logging
 import re
 import subprocess
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -57,11 +72,20 @@ from zoneinfo import ZoneInfo
 
 # 3rd party imports
 import click
+import yaml
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
 # Project imports
+from importers.bofa_categories import category_for, load_overlay_map
+from importers.bofa_common import (
+    DEFAULT_DETAILS_LIMIT,
+    BofASessionLost,
+    DetailsPacer,
+    fetch_details_for_account,
+    normalize_description,
+)
 from importers.client import AuthenticationError
 from importers.import_transactions import (
     _build_client,
@@ -74,7 +98,7 @@ from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
 
-SCRAPE_FORMAT_VERSION = 2
+SCRAPE_FORMAT_VERSION = 3
 
 
 ########################################################################
@@ -151,6 +175,11 @@ class SavedTransaction:
     as shown in BofA's activity table.  Passed through to the server
     for the posting-order sanity walk.  `'0.00'` for files saved before
     format_version 2.
+
+    `details` is the raw per-transaction details dict fetched from the
+    View/Edit dialog, when the live run captured one (format_version 3);
+    None otherwise.  Replayed through the transaction-details endpoint
+    by import_bofa_saved.
     """
 
     date: str
@@ -159,6 +188,7 @@ class SavedTransaction:
     type: str
     txn_hash: str = ""
     running_balance: str = "0.00"
+    details: dict[str, Any] | None = None
 
 
 ########################################################################
@@ -187,6 +217,7 @@ def save_scraped_account(
     account: Any,
     save_dir: Path,
     scraped_at: datetime,
+    details_by_index: dict[int, dict[str, Any]] | None = None,
 ) -> Path:
     """Serialize a scraped BofA account to a JSON file.
 
@@ -194,6 +225,10 @@ def save_scraped_account(
         account: bofa_scraper Account with transactions populated.
         save_dir: Directory to write the file into.
         scraped_at: Timestamp of the scrape (UTC).
+        details_by_index: Fetched per-transaction details keyed by the
+            transaction's index in `account.get_transactions()`.
+            Attached to the saved rows so import_bofa_saved can replay
+            the enrichment.
 
     Returns:
         Path to the written file.
@@ -202,6 +237,7 @@ def save_scraped_account(
     ts = scraped_at.strftime("%Y-%m-%d-%H%M%S")
     filename = save_dir / f"{ts}-{last_four}.json"
 
+    details_by_index = details_by_index or {}
     raw_txs = account.get_transactions()
     saved = SavedScrape(
         format_version=SCRAPE_FORMAT_VERSION,
@@ -222,8 +258,9 @@ def save_scraped_account(
                         Decimal("0.01")
                     )
                 ),
+                details=details_by_index.get(i),
             )
-            for tx in raw_txs
+            for i, tx in enumerate(raw_txs)
         ],
     )
 
@@ -249,7 +286,7 @@ def load_saved_scrape(path: Path) -> SavedScrape:
     """
     data = json.loads(path.read_text(encoding="utf-8"))
     version = data.get("format_version", 0)
-    if version not in (1, SCRAPE_FORMAT_VERSION):
+    if version not in (1, 2, SCRAPE_FORMAT_VERSION):
         raise ValueError(
             f"{path}: unsupported format_version {version} "
             f"(expected {SCRAPE_FORMAT_VERSION})"
@@ -267,6 +304,8 @@ def load_saved_scrape(path: Path) -> SavedScrape:
                 )
             )
         else:
+            # `details` was added (optional) in format_version 3; the
+            # dataclass default covers v2 rows.
             txs.append(SavedTransaction(**tx))
     return SavedScrape(
         format_version=version,
@@ -275,21 +314,6 @@ def load_saved_scrape(path: Path) -> SavedScrape:
         ending_balance=data["ending_balance"],
         transactions=txs,
     )
-
-
-########################################################################
-########################################################################
-#
-def _normalize_description(text: str) -> str:
-    """Collapse internal whitespace to match CSV-imported raw_description values.
-
-    BofA appends extra text after a <br> tag (rendered as \\n by the
-    scraper) for some pending transactions, e.g. "Amount may change -
-    waiting for final amount from merchant".  Everything from the first
-    \\n onwards is UI noise, not part of the transaction description.
-    """
-    text = text.split("\n")[0]
-    return " ".join(text.split())
 
 
 ####################################################################
@@ -390,7 +414,7 @@ def _build_sync_payload(
     for tx in raw_txs:
         parsed_date, is_pending = _parse_scraped_date(tx.date)
         amount = Decimal(str(tx.amount)).quantize(Decimal("0.01"))
-        raw_description = _normalize_description(tx.desc)
+        raw_description = normalize_description(tx.desc)
         transaction_type = _infer_transaction_type(raw_description, amount)
 
         if is_pending:
@@ -452,7 +476,7 @@ def _post_sync_scrape(
     dry_run: bool,
     console: Console,
     interactive: bool,
-) -> bool:
+) -> tuple[bool, dict[str, Any] | None]:
     """POST the scrape to mibudge and render the result.
 
     Args:
@@ -469,9 +493,11 @@ def _post_sync_scrape(
         interactive: Whether to render via Rich tables.
 
     Returns:
-        True on success (including dry-run); False if the POST raised
-        or the server reported a balance mismatch / posting-order
-        warning.
+        An ``(ok, report)`` tuple.  `ok` is True on success (including
+        dry-run) and False if the POST raised or the server reported a
+        balance mismatch / posting-order warning.  `report` is the
+        server's ScrapeSyncReport dict (carrying `details_needed`), or
+        None on dry-run / POST failure.
     """
     if dry_run:
         msg = (
@@ -482,7 +508,7 @@ def _post_sync_scrape(
             console.print(f"[warning]{msg}[/warning]")
         else:
             print(msg)
-        return True
+        return True, None
 
     try:
         report = client.post(
@@ -496,7 +522,7 @@ def _post_sync_scrape(
             )
         else:
             logger.error("sync-scrape failed for %s: %s", account_label, exc)
-        return False
+        return False, None
 
     # DRF serializes DecimalField as a string -- coerce so we can apply
     # signed numeric formatting.  None means the totals matched.
@@ -533,6 +559,10 @@ def _post_sync_scrape(
         table.add_row("Ending balance", bal_str)
         last_through = report.get("last_posted_through") or "-"
         table.add_row("last_posted_through", str(last_through))
+        table.add_row(
+            "Details needed",
+            f"[accent]{len(report.get('details_needed') or [])}[/accent]",
+        )
         console.print()
         console.print(table)
         for w in posting_warnings:
@@ -549,12 +579,101 @@ def _post_sync_scrape(
             f"inserted_posted={report['inserted_posted']}, "
             f"skipped_posted={report['skipped_posted']}, "
             f"inserted_pending={report['inserted_pending']}, "
+            f"details_needed={len(report.get('details_needed') or [])}, "
             f"{bal_str}."
         )
         for w in posting_warnings:
             logger.warning("posting-order: %s", w)
 
-    return ok
+    return ok, report
+
+
+########################################################################
+########################################################################
+#
+def _post_transaction_details(
+    client: Any,
+    bank_account_id: str,
+    items: list[dict[str, Any]],
+    account_label: str,
+    console: Console,
+    interactive: bool,
+    overlay: dict[str, str | None] | None = None,
+    unmapped: set[str] | None = None,
+) -> bool:
+    """POST fetched transaction details to mibudge and render the result.
+
+    Each item's BofA ``transaction_category`` string is translated to
+    a mibudge category full name (BOFA_CATEGORY_MAP plus the overlay)
+    and submitted as the item's ``category`` -- the mapping is the
+    importer's job; mibudge only understands its own category names.
+    Strings in neither map are collected into `unmapped` so the run
+    can report them at the end.
+
+    Args:
+        client: Authenticated `MibudgeClient`.
+        bank_account_id: UUID string of the mibudge BankAccount.
+        items: ``{"transaction": uuid, "details": dict}`` entries from
+            `fetch_details_for_account` (or a saved-scrape replay).
+        account_label: Display label for the account.
+        console: Rich console for interactive output.
+        interactive: Whether to render via Rich.
+        overlay: Optional overlay category map (--category-map).
+        unmapped: Run-wide accumulator for unmapped BofA category
+            strings; appended to in place.
+
+    Returns:
+        True when the POST succeeded (individual skips are reported
+        but do not fail the run); False when it raised.
+    """
+    payload_items = []
+    for item in items:
+        raw_category = str(item["details"].get("transaction_category") or "")
+        lookup = category_for(raw_category, overlay)
+        if not lookup.known and unmapped is not None:
+            unmapped.add(raw_category)
+        entry = dict(item)
+        if lookup.full_name is not None:
+            entry["category"] = lookup.full_name
+        payload_items.append(entry)
+
+    try:
+        report = client.post(
+            f"/api/v1/bank-accounts/{bank_account_id}/transaction-details/",
+            {"details": payload_items},
+        )
+    except Exception as exc:
+        if interactive:
+            console.print(
+                f"[error]transaction-details failed for "
+                f"{account_label}: {exc}[/error]"
+            )
+        else:
+            logger.error(
+                "transaction-details failed for %s: %s", account_label, exc
+            )
+        return False
+
+    summary = (
+        f"details applied={report['applied']}, "
+        f"skipped_has_details={report['skipped_has_details']}, "
+        f"skipped_pending={report['skipped_pending']}, "
+        f"not_found={report['not_found']}"
+    )
+    if interactive:
+        console.print(f"[dim]{account_label}: {summary}[/dim]")
+    else:
+        logger.info("%s: %s", account_label, summary)
+
+    for result in report.get("results", []):
+        for warning in result.get("warnings", []):
+            logger.warning(
+                "%s: details %s: %s",
+                account_label,
+                result.get("transaction"),
+                warning,
+            )
+    return True
 
 
 ########################################################################
@@ -747,6 +866,42 @@ def _setup_logging(
         "whether to import."
     ),
 )
+@click.option(
+    "--details-limit",
+    default=DEFAULT_DETAILS_LIMIT,
+    show_default=True,
+    type=int,
+    help=(
+        "Max transaction-detail dialog opens per RUN across all "
+        "accounts (merchant-copies are free).  BofA's burst limit "
+        "wedges the page after ~40-50 opens in one login session; "
+        "keep this comfortably below that.  0 disables detail "
+        "fetching entirely."
+    ),
+)
+@click.option(
+    "--details-all",
+    is_flag=True,
+    help=(
+        "With --save-only: fetch the real details dialog for EVERY "
+        "posted transaction that has one (paced, unlimited budget, no "
+        "merchant-copy shortcut) so the saved file captures the full "
+        "data.  Ignores --details-limit.  Expect wedge-recovery "
+        "pauses on large histories."
+    ),
+)
+@click.option(
+    "--category-map",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "YAML overlay for the built-in BofA-to-mibudge category map: "
+        "normalized 'group:name' keys to mibudge category full names "
+        "(or null for 'leave unassigned').  Overlay entries win over "
+        "the built-ins; use it to map BofA categories discovered "
+        "after this importer shipped.  [env var: MIBUDGE_CATEGORY_MAP]"
+    ),
+)
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -773,6 +928,9 @@ def cli_cmd(
     run_funding: bool,
     save_dir: Path | None,
     save_only: bool,
+    details_limit: int,
+    details_all: bool,
+    category_map: Path | None,
     verbose: bool,
     plain: bool,
     theme_name: str,
@@ -780,7 +938,26 @@ def cli_cmd(
     """CLI entry point for the live BofA importer."""
     if save_only and save_dir is None:
         raise click.UsageError("--save-only requires --save-dir.")
+    if details_all and not save_only:
+        raise click.UsageError(
+            "--details-all only applies to --save-only offline captures."
+        )
 
+    # --- Category translation setup ---
+    # Mapping BofA's category vocabulary onto mibudge categories is
+    # the importer's job (mibudge only understands its own category
+    # full names).  The optional overlay extends/overrides the
+    # built-in BOFA_CATEGORY_MAP; any BofA string found in neither is
+    # collected here and reported at the end of the run.
+    overlay: dict[str, str | None] | None = None
+    if category_map is not None:
+        try:
+            overlay = load_overlay_map(category_map)
+        except (ValueError, yaml.YAMLError) as e:
+            raise click.ClickException(str(e)) from e
+    unmapped_categories: set[str] = set()
+
+    # --- BofA credentials ---
     if bofa_onepassword_url is not None:
         bofa_id, bofa_passcode = _read_bofa_credentials_from_1password(
             bofa_onepassword_url
@@ -791,6 +968,7 @@ def cli_cmd(
         if bofa_passcode is None:
             bofa_passcode = click.prompt("BofA Passcode", hide_input=True)
 
+    # --- Output & logging setup ---
     console = Console(theme=get_theme(theme_name).rich, stderr=True)
     interactive = console.is_terminal and not plain
     _setup_logging(verbose, interactive, console=console)
@@ -814,218 +992,381 @@ def cli_cmd(
             "  uv sync --group importers-bofa"
         ) from e
 
-    # --- Launch browser ---
-    if interactive:
-        console.print("[bold]Initializing browser...[/bold]")
-    else:
-        logger.info("Initializing browser (headless=%s)...", headless)
-
-    try:
-        scraper = BofAScraper(
-            bofa_id,
-            bofa_passcode,
-            timeout_duration=timeout,
-            headless=headless,
-            verbose=verbose,
-        )
-    except WebDriverException as e:
-        raise click.ClickException(f"Failed to launch browser: {e}") from e
-
     any_error = False
+    session_lost = False
+
+    # One pacer for the whole run -- the BofA burst limit belongs to
+    # the login session, not to an individual account page.
+    # --details-all offline captures are unlimited (limit -1).
+    pacer = DetailsPacer(limit=-1 if details_all else details_limit)
+    seen_by_signature: dict[str, tuple[dict[str, Any], str]] = {}
+
     try:
-        # --- Log in to BofA ---
-        if interactive:
-            console.print("[bold]Logging in to Bank of America...[/bold]")
-        else:
-            logger.info("Logging in to Bank of America...")
-
-        scraper.login()
-
-        if not scraper.logged_in:
-            raise click.ClickException(
-                "BofA login failed. Check credentials or run with "
-                "--no-headless to inspect the browser state."
-            )
-        if interactive:
-            console.print("[success]Logged in to BofA.[/success]")
-        else:
-            logger.info("BofA login successful.")
-
-        # --- Collect and filter accounts ---
-        accounts = scraper.get_accounts()
-        if not accounts:
-            raise click.ClickException(
-                "No BofA accounts found after login. The page layout may "
-                "have changed; run with --no-headless to inspect."
-            )
-
-        if account_filters:
-            filters_lower = [f.lower() for f in account_filters]
-            selected = [
-                a
-                for a in accounts
-                if any(f in a.get_name().lower() for f in filters_lower)
-            ]
-            if not selected:
-                names = [a.get_name() for a in accounts]
-                raise click.ClickException(
-                    f"No BofA accounts matched filter(s) "
-                    f"{list(account_filters)}. "
-                    f"Available: {names}."
-                )
-        else:
-            selected = list(accounts)
-
-        if interactive:
-            console.print(
-                f"[dim]Found {len(accounts)} BofA account(s); "
-                f"{'saving' if save_only else 'importing'} "
-                f"{len(selected)}.[/dim]"
-            )
-
-        # --- Scrape all accounts ---
-        # Scraping is separated from importing so --save-only can exit
-        # cleanly without ever connecting to mibudge.
-        scraped: list[Any] = []
-        scrape_time = datetime.now(UTC)
-        for account in selected:
-            acct_name = account.get_name()
-            if interactive:
-                console.rule(f"[bold]{acct_name}[/bold]")
-            else:
-                logger.info("--- Scraping account: %s ---", acct_name)
-
-            try:
-                sess = scraper.open_account(account)
-                try:
-                    sess.scrape_transactions()
-                    try:
-                        sess.load_more_transactions()
-                        sess.scrape_transactions()
-                    except NoSuchElementException:
-                        pass  # no "load more" button; first scrape got everything
-                finally:
-                    sess.close()
-            except (WebDriverException, Exception) as e:
-                if interactive:
-                    console.print(
-                        f"[error]Failed to scrape {acct_name!r}: {e}[/error]"
-                    )
-                else:
-                    logger.error("Failed to scrape %r: %s", acct_name, e)
-                any_error = True
-                continue
-
-            txs = account.get_transactions()
-            if interactive:
-                console.print(f"[dim]Scraped {len(txs)} transaction(s).[/dim]")
-            else:
-                logger.info("Scraped %d transaction(s).", len(txs))
-
-            if save_dir is not None:
-                saved_path = save_scraped_account(
-                    account, save_dir, scrape_time
-                )
-                if interactive:
-                    console.print(f"[dim]Saved scrape → {saved_path}[/dim]")
-                else:
-                    logger.info("Saved scrape to %s", saved_path)
-
-            scraped.append(account)
-
-        if save_only:
-            return
-
-        # --- Connect to mibudge and import ---
-        with _build_client(
-            url=url,
-            email=email,
-            password=password,
-            api_key=api_key,
-            vault_path=vault_path,
-            api_key_onepassword_url=api_key_onepassword_url,
-            ca_bundle=ca_bundle,
-            trust_local_certs=trust_local_certs,
-            console=console,
-            interactive=interactive,
-        ) as client:
-            if interactive:
-                with console.status("[bold]Authenticating to mibudge..."):
-                    client.authenticate()
-                console.print("[success]Authenticated to mibudge.[/success]")
-            else:
-                client.authenticate()
-                logger.info("Authenticated to mibudge.")
-
-            user_timezone: str = client.get("/api/v1/users/me/").get(
-                "timezone", "UTC"
-            )
-            logger.info("User timezone: %s", user_timezone)
-
-            for account in scraped:
-                acct_name = account.get_name()
-                if interactive:
-                    console.rule(f"[bold]{acct_name}[/bold]")
-                else:
-                    logger.info("--- Importing account: %s ---", acct_name)
-
-                # Auto-match mibudge account by last-4-digits substring query.
-                last_four = _extract_last_four(acct_name)
-                if last_four is None:
-                    if interactive:
-                        console.print(
-                            f"[warning]Could not extract last-4 digits from "
-                            f"{acct_name!r}; skipping.[/warning]"
-                        )
-                    else:
-                        logger.warning(
-                            "Could not extract last-4 from %r; skipping.",
-                            acct_name,
-                        )
-                    any_error = True
-                    continue
-
-                try:
-                    bank_account_id = _resolve_account_by_query(
-                        client,
-                        last_four,
+        with ExitStack() as stack:
+            # --- Authenticate to mibudge FIRST ---
+            # Fail fast before opening a browser and burning a BofA
+            # login (and possibly a 2FA prompt) on a run that could
+            # never import.
+            client: Any = None
+            user_timezone = "UTC"
+            if not save_only:
+                client = stack.enter_context(
+                    _build_client(
+                        url=url,
+                        email=email,
+                        password=password,
+                        api_key=api_key,
+                        vault_path=vault_path,
+                        api_key_onepassword_url=api_key_onepassword_url,
+                        ca_bundle=ca_bundle,
+                        trust_local_certs=trust_local_certs,
                         console=console,
                         interactive=interactive,
                     )
-                except click.ClickException as e:
+                )
+                if interactive:
+                    with console.status("[bold]Authenticating to mibudge..."):
+                        client.authenticate()
+                    console.print(
+                        "[success]Authenticated to mibudge.[/success]"
+                    )
+                else:
+                    client.authenticate()
+                    logger.info("Authenticated to mibudge.")
+
+                user_timezone = client.get("/api/v1/users/me/").get(
+                    "timezone", "UTC"
+                )
+                logger.info("User timezone: %s", user_timezone)
+
+            # --- Launch browser ---
+            if interactive:
+                console.print("[bold]Initializing browser...[/bold]")
+            else:
+                logger.info("Initializing browser (headless=%s)...", headless)
+
+            try:
+                scraper = BofAScraper(
+                    bofa_id,
+                    bofa_passcode,
+                    timeout_duration=timeout,
+                    headless=headless,
+                    verbose=verbose,
+                )
+            except WebDriverException as e:
+                raise click.ClickException(
+                    f"Failed to launch browser: {e}"
+                ) from e
+            stack.callback(scraper.quit)
+
+            # --- Log in to BofA ---
+            if interactive:
+                console.print("[bold]Logging in to Bank of America...[/bold]")
+            else:
+                logger.info("Logging in to Bank of America...")
+
+            scraper.login()
+
+            if not scraper.logged_in:
+                raise click.ClickException(
+                    "BofA login failed. Check credentials or run with "
+                    "--no-headless to inspect the browser state."
+                )
+            if interactive:
+                console.print("[success]Logged in to BofA.[/success]")
+            else:
+                logger.info("BofA login successful.")
+
+            # --- Collect and filter accounts ---
+            accounts = scraper.get_accounts()
+            if not accounts:
+                raise click.ClickException(
+                    "No BofA accounts found after login. The page layout "
+                    "may have changed; run with --no-headless to inspect."
+                )
+
+            if account_filters:
+                filters_lower = [f.lower() for f in account_filters]
+                selected = [
+                    a
+                    for a in accounts
+                    if any(f in a.get_name().lower() for f in filters_lower)
+                ]
+                if not selected:
+                    names = [a.get_name() for a in accounts]
+                    raise click.ClickException(
+                        f"No BofA accounts matched filter(s) "
+                        f"{list(account_filters)}. "
+                        f"Available: {names}."
+                    )
+            else:
+                selected = list(accounts)
+
+            if interactive:
+                console.print(
+                    f"[dim]Found {len(accounts)} BofA account(s); "
+                    f"{'saving' if save_only else 'importing'} "
+                    f"{len(selected)}.[/dim]"
+                )
+
+            # --- Per account: scrape -> sync -> fetch details -> post ---
+            # The scrape session stays OPEN through the details fetch:
+            # bofa_scraper txn hashes are session-scoped, so details
+            # can only be fetched while the account page is still live.
+            scrape_time = datetime.now(UTC)
+            for account in selected:
+                acct_name = account.get_name()
+
+                if session_lost:
+                    logger.warning(
+                        "BofA session lost; skipping remaining account(s) "
+                        "starting with %r.",
+                        acct_name,
+                    )
+                    any_error = True
+                    break
+
+                if interactive:
+                    console.rule(f"[bold]{acct_name}[/bold]")
+                else:
+                    logger.info("--- Processing account: %s ---", acct_name)
+
+                # Resolve the mibudge account BEFORE scraping so an
+                # unmatched account is skipped without page work.
+                bank_account_id = ""
+                if not save_only:
+                    last_four = _extract_last_four(acct_name)
+                    if last_four is None:
+                        if interactive:
+                            console.print(
+                                f"[warning]Could not extract last-4 digits "
+                                f"from {acct_name!r}; skipping.[/warning]"
+                            )
+                        else:
+                            logger.warning(
+                                "Could not extract last-4 from %r; skipping.",
+                                acct_name,
+                            )
+                        any_error = True
+                        continue
+
+                    try:
+                        bank_account_id = _resolve_account_by_query(
+                            client,
+                            last_four,
+                            console=console,
+                            interactive=interactive,
+                        )
+                    except click.ClickException as e:
+                        if interactive:
+                            console.print(
+                                f"[warning]Skipping {acct_name!r}: "
+                                f"{e.format_message()}[/warning]"
+                            )
+                        else:
+                            logger.warning(
+                                "Skipping %r: %s",
+                                acct_name,
+                                e.format_message(),
+                            )
+                        any_error = True
+                        continue
+
+                # --- Scrape (session stays open for detail fetches) ---
+                details_items: list[dict[str, Any]] = []
+                details_by_index: dict[int, dict[str, Any]] = {}
+                posted_count = 0
+                load_more_clicks = 0
+                try:
+                    sess = scraper.open_account(account)
+                except (WebDriverException, Exception) as e:
                     if interactive:
                         console.print(
-                            f"[warning]Skipping {acct_name!r}: "
-                            f"{e.format_message()}[/warning]"
+                            f"[error]Failed to open {acct_name!r}: {e}[/error]"
                         )
                     else:
-                        logger.warning(
-                            "Skipping %r: %s", acct_name, e.format_message()
-                        )
+                        logger.error("Failed to open %r: %s", acct_name, e)
                     any_error = True
                     continue
 
-                payload, posted_count, pending_count = _build_sync_payload(
-                    account, scrape_time, user_timezone
-                )
-                ok = _post_sync_scrape(
-                    client,
-                    bank_account_id,
-                    payload,
-                    posted_count=posted_count,
-                    pending_count=pending_count,
-                    account_label=acct_name,
-                    dry_run=dry_run,
-                    console=console,
-                    interactive=interactive,
-                )
-                if not ok:
-                    any_error = True
+                try:
+                    try:
+                        sess.scrape_transactions()
+                        try:
+                            sess.load_more_transactions()
+                            load_more_clicks = 1
+                            sess.scrape_transactions()
+                        except NoSuchElementException:
+                            # no "load more" button; first scrape got
+                            # everything
+                            pass
+                    except (WebDriverException, Exception) as e:
+                        if interactive:
+                            console.print(
+                                f"[error]Failed to scrape {acct_name!r}: "
+                                f"{e}[/error]"
+                            )
+                        else:
+                            logger.error(
+                                "Failed to scrape %r: %s", acct_name, e
+                            )
+                        any_error = True
+                        continue
+
+                    raw_txs = account.get_transactions()
+                    if interactive:
+                        console.print(
+                            f"[dim]Scraped {len(raw_txs)} transaction(s).[/dim]"
+                        )
+                    else:
+                        logger.info("Scraped %d transaction(s).", len(raw_txs))
+
+                    if save_only:
+                        if details_all:
+                            # Offline capture: fetch the real dialog
+                            # for every posted row that has one.  Row
+                            # ids are list indexes -- there is no
+                            # server transaction to reference.
+                            capture = [
+                                (str(i), tx) for i, tx in enumerate(raw_txs)
+                            ]
+                            try:
+                                results, stats = fetch_details_for_account(
+                                    sess,
+                                    account,
+                                    capture,
+                                    pacer,
+                                    seen_by_signature,
+                                    load_more_clicks,
+                                    copy_repeats=False,
+                                )
+                            except BofASessionLost as exc:
+                                results = list(
+                                    getattr(exc, "partial_results", [])
+                                )
+                                session_lost = True
+                                logger.warning("%s", exc)
+                            details_by_index = {
+                                int(item["transaction"]): item["details"]
+                                for item in results
+                            }
+                            logger.info(
+                                "%s: captured details for %d transaction(s).",
+                                acct_name,
+                                len(details_by_index),
+                            )
+                    else:
+                        payload, posted_count, pending_count = (
+                            _build_sync_payload(
+                                account, scrape_time, user_timezone
+                            )
+                        )
+                        ok, report = _post_sync_scrape(
+                            client,
+                            bank_account_id,
+                            payload,
+                            posted_count=posted_count,
+                            pending_count=pending_count,
+                            account_label=acct_name,
+                            dry_run=dry_run,
+                            console=console,
+                            interactive=interactive,
+                        )
+                        if not ok:
+                            any_error = True
+
+                        # --- Fetch details for rows the server wants ---
+                        if report is not None and pacer.limit != 0:
+                            needed: list[tuple[str, Any]] = []
+                            uuid_to_index: dict[str, int] = {}
+                            for row in report.get("details_needed", []):
+                                idx = row["index"]
+                                tid = row["transaction"]
+                                if 0 <= idx < len(raw_txs):
+                                    needed.append((tid, raw_txs[idx]))
+                                    uuid_to_index.setdefault(tid, idx)
+
+                            if needed:
+                                if interactive:
+                                    console.print(
+                                        f"[dim]Fetching details for "
+                                        f"{len(needed)} transaction(s) "
+                                        f"(budget left: "
+                                        f"{pacer.limit - pacer.used})"
+                                        f"...[/dim]"
+                                    )
+                                stats = None
+                                try:
+                                    details_items, stats = (
+                                        fetch_details_for_account(
+                                            sess,
+                                            account,
+                                            needed,
+                                            pacer,
+                                            seen_by_signature,
+                                            load_more_clicks,
+                                        )
+                                    )
+                                except BofASessionLost as exc:
+                                    details_items = list(
+                                        getattr(exc, "partial_results", [])
+                                    )
+                                    session_lost = True
+                                    logger.warning("%s", exc)
+                                if stats is not None:
+                                    msg = (
+                                        f"details: fetched={stats.fetched}, "
+                                        f"copied={stats.copied}, "
+                                        f"failed={stats.failed}, "
+                                        f"left-for-next-run="
+                                        f"{stats.skipped_budget}"
+                                    )
+                                    if interactive:
+                                        console.print(f"[dim]{msg}[/dim]")
+                                    else:
+                                        logger.info("%s: %s", acct_name, msg)
+
+                                details_by_index = {
+                                    uuid_to_index[item["transaction"]]: item[
+                                        "details"
+                                    ]
+                                    for item in details_items
+                                    if item["transaction"] in uuid_to_index
+                                }
+                finally:
+                    sess.close()
+
+                # --- Save (now including any fetched details) ---
+                if save_dir is not None:
+                    saved_path = save_scraped_account(
+                        account, save_dir, scrape_time, details_by_index
+                    )
+                    if interactive:
+                        console.print(f"[dim]Saved scrape → {saved_path}[/dim]")
+                    else:
+                        logger.info("Saved scrape to %s", saved_path)
+
+                if save_only:
+                    continue
+
+                # --- POST fetched details ---
+                if details_items:
+                    if not _post_transaction_details(
+                        client,
+                        bank_account_id,
+                        details_items,
+                        acct_name,
+                        console,
+                        interactive,
+                        overlay=overlay,
+                        unmapped=unmapped_categories,
+                    ):
+                        any_error = True
 
                 # run-funding only fires when at least one settled
-                # transaction was in this scrape (pending-only scrapes do
-                # not advance last_posted_through and should not trigger
-                # funding).
+                # transaction was in this scrape (pending-only scrapes
+                # do not advance last_posted_through and should not
+                # trigger funding).
                 if not dry_run and run_funding and posted_count > 0:
                     _run_funding(
                         client,
@@ -1038,9 +1379,25 @@ def cli_cmd(
         raise click.ClickException(str(e)) from e
     except KeyboardInterrupt as e:
         raise click.Abort() from e
-    finally:
-        scraper.quit()
 
+    # --- Run summary & exit status ---
+    if session_lost:
+        logger.warning(
+            "BofA terminated the login session mid-run; unfetched details "
+            "stay pending server-side and will be retried next run."
+        )
+    if unmapped_categories:
+        listing = ", ".join(repr(c) for c in sorted(unmapped_categories))
+        msg = (
+            "BofA categories with no mapping (their transactions were "
+            "left unassigned): "
+            f"{listing}.  Add them to a --category-map overlay file or "
+            "extend BOFA_CATEGORY_MAP in importers/bofa_categories.py."
+        )
+        if interactive:
+            console.print(f"[warning]{msg}[/warning]")
+        else:
+            logger.warning("%s", msg)
     if any_error:
         raise SystemExit(1)
 

@@ -2,6 +2,8 @@
 Utilities for extracting structured data from raw bank transaction descriptions.
 
 parse_transaction_date -- derive the purchase date embedded in a description.
+compose_enriched_description -- build a display description from
+    merchant-detail columns.
 """
 
 # system imports
@@ -68,3 +70,48 @@ def parse_transaction_date(
         return candidate
 
     return posted_date
+
+
+####################################################################
+#
+def compose_enriched_description(
+    merchant_name: str | None,
+    city: str | None,
+    region: str | None,
+    merchant_category: str | None,
+    intermediary_display_name: str | None = None,
+) -> str:
+    """Compose a display description from merchant-detail columns.
+
+    Produces strings like
+    'Trader Joes -- Menlo Park, CA (Grocery Stores and Supermarkets)', or
+    'Blue Bottle Coffee -- Menlo Park, CA (Restaurants, via DoorDash)'
+    when the purchase was routed through a payment platform, omitting
+    any empty part: the location clause drops missing city/region
+    components, and the parenthesised clause is skipped entirely when
+    both the category and the platform are absent.
+
+    Args:
+        merchant_name: The merchant's display name.
+        city: The merchant location city.
+        region: The merchant location region (state/province).
+        merchant_category: The provider's human-readable MCC
+            description.
+        intermediary_display_name: The payment platform's display name
+            (e.g. 'DoorDash'), or None for a direct purchase.
+
+    Returns:
+        The composed description, or '' when every part is empty
+        (callers should keep the existing description in that case).
+    """
+    location = ", ".join(p for p in (city, region) if p)
+    head = " -- ".join(p for p in (merchant_name, location) if p)
+    via = (
+        f"via {intermediary_display_name}" if intermediary_display_name else ""
+    )
+    parenthetical = ", ".join(p for p in (merchant_category, via) if p)
+    if parenthetical:
+        if head:
+            return f"{head} ({parenthetical})"
+        return parenthetical
+    return head

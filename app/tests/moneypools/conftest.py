@@ -11,6 +11,7 @@ from .factories import (
     BudgetFactory,
     FundingEventOccurrenceFactory,
     InternalTransactionFactory,
+    MerchantIntermediaryPatternFactory,
     TransactionAllocationFactory,
     TransactionCategoryFactory,
     TransactionFactory,
@@ -35,6 +36,9 @@ register(
 register(
     BankAccountInvitationFactory
 )  # BankAccountInvitationFactory -> bank_account_invitation_factory
+register(
+    MerchantIntermediaryPatternFactory
+)  # MerchantIntermediaryPatternFactory -> merchant_intermediary_pattern_factory
 
 
 @pytest.fixture

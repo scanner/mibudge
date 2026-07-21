@@ -8,14 +8,23 @@
 #
 # auto_spend: entries were enum strings ('Food & Drink:Groceries');
 # they become canonical full names ('Food & Drink : Groceries')
-# matched case-insensitively against the seeded rows.  Sentinel
+# matched case-insensitively against the seeded rows, with the same
+# enum-spelling translation 0039 applies to allocations.  Sentinel
 # entries ('Uncategorized:Unassigned') are dropped.
 
-from django.db import migrations, models
 import django.db.models.deletion
+from django.db import migrations, models
 from django.db.models import Count
 
 SENTINEL_KEY = ("uncategorized", "unassigned")
+
+# Enum values whose canonical seeded row is spelled differently.  Keys
+# are casefolded normalized (group, name) pairs; values are the
+# canonical seeded pair.
+ENUM_SPELLING_CHANGES: dict[tuple[str, str], tuple[str, str]] = {
+    ("food & drink", "alcohol & bars"): ("Food & Drink", "Alcohol"),
+    ("transportation", "taxies"): ("Transportation", "Taxis & Rideshare"),
+}
 
 
 def _normalize(raw):
@@ -30,6 +39,20 @@ def _normalize(raw):
         return group, group
     name = " ".join(name.split())
     return group, name or group
+
+
+def _canonical(raw):
+    """Normalize an enum string and apply the spelling changes.
+
+    Returns (group, name, casefolded_key) for the canonical pair.
+    """
+    group, name = _normalize(raw)
+    key = (group.casefold(), name.casefold())
+    changed = ENUM_SPELLING_CHANGES.get(key)
+    if changed is not None:
+        group, name = changed
+        key = (group.casefold(), name.casefold())
+    return group, name, key
 
 
 def backfill_transaction_categories(apps, schema_editor):
@@ -81,8 +104,7 @@ def rewrite_auto_spend(apps, schema_editor):
             if not isinstance(entry, str):
                 rewritten.append(entry)
                 continue
-            group, name = _normalize(entry)
-            key = (group.casefold(), name.casefold())
+            group, name, key = _canonical(entry)
             if not group or key == SENTINEL_KEY:
                 continue  # drop sentinel / empty entries
             category = by_key.get(key)
@@ -112,7 +134,7 @@ def unrewrite_auto_spend(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("moneypools", "0041_swap_allocation_category"),
+        ("moneypools", "0039_convert_allocation_category"),
     ]
 
     operations = [

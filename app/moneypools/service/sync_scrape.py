@@ -173,6 +173,24 @@ class ScrapeSyncPayload:
 ########################################################################
 #
 @dataclass
+class DetailsNeededRow:
+    """One posted scrape row whose DB transaction still lacks details.
+
+    `index` is the row's position in the SUBMITTED transactions array
+    (the payload's newest-first order), giving the scraper an exact
+    correlation back to its own row -- immune to the ambiguity of the
+    truncation-rescue dedup.  `transaction_id` is the DB row the
+    fetched details should be applied to.
+    """
+
+    index: int
+    transaction_id: str
+
+
+########################################################################
+########################################################################
+#
+@dataclass
 class ScrapeSyncReport:
     """Summary returned to the caller after a sync.
 
@@ -184,6 +202,15 @@ class ScrapeSyncReport:
     one per row whose posting-order running balance disagrees with the
     bank's per-row `running_balance`.  Empty when every row checks
     out (or when the scrape carried no running balances).
+
+    `details_needed` lists the posted scrape rows whose DB transaction
+    has no details yet: every newly inserted posted row, plus
+    skipped-duplicate posted rows whose existing row has details IS
+    NULL (covering earlier failed detail fetches and pending->posted
+    transitions).  Ordered by `index` ascending -- newest-first,
+    matching the payload order -- so a detail-fetch budget is spent on
+    the most relevant rows first.  Pending rows never appear (details
+    exist only for posted transactions).
     """
 
     deleted_pending: int = 0
@@ -195,6 +222,7 @@ class ScrapeSyncReport:
     last_posted_through: date | None = None
     new_transaction_ids: list[str] = field(default_factory=list)
     new_pending_transaction_ids: list[str] = field(default_factory=list)
+    details_needed: list[DetailsNeededRow] = field(default_factory=list)
 
 
 ########################################################################
@@ -450,7 +478,14 @@ def _sync_scrape_locked(
         Transaction.objects.filter(pkid__in=pending_pkids).delete()
 
     # --- 2. Build dedup map for posted ---------------------------------
-    scraped_posted = [t for t in payload.transactions if not t.is_pending]
+    # Posted rows carry their index in the SUBMITTED transactions
+    # array so the details_needed report can correlate exactly back
+    # to the scraper's own rows.
+    scraped_posted = [
+        (idx, t)
+        for idx, t in enumerate(payload.transactions)
+        if not t.is_pending
+    ]
     scraped_pending = [t for t in payload.transactions if t.is_pending]
 
     # Normalize dates once per scraped posted row.  The parsed
@@ -461,9 +496,9 @@ def _sync_scrape_locked(
     # transaction_date 01/24; using posted_date 01/26 - pad as the
     # floor would push 01/24 outside the window and miss the existing
     # duplicate.
-    posted_normalized: list[tuple[ScrapedTransaction, datetime, datetime]] = [
-        (stx, *_normalize_dates(stx)) for stx in scraped_posted
-    ]
+    posted_normalized: list[
+        tuple[int, ScrapedTransaction, datetime, datetime]
+    ] = [(idx, stx, *_normalize_dates(stx)) for idx, stx in scraped_posted]
 
     # Strict-equality dedup map plus a secondary index keyed by
     # (date, amount) so we can rescue rows whose `raw_description` was
@@ -472,15 +507,21 @@ def _sync_scrape_locked(
     # width (variable per row), so the scraped value can be a prefix
     # of the full description we already have on file (typically from
     # an OFX or CSV import).
-    existing_keys: set[tuple[date, Decimal, str]] = set()
-    existing_by_date_amount: dict[tuple[date, Decimal], list[str]] = {}
+    #
+    # Both structures carry the existing row's (id, has_details) so a
+    # skipped duplicate whose row was never enriched can be reported
+    # in details_needed.
+    existing_keys: dict[tuple[date, Decimal, str], tuple[str, bool]] = {}
+    existing_by_date_amount: dict[
+        tuple[date, Decimal], list[tuple[str, str, bool]]
+    ] = {}
     if posted_normalized:
         min_date = (
-            min(txn_dt.date() for _, _, txn_dt in posted_normalized)
+            min(txn_dt.date() for _, _, _, txn_dt in posted_normalized)
             - _DEDUP_WINDOW_PAD
         )
         max_date = (
-            max(txn_dt.date() for _, _, txn_dt in posted_normalized)
+            max(txn_dt.date() for _, _, _, txn_dt in posted_normalized)
             + _DEDUP_WINDOW_PAD
         )
         for row in Transaction.objects.filter(
@@ -488,14 +529,17 @@ def _sync_scrape_locked(
             pending=False,
             transaction_date__date__gte=min_date,
             transaction_date__date__lte=max_date,
-        ).values("transaction_date", "amount", "raw_description"):
+        ).values(
+            "id", "transaction_date", "amount", "raw_description", "details"
+        ):
             row_date = row["transaction_date"].date()
             row_amount = Decimal(row["amount"])
             row_desc = row["raw_description"]
-            existing_keys.add((row_date, row_amount, row_desc))
+            row_info = (str(row["id"]), row["details"] is not None)
+            existing_keys.setdefault((row_date, row_amount, row_desc), row_info)
             existing_by_date_amount.setdefault(
                 (row_date, row_amount), []
-            ).append(row_desc)
+            ).append((row_desc, *row_info))
 
     # --- 3. Insert new posted (reverse scrape order) -------------------
     new_tx_ids: list[str] = []
@@ -513,17 +557,31 @@ def _sync_scrape_locked(
     # Pending never touched posted_balance, so no posted_delta adjustment
     # from the wipe.
 
-    for stx, posted_dt, txn_dt in reversed(posted_normalized):
+    # transaction id -> submitted-array index for rows needing a
+    # details fetch.  The reversed walk visits indexes high-to-low,
+    # so a plain overwrite leaves each id holding its LOWEST (newest)
+    # index, and the dict key dedups repeat hits on the same row.
+    details_needed_idx: dict[str, int] = {}
+
+    for idx, stx, posted_dt, txn_dt in reversed(posted_normalized):
         key = (txn_dt.date(), stx.amount.amount, stx.raw_description)
-        if key in existing_keys:
+        existing = existing_keys.get(key)
+        if existing is not None:
             skipped_posted += 1
+            existing_id, existing_has_details = existing
+            if not existing_has_details:
+                details_needed_idx[existing_id] = idx
             continue
 
-        if _matches_truncated(
+        rescued = _matches_truncated(
             stx.raw_description,
             existing_by_date_amount.get((key[0], key[1]), ()),
-        ):
+        )
+        if rescued is not None:
             skipped_posted += 1
+            _, rescued_id, rescued_has_details = rescued
+            if not rescued_has_details:
+                details_needed_idx[rescued_id] = idx
             continue
 
         tx = _insert_transaction(
@@ -536,6 +594,7 @@ def _sync_scrape_locked(
             pending=False,
         )
         new_tx_ids.append(str(tx.id))
+        details_needed_idx[str(tx.id)] = idx
         inserted_posted += 1
         avail_delta += stx.amount.amount
         posted_delta += stx.amount.amount
@@ -543,9 +602,9 @@ def _sync_scrape_locked(
 
         # Index the newly-inserted row so a subsequent scraped row in
         # the same payload doesn't slip past via truncation rescue.
-        existing_keys.add(key)
+        existing_keys[key] = (str(tx.id), False)
         existing_by_date_amount.setdefault((key[0], key[1]), []).append(
-            stx.raw_description
+            (stx.raw_description, str(tx.id), False)
         )
 
     # --- 4. Insert pending (reverse scrape order) ----------------------
@@ -597,7 +656,7 @@ def _sync_scrape_locked(
     # --- 7. last_imported_at / last_posted_through ---------------------
     new_last_posted_through = bank_account.last_posted_through
     if scraped_posted:
-        latest_posted = max(t.posted_date.date() for t in scraped_posted)
+        latest_posted = max(t.posted_date.date() for _, t in scraped_posted)
         if (
             new_last_posted_through is None
             or latest_posted > new_last_posted_through
@@ -642,6 +701,14 @@ def _sync_scrape_locked(
         for tid in new_tx_ids:
             _enqueue_link(tid)
 
+    details_needed = sorted(
+        (
+            DetailsNeededRow(index=idx, transaction_id=tid)
+            for tid, idx in details_needed_idx.items()
+        ),
+        key=lambda r: r.index,
+    )
+
     return ScrapeSyncReport(
         deleted_pending=deleted_pending,
         inserted_posted=inserted_posted,
@@ -652,6 +719,7 @@ def _sync_scrape_locked(
         last_posted_through=new_last_posted_through,
         new_transaction_ids=new_tx_ids,
         new_pending_transaction_ids=new_pending_tx_ids,
+        details_needed=details_needed,
     )
 
 
@@ -660,9 +728,9 @@ def _sync_scrape_locked(
 #
 def _matches_truncated(
     scraped_desc: str,
-    candidates: "list[str] | tuple[str, ...]",
-) -> bool:
-    """Decide if `scraped_desc` is the truncated/full sibling of any candidate.
+    candidates: "list[tuple[str, str, bool]] | tuple[()]",
+) -> tuple[str, str, bool] | None:
+    """Find the existing row `scraped_desc` is a truncated/full sibling of.
 
     BofA's web UI sometimes truncates long ACH descriptions with a
     trailing `...` (length varies row-to-row -- 63 to 66 characters
@@ -672,41 +740,43 @@ def _matches_truncated(
     case (existing row is the truncated one, scraped row is full) is
     also handled for robustness.
 
-    Caller guarantees that `candidates` are descriptions of rows that
-    already share `(transaction_date, amount)` with the scraped row,
-    so a prefix relationship is strong evidence of duplication.
+    Caller guarantees that `candidates` are rows that already share
+    `(transaction_date, amount)` with the scraped row, so a prefix
+    relationship is strong evidence of duplication.
 
     Args:
         scraped_desc: `raw_description` from the scrape.
-        candidates: Existing-row descriptions in the same
-            `(date, amount)` bucket.
+        candidates: Existing-row `(raw_description, id, has_details)`
+            tuples in the same `(date, amount)` bucket.
 
     Returns:
-        True if any candidate is a prefix/extension of `scraped_desc`
-        with the `...` truncation marker in play.
+        The first matching candidate tuple, or None when no candidate
+        is a prefix/extension of `scraped_desc` with the `...`
+        truncation marker in play.
     """
     if not candidates:
-        return False
+        return None
 
     scraped_truncated = scraped_desc.endswith("...")
     scraped_stem = scraped_desc[:-3] if scraped_truncated else scraped_desc
 
-    for cand in candidates:
+    for candidate in candidates:
+        cand = candidate[0]
         if cand == scraped_desc:
-            return True
+            return candidate
         cand_truncated = cand.endswith("...")
         cand_stem = cand[:-3] if cand_truncated else cand
 
         # Scraped is truncated: its stem should be a prefix of the
         # candidate's full text.
         if scraped_truncated and cand.startswith(scraped_stem):
-            return True
+            return candidate
         # Candidate is truncated: its stem should be a prefix of the
         # scraped full text.
         if cand_truncated and scraped_desc.startswith(cand_stem):
-            return True
+            return candidate
 
-    return False
+    return None
 
 
 ########################################################################

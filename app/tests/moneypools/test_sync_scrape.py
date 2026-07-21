@@ -918,8 +918,18 @@ class TestMatchesTruncated:
         reason: str,
     ) -> None:
         """Parametrised cases for the truncation-rescue rule."""
-        actual = sync_scrape_svc._matches_truncated(scraped, candidates)
-        assert actual is expected, reason
+        # Candidates carry (raw_description, id, has_details) so the
+        # details_needed report can reference the matched row; the
+        # match itself is still driven purely by the description.
+        candidate_rows = [
+            (desc, f"id-{i}", False) for i, desc in enumerate(candidates)
+        ]
+        actual = sync_scrape_svc._matches_truncated(scraped, candidate_rows)
+        if expected:
+            assert actual is not None, reason
+            assert actual[0] in candidates, reason
+        else:
+            assert actual is None, reason
 
 
 ########################################################################
@@ -1424,3 +1434,171 @@ class TestSyncScrapeNotifications:
         assert n.context["account_id"] == str(empty_account.id)
         assert "error" in n.context
         assert n.log_entry is None  # queued for digest, not sent immediately
+
+
+########################################################################
+########################################################################
+#
+class TestSyncScrapeDetailsNeeded:
+    """Tests for the details_needed report of `sync_scrape`."""
+
+    ####################################################################
+    #
+    @pytest.fixture(autouse=True)
+    def _mock_notifications(self, mock_send_notification_now):
+        """
+        Bring in mock_send_notification_now so notifications don't attempt
+        a real Celery dispatch.
+        """
+        return mock_send_notification_now
+
+    ####################################################################
+    #
+    def test_new_posted_rows_listed_newest_first(
+        self, empty_account: BankAccount
+    ) -> None:
+        """
+        GIVEN: a scrape with a pending row and two new posted rows
+        WHEN:  sync_scrape runs
+        THEN:  details_needed lists only the posted rows, index
+               ascending (the payload's newest-first order), each
+               correlated to its inserted transaction
+        """
+        payload = _payload(
+            ending_balance=Decimal("70.00"),
+            transactions=[
+                _stx(
+                    pending=True,
+                    posted_date=datetime(2026, 5, 19, 12, 0, tzinfo=UTC),
+                    raw_description="PENDING COFFEE",
+                    amount=Decimal("-5.00"),
+                ),
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, tzinfo=UTC),
+                    raw_description="POSTED NEWER",
+                    amount=Decimal("-10.00"),
+                ),
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 17, tzinfo=UTC),
+                    raw_description="POSTED OLDER",
+                    amount=Decimal("85.00"),
+                ),
+            ],
+        )
+
+        report = sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        assert [row.index for row in report.details_needed] == [1, 2]
+        by_desc = {
+            t.raw_description: str(t.id)
+            for t in Transaction.objects.filter(bank_account=empty_account)
+        }
+        assert (
+            report.details_needed[0].transaction_id == by_desc["POSTED NEWER"]
+        )
+        assert (
+            report.details_needed[1].transaction_id == by_desc["POSTED OLDER"]
+        )
+
+    ####################################################################
+    #
+    def test_enriched_duplicates_are_not_relisted(
+        self, empty_account: BankAccount
+    ) -> None:
+        """
+        GIVEN: a prior sync whose rows were partially enriched
+        WHEN:  the same scrape is synced again
+        THEN:  details_needed lists only the still-unenriched
+               duplicate, pointing at the EXISTING row's id
+        """
+        payload = _payload(
+            ending_balance=Decimal("75.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, tzinfo=UTC),
+                    raw_description="POSTED ENRICHED",
+                    amount=Decimal("-10.00"),
+                ),
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 17, tzinfo=UTC),
+                    raw_description="POSTED UNENRICHED",
+                    amount=Decimal("85.00"),
+                ),
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        enriched = Transaction.objects.get(
+            bank_account=empty_account, raw_description="POSTED ENRICHED"
+        )
+        enriched.details = {"merchant_name": "Enriched Mart"}
+        enriched.save()
+        unenriched = Transaction.objects.get(
+            bank_account=empty_account, raw_description="POSTED UNENRICHED"
+        )
+
+        report = sync_scrape_svc.sync_scrape(empty_account, payload)
+
+        assert report.inserted_posted == 0
+        assert report.skipped_posted == 2
+        assert [
+            (row.index, row.transaction_id) for row in report.details_needed
+        ] == [(1, str(unenriched.id))]
+
+    ####################################################################
+    #
+    def test_truncation_rescued_duplicate_is_listed(
+        self, empty_account: BankAccount
+    ) -> None:
+        """
+        GIVEN: a stored full-description row without details and a
+               scrape carrying its truncated sibling
+        WHEN:  sync_scrape runs
+        THEN:  the row dedups via truncation rescue and still appears
+               in details_needed with the existing row's id
+        """
+        full = (
+            "ACMECORP BRK SVC DES:TRANSFER ID:XXXXX1234 ZN8K3 "
+            "INDN:USER NAME CO ID:XXXXX98765 WEB"
+        )
+        truncated = (
+            "ACMECORP BRK SVC DES:TRANSFER ID:XXXXX1234 ZN8K3 "
+            "INDN:USER NAME CO..."
+        )
+        first = _payload(
+            ending_balance=Decimal("-10.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, tzinfo=UTC),
+                    raw_description=full,
+                    amount=Decimal("-10.00"),
+                ),
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, first)
+        stored = Transaction.objects.get(
+            bank_account=empty_account, raw_description=full
+        )
+
+        second = _payload(
+            ending_balance=Decimal("-10.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, tzinfo=UTC),
+                    raw_description=truncated,
+                    amount=Decimal("-10.00"),
+                ),
+            ],
+        )
+        report = sync_scrape_svc.sync_scrape(empty_account, second)
+
+        assert report.skipped_posted == 1
+        assert [
+            (row.index, row.transaction_id) for row in report.details_needed
+        ] == [(0, str(stored.id))]
