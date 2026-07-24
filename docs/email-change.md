@@ -76,7 +76,7 @@ gate applies to `change-password`.
 ### Interactive sessions only
 
 The initiating endpoint carries `RequiresInteractiveAuth`
-([`app/users/permissions.py`](../app/users/permissions.py)): a leaked
+([`app/credentials/permissions.py`](../app/credentials/permissions.py)): a leaked
 API key can read budgets, but it can never rotate the account's email.
 See [`authentication.md`](authentication.md).
 

@@ -124,7 +124,7 @@ select = ["E", "W", "F", "B", "C4", "UP", "I"]
 ignore = ["E501", "B008", "B905"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["moneypools", "users", "config", "importers", "common", "notifications"]
+known-first-party = ["moneypools", "users", "credentials", "config", "importers", "common", "notifications"]
 
 [tool.ruff.format]
 quote-style = "double"

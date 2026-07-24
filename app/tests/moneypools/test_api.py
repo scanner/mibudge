@@ -13,6 +13,8 @@ from djmoney.money import Money
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from credentials.models import APIKey
+
 # Project imports
 from moneypools.models import (
     Bank,
@@ -31,7 +33,7 @@ from tests.moneypools.factories import (
     BudgetFactory,
     TransactionFactory,
 )
-from users.models import APIKey, User
+from users.models import User
 
 # Monthly schedule anchored Jan 1 -- dtstart controls which day-of-month fires.
 _MONTHLY = recurrence.Recurrence(

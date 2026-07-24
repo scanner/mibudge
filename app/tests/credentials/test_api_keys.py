@@ -18,7 +18,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 # Project imports
-from users.models import APIKey, User
+from credentials.models import APIKey
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 

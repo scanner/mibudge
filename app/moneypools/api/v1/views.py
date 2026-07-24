@@ -34,6 +34,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from credentials.permissions import RequiresInteractiveAuth
+
 # Project imports
 from moneypools.models import (
     Bank,
@@ -57,7 +59,6 @@ from moneypools.service import sync_scrape as sync_scrape_svc
 from moneypools.service import transaction as transaction_svc
 from moneypools.service import transaction_details as transaction_details_svc
 from moneypools.service.shared import funding_system_user
-from users.permissions import RequiresInteractiveAuth
 
 from .filters import (
     BudgetFilter,

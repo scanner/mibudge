@@ -1,7 +1,7 @@
 """
 DRF authentication for API keys.
 
-API keys are long-lived machine credentials (see users.models.APIKey)
+API keys are long-lived machine credentials (see credentials.models.APIKey)
 sent as ``Authorization: Api-Key <key>``.  They authenticate as the
 key's owning user; ``request.auth`` is set to the APIKey instance,
 which is how the RequiresInteractiveAuth permission distinguishes
@@ -22,9 +22,10 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 
 # Project imports
-from users.models import APIKey, User
+from credentials.models import APIKey
+from users.models import User
 
-logger = logging.getLogger("users.authentication")
+logger = logging.getLogger("credentials.authentication")
 
 
 ########################################################################
@@ -126,7 +127,7 @@ class ApiKeyAuthentication(BaseAuthentication):
 class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
     """drf-spectacular security scheme for ApiKeyAuthentication."""
 
-    target_class = "users.authentication.ApiKeyAuthentication"
+    target_class = "credentials.authentication.ApiKeyAuthentication"
     name = "apiKeyAuth"
 
     ####################################################################

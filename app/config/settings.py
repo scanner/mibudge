@@ -139,6 +139,7 @@ THIRD_PARTY_APPS = [
 ]
 LOCAL_APPS = [
     "users.apps.UsersConfig",
+    "credentials.apps.CredentialsConfig",
     "moneypools.apps.MoneyPoolsConfig",
     "notifications.apps.NotificationsConfig",
 ]
@@ -410,7 +411,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         # Machine credentials ('Authorization: Api-Key <key>').  Denied
         # on user/security endpoints via RequiresInteractiveAuth.
-        "users.authentication.ApiKeyAuthentication",
+        "credentials.authentication.ApiKeyAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",

@@ -127,7 +127,7 @@ credentials. It returns only profile facts (no security levers), and the
 importers need the `timezone` field to anchor bank-statement dates
 correctly. Writes to the profile remain interactive-only.
 
-This is enforced by the `users.permissions.RequiresInteractiveAuth`
+This is enforced by the `credentials.permissions.RequiresInteractiveAuth`
 permission -- a blocklist gate attached to those views -- and its
 read-only variant `RequiresInteractiveAuthForWrites` (used on
 `/users/me/`, gating only mutating methods). When fine-grained scopes are
@@ -141,10 +141,10 @@ need the reads.**
 
 | Piece                  | Location                                        |
 |------------------------|--------------------------------------------------|
-| `APIKey` model         | `app/users/models.py`                            |
-| DRF authentication     | `app/users/authentication.py` (`ApiKeyAuthentication`) |
-| Interactive-auth gate  | `app/users/permissions.py` (`RequiresInteractiveAuth`) |
-| Management endpoints   | `app/users/api/v1/views.py` (`APIKeyViewSet`)    |
+| `APIKey` model         | `app/credentials/models.py`                      |
+| DRF authentication     | `app/credentials/authentication.py` (`ApiKeyAuthentication`) |
+| Interactive-auth gate  | `app/credentials/permissions.py` (`RequiresInteractiveAuth`) |
+| Management endpoints   | `app/credentials/api/v1/views.py` (`APIKeyViewSet`) |
 | Client support         | `importers/client.py` (`MibudgeClient(api_key=...)`) |
 
 NOTE: the stored digest is an unsalted SHA-256 of the plaintext -- safe

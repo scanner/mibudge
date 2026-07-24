@@ -1,5 +1,5 @@
 """
-DRF permissions for user/security endpoints.
+DRF permissions gating machine credentials off user/security endpoints.
 
 Machine credentials (API keys today; OAuth2 tokens when phase 2 lands)
 get blanket access to the budgeting domain but are denied on
@@ -17,7 +17,7 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 # Project imports
-from users.models import APIKey
+from credentials.models import APIKey
 
 
 ########################################################################

@@ -15,6 +15,7 @@ from django.conf import settings
 from django.urls import path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
+from credentials.api.v1.views import APIKeyViewSet
 from moneypools.api.v1.views import (
     BankAccountViewSet,
     BankViewSet,
@@ -33,7 +34,7 @@ from notifications.api.v1.views import (
     ChannelPreferenceViewSet,
     NotificationPreferenceViewSet,
 )
-from users.api.v1.views import APIKeyViewSet, UserViewSet
+from users.api.v1.views import UserViewSet
 
 if settings.DEBUG:
     router = DefaultRouter()
