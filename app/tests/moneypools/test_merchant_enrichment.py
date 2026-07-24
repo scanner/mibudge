@@ -17,7 +17,7 @@ pytestmark = pytest.mark.django_db
 class TestSplitIntermediary:
     """Tests for the payment-platform prefix detector.
 
-    Relies on the eight patterns seeded by migration 0042 (real
+    Relies on the patterns seeded by migrations 0042 and 0043 (real
     platforms observed in BofA card descriptors); merchant/store names
     below are invented, not real transaction data.
     """
@@ -111,6 +111,17 @@ class TestSplitIntermediary:
                 "actblue",
                 "ActBlue",
                 "SOMECAUSE",
+            ),
+            # Paddle: merchant-of-record for software vendors. BofA's
+            # own merchant name keeps the "PADDLE.NET*" prefix, so it is
+            # NOT provider-resolved -- the store is derived from the
+            # capture group and noise-stripped ("TOWER" from real data).
+            (
+                "PADDLE.NET* TOWER 06/25 PURCHASE PADDLE.COM NY",
+                "PADDLE.NET* TOWER",
+                "paddle",
+                "Paddle",
+                "TOWER",
             ),
             # No known prefix -- a direct merchant using its own
             # asterisk-soft-descriptor convention (UPS, AT&T, ...);

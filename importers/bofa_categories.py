@@ -84,9 +84,10 @@ def category_key(raw: str) -> str:
     return f"{group}:{name}".casefold()
 
 
-# The reviewed BofA vocabulary (complete as of the 2026-07 harvest:
-# 24 categories across 4 accounts, converged).  None = deliberately
-# unassigned.
+# The reviewed BofA vocabulary (25 categories seen across 4 accounts
+# as of the 2026-07 harvest).  Not guaranteed complete: BofA can post
+# a category we have not seen yet, which the importer flags at end of
+# run.  None = deliberately unassigned.
 #
 BOFA_CATEGORY_MAP: dict[str, str | None] = {
     "cash, checks & misc:checks": "Uncategorized : Checks",
@@ -122,6 +123,16 @@ BOFA_CATEGORY_MAP: dict[str, str | None] = {
     "transportation:gasoline/fuel": "Transportation : Gas",
     "travel:travel": "Travel : Other Travel",
     "uncategorized:uncategorized": "Uncategorized : Unknown",
+    # BofA's placeholder for a transaction that has already POSTED but
+    # that BofA has not categorized yet (detail page reports
+    # 'Uncategorized: Pending').  We do not know what it is *yet*, not
+    # that it is unknowable -- so leave it unassigned rather than
+    # bucketing it into 'Unknown'.  None here means "send no category",
+    # and the details service only ever sets a NULL category (never
+    # clears one), so the transaction is left for the user to
+    # categorize.  Genuinely-pending transactions never reach here:
+    # BofA returns no category for them and the endpoint skips pending.
+    "uncategorized:pending": None,
 }
 
 
