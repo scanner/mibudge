@@ -136,6 +136,7 @@ THIRD_PARTY_APPS = [
     "guardian",
     "django_vite",
     "ordered_model",
+    "oauth2_provider",
 ]
 LOCAL_APPS = [
     "users.apps.UsersConfig",
@@ -445,6 +446,51 @@ API_KEY_LAST_USED_THROTTLE = timedelta(minutes=5)
 # Owners of an expiring API key are notified once the expiry is within
 # this many days, giving them time to mint a replacement key.
 API_KEY_EXPIRY_NOTICE_DAYS = env.int("API_KEY_EXPIRY_NOTICE_DAYS", default=14)
+
+# django-oauth-toolkit (OAuth2 provider)
+# ------------------------------------------------------------------------------
+# We swap DOT's Application/AccessToken/RefreshToken/Grant/IDToken for
+# concrete models in the `credentials` app -- see credentials/models.py
+# for why each one must (or should) be owned.  These settings MUST be in
+# place before DOT's own migrations run: swapped-out models make DOT's
+# CreateModel operations no-ops, and credentials/0003 creates the real
+# tables.
+#
+# DeviceGrant (DOT's sixth swappable model, RFC 8628 device flow) is
+# deliberately NOT swapped: it is not part of the Application/token FK
+# web (it references the client by a plain client_id string), so owning
+# its upgrade migrations would buy nothing today.  Enabling device flow
+# later stays additive -- flip on the device-code grant and add the
+# verification views; DOT's own DeviceGrant table is used as-is.
+OAUTH2_PROVIDER_APPLICATION_MODEL = "credentials.Application"
+OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "credentials.AccessToken"
+OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "credentials.RefreshToken"
+OAUTH2_PROVIDER_ID_TOKEN_MODEL = "credentials.IDToken"
+OAUTH2_PROVIDER_GRANT_MODEL = "credentials.Grant"
+
+OAUTH2_PROVIDER = {
+    # PKCE is mandatory for every authorization-code flow (public MCP /
+    # desktop / mobile clients).  DOT 3.x already defaults this to True;
+    # pinned here so the policy survives a library default change.
+    "PKCE_REQUIRED": True,
+    # Grant-type policy: authorization-code + PKCE + refresh tokens ONLY.
+    # DOT has no global grant-type allowlist -- the flow permitted by an
+    # app is its per-row `authorization_grant_type`, so this is enforced
+    # at app registration (checkpoint 4) by only ever writing
+    # 'authorization-code'.  No implicit, password, or client-credentials
+    # app is creatable.  Refresh tokens are issued for the auth-code
+    # grant automatically and rotate on use (ROTATE_REFRESH_TOKEN, DOT
+    # default True).
+    #
+    # Placeholder scope vocabulary: a single blanket read/write pair
+    # until the real taxonomy lands (task-mibudge-auth-scopes).  OAuth2
+    # tokens still pass through the RequiresInteractiveAuth gate, so this
+    # placeholder does not widen machine-credential access.
+    "SCOPES": {
+        "read": "Read access to your budgeting data",
+        "write": "Read and write access to your budgeting data",
+    },
+}
 
 # drf-spectacular
 # ------------------------------------------------------------------------------

@@ -60,6 +60,7 @@ dependencies = [
     "crispy-bootstrap5>=2026.3",
     "iso18245>=1.4.1",
     "django-ordered-model>=3.7.4",
+    "django-oauth-toolkit>=3.4.0",
 ]
 
 [build-system]

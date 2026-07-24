@@ -19,6 +19,14 @@ from django.conf import settings
 from django.db import models
 from django.db.models import CharField, DateTimeField, ForeignKey, UUIDField
 from django.utils import timezone
+from oauth2_provider.models import (
+    AbstractAccessToken,
+    AbstractApplication,
+    AbstractGrant,
+    AbstractIDToken,
+    AbstractRefreshToken,
+    ApplicationManager,
+)
 
 if TYPE_CHECKING:
     from users.models import User
@@ -151,3 +159,121 @@ class APIKey(models.Model):
         """Soft-revoke the key.  Revocation is permanent."""
         self.revoked_at = timezone.now()
         self.save(update_fields=["revoked_at", "modified_at"])
+
+
+########################################################################
+########################################################################
+#
+# OAuth2 provider models (django-oauth-toolkit swapped models).
+#
+# Why we own these models instead of using DOT's defaults:
+#
+#   1. Application MUST be swapped -- we add `visibility` and `status`
+#      fields (below).  This is DOT's supported extension path, the same
+#      mechanism as a custom AUTH_USER_MODEL.
+#   2. AccessToken and RefreshToken MUST be swapped as a pair, into this
+#      one app.  They share a circular foreign key
+#      (AccessToken.source_refresh_token <-> RefreshToken.access_token),
+#      so swapping one while leaving the other on DOT's default splits
+#      that cycle across two apps and Django cannot order the migrations
+#      (DOT ships the W011 system check that flags exactly this).
+#   3. Grant and IDToken add no fields, but are swapped alongside them
+#      because model swapping is a one-way door: it only works cleanly
+#      before the first migration, on empty tables.  Doing it later, once
+#      DOT's default tables hold live grants and tokens, is a painful
+#      data migration.  Empty subclasses now are cheap insurance so the
+#      scope work (task-mibudge-auth-scopes) can later add fields to any
+#      of these models without that surgery.
+#
+# The token/grant subclasses inherit their abstract base's Meta so DOT's
+# constraints/indexes survive, and must NOT set `swappable` (that option
+# is what marks DOT's own models as the swap targets).  See
+# config/settings.py for the swap wiring and the DeviceGrant decision.
+#
+class Application(AbstractApplication):
+    """An OAuth2 client application registered against mibudge.
+
+    Adds two fields beyond DOT's AbstractApplication:
+
+    - `visibility`: whether the app is private to the registering user
+      or promoted to global (visible/authorizable by everyone).
+    - `status`: lifecycle stage gating who sees a global app, so new
+      versions can be staged before every user sees them.
+
+    Only global + published apps are listed for non-owners; earlier
+    stages stay visible to the owner and staff only (enforced at the
+    registration/list layer in checkpoint 4).
+    """
+
+    class Visibility(models.TextChoices):
+        PRIVATE = "private", "Private to owner"
+        GLOBAL = "global", "Global (all users)"
+
+    class Status(models.TextChoices):
+        TESTING = "testing", "Testing"
+        VALIDATION = "validation", "Validation"
+        PUBLISHED = "published", "Published"
+
+    # NOTE: the var-annotated ignores below are unavoidable, not sloppy:
+    # DOT ships no type stubs, so django-stubs sees AbstractApplication as
+    # Any and does not treat Application as a Django model -- it therefore
+    # cannot infer the descriptor type for fields we add here (inherited
+    # fields are unaffected, being declared on the untyped base).  The
+    # fields are ordinary CharFields at runtime.
+    visibility = models.CharField(  # type: ignore[var-annotated]
+        max_length=16,
+        choices=Visibility.choices,
+        default=Visibility.PRIVATE,
+        help_text=(
+            "Private apps are visible only to the registering user; "
+            "global apps are visible to all users (staff-promoted)."
+        ),
+    )
+    status = models.CharField(  # type: ignore[var-annotated]
+        max_length=16,
+        choices=Status.choices,
+        default=Status.TESTING,
+        help_text=(
+            "Lifecycle stage.  Only global + published apps are listed "
+            "for non-owners; earlier stages are owner/staff only."
+        ),
+    )
+
+    objects = ApplicationManager()
+
+    class Meta(AbstractApplication.Meta):
+        pass
+
+    ####################################################################
+    #
+    def natural_key(self) -> tuple[str]:
+        """Natural key (client_id) for serialization/fixtures."""
+        return (self.client_id,)
+
+
+class Grant(AbstractGrant):
+    """Authorization-code grant (short-lived, exchanged for a token)."""
+
+    class Meta(AbstractGrant.Meta):
+        pass
+
+
+class AccessToken(AbstractAccessToken):
+    """A bearer access token issued to an authorized application."""
+
+    class Meta(AbstractAccessToken.Meta):
+        pass
+
+
+class RefreshToken(AbstractRefreshToken):
+    """A refresh token used to mint a new access token on rotation."""
+
+    class Meta(AbstractRefreshToken.Meta):
+        pass
+
+
+class IDToken(AbstractIDToken):
+    """An OpenID Connect ID token (kept swapped for FK integrity)."""
+
+    class Meta(AbstractIDToken.Meta):
+        pass

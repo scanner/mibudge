@@ -680,6 +680,22 @@ wheels = [
 ]
 
 [[package]]
+name = "django-oauth-toolkit"
+version = "3.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "jwcrypto" },
+    { name = "oauthlib" },
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/59/a7/f185dc058f859b104c1fed06ab25eeebbb7e182c3e25c6f7e11e8df3f739/django_oauth_toolkit-3.4.0.tar.gz", hash = "sha256:e43bef1568d6322b44175e27eff82ed7d7cf210889a07d10b8a64e4190ff1351", size = 220227, upload-time = "2026-07-24T02:50:38.186Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/64/3cb3a71aaac17ebfc1db56522fdacddeb79dd041f1174584b210988df4c3/django_oauth_toolkit-3.4.0-py3-none-any.whl", hash = "sha256:c504457898a363d332fb98beed5eceeec9da4aa659055a50a93aa52e8ed55534", size = 145738, upload-time = "2026-07-24T02:50:36.852Z" },
+]
+
+[[package]]
 name = "django-ordered-model"
 version = "3.7.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1176,6 +1192,19 @@ wheels = [
 ]
 
 [[package]]
+name = "jwcrypto"
+version = "1.5.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/de/7e/53c14813521693e931e420d9db00efe317419ff194495903bce03402275e/jwcrypto-1.5.8.tar.gz", hash = "sha256:c3d7114b6f6e65b52f6b7da817eb8cb8423e1da31e1ef13508447c81ecbdcc34", size = 90772, upload-time = "2026-06-24T19:36:50.782Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/7c/f87c5db042c4f7b4476346fc0d22f1025a777fee08eebde3720d3b9c4eb5/jwcrypto-1.5.8-py3-none-any.whl", hash = "sha256:85aeb475f808d56bbc2f2ed1f6f73e6a317c4011a4321505f02f0aed695a3742", size = 96133, upload-time = "2026-06-24T19:36:49.519Z" },
+]
+
+[[package]]
 name = "kombu"
 version = "5.6.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1463,6 +1492,7 @@ dependencies = [
     { name = "django-guardian" },
     { name = "django-model-utils" },
     { name = "django-money" },
+    { name = "django-oauth-toolkit" },
     { name = "django-ordered-model" },
     { name = "django-recurrence" },
     { name = "django-redis" },
@@ -1539,6 +1569,7 @@ requires-dist = [
     { name = "django-guardian" },
     { name = "django-model-utils" },
     { name = "django-money" },
+    { name = "django-oauth-toolkit", specifier = ">=3.4.0" },
     { name = "django-ordered-model", specifier = ">=3.7.4" },
     { name = "django-recurrence" },
     { name = "django-redis" },
@@ -1639,6 +1670,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9e5958945e01910052158313224ada5ce1fb2e1113b8/nodeenv-1.10.0.tar.gz", hash = "sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb", size = 55611, upload-time = "2025-12-20T14:08:54.006Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438, upload-time = "2025-12-20T14:08:52.782Z" },
+]
+
+[[package]]
+name = "oauthlib"
+version = "3.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/5f/19930f824ffeb0ad4372da4812c50edbd1434f678c90c2733e1188edfc63/oauthlib-3.3.1.tar.gz", hash = "sha256:0f0f8aa759826a193cf66c12ea1af1637f87b9b4622d46e866952bb022e538c9", size = 185918, upload-time = "2025-06-19T22:48:08.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/9c/92789c596b8df838baa98fa71844d84283302f7604ed565dafe5a6b5041a/oauthlib-3.3.1-py3-none-any.whl", hash = "sha256:88119c938d2b8fb88561af5f6ee0eec8cc8d552b7bb1f712743136eb7523b7a1", size = 160065, upload-time = "2025-06-19T22:48:06.508Z" },
 ]
 
 [[package]]
