@@ -58,6 +58,10 @@ class TestCategoryFor:
             # Vocabulary miss: no category AND flagged for the run
             # report.
             ("Brand New : Bucket", None, None, False),
+            # Built-in null mapping: BofA's 'Uncategorized: Pending'
+            # (a posted transaction BofA has not categorized yet) is
+            # known but deliberately left unassigned -- not a miss.
+            ("Uncategorized: Pending", None, None, True),
             # Empty category string is normal (not every transaction
             # has one) -- no category, not a miss.
             ("", None, None, True),
