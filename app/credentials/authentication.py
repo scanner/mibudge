@@ -1,11 +1,17 @@
 """
-DRF authentication for API keys.
+DRF authentication for machine credentials.
 
 API keys are long-lived machine credentials (see credentials.models.APIKey)
 sent as ``Authorization: Api-Key <key>``.  They authenticate as the
 key's owning user; ``request.auth`` is set to the APIKey instance,
 which is how the RequiresInteractiveAuth permission distinguishes
 machine credentials from interactive JWT sessions.
+
+OAuth2 access tokens issued to registered 3rd-party apps arrive as
+``Authorization: Bearer <token>`` and are handled by
+django-oauth-toolkit; the OAuth2Authentication subclass here adds the
+active-user check DOT omits.  It sets ``request.auth`` to an
+AccessToken, the other half of the RequiresInteractiveAuth blocklist.
 """
 
 # system imports
@@ -13,7 +19,13 @@ import logging
 
 # 3rd party imports
 from django.utils import timezone
+from drf_spectacular.contrib.django_oauth_toolkit import (
+    DjangoOAuthToolkitScheme,
+)
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
+from oauth2_provider.contrib.rest_framework import (
+    OAuth2Authentication as DOTOAuth2Authentication,
+)
 from rest_framework.authentication import (
     BaseAuthentication,
     get_authorization_header,
@@ -22,7 +34,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 
 # Project imports
-from credentials.models import APIKey
+from credentials.models import AccessToken, APIKey
 from users.models import User
 
 logger = logging.getLogger("credentials.authentication")
@@ -119,6 +131,66 @@ class ApiKeyAuthentication(BaseAuthentication):
         ):
             return
         APIKey.objects.filter(pk=api_key.pk).update(last_used_at=now)
+
+
+########################################################################
+########################################################################
+#
+class OAuth2Authentication(DOTOAuth2Authentication):
+    """DOT's OAuth2 authentication, plus an active-user check.
+
+    django-oauth-toolkit validates the token but never looks at
+    ``user.is_active`` -- it hands back the token's user regardless.
+    Both other authenticators here reject deactivated users (simplejwt
+    in ``get_user()``, ApiKeyAuthentication explicitly), so without this
+    an OAuth2 grant would be the one credential that survives
+    deactivating an account.
+
+    NOTE: revocation of the grant itself is DOT's job (the token row is
+    deleted or its ``expires`` passes); this only covers the case where
+    the *user* is disabled while grants are outstanding.
+    """
+
+    ####################################################################
+    #
+    def authenticate(self, request: Request) -> tuple[User, AccessToken] | None:
+        """Authenticate the bearer token, rejecting inactive users.
+
+        Args:
+            request: The incoming DRF request.
+
+        Returns:
+            (user, access_token) on success, or None if the request
+            carries no valid OAuth2 bearer token (a JWT, for instance),
+            so that the next authenticator gets a chance at it.
+
+        Raises:
+            AuthenticationFailed: If the token is valid but its user has
+                been deactivated.
+        """
+        result = super().authenticate(request)
+        if result is None:
+            return None
+
+        user, access_token = result
+        if not user.is_active:
+            raise AuthenticationFailed("User inactive or deleted.")
+        return (user, access_token)
+
+
+########################################################################
+########################################################################
+#
+class OAuth2AuthenticationScheme(DjangoOAuthToolkitScheme):
+    """Point drf-spectacular's DOT scheme at our subclass.
+
+    OpenApiAuthenticationExtension matches on the exact class by
+    default, so the stock DOT extension would not fire for
+    OAuth2Authentication above and the schema would lose its oauth2
+    security scheme.
+    """
+
+    target_class = "credentials.authentication.OAuth2Authentication"
 
 
 ########################################################################

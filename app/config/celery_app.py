@@ -78,6 +78,10 @@ MANAGED_PERIODIC_TASKS: dict = {
         "task": "credentials.tasks.notify_expiring_api_keys",
         "schedule": {"crontab": {"minute": "0", "hour": "15"}},
     },
+    "Clear expired OAuth2 tokens": {
+        "task": "credentials.tasks.clear_expired_oauth2_tokens",
+        "schedule": {"crontab": {"minute": "30", "hour": "3"}},
+    },
 }
 
 

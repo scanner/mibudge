@@ -408,7 +408,20 @@ SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 # django-rest-framework
 # ------------------------------------------------------------------------------
 REST_FRAMEWORK = {
+    # IMPORTANT: OAuth2 MUST precede JWT.  Both schemes read
+    # 'Authorization: Bearer <token>', and simplejwt does not fall
+    # through on a token it cannot parse -- it raises InvalidToken (401),
+    # so an OAuth2 access token would never reach DOT if JWT ran first.
+    # DOT's OAuth2Authentication, by contrast, returns None when the
+    # bearer token is not one of its own, so JWT still sees every JWT.
+    # The cost is one indexed AccessToken lookup per JWT request; if that
+    # ever matters, discriminate on token shape (a JWS has two dots)
+    # rather than reordering.
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        # OAuth2 access tokens from registered 3rd-party apps
+        # ('Authorization: Bearer <token>').  Machine credentials: denied
+        # on user/security endpoints via RequiresInteractiveAuth.
+        "credentials.authentication.OAuth2Authentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         # Machine credentials ('Authorization: Api-Key <key>').  Denied
         # on user/security endpoints via RequiresInteractiveAuth.
@@ -490,6 +503,47 @@ OAUTH2_PROVIDER = {
         "read": "Read access to your budgeting data",
         "write": "Read and write access to your budgeting data",
     },
+    # Token lifetimes.  The access token mirrors the SPA's JWT access
+    # lifetime (60 min) -- short enough that a leaked token is of limited
+    # use, long enough that clients are not refreshing constantly.  DOT's
+    # own default is 10 hours, which is far too generous for a credential
+    # that reaches a user's whole financial history.
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
+    # Refresh tokens do NOT expire on a timer: an authorization grant
+    # persists until the user revokes it or the app is deregistered
+    # (unlike the SPA's 14-day sliding JWT refresh, which is a session).
+    # Revocation is therefore the ONLY way a grant ends -- the
+    # "Authorized apps" management surface is what makes that usable.
+    "REFRESH_TOKEN_EXPIRE_SECONDS": None,
+    # Rotate on every use (DOT default; pinned) so a captured refresh
+    # token is single-use and reuse is detectable.
+    "ROTATE_REFRESH_TOKEN": True,
+    # Act on that detection: replaying a rotated-out refresh token
+    # revokes the whole token family, so a stolen refresh token buys an
+    # attacker one access token before the grant dies and the user is
+    # forced back through consent.  DOT defaults this OFF; it is on here
+    # because every client is public (PKCE, no client secret) and holds
+    # a refresh token that never expires on its own -- precisely the
+    # case the protection exists for.
+    #
+    # NOTE: with reuse protection on, DOT's clear_expired() deliberately
+    # RETAINS revoked refresh tokens (they are the detection record) so
+    # long as REFRESH_TOKEN_EXPIRE_SECONDS is None.  Those rows
+    # therefore accumulate at roughly one per refresh per grant; revisit
+    # if the table ever grows enough to matter.
+    "REFRESH_TOKEN_REUSE_PROTECTION": True,
+    # ...but honor a rotated-out refresh token briefly.  With a 0-second
+    # grace period (DOT's default) a client whose refresh response is
+    # lost in flight -- a dropped mobile connection, a retried request --
+    # retries with a token the server has already consumed and loses the
+    # grant outright, forcing the user back through consent.  Two minutes
+    # covers a retry without meaningfully widening the replay window.
+    "REFRESH_TOKEN_GRACE_PERIOD_SECONDS": 120,
+    # Authorization codes are exchanged immediately by a redirected
+    # client; 60s (DOT default, pinned) is ample and keeps the window
+    # where an intercepted code is useful small.  PKCE already binds the
+    # code to the client that requested it.
+    "AUTHORIZATION_CODE_EXPIRE_SECONDS": 60,
 }
 
 # drf-spectacular
@@ -522,6 +576,13 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1/",
+    # The oauth2 security scheme is emitted (see
+    # credentials.authentication.OAuth2AuthenticationScheme) but its
+    # `flows` are empty until DOT's endpoints are mounted: describing a
+    # flow means naming its authorization/token URLs.  Set
+    # OAUTH2_FLOWS/OAUTH2_AUTHORIZATION_URL/OAUTH2_TOKEN_URL here once
+    # /o/authorize/ and /o/token/ exist, so Swagger UI can drive the
+    # flow interactively.
     # Three models expose a 'status' field with different choice sets;
     # name each component explicitly so spectacular does not fall back
     # to hash-suffixed names like 'Status58bEnum'.  NOTE: no trailing

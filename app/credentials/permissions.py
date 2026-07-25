@@ -1,14 +1,14 @@
 """
 DRF permissions gating machine credentials off user/security endpoints.
 
-Machine credentials (API keys today; OAuth2 tokens when phase 2 lands)
-get blanket access to the budgeting domain but are denied on
-user/security endpoints -- a blocklist enforced by attaching
-RequiresInteractiveAuth to those views.  Views whose reads are useful
-to machine consumers (e.g. /users/me/, which the importers query for
-the user's timezone) use RequiresInteractiveAuthForWrites instead,
-which gates only the mutating methods.  When fine-grained scopes are
-introduced these gates become just another scope check.
+Machine credentials (API keys and OAuth2 access tokens) get blanket
+access to the budgeting domain but are denied on user/security
+endpoints -- a blocklist enforced by attaching RequiresInteractiveAuth
+to those views.  Views whose reads are useful to machine consumers
+(e.g. /users/me/, which the importers query for the user's timezone)
+use RequiresInteractiveAuthForWrites instead, which gates only the
+mutating methods.  When fine-grained scopes are introduced these gates
+become just another scope check.
 """
 
 # 3rd party imports
@@ -17,7 +17,20 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 # Project imports
-from credentials.models import APIKey
+from credentials.models import AccessToken, APIKey
+
+# The credential types that identify a request as machine-driven, keyed
+# off what each authenticator puts in ``request.auth``:
+# ApiKeyAuthentication -> APIKey, DOT's OAuth2Authentication ->
+# AccessToken.  Interactive sessions carry a simplejwt token instead
+# (and force_authenticate() in tests carries None).
+#
+# IMPORTANT: this is a blocklist, so it fails OPEN -- a new machine
+# credential type that is not listed here silently gains access to every
+# gated endpoint.  Any authenticator added to
+# DEFAULT_AUTHENTICATION_CLASSES must be classified here.
+#
+MACHINE_CREDENTIAL_TYPES = (APIKey, AccessToken)
 
 
 ########################################################################
@@ -28,21 +41,27 @@ class RequiresInteractiveAuth(BasePermission):
 
     Interactive sessions (JWT from a password login) carry a
     rest_framework_simplejwt token in ``request.auth``; machine
-    credentials carry an APIKey instance (and later an OAuth2 access
-    token).  Apply this alongside the view's normal permissions on
-    sensitive endpoints: password/email change, invitations, user
-    management, and API-key management itself.
+    credentials carry an APIKey or an OAuth2 AccessToken (see
+    MACHINE_CREDENTIAL_TYPES).  Apply this alongside the view's normal
+    permissions on sensitive endpoints: password/email change,
+    invitations, user management, and API-key management itself.
+
+    NOTE: an OAuth2 grant is denied here no matter what scopes it
+    carries.  A 3rd-party app must never be able to change the login
+    email or password of the account that authorized it -- that would
+    let a granted app lock the user out of revoking the grant.
     """
 
     message = (
         "This endpoint requires an interactive login session; "
-        "machine credentials such as API keys are not permitted."
+        "machine credentials such as API keys and OAuth2 tokens are "
+        "not permitted."
     )
 
     ####################################################################
     #
     def has_permission(self, request: Request, view: APIView) -> bool:
-        """Return False when the request was authenticated by an API key.
+        """Return False when a machine credential authenticated the request.
 
         Args:
             request: The incoming DRF request.
@@ -51,7 +70,7 @@ class RequiresInteractiveAuth(BasePermission):
         Returns:
             True unless the request's credential is a machine credential.
         """
-        return not isinstance(request.auth, APIKey)
+        return not isinstance(request.auth, MACHINE_CREDENTIAL_TYPES)
 
 
 ########################################################################

@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.utils import timezone
 from django.utils.dateformat import format as django_date_format
+from oauth2_provider.models import clear_expired
 
 # Project imports
 from config import celery_app
@@ -84,3 +85,25 @@ def notify_expiring_api_keys() -> None:
             "notify_expiring_api_keys: %d expiring key(s) notified.",
             notified,
         )
+
+
+########################################################################
+########################################################################
+#
+@celery_app.task(ignore_result=True)
+def clear_expired_oauth2_tokens() -> None:
+    """
+    Delete expired OAuth2 access tokens, grants, and refresh tokens.
+
+    Runs nightly (registered in MANAGED_PERIODIC_TASKS).  Access tokens
+    expire hourly and unused authorization codes within a minute, so
+    without this the tables grow without bound.  Deletion is purely
+    housekeeping -- an expired token has no authority -- and DOT batches
+    it internally (CLEAR_EXPIRED_TOKENS_BATCH_SIZE).
+
+    NOTE: with REFRESH_TOKEN_REUSE_PROTECTION enabled and no refresh
+    expiry configured, DOT intentionally keeps revoked refresh tokens:
+    they are the record that makes replay detectable.  This task does
+    not (and must not) remove them.
+    """
+    clear_expired()

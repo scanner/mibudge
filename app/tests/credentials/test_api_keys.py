@@ -2,9 +2,9 @@
 #
 """Tests for API-key machine authentication.
 
-Covers the APIKey model, the ApiKeyAuthentication DRF class, the
-key-management endpoints, and the RequiresInteractiveAuth blocklist
-gate on user/security endpoints.
+Covers the APIKey model, the ApiKeyAuthentication DRF class, and the
+key-management endpoints.  The RequiresInteractiveAuth gate is shared
+with OAuth2 tokens and is tested in test_permissions.py.
 """
 
 # system imports
@@ -21,21 +21,14 @@ from rest_framework.test import APIClient
 from credentials.models import APIKey
 from users.models import User
 
+from .factories import MintedAPIKey
+
 pytestmark = pytest.mark.django_db
 
 # The gate-free endpoint used to exercise authentication: read-only,
 # available to any authenticated user, no fixtures required.
 BANKS_URL = reverse("api_v1:bank-list")
 API_KEYS_URL = reverse("api_v1:api-key-list")
-
-
-####################################################################
-#
-def key_client(plaintext: str) -> APIClient:
-    """Return an APIClient sending the given plaintext API key."""
-    client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
-    return client
 
 
 ########################################################################
@@ -46,14 +39,17 @@ class TestApiKeyAuthentication:
 
     ####################################################################
     #
-    def test_make_returns_plaintext_and_stores_only_hash(self, user: User):
+    def test_make_returns_plaintext_and_stores_only_hash(
+        self, user: User, api_key_factory: Callable[..., MintedAPIKey]
+    ):
         """
         GIVEN: a user
-        WHEN:  APIKey.make() is called
+        WHEN:  APIKey.make() is called (as the factory does)
         THEN:  the plaintext is returned once, only its hash is stored,
                and the displayable prefix matches the plaintext
         """
-        api_key, plaintext = APIKey.make(user, "test key")
+        api_key = api_key_factory(user=user, name="test key")
+        plaintext = api_key.plaintext
 
         assert plaintext.startswith(APIKey.KEY_PREFIX)
         assert api_key.hashed_key == APIKey.hash_key(plaintext)
@@ -68,7 +64,12 @@ class TestApiKeyAuthentication:
         "scenario",
         ["unknown", "revoked", "expired", "inactive_user", "malformed"],
     )
-    def test_bad_credentials_rejected(self, user: User, scenario: str):
+    def test_bad_credentials_rejected(
+        self,
+        user: User,
+        api_key_factory: Callable[..., MintedAPIKey],
+        scenario: str,
+    ):
         """
         GIVEN: a credential that is unknown, revoked, expired, owned by
                a deactivated user, or a malformed Api-Key header
@@ -79,21 +80,21 @@ class TestApiKeyAuthentication:
             case "unknown":
                 header = "Api-Key mib_not-a-real-key"
             case "revoked":
-                api_key, plaintext = APIKey.make(user, scenario)
+                api_key = api_key_factory(user=user, name=scenario)
                 api_key.revoke()
-                header = f"Api-Key {plaintext}"
+                header = f"Api-Key {api_key.plaintext}"
             case "expired":
-                _, plaintext = APIKey.make(
-                    user,
-                    scenario,
+                api_key = api_key_factory(
+                    user=user,
+                    name=scenario,
                     expires_at=timezone.now() - timedelta(seconds=1),
                 )
-                header = f"Api-Key {plaintext}"
+                header = f"Api-Key {api_key.plaintext}"
             case "inactive_user":
-                _, plaintext = APIKey.make(user, scenario)
+                api_key = api_key_factory(user=user, name=scenario)
                 user.is_active = False
                 user.save()
-                header = f"Api-Key {plaintext}"
+                header = f"Api-Key {api_key.plaintext}"
             case "malformed":
                 header = "Api-Key"
 
@@ -103,14 +104,20 @@ class TestApiKeyAuthentication:
 
     ####################################################################
     #
-    def test_last_used_updates_are_throttled(self, user: User, settings):
+    def test_last_used_updates_are_throttled(
+        self,
+        user: User,
+        settings,
+        api_key_factory: Callable[..., MintedAPIKey],
+        api_key_client: Callable[[str], APIClient],
+    ):
         """
         GIVEN: a key that was just used (last_used_at is fresh)
         WHEN:  a second request arrives inside the throttle interval
         THEN:  last_used_at is not written again; outside it, it is
         """
-        api_key, plaintext = APIKey.make(user, "importer")
-        client = key_client(plaintext)
+        api_key = api_key_factory(user=user, name="importer")
+        client = api_key_client(api_key.plaintext)
 
         client.get(BANKS_URL)
         api_key.refresh_from_db()
@@ -185,7 +192,10 @@ class TestAPIKeyManagementAPI:
     ####################################################################
     #
     def test_scoped_to_own_keys(
-        self, user: User, user_factory: Callable[..., User]
+        self,
+        user: User,
+        user_factory: Callable[..., User],
+        api_key_factory: Callable[..., MintedAPIKey],
     ):
         """
         GIVEN: keys belonging to two different users
@@ -193,8 +203,8 @@ class TestAPIKeyManagementAPI:
         THEN:  only their own keys are listed; the foreign key is 404
         """
         other = user_factory()
-        APIKey.make(user, "mine")
-        theirs, _ = APIKey.make(other, "theirs")
+        api_key_factory(user=user, name="mine")
+        theirs = api_key_factory(user=other, name="theirs")
 
         client = APIClient()
         client.force_authenticate(user=user)
@@ -210,13 +220,15 @@ class TestAPIKeyManagementAPI:
 
     ####################################################################
     #
-    def test_revoke(self, user: User):
+    def test_revoke(
+        self, user: User, api_key_factory: Callable[..., MintedAPIKey]
+    ):
         """
         GIVEN: an active key
         WHEN:  POST .../{uuid}/revoke/ is called, twice
         THEN:  the first call revokes it, the second returns 400
         """
-        api_key, _ = APIKey.make(user, "doomed")
+        api_key = api_key_factory(user=user, name="doomed")
         client = APIClient()
         client.force_authenticate(user=user)
         revoke_url = reverse(
@@ -229,57 +241,3 @@ class TestAPIKeyManagementAPI:
 
         response = client.post(revoke_url)
         assert response.status_code == 400
-
-
-########################################################################
-########################################################################
-#
-class TestRequiresInteractiveAuth:
-    """Tests for the machine-credential blocklist gate."""
-
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "method,url_name,expected_status",
-        [
-            # Sensitive user/security endpoints: machine creds denied.
-            ("patch", "api_v1:user-me", 403),
-            ("post", "api_v1:user-change-password", 403),
-            ("post", "api_v1:user-change-email", 403),
-            ("get", "api_v1:user-my-invitations", 403),
-            ("get", "api_v1:api-key-list", 403),
-            ("post", "api_v1:api-key-list", 403),
-            # Profile reads + budgeting domain: allowed.
-            ("get", "api_v1:user-me", 200),
-            ("get", "api_v1:bank-list", 200),
-            ("get", "api_v1:bankaccount-list", 200),
-        ],
-    )
-    def test_api_key_access_by_endpoint(
-        self, user: User, method: str, url_name: str, expected_status: int
-    ):
-        """
-        GIVEN: a valid API key
-        WHEN:  a v1 endpoint is accessed with it
-        THEN:  user/security endpoints deny the machine credential
-               with 403, while profile reads and budgeting-domain
-               endpoints allow it
-        """
-        _, plaintext = APIKey.make(user, "importer")
-        response = getattr(key_client(plaintext), method)(reverse(url_name))
-        assert response.status_code == expected_status
-
-    ####################################################################
-    #
-    def test_api_key_can_read_own_profile(self, user: User):
-        """
-        GIVEN: a valid API key
-        WHEN:  GET /users/me/ is requested with it
-        THEN:  the profile body includes the fields machine consumers
-               rely on (importers read the timezone)
-        """
-        _, plaintext = APIKey.make(user, "importer")
-        response = key_client(plaintext).get(reverse("api_v1:user-me"))
-        assert response.status_code == 200
-        assert response.data["username"] == user.username
-        assert response.data["timezone"] == user.timezone
