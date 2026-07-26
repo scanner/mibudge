@@ -9,6 +9,11 @@ class UsersConfig(AppConfig):
     def ready(self):
         import users.signals  # noqa F401
 
+        # Registers the OpenAPI security-scheme override for JWT auth;
+        # an extension registers itself when its class body executes, so
+        # the module has to be imported somewhere.
+        import users.schema  # noqa F401
+
         # Deferred import: notification_kinds imports from notifications.models,
         # which requires the app registry to be fully initialized.  ready() is
         # the correct place for any import that touches Django models.

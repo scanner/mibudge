@@ -631,11 +631,17 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "mibudge API",
     "DESCRIPTION": (
         "REST API for the mibudge personal budgeting service.\n\n"
-        "## Authentication\n\n"
-        "All endpoints require JWT authentication via "
-        "`Authorization: Bearer <token>` header. Obtain tokens "
-        "through the login flow; refresh via "
-        "`POST /api/token/refresh/` (httpOnly cookie).\n\n"
+        # NOTE: no '## Authentication' section here -- each scheme
+        # documents itself in components.securitySchemes (see
+        # credentials/authentication.py and users/schema.py), and the
+        # generated docs render those under their own Authentication
+        # heading.  Describing the schemes here too duplicated the
+        # heading and went stale the moment a third method landed.
+        "Every endpoint requires authentication. Three credentials are "
+        "accepted -- an interactive JWT, a machine API key, or an "
+        "OAuth2 access token -- each described under Authentication "
+        "below. Machine credentials (API keys and OAuth2 tokens) are "
+        "refused on user/security endpoints.\n\n"
         "## Permissions\n\n"
         "- **Banks**: read-only, any authenticated user.\n"
         "- **Users**: list/retrieve/update restricted to staff; "

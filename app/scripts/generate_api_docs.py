@@ -85,6 +85,66 @@ def _format_schema_properties(
 
 ########################################################################
 #
+def _format_security_scheme(name: str, scheme: dict) -> list[str]:
+    """
+    Render one OpenAPI security scheme as Markdown.
+
+    Each scheme type carries different fields -- `in`/`name` belong to
+    apiKey only, `scheme`/`bearerFormat` to http, and `flows` to oauth2 --
+    so each is summarized on its own terms rather than through one
+    apiKey-shaped template.
+
+    Args:
+        name: The security scheme's name in `components.securitySchemes`.
+        scheme: The security scheme object.
+
+    Returns:
+        Markdown lines describing the scheme.
+    """
+    scheme_type = scheme.get("type", "")
+
+    match scheme_type:
+        case "apiKey":
+            summary = (
+                f"`apiKey` in `{scheme.get('in', '')}` "
+                f"(`{scheme.get('name', '')}`)"
+            )
+        case "http":
+            summary = f"`http`, scheme `{scheme.get('scheme', '')}`"
+            if scheme.get("bearerFormat"):
+                summary += f", format `{scheme['bearerFormat']}`"
+        case "oauth2":
+            flows = scheme.get("flows", {})
+            summary = f"`oauth2`, flows: {', '.join(flows) or 'none'}"
+        case _:
+            summary = f"`{scheme_type}`"
+
+    lines = [f"### {name}", "", summary, ""]
+
+    if scheme.get("description"):
+        lines.extend([scheme["description"], ""])
+
+    # oauth2 flows carry the endpoints and scopes a client needs, which
+    # are the whole point of the scheme -- spell them out.
+    for flow_name, flow in scheme.get("flows", {}).items():
+        lines.append(f"**{flow_name} flow**")
+        lines.append("")
+        for label, key in (
+            ("Authorization URL", "authorizationUrl"),
+            ("Token URL", "tokenUrl"),
+            ("Refresh URL", "refreshUrl"),
+        ):
+            if flow.get(key):
+                lines.append(f"- {label}: `{flow[key]}`")
+        for scope, scope_description in flow.get("scopes", {}).items():
+            lines.append(f"- Scope `{scope}`: {scope_description}")
+        lines.append("")
+
+    return lines
+
+
+########################################################################
+#
 def generate_markdown(spec: dict) -> str:
     """
     Convert an OpenAPI spec dict into a Markdown string.
@@ -112,13 +172,7 @@ def generate_markdown(spec: dict) -> str:
         sections.append("## Authentication")
         sections.append("")
         for scheme_name, scheme in security_schemes.items():
-            scheme_type = scheme.get("type", "")
-            location = scheme.get("in", "")
-            name = scheme.get("name", "")
-            sections.append(
-                f"- **{scheme_name}**: `{scheme_type}` "
-                f"(in: `{location}`, name: `{name}`)"
-            )
+            sections.extend(_format_security_scheme(scheme_name, scheme))
         sections.append("")
 
     # Group paths by tag

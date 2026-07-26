@@ -192,6 +192,41 @@ class OAuth2AuthenticationScheme(DjangoOAuthToolkitScheme):
 
     target_class = "credentials.authentication.OAuth2Authentication"
 
+    ####################################################################
+    #
+    def get_security_definition(self, auto_schema: object) -> dict:
+        """Return DOT's oauth2 scheme plus mibudge's usage notes.
+
+        The flows themselves are built by DOT's extension from the
+        SPECTACULAR OAUTH2_* settings; only the description is added
+        here, so the endpoints and scopes stay generated rather than
+        duplicated.
+
+        Args:
+            auto_schema: The drf-spectacular AutoSchema being built.
+
+        Returns:
+            The OpenAPI security scheme object.
+        """
+        definition = super().get_security_definition(auto_schema)
+        definition["description"] = (
+            "Delegated access for registered 3rd-party apps and MCP "
+            "servers, granted by a user rather than handed to them.\n\n"
+            "Authorization code + PKCE only, and PKCE is mandatory "
+            "(S256; `plain` is rejected). The implicit, password, "
+            "client-credentials and device grants are all refused. "
+            "Access tokens last 60 minutes and must be sent as "
+            "`Authorization: Bearer <token>`; refresh tokens do not "
+            "expire on a timer and rotate on every use, so a grant ends "
+            "only when the user revokes it at `/o/revoke_token/`.\n\n"
+            "Endpoints are discoverable at "
+            "`/.well-known/oauth-authorization-server` (RFC 8414). "
+            "OAuth2 tokens are machine credentials: they reach the "
+            "budgeting domain but are refused on user/security "
+            "endpoints."
+        )
+        return definition
+
 
 ########################################################################
 ########################################################################
@@ -211,6 +246,17 @@ class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
             "in": "header",
             "name": "Authorization",
             "description": (
-                "API-key authentication. Format: ``Api-Key <key>``."
+                "Long-lived machine credentials for services the user "
+                "runs themselves -- the transaction importers, scripts, "
+                "self-hosted integrations.\n\n"
+                "Send as `Authorization: Api-Key <key>`. Keys are "
+                "minted at `/api/v1/users/me/api-keys/`, which returns "
+                "the plaintext exactly once (only a hash is stored), "
+                "and are revoked there too. A key may carry an expiry; "
+                "its owner is emailed before it lapses.\n\n"
+                "API keys are machine credentials: they reach the "
+                "budgeting domain but are refused on user/security "
+                "endpoints. Use OAuth2 instead when a 3rd party -- not "
+                "the user -- will hold the credential."
             ),
         }

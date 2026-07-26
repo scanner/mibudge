@@ -2,9 +2,7 @@
 
 REST API for the mibudge personal budgeting service.
 
-## Authentication
-
-All endpoints require JWT authentication via `Authorization: Bearer <token>` header. Obtain tokens through the login flow; refresh via `POST /api/token/refresh/` (httpOnly cookie).
+Every endpoint requires authentication. Three credentials are accepted -- an interactive JWT, a machine API key, or an OAuth2 access token -- each described under Authentication below. Machine credentials (API keys and OAuth2 tokens) are refused on user/security endpoints.
 
 ## Permissions
 
@@ -20,9 +18,43 @@ Monetary values are represented as a decimal amount paired with an ISO 4217 curr
 
 ## Authentication
 
-- **apiKeyAuth**: `apiKey` (in: `header`, name: `Authorization`)
-- **jwtAuth**: `http` (in: ``, name: ``)
-- **oauth2**: `oauth2` (in: ``, name: ``)
+### apiKeyAuth
+
+`apiKey` in `header` (`Authorization`)
+
+Long-lived machine credentials for services the user runs themselves -- the transaction importers, scripts, self-hosted integrations.
+
+Send as `Authorization: Api-Key <key>`. Keys are minted at `/api/v1/users/me/api-keys/`, which returns the plaintext exactly once (only a hash is stored), and are revoked there too. A key may carry an expiry; its owner is emailed before it lapses.
+
+API keys are machine credentials: they reach the budgeting domain but are refused on user/security endpoints. Use OAuth2 instead when a 3rd party -- not the user -- will hold the credential.
+
+### jwtAuth
+
+`http`, scheme `bearer`, format `JWT`
+
+Interactive user sessions -- the SPA and native apps.
+
+POST email and password to `/api/token/` to get an access token in the response body plus a long-lived refresh token as an httpOnly cookie. Send the access token as `Authorization: Bearer <access>`; it expires after 60 minutes. `POST /api/token/refresh/` reads the refresh cookie and returns a fresh access token, rotating the cookie.
+
+This is the only credential that reaches user/security endpoints (password change, email change, invitations, API-key management); machine credentials are refused there.
+
+### oauth2
+
+`oauth2`, flows: authorizationCode
+
+Delegated access for registered 3rd-party apps and MCP servers, granted by a user rather than handed to them.
+
+Authorization code + PKCE only, and PKCE is mandatory (S256; `plain` is rejected). The implicit, password, client-credentials and device grants are all refused. Access tokens last 60 minutes and must be sent as `Authorization: Bearer <token>`; refresh tokens do not expire on a timer and rotate on every use, so a grant ends only when the user revokes it at `/o/revoke_token/`.
+
+Endpoints are discoverable at `/.well-known/oauth-authorization-server` (RFC 8414). OAuth2 tokens are machine credentials: they reach the budgeting domain but are refused on user/security endpoints.
+
+**authorizationCode flow**
+
+- Authorization URL: `/o/authorize/`
+- Token URL: `/o/token/`
+- Scope `read`: Read access to your budgeting data
+- Scope `write`: Read and write access to your budgeting data
+
 
 ## Endpoints
 
