@@ -3,6 +3,7 @@
 # 3rd party imports
 from django.contrib import admin
 from django.http import HttpRequest
+from oauth2_provider.admin import ApplicationAdmin as DOTApplicationAdmin
 
 # Project imports
 from credentials.models import APIKey
@@ -63,3 +64,37 @@ class APIKeyAdmin(admin.ModelAdmin):
         self, request: HttpRequest, obj: APIKey | None = None
     ) -> bool:
         return False
+
+
+########################################################################
+########################################################################
+#
+class ApplicationAdmin(DOTApplicationAdmin):
+    """DOT's application admin, with the two mibudge fields surfaced.
+
+    Registered via OAUTH2_PROVIDER['APPLICATION_ADMIN_CLASS'] rather than
+    admin.site.register(), which is DOT's supported override hook.
+
+    IMPORTANT: view_on_site is disabled.  DOT's AbstractApplication
+    defines get_absolute_url() pointing at its own application-detail
+    management view, and that view is deliberately not mounted (see
+    credentials/urls.py) -- leaving the link in place makes the admin's
+    'View on site' raise NoReverseMatch.
+    """
+
+    view_on_site = False
+
+    list_display = (
+        "name",
+        "user",
+        "visibility",
+        "status",
+        "client_type",
+        "authorization_grant_type",
+    )
+    list_filter = (
+        "visibility",
+        "status",
+        "client_type",
+        "authorization_grant_type",
+    )

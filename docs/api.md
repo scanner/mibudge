@@ -22,6 +22,7 @@ Monetary values are represented as a decimal amount paired with an ISO 4217 curr
 
 - **apiKeyAuth**: `apiKey` (in: `header`, name: `Authorization`)
 - **jwtAuth**: `http` (in: ``, name: ``)
+- **oauth2**: `oauth2` (in: ``, name: ``)
 
 ## Endpoints
 

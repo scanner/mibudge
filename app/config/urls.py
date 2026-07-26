@@ -71,6 +71,12 @@ urlpatterns = [
             ]
         ),
     ),
+    # OAuth2 provider: /o/authorize/, /o/token/, /o/revoke_token/, plus
+    # its own /o/login/ and the RFC 8414 discovery document at
+    # /.well-known/oauth-authorization-server.  Mounted at the root
+    # because that document must live at the origin root -- the /o/
+    # prefix is on the individual patterns.  See credentials/urls.py.
+    path("", include("credentials.urls")),
     # Moneypools
     path("mp/", include("moneypools.urls")),
     # Invitation acceptance pages (outside the SPA; unauthenticated-accessible)

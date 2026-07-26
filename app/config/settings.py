@@ -487,13 +487,16 @@ OAUTH2_PROVIDER = {
     # pinned here so the policy survives a library default change.
     "PKCE_REQUIRED": True,
     # Grant-type policy: authorization-code + PKCE + refresh tokens ONLY.
-    # DOT has no global grant-type allowlist -- the flow permitted by an
-    # app is its per-row `authorization_grant_type`, so this is enforced
-    # at app registration (checkpoint 4) by only ever writing
-    # 'authorization-code'.  No implicit, password, or client-credentials
-    # app is creatable.  Refresh tokens are issued for the auth-code
-    # grant automatically and rotate on use (ROTATE_REFRESH_TOKEN, DOT
-    # default True).
+    # DOT has no single grant-type allowlist; the policy is enforced in
+    # three places, and all three must agree:
+    #   1. per-app `authorization_grant_type` -- only ever written as
+    #      'authorization-code' at registration (checkpoint 4);
+    #   2. the COMPLIANT_BCP_RFC9700_* gates below, which reject the
+    #      implicit and password grants server-wide;
+    #   3. the discovery document (OAUTH2_*_SUPPORTED below), which must
+    #      advertise exactly what 1 and 2 accept.
+    # Refresh tokens are issued for the auth-code grant automatically and
+    # rotate on use (ROTATE_REFRESH_TOKEN, DOT default True).
     #
     # Placeholder scope vocabulary: a single blanket read/write pair
     # until the real taxonomy lands (task-mibudge-auth-scopes).  OAuth2
@@ -544,7 +547,83 @@ OAUTH2_PROVIDER = {
     # where an intercepted code is useful small.  PKCE already binds the
     # code to the client that requested it.
     "AUTHORIZATION_CODE_EXPIRE_SECONDS": 60,
+    # RFC 8414 discovery document (/.well-known/oauth-authorization-server).
+    # DOT's defaults advertise implicit, password, client-credentials and
+    # device-code -- every one of which this server rejects.  A discovery
+    # document that lies sends clients down flows that will fail, so these
+    # are narrowed to what is actually accepted.  Endpoint URLs are not
+    # listed here: DOT reverse()s them and omits any that are not mounted,
+    # which is what keeps the unmounted device-flow endpoints out.
+    # Surface `visibility`/`status` in the admin and drop DOT's
+    # "View on site" link, which points at an unmounted view.
+    "APPLICATION_ADMIN_CLASS": "credentials.admin.ApplicationAdmin",
+    "OAUTH2_GRANT_TYPES_SUPPORTED": ["authorization_code", "refresh_token"],
+    "OAUTH2_RESPONSE_TYPES_SUPPORTED": ["code"],
+    # 'none' is the RFC 8414 value for public clients, which is what MCP /
+    # desktop / mobile apps are.  The two client_secret_* methods stay for
+    # confidential clients (our own hosted importers, registered as global
+    # apps) -- PKCE is required of both.
+    "OAUTH2_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED": [
+        "none",
+        "client_secret_post",
+        "client_secret_basic",
+    ],
+    # RFC 9700 (OAuth 2.0 Security BCP) gates.  DOT defaults every one of
+    # these to False for backwards compatibility and flips them in 4.0;
+    # adopting them now is what enforces this server's grant policy in the
+    # library itself rather than only at registration time.
+    #
+    # Behaviour gates:
+    "COMPLIANT_BCP_RFC9700_IMPLICIT_GRANT": True,  # reject implicit
+    "COMPLIANT_BCP_RFC9700_PASSWORD_GRANT": True,  # reject password grant
+    # Reject the PKCE 'plain' challenge method: it transmits the verifier
+    # in the clear and gives no protection against code interception,
+    # which is the entire reason PKCE is required here.  S256 only.
+    "COMPLIANT_BCP_RFC9700_PKCE_METHOD": True,
+    # Reject access tokens passed in the URI query string (they leak into
+    # logs, Referer headers, and browser history).  Header only.
+    "COMPLIANT_BCP_RFC9700_ACCESS_TOKEN_TRANSPORT": True,
+    # RFC 9207: identify this server in the authorization response so a
+    # client talking to several providers cannot be tricked into sending
+    # our code to another one (mix-up defence).
+    "COMPLIANT_BCP_RFC9700_AUTHZ_RESPONSE_ISS": True,
+    #
+    # Config-validation gates: these change no behaviour, they raise the
+    # severity of `manage.py check --deploy` from Warning to Error when
+    # the setting they cover is on a non-compliant value.  The covered
+    # settings are all compliant above, so turning these on costs nothing
+    # today and makes a future regression fail the deploy check.
+    "COMPLIANT_BCP_RFC9700_REFRESH_TOKEN": True,
+    "COMPLIANT_BCP_RFC9700_REDIRECT_URI_MATCHING": True,
+    "COMPLIANT_BCP_RFC9700_PKCE_REQUIRED": True,
+    #
+    # Two gates are deliberately left OFF:
+    #
+    # COMPLIANT_BCP_RFC9700_REDIRECT_URI_SCHEME would forbid 'http'
+    # redirect URIs, which also forbids the http://127.0.0.1 loopback
+    # callback that RFC 8252 native apps -- desktop, mobile, and MCP
+    # clients, i.e. most of our intended consumers -- must use.  Keeping
+    # 'http' allowed does mean a registered redirect URI could point at a
+    # plaintext remote host, so registration validation must restrict
+    # http to loopback (checkpoint 4).
+    #
+    # COMPLIANT_BCP_RFC9700_TOKEN_STORAGE (hash tokens at rest, like
+    # APIKey does) is mutually exclusive with
+    # REFRESH_TOKEN_GRACE_PERIOD_SECONDS > 0 -- DOT raises E001 -- because
+    # honouring a rotated-out refresh token means returning the previously
+    # issued token, which a hash cannot reproduce.  The grace period was
+    # chosen deliberately; revisit the trade-off if that changes.
 }
+
+# The OAuth2 consent flow's own login page (/o/login/) accepts a
+# password, so it needs a brute-force limit of its own -- it is a plain
+# Django view and none of DRF's throttling applies to it.  Counted per
+# submitted email address; see credentials.views.OAuth2LoginView for why
+# not per IP.
+OAUTH2_LOGIN_MAX_ATTEMPTS = env.int("OAUTH2_LOGIN_MAX_ATTEMPTS", default=10)
+OAUTH2_LOGIN_WINDOW_SECONDS = env.int(
+    "OAUTH2_LOGIN_WINDOW_SECONDS", default=900
+)
 
 # drf-spectacular
 # ------------------------------------------------------------------------------
@@ -576,13 +655,15 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1/",
-    # The oauth2 security scheme is emitted (see
-    # credentials.authentication.OAuth2AuthenticationScheme) but its
-    # `flows` are empty until DOT's endpoints are mounted: describing a
-    # flow means naming its authorization/token URLs.  Set
-    # OAUTH2_FLOWS/OAUTH2_AUTHORIZATION_URL/OAUTH2_TOKEN_URL here once
-    # /o/authorize/ and /o/token/ exist, so Swagger UI can drive the
-    # flow interactively.
+    # Describe the one OAuth2 flow this server offers, so Swagger UI can
+    # drive it.  Only 'authorizationCode' is listed -- the implicit,
+    # password and client-credentials flows are rejected (see the RFC
+    # 9700 gates in OAUTH2_PROVIDER) and must not be advertised here
+    # either.  Scopes are read from OAUTH2_PROVIDER['SCOPES'] by
+    # drf-spectacular's DOT extension when OAUTH2_SCOPES is unset.
+    "OAUTH2_FLOWS": ["authorizationCode"],
+    "OAUTH2_AUTHORIZATION_URL": "/o/authorize/",
+    "OAUTH2_TOKEN_URL": "/o/token/",
     # Three models expose a 'status' field with different choice sets;
     # name each component explicitly so spectacular does not fall back
     # to hash-suffixed names like 'Status58bEnum'.  NOTE: no trailing

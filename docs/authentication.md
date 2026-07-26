@@ -1,14 +1,20 @@
 # Authentication
 
-mibudge supports two ways to authenticate against the REST API:
+mibudge supports three ways to authenticate against the REST API:
 
 | Method             | Credential                          | Intended for                                              |
 |--------------------|-------------------------------------|-----------------------------------------------------------|
 | **Password + JWT** | `Authorization: Bearer <access>`    | Interactive user agents: the SPA, mobile and desktop apps |
-| **API key**        | `Authorization: Api-Key <key>`      | Machine clients: transaction importers, 3rd-party services |
+| **API key**        | `Authorization: Api-Key <key>`      | Machine clients you run yourself: transaction importers   |
+| **OAuth2 token**   | `Authorization: Bearer <access>`    | Registered third-party apps and MCP servers acting for a user |
 
-OAuth2 for registered third-party apps (hosted import services, MCP
-servers) is planned as the next phase of machine authentication.
+The difference between the last two is who holds the secret. An API key
+is minted by the user and pasted into something they operate. An OAuth2
+grant is what a *third party* gets: the user authorizes an app without
+ever handing it a credential, and can revoke it later.
+
+Both are **machine credentials** and are treated identically by the
+`RequiresInteractiveAuth` gate described below.
 
 ---
 
@@ -111,7 +117,7 @@ variable, a 1Password secret reference to the field holding the key
 Vault secret key `api_key` -- see
 [`docs/importers.md`](importers.md).
 
-### What API keys may not do
+### What machine credentials may not do
 
 Machine credentials get blanket access to the budgeting domain (bank
 accounts, budgets, transactions, allocations, funding, ...) but are
@@ -151,3 +157,128 @@ NOTE: the stored digest is an unsalted SHA-256 of the plaintext -- safe
 because the secret is a high-entropy random token (not a low-entropy
 password), and a deterministic hash allows an indexed O(1) lookup on every
 authenticated request.
+
+---
+
+## Delegated access: OAuth2 for registered apps
+
+Third-party apps -- MCP servers, hosted import services, future
+integrations -- get access through an OAuth2 authorization-code grant
+rather than by being handed a credential. The user approves the app once
+on a consent screen; the grant then persists until they revoke it.
+
+**Only one flow is offered: authorization code + PKCE, plus refresh
+tokens.** No implicit, no resource-owner password, no client
+credentials, and (for now) no device flow. This covers desktop, mobile
+and MCP clients, all of which are public clients that cannot keep a
+secret.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/.well-known/oauth-authorization-server` | RFC 8414 discovery document -- how a client finds the rest |
+| `/o/authorize/` | Consent screen (server-rendered) |
+| `/o/token/` | Code exchange and refresh |
+| `/o/revoke_token/` | Revocation |
+| `/o/login/` | **The OAuth2 flow's own login page** -- see below |
+
+Endpoints DOT ships that are deliberately **not** mounted: the device
+flow (`/o/device*`), DOT's own HTML app/token management screens, OIDC
+(`userinfo`, `jwks.json`), dynamic client registration, and token
+introspection. See the module docstring in
+[`app/credentials/urls.py`](../app/credentials/urls.py) for why each one
+is out.
+
+### IMPORTANT: the OAuth2 flow has its own login page
+
+`/o/login/` is a **separate login page from the SPA's** `/app/login/`,
+and that is deliberate.
+
+The consent screen needs `request.user`, which means it needs a **Django
+session**. Nothing else in mibudge uses one: the SPA authenticates with
+a JWT and API-key clients never see a login page at all. Pointing the
+consent screen at the SPA login would deadlock -- the SPA would
+authenticate the user, hand back a JWT, set no session cookie, and the
+consent screen would bounce the user back to the login page forever.
+
+So the OAuth2 flow gets a server-rendered login of its own. It takes the
+**same email and password** as the SPA; only the artifact differs (a
+session instead of a JWT), and that session exists only to carry the
+user through consent.
+
+This also matches the traffic: someone landing on `/o/authorize/` got
+there from a third-party app, not from a mibudge tab, so there is
+usually no SPA session to reuse anyway.
+
+Practical consequences:
+
+- Signing in at `/o/login/` does **not** sign you in to the SPA, and
+  vice versa.
+- `/o/login/` has a brute-force limit of its own
+  (`OAUTH2_LOGIN_MAX_ATTEMPTS` failures per `OAUTH2_LOGIN_WINDOW_SECONDS`,
+  counted per submitted email address) because DRF's throttling does not
+  apply to a plain Django view.
+- allauth's login view is **not** used: with
+  `ACCOUNT_EMAIL_VERIFICATION = "mandatory"` it refuses any account
+  without a verified allauth `EmailAddress` row, and this project never
+  creates those.
+
+### Token lifetimes and rotation
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| Access token | 60 min | Mirrors the SPA's JWT. DOT's 10-hour default is far too generous for a credential reaching a user's whole financial history. |
+| Refresh token | No expiry | A grant ends by revocation, not by a timer -- that is the point of OAuth2 here. |
+| Rotation | On every use | A captured refresh token is single-use and its reuse is detectable. |
+| Reuse protection | On | Replaying a rotated-out refresh token revokes the whole token family. |
+| Grace period | 120 s | A client whose refresh response is lost in flight can retry instead of losing the grant. |
+
+NOTE: reuse protection makes DOT deliberately **retain** revoked refresh
+tokens -- they are the record that makes replay detectable -- so those
+rows accumulate at roughly one per refresh per grant.
+
+It also rules out hashed token storage
+(`COMPLIANT_BCP_RFC9700_TOKEN_STORAGE`): honouring a rotated-out refresh
+token means returning the previously issued token, which a hash cannot
+reproduce. That is a deliberate trade-off of at-rest protection for
+refresh reliability, and it is the one place OAuth2 tokens are stored
+differently from API keys (which are hash-only).
+
+### Security policy enforced in settings
+
+`OAUTH2_PROVIDER` adopts DOT's RFC 9700 (OAuth 2.0 Security BCP) gates
+early -- they all default to off in DOT 3.x and flip in 4.0. Enabled:
+implicit and password grants rejected, PKCE `plain` rejected (S256
+only), access tokens rejected in query strings, and RFC 9207 `iss` in
+the authorization response (mix-up defence). The config-validation gates
+are on too, so a regression on PKCE, refresh-token reuse protection, or
+wildcard redirect URIs fails `manage.py check --deploy`.
+
+Two gates stay off, both documented in
+[`app/config/settings.py`](../app/config/settings.py):
+`COMPLIANT_BCP_RFC9700_REDIRECT_URI_SCHEME` (it would forbid the
+`http://127.0.0.1` loopback callback RFC 8252 native apps need) and
+`COMPLIANT_BCP_RFC9700_TOKEN_STORAGE` (the grace-period trade-off
+above).
+
+The grant-type policy is enforced in three places that must agree: the
+per-app `authorization_grant_type`, the RFC 9700 gates, and the
+discovery document. A discovery document that advertises flows the
+server rejects sends clients down paths that will fail.
+
+### Implementation
+
+| Piece | Location |
+|-------|----------|
+| Swapped DOT models | `app/credentials/models.py` (`Application`, `AccessToken`, `RefreshToken`, `Grant`, `IDToken`) |
+| DRF authentication | `app/credentials/authentication.py` (`OAuth2Authentication`) |
+| Endpoints | `app/credentials/urls.py` |
+| Consent + login views | `app/credentials/views.py` |
+| Templates | `app/templates/oauth2_provider/authorize.html`, `app/templates/credentials/oauth2_login.html` |
+| Expired-token cleanup | `app/credentials/tasks.py` (`clear_expired_oauth2_tokens`, nightly) |
+
+NOTE: DOT does not check `user.is_active` -- it validates the token and
+returns its user regardless. `credentials.authentication.OAuth2Authentication`
+subclasses DOT's to add that check, so deactivating an account kills its
+outstanding grants like it kills every other credential.

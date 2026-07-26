@@ -79,7 +79,7 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 
 - **`moneypools/`** -- core budgeting domain (see Models below)
 - **`users/`** -- custom user model (`AbstractUser` + `name` field), JWT auth views, allauth integration
-- **`credentials/`** -- machine credentials: the `APIKey` model + DRF authentication class, the `RequiresInteractiveAuth` permission gate, and (phase 2) the OAuth2 provider models
+- **`credentials/`** -- machine credentials: the `APIKey` model + DRF authentication class, the `RequiresInteractiveAuth` permission gate, and the OAuth2 provider (swapped django-oauth-toolkit models, endpoints, consent/login views)
 
 **URL routing summary:**
 
@@ -94,6 +94,9 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 | `/api/v1/schema/swagger-ui/` | drf-spectacular -- Swagger UI (interactive docs) |
 | `/api/v1/schema/redoc/` | drf-spectacular -- ReDoc (interactive docs) |
 | `/app/*` | `SpaShellView` -- serves `index.html`; Vue Router handles all sub-routes |
+| `/o/authorize/`, `/o/token/`, `/o/revoke_token/` | OAuth2 provider endpoints (django-oauth-toolkit) |
+| `/o/login/` | Server-rendered login **for the OAuth2 consent flow only** -- not the SPA login |
+| `/.well-known/oauth-authorization-server` | RFC 8414 OAuth2 discovery document |
 
 ### Authentication
 
@@ -104,6 +107,8 @@ Two-token JWT pattern:
 The Vue `auth` Pinia store manages the access token lifecycle and provides an authenticated `apiFetch` wrapper that silently refreshes before expiry.
 
 **API keys (machine credentials).** 3rd-party services and the importers authenticate with a long-lived API key (`Authorization: Api-Key <key>`) instead of a password/JWT. Machine credentials live in the `credentials/` app: the `APIKey` model in `credentials/models.py` (SHA-256 hash stored, plaintext shown once at creation, soft-revoked for audit); `credentials/authentication.py` provides the DRF authentication class; management endpoints are at `/api/v1/users/me/api-keys/` (served by `credentials/api/v1/`). Machine credentials get blanket access to the budgeting domain but are denied on user/security endpoints (password/email change, invitations, user management, API-key management) via `credentials.permissions.RequiresInteractiveAuth` -- a blocklist gate that will become a scope check when fine-grained scopes land. Exception: `GET /api/v1/users/me/` is allowed for machine credentials (importers read `timezone`); the `me` action uses the read-only variant `RequiresInteractiveAuthForWrites`, which gates only mutating methods. When adding a new sensitive user/security endpoint, remember to attach `RequiresInteractiveAuth` (or the ForWrites variant if machine consumers need the reads).
+
+**OAuth2 (delegated access for registered apps).** Third-party apps and MCP servers get an authorization-code + PKCE grant instead of a credential; refresh tokens never expire on a timer, so a grant ends only by revocation. OAuth2 access tokens are machine credentials and pass through the same `RequiresInteractiveAuth` gate as API keys. Endpoints are mounted from `credentials/urls.py` -- a deliberately curated subset of django-oauth-toolkit's (no device flow, no OIDC, no dynamic registration, no introspection, and none of DOT's own HTML management screens). IMPORTANT: `/o/login/` is a **separate login page from the SPA's**. DOT's consent view needs a Django *session*, which the JWT-based SPA login never creates, so pointing it at `/app/login/` would produce a redirect loop; the OAuth2 flow therefore has its own server-rendered login taking the same email+password. Signing in there does not sign you in to the SPA. `credentials.authentication.OAuth2Authentication` subclasses DOT's to add the `user.is_active` check DOT omits. Grant-type policy is enforced in three places that must agree -- the per-app `authorization_grant_type`, the RFC 9700 gates in `OAUTH2_PROVIDER`, and the discovery document. See `docs/authentication.md`.
 
 **No-usable-password state.** Accounts created via the invitation flows (bank-account co-ownership or admin user invitations) start with `User.has_usable_password()` returning `False`. Invitation acceptance activates the account and triggers allauth's password-reset flow at `/accounts/password/reset/`, which emails a one-time link so the user sets their first password -- acceptance never issues a session or credentials directly. While an account has no usable password, the change-password and change-email endpoints refuse to operate (400/403). The `has_usable_password` boolean is exposed on `GET /api/v1/users/me/` so the SPA can show appropriate guidance rather than silently disabling forms. See `docs/invitations.md` and `docs/email-change.md`.
 

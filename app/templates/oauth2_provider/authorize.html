@@ -1,0 +1,70 @@
+{% extends "credentials/oauth2_base.html" %}
+
+{% comment %}
+Overrides django-oauth-toolkit's default consent screen (its own
+templates/oauth2_provider/authorize.html) so the page matches the rest
+of mibudge's server-rendered pages.
+
+Context comes from DOT's AuthorizationView: `application`, `form` (an
+AllowForm whose hidden fields carry the authorization request across the
+GET/POST pair), `scopes_descriptions`, and `error`.
+
+IMPORTANT: the Authorize button is `name="allow"` and the Cancel button
+has no name.  That is the whole allow/deny signal -- DOT reads
+`allow` from the POST -- so do not add a name to Cancel.
+{% endcomment %}
+
+{% block head_title %}Authorize {{ application.name }}{% endblock %}
+
+{% block card %}
+{% if not error %}
+<div class="card-header">Authorize {{ application.name }}</div>
+<div class="card-body">
+
+  <p><strong>{{ application.name }}</strong> wants to access your mibudge
+  account. It will be able to:</p>
+
+  <ul class="scopes">
+    {% for scope in scopes_descriptions %}
+    <li>{{ scope }}</li>
+    {% endfor %}
+  </ul>
+
+  <p>Access continues until you revoke it from your mibudge account
+  settings.</p>
+
+  {% if form.errors or form.non_field_errors %}
+  <div class="alert-error">
+    {{ form.errors }}
+    {{ form.non_field_errors }}
+  </div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}{% if field.is_hidden %}{{ field }}{% endif %}{% endfor %}
+    <div class="actions">
+      <button type="submit" name="allow" value="Authorize" class="btn btn-primary">Authorize</button>
+      <button type="submit" class="btn btn-secondary">Cancel</button>
+    </div>
+  </form>
+
+  <div class="identity">
+    Signed in as {{ request.user.email }}.
+  </div>
+
+</div>
+<div class="card-footer">
+  This application cannot change your password or email address, and
+  cannot see your mibudge password.
+</div>
+{% else %}
+<div class="card-header">Authorization failed</div>
+<div class="card-body">
+  <p><strong>{{ error.error }}</strong></p>
+  <p>{{ error.description }}</p>
+  <p>Nothing has been shared with the application. Return to it and try
+  again.</p>
+</div>
+{% endif %}
+{% endblock %}
