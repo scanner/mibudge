@@ -90,11 +90,18 @@ def oauth2_app(
     application_factory: Callable[..., Application],
     user_factory: Callable[..., User],
 ) -> Application:
-    """A registered public auth-code app owned by some other user."""
+    """A public auth-code app owned by some other user.
+
+    Global + published, so the signed-in user (a non-owner) may
+    authorize it -- the normal case for a mibudge importer.  Visibility
+    enforcement is exercised separately in TestAuthorizationVisibility.
+    """
     return application_factory(
         name="Test Importer",
         user=user_factory(),
         redirect_uris=REDIRECT_URI,
+        visibility=Application.Visibility.GLOBAL,
+        status=Application.Status.PUBLISHED,
     )
 
 
@@ -390,6 +397,130 @@ class TestAuthorizationFlow:
 ########################################################################
 ########################################################################
 #
+class TestAuthorizationVisibility:
+    """Tests for who may authorize an app, by visibility + status.
+
+    DOT resolves an application from its client_id alone and never
+    consults our `visibility`/`status` fields, so these pin the gate
+    OAuth2AuthorizationView adds on top: a signed-in user must not be
+    able to authorize -- and hand their whole financial history to -- a
+    stranger's private or unpublished app just by knowing the client_id.
+    """
+
+    # Every (visibility, status) a non-owner must be refused: everything
+    # except global + published.
+    OFF_LIMITS = [
+        (Application.Visibility.PRIVATE, Application.Status.TESTING),
+        (Application.Visibility.PRIVATE, Application.Status.PUBLISHED),
+        (Application.Visibility.GLOBAL, Application.Status.TESTING),
+        (Application.Visibility.GLOBAL, Application.Status.VALIDATION),
+    ]
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize("visibility,status", OFF_LIMITS)
+    def test_non_owner_cannot_authorize_off_limits_app(
+        self,
+        logged_in_client: Client,
+        application_factory: Callable[..., Application],
+        user_factory: Callable[..., User],
+        visibility: str,
+        status: str,
+    ):
+        """
+        GIVEN: an app owned by someone else that is not global+published
+        WHEN:  a signed-in non-owner takes the request as far as it goes
+               -- the consent screen, then a forced approval POST
+        THEN:  both are refused with 403 and no grant is created;
+               knowing the client_id is not enough, and the POST cannot
+               skip past the (never-shown) consent screen
+        """
+        app = application_factory(
+            user=user_factory(),
+            redirect_uris=REDIRECT_URI,
+            visibility=visibility,
+            status=status,
+        )
+        _, challenge = pkce_pair()
+        params = authorization_params(app, challenge)
+
+        consent = logged_in_client.get(AUTHORIZE_URL, params)
+        assert consent.status_code == 403
+
+        approval = logged_in_client.post(
+            AUTHORIZE_URL, {**params, "allow": "Authorize"}
+        )
+        assert approval.status_code == 403
+        assert not app.grant_set.exists()
+
+    ####################################################################
+    #
+    def test_owner_can_authorize_own_unpublished_app(
+        self,
+        logged_in_client: Client,
+        oauth2_user: User,
+        application_factory: Callable[..., Application],
+    ):
+        """
+        GIVEN: a private, testing app owned by the signed-in user
+        WHEN:  they authorize it
+        THEN:  consent renders and a grant is issued -- an owner can
+               drive their own app through the real flow before staff
+               ever promote or publish it
+        """
+        app = application_factory(
+            user=oauth2_user,
+            redirect_uris=REDIRECT_URI,
+            visibility=Application.Visibility.PRIVATE,
+            status=Application.Status.TESTING,
+        )
+        _, challenge = pkce_pair()
+        params = authorization_params(app, challenge)
+
+        consent = logged_in_client.get(AUTHORIZE_URL, params)
+        assert consent.status_code == 200
+
+        approval = logged_in_client.post(
+            AUTHORIZE_URL, {**params, "allow": "Authorize"}
+        )
+        assert approval.status_code == 302
+        assert "code" in redirect_query(approval)
+
+    ####################################################################
+    #
+    def test_staff_get_no_authorization_exception(
+        self,
+        application_factory: Callable[..., Application],
+        user_factory: Callable[..., User],
+    ):
+        """
+        GIVEN: a private, testing app owned by another user
+        WHEN:  a staff member (not the owner) reaches its consent screen
+        THEN:  it is refused with 403 -- staff *see* and *promote* apps,
+               but authorizing one hands it the staff member's own data,
+               so exempting staff would reopen the phishing surface this
+               gate closes for the highest-value targets
+        """
+        app = application_factory(
+            user=user_factory(),
+            redirect_uris=REDIRECT_URI,
+            visibility=Application.Visibility.PRIVATE,
+            status=Application.Status.TESTING,
+        )
+        client = Client()
+        client.force_login(user_factory(is_staff=True))
+        _, challenge = pkce_pair()
+
+        consent = client.get(
+            AUTHORIZE_URL, authorization_params(app, challenge)
+        )
+
+        assert consent.status_code == 403
+
+
+########################################################################
+########################################################################
+#
 class TestOAuth2LoginView:
     """Tests for the OAuth2 flow's own login page."""
 
@@ -570,3 +701,48 @@ class TestApplicationAdmin:
 
         assert response.status_code == 200
         assert b"View on site" not in response.content
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "action,field,expected",
+        [
+            (
+                "promote_to_global",
+                "visibility",
+                Application.Visibility.GLOBAL,
+            ),
+            (
+                "advance_to_validation",
+                "status",
+                Application.Status.VALIDATION,
+            ),
+            ("publish", "status", Application.Status.PUBLISHED),
+        ],
+    )
+    def test_promotion_actions_advance_the_lifecycle(
+        self,
+        application_factory: Callable[..., Application],
+        user_factory: Callable[..., User],
+        action: str,
+        field: str,
+        expected: str,
+    ):
+        """
+        GIVEN: an app at the registration defaults (private, testing)
+        WHEN:  staff run a promotion action on it from the changelist
+        THEN:  the corresponding field advances, so a version can be
+               staged without editing each app by hand
+        """
+        app = application_factory(user=user_factory())
+        client = Client()
+        client.force_login(user_factory(is_staff=True, is_superuser=True))
+
+        response = client.post(
+            reverse("admin:credentials_application_changelist"),
+            {"action": action, "_selected_action": [str(app.pk)]},
+        )
+
+        assert response.status_code == 302
+        app.refresh_from_db()
+        assert getattr(app, field) == expected

@@ -260,16 +260,20 @@ class Application(AbstractApplication):
         - their OWN app, in any lifecycle stage -- so an owner can drive
           a `testing`/`validation` app through the real flow before it is
           published;
-        - ANY app, if they are staff -- staff see every app (see the
-          admin), and a staff member authorizing an app only ever exposes
-          their own data;
         - anyone's app once it is global AND published -- the only case
-          in which a stranger's app becomes visible.
+          in which a stranger's app becomes authorizable.
 
         Everything else is off-limits: a private or pre-published app
         owned by someone else must NOT be authorizable just because its
-        client_id leaked.  This is the same visibility rule the (future)
-        non-owner app listing will use.
+        client_id leaked.
+
+        NOTE: staff get NO exception here on purpose.  Being able to *see*
+        every app (the admin, and the future non-owner listing) and to
+        *promote* one is a management capability; *authorizing* an app is
+        the user handing it their own financial data, and exempting staff
+        would reopen the exact phishing threat this gate closes -- for the
+        highest-value targets.  Staff who genuinely need to exercise an
+        unpublished app own it (owner clause) or promote it first.
 
         IMPORTANT: DOT's AuthorizationView resolves an app from its
         client_id alone and never consults `visibility`/`status`, so this
@@ -277,7 +281,7 @@ class Application(AbstractApplication):
         user could hand their whole financial history to an unpublished
         app.  It is enforced in credentials.views.OAuth2AuthorizationView.
         """
-        if self.user_id == user.pk or user.is_staff:
+        if self.user_id == user.pk:
             return True
         return (
             self.visibility == self.Visibility.GLOBAL

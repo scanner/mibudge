@@ -2,11 +2,12 @@
 
 # 3rd party imports
 from django.contrib import admin
+from django.db.models import QuerySet
 from django.http import HttpRequest
 from oauth2_provider.admin import ApplicationAdmin as DOTApplicationAdmin
 
 # Project imports
-from credentials.models import APIKey
+from credentials.models import APIKey, Application
 
 
 ########################################################################
@@ -98,3 +99,56 @@ class ApplicationAdmin(DOTApplicationAdmin):
         "client_type",
         "authorization_grant_type",
     )
+
+    # Bulk promotion workflow.  visibility/status are also editable one
+    # app at a time in the change form (they are ordinary model fields);
+    # these actions exist so staff can stage a version -- promote to
+    # global, then walk it testing -> validation -> published -- without
+    # opening each app.  They are forward-only on purpose: reverting
+    # (unpublishing / making private) is done in the change form, and the
+    # notification that a staff unpublish kills live grants is a separate,
+    # later piece of work.
+    actions = (
+        "promote_to_global",
+        "advance_to_validation",
+        "publish",
+    )
+
+    ####################################################################
+    #
+    @admin.action(description="Promote selected apps to global visibility")
+    def promote_to_global(
+        self, request: HttpRequest, queryset: QuerySet[Application]
+    ) -> None:
+        """Make the selected apps visible to all users."""
+        updated = queryset.update(visibility=Application.Visibility.GLOBAL)
+        self.message_user(
+            request, f"{updated} application(s) promoted to global."
+        )
+
+    ####################################################################
+    #
+    @admin.action(description="Advance selected apps to the validation stage")
+    def advance_to_validation(
+        self, request: HttpRequest, queryset: QuerySet[Application]
+    ) -> None:
+        """Move the selected apps to the validation lifecycle stage."""
+        updated = queryset.update(status=Application.Status.VALIDATION)
+        self.message_user(
+            request, f"{updated} application(s) moved to validation."
+        )
+
+    ####################################################################
+    #
+    @admin.action(description="Publish selected apps")
+    def publish(
+        self, request: HttpRequest, queryset: QuerySet[Application]
+    ) -> None:
+        """Publish the selected apps.
+
+        Only global + published apps become authorizable by non-owners,
+        so publishing a private app has no visible effect until it is
+        also promoted to global.
+        """
+        updated = queryset.update(status=Application.Status.PUBLISHED)
+        self.message_user(request, f"{updated} application(s) published.")
