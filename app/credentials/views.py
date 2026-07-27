@@ -31,12 +31,14 @@ from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
+from django.forms import Form
 from django.http import HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 from oauth2_provider.views import AuthorizationView
 
 # Project imports
 from credentials.forms import OAuth2LoginForm
+from credentials.models import Application
 
 logger = logging.getLogger("credentials.views")
 
@@ -170,6 +172,68 @@ class OAuth2AuthorizationView(AuthorizationView):
     LoginRequiredMixin would otherwise send an unauthenticated visitor to
     settings.LOGIN_URL -- the SPA -- which cannot produce the session
     this view requires.  See the module docstring.
+
+    It also enforces app visibility.  DOT resolves the application from
+    its client_id alone and never looks at our `visibility`/`status`
+    fields, so on its own it would let any signed-in user authorize --
+    and hand their whole financial history to -- anyone's private,
+    unpublished app just by knowing the client_id.  Both entry points are
+    guarded: the GET that renders the consent screen and the POST
+    (`form_valid`) that mints the grant, so the check cannot be skipped by
+    POSTing straight past the screen.
     """
 
     login_url = reverse_lazy("oauth2_provider:login")
+
+    ####################################################################
+    #
+    def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        """Guard the consent screen, then defer to DOT."""
+        denial = self._deny_unauthorizable(request.GET.get("client_id"))
+        if denial is not None:
+            return denial
+        return super().get(request, *args, **kwargs)
+
+    ####################################################################
+    #
+    def form_valid(self, form: Form) -> HttpResponse:
+        """Guard grant creation, then defer to DOT."""
+        denial = self._deny_unauthorizable(form.cleaned_data.get("client_id"))
+        if denial is not None:
+            return denial
+        return super().form_valid(form)
+
+    ####################################################################
+    #
+    def _deny_unauthorizable(
+        self, client_id: str | None
+    ) -> HttpResponse | None:
+        """Return a 403 consent-denied page if the app is off-limits.
+
+        Returns None -- let DOT proceed and render its own errors -- when
+        the app is authorizable by the requesting user OR the client_id
+        is absent/unknown (an unknown client is DOT's error to report,
+        not ours, and answering it here would leak nothing but does not
+        belong to this gate).
+        """
+        if not client_id:
+            return None
+        application = Application.objects.filter(client_id=client_id).first()
+        if application is None or application.is_authorizable_by(
+            self.request.user
+        ):
+            return None
+        # Reuse the consent template's error branch so the denial is
+        # styled like the rest of the flow.  A dict is enough: the
+        # template reads only `error.error` and `error.description`.
+        return self.render_to_response(
+            {
+                "error": {
+                    "error": "access_denied",
+                    "description": (
+                        "This application is not available for authorization."
+                    ),
+                }
+            },
+            status=403,
+        )

@@ -250,6 +250,40 @@ class Application(AbstractApplication):
         """Natural key (client_id) for serialization/fixtures."""
         return (self.client_id,)
 
+    ####################################################################
+    #
+    def is_authorizable_by(self, user: "User") -> bool:
+        """True if `user` may run this app through the consent flow.
+
+        A user may authorize:
+
+        - their OWN app, in any lifecycle stage -- so an owner can drive
+          a `testing`/`validation` app through the real flow before it is
+          published;
+        - ANY app, if they are staff -- staff see every app (see the
+          admin), and a staff member authorizing an app only ever exposes
+          their own data;
+        - anyone's app once it is global AND published -- the only case
+          in which a stranger's app becomes visible.
+
+        Everything else is off-limits: a private or pre-published app
+        owned by someone else must NOT be authorizable just because its
+        client_id leaked.  This is the same visibility rule the (future)
+        non-owner app listing will use.
+
+        IMPORTANT: DOT's AuthorizationView resolves an app from its
+        client_id alone and never consults `visibility`/`status`, so this
+        gate is load-bearing, not advisory -- without it any signed-in
+        user could hand their whole financial history to an unpublished
+        app.  It is enforced in credentials.views.OAuth2AuthorizationView.
+        """
+        if self.user_id == user.pk or user.is_staff:
+            return True
+        return (
+            self.visibility == self.Visibility.GLOBAL
+            and self.status == self.Status.PUBLISHED
+        )
+
 
 class Grant(AbstractGrant):
     """Authorization-code grant (short-lived, exchanged for a token)."""
