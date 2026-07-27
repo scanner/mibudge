@@ -44,6 +44,10 @@ class TestRequiresInteractiveAuth:
             ("get", "api_v1:user-my-invitations", 403),
             ("get", "api_v1:api-key-list", 403),
             ("post", "api_v1:api-key-list", 403),
+            # Registering an OAuth2 app is how the next credential
+            # gets minted, so a credential must not reach it.
+            ("get", "api_v1:oauth2-app-list", 403),
+            ("post", "api_v1:oauth2-app-list", 403),
             # Profile reads + budgeting domain: allowed.
             ("get", "api_v1:user-me", 200),
             ("get", "api_v1:bank-list", 200),

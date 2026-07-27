@@ -2745,6 +2745,193 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedBankAccountInvitationList'
           description: ''
+  /api/v1/users/me/oauth2-apps/:
+    get:
+      operationId: users_me_oauth2_apps_list
+      description: Return the OAuth2 applications registered by the authenticated
+        user.  Client secrets are never included -- they are hashed on save and shown
+        only at registration.
+      summary: List the current user's OAuth2 applications
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedApplicationList'
+          description: ''
+    post:
+      operationId: users_me_oauth2_apps_create
+      description: |-
+        Register a new OAuth2 application owned by the authenticated user.  The application uses the authorization-code grant with PKCE; no other grant type is offered.
+
+        New applications start private to their owner and in the ``testing`` lifecycle stage; only staff can promote an application to global or publish it.
+
+        For ``confidential`` clients the response is the **only** time ``client_secret`` is returned -- it is hashed on save and cannot be recovered.  ``public`` clients get null: they cannot keep a secret and authenticate with PKCE instead.
+      summary: Register an OAuth2 application
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ApplicationWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApplicationWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationCreated'
+          description: ''
+  /api/v1/users/me/oauth2-apps/{client_id}/:
+    get:
+      operationId: users_me_oauth2_apps_retrieve
+      description: Return a single application by its client ID.
+      summary: Get one of the current user's OAuth2 applications
+      parameters:
+      - in: path
+        name: client_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          description: ''
+    put:
+      operationId: users_me_oauth2_apps_update
+      description: |-
+        OAuth2 applications registered by the authenticated user.
+
+        Registration is deliberately narrow: the caller chooses a name, a
+        client type and redirect URIs, and everything that constitutes
+        policy -- grant type, visibility, lifecycle status, consent
+        skipping -- is set here or by staff.  See ApplicationWriteSerializer
+        for why each withheld field is withheld.
+
+        Scoped to the requesting user's own applications.  Registering an
+        app is not the same as authorizing one: a user's grants against
+        *other* people's apps are managed separately.
+      summary: Replace an OAuth2 application
+      parameters:
+      - in: path
+        name: client_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ApplicationWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApplicationWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationWrite'
+          description: ''
+    patch:
+      operationId: users_me_oauth2_apps_partial_update
+      description: Update the application's name or redirect URIs.  ``client_type``
+        cannot be changed after registration.
+      summary: Update an OAuth2 application
+      parameters:
+      - in: path
+        name: client_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedApplicationWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedApplicationWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedApplicationWriteRequest'
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationWrite'
+          description: ''
+    delete:
+      operationId: users_me_oauth2_apps_destroy
+      description: Delete the application.  Every grant, access token and refresh
+        token issued for it is deleted with it, so any user who authorized this app
+        loses access immediately.
+      summary: Deregister an OAuth2 application
+      parameters:
+      - in: path
+        name: client_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '204':
+          description: No response body
 components:
   schemas:
     APIKey:
@@ -2875,6 +3062,222 @@ components:
         * `C` - Checking
         * `S` - Savings
         * `X` - Credit Card
+    Application:
+      type: object
+      description: |-
+        Read serializer for a registered OAuth2 application.
+
+        Never exposes ``client_secret``: it is hashed on save and cannot be
+        recovered, so it appears exactly once in the creation response (see
+        ApplicationCreatedSerializer).
+
+        ``redirect_uris`` is stored by django-oauth-toolkit as one
+        space-separated string; the API presents it as a list, which is what
+        clients actually want to render and edit.
+      properties:
+        client_id:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        client_type:
+          allOf:
+          - $ref: '#/components/schemas/ClientTypeEnum'
+          readOnly: true
+        redirect_uris:
+          type: array
+          items:
+            type: string
+          description: Split the stored space-separated URIs into a list.
+          readOnly: true
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityEnum'
+          readOnly: true
+          description: |-
+            Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+            * `private` - Private to owner
+            * `global` - Global (all users)
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OAuth2ApplicationStatusEnum'
+          readOnly: true
+          description: |-
+            Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+            * `testing` - Testing
+            * `validation` - Validation
+            * `published` - Published
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+        updated:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - client_id
+      - client_type
+      - created
+      - name
+      - redirect_uris
+      - status
+      - updated
+      - visibility
+    ApplicationCreated:
+      type: object
+      description: |-
+        Registration response -- the only place the secret appears.
+
+        ``client_secret`` is returned for confidential applications only,
+        and only here: it is hashed on save and unrecoverable afterwards.
+        Public applications (native, mobile and MCP clients, which cannot
+        keep a secret) get null -- they authenticate with PKCE instead.
+      properties:
+        client_id:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        client_type:
+          allOf:
+          - $ref: '#/components/schemas/ClientTypeEnum'
+          readOnly: true
+        redirect_uris:
+          type: array
+          items:
+            type: string
+          description: Split the stored space-separated URIs into a list.
+          readOnly: true
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityEnum'
+          readOnly: true
+          description: |-
+            Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+            * `private` - Private to owner
+            * `global` - Global (all users)
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OAuth2ApplicationStatusEnum'
+          readOnly: true
+          description: |-
+            Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+            * `testing` - Testing
+            * `validation` - Validation
+            * `published` - Published
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+        updated:
+          type: string
+          format: date-time
+          readOnly: true
+        client_secret:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - client_id
+      - client_secret
+      - client_type
+      - created
+      - name
+      - redirect_uris
+      - status
+      - updated
+      - visibility
+    ApplicationWrite:
+      type: object
+      description: |-
+        Validate a registration or update request.
+
+        Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
+        are writable.  Everything else about an application is either
+        derived or a privilege the owner does not hold:
+
+        - ``authorization_grant_type`` is pinned to authorization-code by
+          the view.  It is the per-app half of the grant-type policy, so
+          accepting it from input would let a caller register the implicit
+          or password app the rest of the stack refuses to serve.
+        - ``visibility`` and ``status`` are staff levers (promoting an app
+          to global exposes it to every user), managed in the django admin.
+        - ``skip_authorization`` would suppress the consent screen -- the
+          one place the user is told what they are granting.
+        - ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
+          features this server does not offer.
+
+        ``client_type`` is create-only: switching an app between public and
+        confidential changes how it authenticates at the token endpoint, and
+        a confidential app's secret is only ever shown at creation.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        client_type:
+          $ref: '#/components/schemas/ClientTypeEnum'
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            maxLength: 500
+          description: Allowed callback URIs. Must be https, or http on the loopback
+            interface (127.0.0.1 / [::1]) for native apps.
+          minItems: 1
+      required:
+      - client_type
+      - name
+      - redirect_uris
+    ApplicationWriteRequest:
+      type: object
+      description: |-
+        Validate a registration or update request.
+
+        Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
+        are writable.  Everything else about an application is either
+        derived or a privilege the owner does not hold:
+
+        - ``authorization_grant_type`` is pinned to authorization-code by
+          the view.  It is the per-app half of the grant-type policy, so
+          accepting it from input would let a caller register the implicit
+          or password app the rest of the stack refuses to serve.
+        - ``visibility`` and ``status`` are staff levers (promoting an app
+          to global exposes it to every user), managed in the django admin.
+        - ``skip_authorization`` would suppress the consent screen -- the
+          one place the user is told what they are granting.
+        - ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
+          features this server does not offer.
+
+        ``client_type`` is create-only: switching an app between public and
+        confidential changes how it authenticates at the token endpoint, and
+        a confidential app's secret is only ever shown at creation.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        client_type:
+          $ref: '#/components/schemas/ClientTypeEnum'
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 500
+          description: Allowed callback URIs. Must be https, or http on the loopback
+            interface (127.0.0.1 / [::1]) for native apps.
+          minItems: 1
+      required:
+      - client_type
+      - name
+      - redirect_uris
     Bank:
       type: object
       description: |-
@@ -3454,6 +3857,14 @@ components:
       - channel
       - digest_frequency
       - display_name
+    ClientTypeEnum:
+      enum:
+      - confidential
+      - public
+      type: string
+      description: |-
+        * `confidential` - Confidential
+        * `public` - Public
     DeliveryModeEnum:
       enum:
       - digest
@@ -3750,6 +4161,16 @@ components:
     NullEnum:
       enum:
       - null
+    OAuth2ApplicationStatusEnum:
+      enum:
+      - testing
+      - validation
+      - published
+      type: string
+      description: |-
+        * `testing` - Testing
+        * `validation` - Validation
+        * `published` - Published
     PaginatedAPIKeyList:
       type: object
       required:
@@ -3773,6 +4194,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/APIKey'
+    PaginatedApplicationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Application'
     PaginatedBankAccountInvitationList:
       type: object
       required:
@@ -4049,6 +4493,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/User'
+    PatchedApplicationWriteRequest:
+      type: object
+      description: |-
+        Validate a registration or update request.
+
+        Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
+        are writable.  Everything else about an application is either
+        derived or a privilege the owner does not hold:
+
+        - ``authorization_grant_type`` is pinned to authorization-code by
+          the view.  It is the per-app half of the grant-type policy, so
+          accepting it from input would let a caller register the implicit
+          or password app the rest of the stack refuses to serve.
+        - ``visibility`` and ``status`` are staff levers (promoting an app
+          to global exposes it to every user), managed in the django admin.
+        - ``skip_authorization`` would suppress the consent screen -- the
+          one place the user is told what they are granting.
+        - ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
+          features this server does not offer.
+
+        ``client_type`` is create-only: switching an app between public and
+        confidential changes how it authenticates at the token endpoint, and
+        a confidential app's secret is only ever shown at creation.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        client_type:
+          $ref: '#/components/schemas/ClientTypeEnum'
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 500
+          description: Allowed callback URIs. Must be https, or http on the loopback
+            interface (127.0.0.1 / [::1]) for native apps.
+          minItems: 1
     PatchedBankAccountRequest:
       type: object
       description: |-
@@ -5215,6 +5698,14 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+    VisibilityEnum:
+      enum:
+      - private
+      - global
+      type: string
+      description: |-
+        * `private` - Private to owner
+        * `global` - Global (all users)
   securitySchemes:
     apiKeyAuth:
       type: apiKey

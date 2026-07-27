@@ -2788,6 +2788,200 @@ Return all pending co-ownership invitations sent by the authenticated user, acro
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+#### `GET /api/v1/users/me/oauth2-apps/`
+
+**Operation:** `users_me_oauth2_apps_list`
+
+Return the OAuth2 applications registered by the authenticated user.  Client secrets are never included -- they are hashed on save and shown only at registration.
+
+**Parameters:**
+
+- `page` (query, optional) — A page number within the paginated result set.
+- `page_size` (query, optional) — Number of results to return per page.
+
+**Response 200:** 
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+#### `POST /api/v1/users/me/oauth2-apps/`
+
+**Operation:** `users_me_oauth2_apps_create`
+
+Register a new OAuth2 application owned by the authenticated user.  The application uses the authorization-code grant with PKCE; no other grant type is offered.
+
+New applications start private to their owner and in the ``testing`` lifecycle stage; only staff can promote an application to global or publish it.
+
+For ``confidential`` clients the response is the **only** time ``client_secret`` is returned -- it is hashed on save and cannot be recovered.  ``public`` clients get null: they cannot keep a secret and authenticate with PKCE instead.
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Response 201:** 
+
+- **`client_id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)*
+- **`client_type`** (``) *(required, read-only)*
+- **`redirect_uris`** (`array`) *(required, read-only)* — Split the stored space-separated URIs into a list.
+- **`visibility`** (``) *(required, read-only)* — Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+* `private` - Private to owner
+* `global` - Global (all users)
+- **`status`** (``) *(required, read-only)* — Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+- **`created`** (`string`) *(required, read-only)*
+- **`updated`** (`string`) *(required, read-only)*
+- **`client_secret`** (`string`) *(required, read-only)*
+
+#### `GET /api/v1/users/me/oauth2-apps/{client_id}/`
+
+**Operation:** `users_me_oauth2_apps_retrieve`
+
+Return a single application by its client ID.
+
+**Parameters:**
+
+- `client_id` (path, required)
+
+**Response 200:** 
+
+- **`client_id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)*
+- **`client_type`** (``) *(required, read-only)*
+- **`redirect_uris`** (`array`) *(required, read-only)* — Split the stored space-separated URIs into a list.
+- **`visibility`** (``) *(required, read-only)* — Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+* `private` - Private to owner
+* `global` - Global (all users)
+- **`status`** (``) *(required, read-only)* — Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+- **`created`** (`string`) *(required, read-only)*
+- **`updated`** (`string`) *(required, read-only)*
+
+#### `PUT /api/v1/users/me/oauth2-apps/{client_id}/`
+
+**Operation:** `users_me_oauth2_apps_update`
+
+OAuth2 applications registered by the authenticated user.
+
+Registration is deliberately narrow: the caller chooses a name, a
+client type and redirect URIs, and everything that constitutes
+policy -- grant type, visibility, lifecycle status, consent
+skipping -- is set here or by staff.  See ApplicationWriteSerializer
+for why each withheld field is withheld.
+
+Scoped to the requesting user's own applications.  Registering an
+app is not the same as authorizing one: a user's grants against
+*other* people's apps are managed separately.
+
+**Parameters:**
+
+- `client_id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Response 200:** 
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+#### `PATCH /api/v1/users/me/oauth2-apps/{client_id}/`
+
+**Operation:** `users_me_oauth2_apps_partial_update`
+
+Update the application's name or redirect URIs.  ``client_type`` cannot be changed after registration.
+
+**Parameters:**
+
+- `client_id` (path, required)
+
+**Request Body** (`application/json`):
+
+- **`name`** (`string`)
+- **`client_type`** (`string`) — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Request Body** (`application/x-www-form-urlencoded`):
+
+- **`name`** (`string`)
+- **`client_type`** (`string`) — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Request Body** (`multipart/form-data`):
+
+- **`name`** (`string`)
+- **`client_type`** (`string`) — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+**Response 200:** 
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+#### `DELETE /api/v1/users/me/oauth2-apps/{client_id}/`
+
+**Operation:** `users_me_oauth2_apps_destroy`
+
+Delete the application.  Every grant, access token and refresh token issued for it is deleted with it, so any user who authorized this app loses access immediately.
+
+**Parameters:**
+
+- `client_id` (path, required)
+
+**Response 204:** No response body
+
 ## Schemas
 
 ### APIKey
@@ -2840,6 +3034,116 @@ model field and cannot be recovered after this response.
 * `S` - Savings
 * `X` - Credit Card
 
+
+### Application
+
+Read serializer for a registered OAuth2 application.
+
+Never exposes ``client_secret``: it is hashed on save and cannot be
+recovered, so it appears exactly once in the creation response (see
+ApplicationCreatedSerializer).
+
+``redirect_uris`` is stored by django-oauth-toolkit as one
+space-separated string; the API presents it as a list, which is what
+clients actually want to render and edit.
+
+- **`client_id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)*
+- **`client_type`** (``) *(required, read-only)*
+- **`redirect_uris`** (`array`) *(required, read-only)* — Split the stored space-separated URIs into a list.
+- **`visibility`** (``) *(required, read-only)* — Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+* `private` - Private to owner
+* `global` - Global (all users)
+- **`status`** (``) *(required, read-only)* — Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+- **`created`** (`string`) *(required, read-only)*
+- **`updated`** (`string`) *(required, read-only)*
+
+### ApplicationCreated
+
+Registration response -- the only place the secret appears.
+
+``client_secret`` is returned for confidential applications only,
+and only here: it is hashed on save and unrecoverable afterwards.
+Public applications (native, mobile and MCP clients, which cannot
+keep a secret) get null -- they authenticate with PKCE instead.
+
+- **`client_id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)*
+- **`client_type`** (``) *(required, read-only)*
+- **`redirect_uris`** (`array`) *(required, read-only)* — Split the stored space-separated URIs into a list.
+- **`visibility`** (``) *(required, read-only)* — Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+* `private` - Private to owner
+* `global` - Global (all users)
+- **`status`** (``) *(required, read-only)* — Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+- **`created`** (`string`) *(required, read-only)*
+- **`updated`** (`string`) *(required, read-only)*
+- **`client_secret`** (`string`) *(required, read-only)*
+
+### ApplicationWrite
+
+Validate a registration or update request.
+
+Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
+are writable.  Everything else about an application is either
+derived or a privilege the owner does not hold:
+
+- ``authorization_grant_type`` is pinned to authorization-code by
+  the view.  It is the per-app half of the grant-type policy, so
+  accepting it from input would let a caller register the implicit
+  or password app the rest of the stack refuses to serve.
+- ``visibility`` and ``status`` are staff levers (promoting an app
+  to global exposes it to every user), managed in the django admin.
+- ``skip_authorization`` would suppress the consent screen -- the
+  one place the user is told what they are granting.
+- ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
+  features this server does not offer.
+
+``client_type`` is create-only: switching an app between public and
+confidential changes how it authenticates at the token endpoint, and
+a confidential app's secret is only ever shown at creation.
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+
+### ApplicationWriteRequest
+
+Validate a registration or update request.
+
+Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
+are writable.  Everything else about an application is either
+derived or a privilege the owner does not hold:
+
+- ``authorization_grant_type`` is pinned to authorization-code by
+  the view.  It is the per-app half of the grant-type policy, so
+  accepting it from input would let a caller register the implicit
+  or password app the rest of the stack refuses to serve.
+- ``visibility`` and ``status`` are staff levers (promoting an app
+  to global exposes it to every user), managed in the django admin.
+- ``skip_authorization`` would suppress the consent screen -- the
+  one place the user is told what they are granting.
+- ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
+  features this server does not offer.
+
+``client_type`` is create-only: switching an app between public and
+confidential changes how it authenticates at the token endpoint, and
+a confidential app's secret is only ever shown at creation.
+
+- **`name`** (`string`) *(required)*
+- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
 
 ### Bank
 
@@ -3081,6 +3385,12 @@ Write (PATCH): digest_frequency only.
 * `weekly_saturday` - Weekly on Saturday
 * `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
 
+### ClientTypeEnum
+
+* `confidential` - Confidential
+* `public` - Public
+
+
 ### DeliveryModeEnum
 
 * `digest` - Digest
@@ -3227,7 +3537,21 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 ### NullEnum
 
 
+### OAuth2ApplicationStatusEnum
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+
+
 ### PaginatedAPIKeyList
+
+- **`count`** (`integer`) *(required)*
+- **`next`** (`string`)
+- **`previous`** (`string`)
+- **`results`** (`array`) *(required)*
+
+### PaginatedApplicationList
 
 - **`count`** (`integer`) *(required)*
 - **`next`** (`string`)
@@ -3317,6 +3641,34 @@ Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+### PatchedApplicationWriteRequest
+
+Validate a registration or update request.
+
+Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
+are writable.  Everything else about an application is either
+derived or a privilege the owner does not hold:
+
+- ``authorization_grant_type`` is pinned to authorization-code by
+  the view.  It is the per-app half of the grant-type policy, so
+  accepting it from input would let a caller register the implicit
+  or password app the rest of the stack refuses to serve.
+- ``visibility`` and ``status`` are staff levers (promoting an app
+  to global exposes it to every user), managed in the django admin.
+- ``skip_authorization`` would suppress the consent screen -- the
+  one place the user is told what they are granting.
+- ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
+  features this server does not offer.
+
+``client_type`` is create-only: switching an app between public and
+confidential changes how it authenticates at the token endpoint, and
+a confidential app's secret is only ever shown at creation.
+
+- **`name`** (`string`)
+- **`client_type`** (`string`) — * `confidential` - Confidential
+* `public` - Public Enum: ['confidential', 'public']
+- **`redirect_uris`** (`array`) — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
 
 ### PatchedBankAccountRequest
 
@@ -3855,4 +4207,10 @@ whether to enable the change-email and change-password forms.
 - **`name`** (`string`)
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+
+### VisibilityEnum
+
+* `private` - Private to owner
+* `global` - Global (all users)
+
 

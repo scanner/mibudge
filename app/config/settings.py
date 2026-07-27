@@ -683,6 +683,7 @@ SPECTACULAR_SETTINGS = {
             "moneypools.models.BankAccountInvitation.Status"
         ),
         "UserInvitationStatusEnum": "users.models.UserInvitation.Status",
+        "OAuth2ApplicationStatusEnum": "credentials.models.Application.Status",
     },
 }
 

@@ -190,6 +190,61 @@ introspection. See the module docstring in
 [`app/credentials/urls.py`](../app/credentials/urls.py) for why each one
 is out.
 
+### Registering an application
+
+Apps are registered through the REST API at
+`/api/v1/users/me/oauth2-apps/` (interactive sessions only -- a machine
+credential cannot register the next credential):
+
+| Endpoint | Action |
+|----------|--------|
+| `POST /api/v1/users/me/oauth2-apps/` | Register an app (`name`, `client_type`, `redirect_uris`) |
+| `GET /api/v1/users/me/oauth2-apps/` | List your registered apps |
+| `PATCH /api/v1/users/me/oauth2-apps/{client_id}/` | Update name / redirect URIs |
+| `DELETE /api/v1/users/me/oauth2-apps/{client_id}/` | Deregister, revoking every token issued for it |
+
+Registration takes exactly three things from the caller. Everything
+else is either derived or a privilege the owner does not hold:
+
+- **`authorization_grant_type`** is pinned to authorization-code. This
+  is the per-app third of the grant-type policy (the others being the
+  RFC 9700 gates and the discovery document), so accepting it as input
+  would let a caller register the implicit or password app the rest of
+  the stack refuses to serve.
+- **`visibility` / `status`** are staff levers -- promoting an app to
+  global exposes it to every user -- managed in the django admin.
+- **`skip_authorization`** would suppress the consent screen, the one
+  place the user is told what they are granting.
+- **`client_type`** is create-only. Switching between public and
+  confidential changes how the app authenticates at the token endpoint,
+  and a confidential app's secret is only ever issued at registration.
+
+New apps start `private` + `testing`.
+
+**Client secrets.** A `confidential` app gets a `client_secret` in the
+registration response and nowhere else -- it is hashed on save and
+cannot be recovered, only replaced by registering a new app. A `public`
+app gets `null`: native, mobile and MCP clients cannot keep a secret and
+authenticate with PKCE instead. Public is the right choice for anything
+that ships to a user's device.
+
+**Redirect URIs** must be `https`, or `http` on the RFC 8252 loopback
+interface (`http://127.0.0.1` / `http://[::1]`) for native apps that
+spin up a local callback. Two rejections are worth knowing about:
+
+- `http://` on any other host is refused *here*, at registration. It
+  cannot be refused globally: `ALLOWED_REDIRECT_URI_SCHEMES` has to keep
+  `http` so loopback works at all, which is why
+  `COMPLIANT_BCP_RFC9700_REDIRECT_URI_SCHEME` stays off. Registration
+  validation is the only thing standing between a user and a plaintext
+  remote callback.
+- `http://localhost` is refused with a message pointing at the IP
+  literal. RFC 8252 section 7.3 requires the server to allow **any
+  port** for loopback redirects (native clients bind an ephemeral one),
+  and DOT grants that exemption only to `127.0.0.1` and `::1` --
+  `localhost` would register happily and then fail at authorization
+  time for most clients.
+
 ### IMPORTANT: the OAuth2 flow has its own login page
 
 `/o/login/` is a **separate login page from the SPA's** `/app/login/`,
@@ -274,6 +329,7 @@ server rejects sends clients down paths that will fail.
 | Swapped DOT models | `app/credentials/models.py` (`Application`, `AccessToken`, `RefreshToken`, `Grant`, `IDToken`) |
 | DRF authentication | `app/credentials/authentication.py` (`OAuth2Authentication`) |
 | Endpoints | `app/credentials/urls.py` |
+| App registration API | `app/credentials/api/v1/` (`ApplicationViewSet`) |
 | Consent + login views | `app/credentials/views.py` |
 | Templates | `app/templates/oauth2_provider/authorize.html`, `app/templates/credentials/oauth2_login.html` |
 | Expired-token cleanup | `app/credentials/tasks.py` (`clear_expired_oauth2_tokens`, nightly) |

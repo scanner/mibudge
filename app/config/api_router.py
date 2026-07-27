@@ -15,7 +15,7 @@ from django.conf import settings
 from django.urls import path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
-from credentials.api.v1.views import APIKeyViewSet
+from credentials.api.v1.views import APIKeyViewSet, ApplicationViewSet
 from moneypools.api.v1.views import (
     BankAccountViewSet,
     BankViewSet,
@@ -45,6 +45,14 @@ router.register("users", UserViewSet)
 # API-key management for the current user.  Interactive (JWT) sessions
 # only -- a key cannot mint or revoke keys.
 router.register("users/me/api-keys", APIKeyViewSet, basename="api-key")
+# OAuth2 applications the current user has registered.  Registering
+# an app is separate from authorizing one: this is the developer
+# surface, not the list of apps that have access to the account.
+router.register(
+    "users/me/oauth2-apps",
+    ApplicationViewSet,
+    basename="oauth2-app",
+)
 router.register(
     "notification-preferences",
     NotificationPreferenceViewSet,
