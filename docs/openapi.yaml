@@ -2836,17 +2836,15 @@ paths:
     put:
       operationId: users_me_oauth2_apps_update
       description: |-
-        OAuth2 applications registered by the authenticated user.
+        Update an application, echoing back the full read representation.
 
-        Registration is deliberately narrow: the caller chooses a name, a
-        client type and redirect URIs, and everything that constitutes
-        policy -- grant type, visibility, lifecycle status, consent
-        skipping -- is set here or by staff.  See ApplicationWriteSerializer
-        for why each withheld field is withheld.
-
-        Scoped to the requesting user's own applications.  Registering an
-        app is not the same as authorizing one: a user's grants against
-        *other* people's apps are managed separately.
+        DRF's default update() serializes the response with the same
+        (write) serializer it validated the request with.  That would
+        return only the writable fields and, worse, render redirect_uris
+        by iterating the model's space-separated string character by
+        character.  Re-serialize with ApplicationSerializer instead, so
+        the response matches list/retrieve -- mirroring create(), which
+        does the same for the same reason.
       summary: Replace an OAuth2 application
       parameters:
       - in: path
@@ -2876,7 +2874,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationWrite'
+                $ref: '#/components/schemas/Application'
           description: ''
     patch:
       operationId: users_me_oauth2_apps_partial_update
@@ -2910,7 +2908,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationWrite'
+                $ref: '#/components/schemas/Application'
           description: ''
     delete:
       operationId: users_me_oauth2_apps_destroy
@@ -3194,47 +3192,6 @@ components:
       - status
       - updated
       - visibility
-    ApplicationWrite:
-      type: object
-      description: |-
-        Validate a registration or update request.
-
-        Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
-        are writable.  Everything else about an application is either
-        derived or a privilege the owner does not hold:
-
-        - ``authorization_grant_type`` is pinned to authorization-code by
-          the view.  It is the per-app half of the grant-type policy, so
-          accepting it from input would let a caller register the implicit
-          or password app the rest of the stack refuses to serve.
-        - ``visibility`` and ``status`` are staff levers (promoting an app
-          to global exposes it to every user), managed in the django admin.
-        - ``skip_authorization`` would suppress the consent screen -- the
-          one place the user is told what they are granting.
-        - ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
-          features this server does not offer.
-
-        ``client_type`` is create-only: switching an app between public and
-        confidential changes how it authenticates at the token endpoint, and
-        a confidential app's secret is only ever shown at creation.
-      properties:
-        name:
-          type: string
-          maxLength: 255
-        client_type:
-          $ref: '#/components/schemas/ClientTypeEnum'
-        redirect_uris:
-          type: array
-          items:
-            type: string
-            maxLength: 500
-          description: Allowed callback URIs. Must be https, or http on the loopback
-            interface (127.0.0.1 / [::1]) for native apps.
-          minItems: 1
-      required:
-      - client_type
-      - name
-      - redirect_uris
     ApplicationWriteRequest:
       type: object
       description: |-

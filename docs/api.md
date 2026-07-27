@@ -2888,17 +2888,15 @@ Return a single application by its client ID.
 
 **Operation:** `users_me_oauth2_apps_update`
 
-OAuth2 applications registered by the authenticated user.
+Update an application, echoing back the full read representation.
 
-Registration is deliberately narrow: the caller chooses a name, a
-client type and redirect URIs, and everything that constitutes
-policy -- grant type, visibility, lifecycle status, consent
-skipping -- is set here or by staff.  See ApplicationWriteSerializer
-for why each withheld field is withheld.
-
-Scoped to the requesting user's own applications.  Registering an
-app is not the same as authorizing one: a user's grants against
-*other* people's apps are managed separately.
+DRF's default update() serializes the response with the same
+(write) serializer it validated the request with.  That would
+return only the writable fields and, worse, render redirect_uris
+by iterating the model's space-separated string character by
+character.  Re-serialize with ApplicationSerializer instead, so
+the response matches list/retrieve -- mirroring create(), which
+does the same for the same reason.
 
 **Parameters:**
 
@@ -2927,10 +2925,21 @@ app is not the same as authorizing one: a user's grants against
 
 **Response 200:** 
 
-- **`name`** (`string`) *(required)*
-- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
-* `public` - Public Enum: ['confidential', 'public']
-- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+- **`client_id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)*
+- **`client_type`** (``) *(required, read-only)*
+- **`redirect_uris`** (`array`) *(required, read-only)* — Split the stored space-separated URIs into a list.
+- **`visibility`** (``) *(required, read-only)* — Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+* `private` - Private to owner
+* `global` - Global (all users)
+- **`status`** (``) *(required, read-only)* — Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+- **`created`** (`string`) *(required, read-only)*
+- **`updated`** (`string`) *(required, read-only)*
 
 #### `PATCH /api/v1/users/me/oauth2-apps/{client_id}/`
 
@@ -2965,10 +2974,21 @@ Update the application's name or redirect URIs.  ``client_type`` cannot be chang
 
 **Response 200:** 
 
-- **`name`** (`string`) *(required)*
-- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
-* `public` - Public Enum: ['confidential', 'public']
-- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
+- **`client_id`** (`string`) *(required, read-only)*
+- **`name`** (`string`) *(required, read-only)*
+- **`client_type`** (``) *(required, read-only)*
+- **`redirect_uris`** (`array`) *(required, read-only)* — Split the stored space-separated URIs into a list.
+- **`visibility`** (``) *(required, read-only)* — Private apps are visible only to the registering user; global apps are visible to all users (staff-promoted).
+
+* `private` - Private to owner
+* `global` - Global (all users)
+- **`status`** (``) *(required, read-only)* — Lifecycle stage.  Only global + published apps are listed for non-owners; earlier stages are owner/staff only.
+
+* `testing` - Testing
+* `validation` - Validation
+* `published` - Published
+- **`created`** (`string`) *(required, read-only)*
+- **`updated`** (`string`) *(required, read-only)*
 
 #### `DELETE /api/v1/users/me/oauth2-apps/{client_id}/`
 
@@ -3088,34 +3108,6 @@ keep a secret) get null -- they authenticate with PKCE instead.
 - **`created`** (`string`) *(required, read-only)*
 - **`updated`** (`string`) *(required, read-only)*
 - **`client_secret`** (`string`) *(required, read-only)*
-
-### ApplicationWrite
-
-Validate a registration or update request.
-
-Only ``name``, ``redirect_uris`` and (at creation) ``client_type``
-are writable.  Everything else about an application is either
-derived or a privilege the owner does not hold:
-
-- ``authorization_grant_type`` is pinned to authorization-code by
-  the view.  It is the per-app half of the grant-type policy, so
-  accepting it from input would let a caller register the implicit
-  or password app the rest of the stack refuses to serve.
-- ``visibility`` and ``status`` are staff levers (promoting an app
-  to global exposes it to every user), managed in the django admin.
-- ``skip_authorization`` would suppress the consent screen -- the
-  one place the user is told what they are granting.
-- ``algorithm``, ``allowed_origins`` and the OIDC fields belong to
-  features this server does not offer.
-
-``client_type`` is create-only: switching an app between public and
-confidential changes how it authenticates at the token endpoint, and
-a confidential app's secret is only ever shown at creation.
-
-- **`name`** (`string`) *(required)*
-- **`client_type`** (`string`) *(required)* — * `confidential` - Confidential
-* `public` - Public Enum: ['confidential', 'public']
-- **`redirect_uris`** (`array`) *(required)* — Allowed callback URIs. Must be https, or http on the loopback interface (127.0.0.1 / [::1]) for native apps.
 
 ### ApplicationWriteRequest
 

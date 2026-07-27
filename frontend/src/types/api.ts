@@ -326,6 +326,41 @@ export interface APIKeyCreated extends APIKey {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// OAuth2Application — a third-party app the user has registered (see
+// docs/authentication.md).  Distinct from an authorized *grant*: this is
+// an app you registered, not an app you granted access to.
+//
+// Field names follow django-oauth-toolkit, so they differ from the rest
+// of the API: the lookup key is `client_id` (not a UUID), and timestamps
+// are `created`/`updated` (not `created_at`/`modified_at`).
+//
+// `visibility` and `status` are staff-managed lifecycle levers, read-only
+// here: apps start private+testing and only staff can promote them.
+//
+export type OAuth2ClientType = "public" | "confidential";
+export type OAuth2Visibility = "private" | "global";
+export type OAuth2Status = "testing" | "validation" | "published";
+
+export interface OAuth2Application {
+  client_id: string;
+  name: string;
+  client_type: OAuth2ClientType;
+  redirect_uris: string[];
+  visibility: OAuth2Visibility;
+  status: OAuth2Status;
+  created: string;
+  updated: string;
+}
+
+// The registration response is the only place `client_secret` appears,
+// and only for confidential clients; public clients get null (they
+// authenticate with PKCE instead of a secret).
+export interface OAuth2ApplicationCreated extends OAuth2Application {
+  client_secret: string | null;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // Query parameter shapes for list endpoints.  Use these rather than
 // raw URLSearchParams objects so TypeScript catches typos.
 //

@@ -281,6 +281,18 @@ class TestApplicationManagement:
         )
         assert response.status_code == 200, response.data
 
+        # The response is the full read representation (matching
+        # list/retrieve), not the write serializer's echo: redirect_uris
+        # is a proper list, and the read-only fields are present.
+        assert response.data["redirect_uris"] == [
+            "https://example.com/a",
+            "http://127.0.0.1/b",
+        ]
+        assert response.data["client_id"] == application.client_id
+        assert response.data["name"] == "New"
+        assert "visibility" in response.data
+        assert "status" in response.data
+
         application.refresh_from_db()
         assert application.name == "New"
         assert application.redirect_uris.split() == [

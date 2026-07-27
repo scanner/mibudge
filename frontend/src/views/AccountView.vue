@@ -12,6 +12,7 @@
 // 3rd party imports
 //
 import {
+  IconApps,
   IconBuildingBank,
   IconChevronRight,
   IconLock,
@@ -295,6 +296,19 @@ async function signOut() {
             >
               <IconLock class="h-4 w-4 text-neutral-700" />
               <span class="flex-1 text-sm text-neutral-700">Security &amp; Notifications</span>
+              <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
+            </button>
+          </div>
+
+          <!-- Your OAuth2 applications -->
+          <div class="border-t border-neutral-100">
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-neutral-50"
+              @click="router.push('/account/oauth2-apps/')"
+            >
+              <IconApps class="h-4 w-4 text-neutral-700" />
+              <span class="flex-1 text-sm text-neutral-700">Your applications</span>
               <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
             </button>
           </div>

@@ -144,13 +144,17 @@ class APIKeyViewSet(ListModelMixin, RetrieveModelMixin, GenericViewSet):
         summary="Get one of the current user's OAuth2 applications",
         description="Return a single application by its client ID.",
     ),
-    update=extend_schema(summary="Replace an OAuth2 application"),
+    update=extend_schema(
+        summary="Replace an OAuth2 application",
+        responses={200: ApplicationSerializer},
+    ),
     partial_update=extend_schema(
         summary="Update an OAuth2 application",
         description=(
             "Update the application's name or redirect URIs.  "
             "``client_type`` cannot be changed after registration."
         ),
+        responses={200: ApplicationSerializer},
     ),
     destroy=extend_schema(
         summary="Deregister an OAuth2 application",
@@ -194,6 +198,28 @@ class ApplicationViewSet(ModelViewSet):
         if self.action in ("create", "update", "partial_update"):
             return ApplicationWriteSerializer
         return ApplicationSerializer
+
+    ####################################################################
+    #
+    def update(self, request, *args, **kwargs):
+        """Update an application, echoing back the full read representation.
+
+        DRF's default update() serializes the response with the same
+        (write) serializer it validated the request with.  That would
+        return only the writable fields and, worse, render redirect_uris
+        by iterating the model's space-separated string character by
+        character.  Re-serialize with ApplicationSerializer instead, so
+        the response matches list/retrieve -- mirroring create(), which
+        does the same for the same reason.
+        """
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(ApplicationSerializer(instance).data)
 
     ####################################################################
     #
