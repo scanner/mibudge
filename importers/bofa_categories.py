@@ -119,6 +119,7 @@ BOFA_CATEGORY_MAP: dict[str, str | None] = {
     "shopping & entertainment:general merchandise": (
         "Uncategorized : Other Shopping"
     ),
+    "shopping & entertainment : entertainment": "Culture : Movies",
     "shopping & entertainment:hobbies": "Personal : Hobbies",
     "transportation:gasoline/fuel": "Transportation : Gas",
     "travel:travel": "Travel : Other Travel",
