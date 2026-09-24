@@ -15,7 +15,7 @@
 // 3rd party imports
 //
 import { createRouter, createWebHistory } from "vue-router";
-import type { RouteRecordRaw } from "vue-router";
+import type { RouteLocationNormalized, RouteRecordRaw, RouterHistory } from "vue-router";
 
 // app imports
 //
@@ -23,7 +23,7 @@ import { useAuthStore } from "@/stores/auth";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const routes: RouteRecordRaw[] = [
+export const routes: RouteRecordRaw[] = [
   {
     path: "/login/",
     name: "login",
@@ -112,13 +112,6 @@ const routes: RouteRecordRaw[] = [
 
 ////////////////////////////////////////////////////////////////////////
 //
-const router = createRouter({
-  history: createWebHistory("/app/"),
-  routes,
-});
-
-////////////////////////////////////////////////////////////////////////
-//
 // Auth guard.  Runs on every navigation.
 //
 // On an unauthenticated visit to a protected route, redirect to the
@@ -127,7 +120,7 @@ const router = createRouter({
 // to the overview so the back button doesn't leave them stranded on
 // a dead sign-in page.
 //
-router.beforeEach((to) => {
+export function authGuard(to: RouteLocationNormalized) {
   const auth = useAuthStore();
   const isPublic = to.meta.public === true;
   if (!isPublic && !auth.isAuthenticated) {
@@ -137,6 +130,19 @@ router.beforeEach((to) => {
     return { path: "/" };
   }
   return true;
-});
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// Build a router with the app's routes and auth guard.  The app uses
+// browser history under /app/; tests pass a memory history.
+//
+export function createAppRouter(history: RouterHistory = createWebHistory("/app/")) {
+  const router = createRouter({ history, routes });
+  router.beforeEach(authGuard);
+  return router;
+}
+
+const router = createAppRouter();
 
 export default router;

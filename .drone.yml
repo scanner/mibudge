@@ -39,7 +39,7 @@ steps:
       - name: frontend-node-modules
         path: /drone/src/frontend/node_modules
     commands:
-      - npm install -g pnpm
+      - npm install -g pnpm@9
       - cd frontend
       - pnpm install --frozen-lockfile
       - pnpm fmt:check
@@ -71,9 +71,21 @@ steps:
       - name: frontend-node-modules
         path: /drone/src/frontend/node_modules
     commands:
-      - npm install -g pnpm
+      - npm install -g pnpm@9
       - cd frontend
       - pnpm build
+
+  - name: frontend tests
+    image: "node:22"
+    depends_on:
+      - frontend lint
+    volumes:
+      - name: frontend-node-modules
+        path: /drone/src/frontend/node_modules
+    commands:
+      - npm install -g pnpm@9
+      - cd frontend
+      - pnpm test:coverage
 
 ---
 kind: pipeline

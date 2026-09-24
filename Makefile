@@ -10,7 +10,7 @@ DOCKER_BUILDKIT := 1
 # at runtime via .env / docker-compose.
 BUILD_SALT_KEY := $(shell openssl rand -hex 32)
 
-.PHONY: clean purge test logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+.PHONY: clean purge test test-frontend logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
 
 env: $(ROOT_DIR)/.env $(ROOT_DIR)/deployment/local-dev-docker.env	## Generate .env and deployment/local-dev-docker.env from their templates
 
@@ -79,6 +79,9 @@ logs:	## Tail the logs for backend, celeryworker, celerybeat
 
 test: .venv $(ROOT_DIR)/.env	## Run all of the tests
 	@$(UV_RUN) pytest
+
+test-frontend:	## Run the SPA unit tests (Vitest)
+	@cd frontend && pnpm test
 
 uv-sync: .venv	## Sync .venv with uv.lock after dependency changes
 	@uv sync

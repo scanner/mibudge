@@ -82,17 +82,30 @@ export const useAuthStore = defineStore("auth", () => {
   // Attempt a silent token refresh using the httpOnly refresh cookie.
   // Returns true on success, false if the session has fully expired.
   //
-  async function refresh(): Promise<boolean> {
-    try {
-      const data = await authFetch<TokenResponse>("/token/refresh/", null, {
-        method: "POST",
-      });
-      accessToken.value = data.access;
-      return true;
-    } catch {
-      clear();
-      return false;
-    }
+  // Single-flight: concurrent callers share one in-flight refresh.  The
+  // backend rotates and blacklists the refresh cookie on each use, so a
+  // second parallel POST would carry an already-blacklisted cookie, get
+  // 401, and clear a session that the first POST just renewed.
+  //
+  let inFlightRefresh: Promise<boolean> | null = null;
+
+  function refresh(): Promise<boolean> {
+    if (inFlightRefresh) return inFlightRefresh;
+    inFlightRefresh = (async () => {
+      try {
+        const data = await authFetch<TokenResponse>("/token/refresh/", null, {
+          method: "POST",
+        });
+        accessToken.value = data.access;
+        return true;
+      } catch {
+        clear();
+        return false;
+      } finally {
+        inFlightRefresh = null;
+      }
+    })();
+    return inFlightRefresh;
   }
 
   ////////////////////////////////////////////////////////////////////
