@@ -74,7 +74,9 @@ When the access token expires, the auth store handles it transparently:
 2. `authStore.request()` catches the 401 and calls `authStore.refresh()`.
 3. `refresh()` posts to `/api/token/refresh/` — the browser automatically
    sends the httpOnly refresh cookie; the response returns a new access token
-   and rotates the cookie.
+   and rotates the cookie.  Refresh is single-flight: concurrent 401s share
+   one in-flight `POST`, because the backend blacklists each refresh cookie
+   once it has been rotated and a second parallel refresh would fail.
 4. The original request is retried once with the new token.
 5. If the refresh also fails (cookie expired or revoked), an `AuthError` is
    thrown and the session is gone — the user must log in again.
@@ -145,7 +147,7 @@ pnpm install        # Install dependencies
 pnpm dev            # Start Vite dev server on port 5173 (HMR enabled)
 pnpm build          # Production build → dist/ (includes type-check)
 pnpm type-check     # Run vue-tsc standalone
-pnpm fmt            # Format all files with oxfmt
+pnpm fmt            # Format src/ and tests/ with oxfmt
 pnpm fmt:check      # Check formatting without modifying files (used in CI)
 ```
 
@@ -155,6 +157,20 @@ when `DEBUG=True` (the default for local dev).
 
 The Vite dev server does not serve the app directly — it only serves assets.
 The SPA shell at `/app/` is always rendered by Django, even in development.
+
+## Testing
+
+Unit and cross-module tests run under Vitest against an MSW mock REST API:
+
+```bash
+pnpm test           # Run all tests once
+pnpm test:watch     # Watch mode
+pnpm test:coverage  # With v8 coverage and thresholds
+```
+
+Tests live in `tests/`, mirroring `src/`. See
+[docs/spa/testing.md](../docs/spa/testing.md) for the layout, the mock API,
+fixtures, conventions, and which tests to add for a change.
 
 ## Django integration
 

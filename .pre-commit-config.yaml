@@ -35,11 +35,11 @@ repos:
         entry: sh -c 'cd frontend && pnpm fmt'
         language: system
         pass_filenames: false
-        files: ^frontend/src/
+        files: ^frontend/(src|tests)/
 
       - id: vue-tsc
         name: vue-tsc (frontend)
         entry: sh -c 'cd frontend && pnpm type-check'
         language: system
         pass_filenames: false
-        files: ^frontend/src/
+        files: ^frontend/(src|tests)/
