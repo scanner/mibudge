@@ -125,9 +125,10 @@ Public (no auth -- the token is the credential):
 | `POST /api/v1/invitations/{token}/accept/` | Accept (adds invitee to `owners`)         |
 | `POST /api/v1/invitations/{token}/decline/`| Decline                                    |
 
-The management actions are defined on `BankAccountViewSet` and the
-public endpoints as function views, both in
-[`app/moneypools/api/v1/views.py`](../app/moneypools/api/v1/views.py).
+The management actions are defined on `BankAccountInvitationActions`
+(a mixin composed into `BankAccountViewSet`) and the public endpoints
+as function views, both in
+[`app/moneypools/api/v1/views/invitations.py`](../app/moneypools/api/v1/views/invitations.py).
 
 ### Protections
 
@@ -139,7 +140,7 @@ public endpoints as function views, both in
 - **Sender-only cancellation.** Even a co-owner of the same account
   cannot cancel an invitation someone else sent
   (`cancel_invitation` in
-  [`app/moneypools/api/v1/views.py`](../app/moneypools/api/v1/views.py)
+  [`app/moneypools/api/v1/views/invitations.py`](../app/moneypools/api/v1/views/invitations.py)
   checks `invited_by`).
 - **Duplicate suppression.** `create_invitation()` rejects an
   `invitee_email` that is already an owner
@@ -234,7 +235,7 @@ In the Django admin, both limits surface as inline form/action messages.
 | New-user onboarding helpers        | [`app/users/onboarding.py`](../app/users/onboarding.py)        |
 | Co-owner service layer             | [`app/moneypools/service/invitation.py`](../app/moneypools/service/invitation.py) |
 | Co-owner model (`BankAccountInvitation`) | [`app/moneypools/models.py`](../app/moneypools/models.py) |
-| Co-owner REST endpoints            | [`app/moneypools/api/v1/views.py`](../app/moneypools/api/v1/views.py) |
+| Co-owner REST endpoints            | [`app/moneypools/api/v1/views/invitations.py`](../app/moneypools/api/v1/views/invitations.py) |
 | Co-owner acceptance page           | [`app/moneypools/invitation_views.py`](../app/moneypools/invitation_views.py) |
 | Admin-invite service layer         | [`app/users/invitation.py`](../app/users/invitation.py)        |
 | Admin-invite model (`UserInvitation`) | [`app/users/models.py`](../app/users/models.py)             |
