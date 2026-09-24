@@ -18,6 +18,7 @@ from rest_framework.test import APIClient
 
 # project imports
 import notifications.service as notifications_service
+from common.db import SQLITE_ENGINE, apply_sqlite_locking
 from tests.users.factories import UserFactory
 from users.models import APIKey, User
 
@@ -62,10 +63,19 @@ def pytest_collection_modifyitems(
 ####################################################################
 #
 @pytest.fixture(scope="session")
-def django_db_modify_db_settings() -> None:
+def django_db_modify_db_settings(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
     """
-    Point the test database at in-memory SQLite, or at Postgres when
+    Point the test database at a SQLite file, or at Postgres when
     `MIBUDGE_TEST_DATABASE_URL` is set.
+
+    The SQLite test database is a file, not `:memory:`, so threads in
+    the concurrency tests get their own connections with SQLite's
+    file-level write locking.  Django's in-memory test database uses a
+    shared cache, whose table-level locks fail at once instead of
+    waiting.  The file is opened with the same `BEGIN IMMEDIATE`
+    transaction mode as production SQLite (`common.db`).
 
     pytest-django calls this session-scoped fixture inside
     ``django_db_setup``, just before ``setup_databases()`` runs, making it
@@ -86,8 +96,12 @@ def django_db_modify_db_settings() -> None:
         url = os.environ[POSTGRES_TEST_URL_ENV]
         db.update(environ.Env.db_url_config(url))
     else:
-        db["ENGINE"] = "django.db.backends.sqlite3"
+        db["ENGINE"] = SQLITE_ENGINE
         db["NAME"] = ":memory:"
+        db.setdefault("TEST", {})["NAME"] = str(
+            tmp_path_factory.mktemp("db") / "test_mibudge.sqlite3"
+        )
+        apply_sqlite_locking(db)
 
     # Discard the cached DatabaseWrapper -- it was built from the
     # original settings. Deleting it forces the next access to construct

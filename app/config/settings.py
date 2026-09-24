@@ -15,6 +15,9 @@ from pathlib import Path
 import environ
 from django.utils.crypto import get_random_string
 
+# Project imports
+from common.db import apply_sqlite_locking
+
 ROOT_DIR = Path(__file__).resolve(strict=True).parent.parent
 APPS_DIR = ROOT_DIR
 # REPO_DIR is the repository root (one level above the Django project root).
@@ -98,6 +101,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ------------------------------------------------------------------------------
 DATABASES = {"default": env.db()}
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
+apply_sqlite_locking(DATABASES["default"])
 if not DEBUG:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("CONN_MAX_AGE", default=60)
 
