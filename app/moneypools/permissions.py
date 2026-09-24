@@ -15,8 +15,8 @@ Ownership is enforced in three layers:
   `IsAccountOwner.has_object_permission` re-checks the fetched object.
 - Create: DRF never calls object-level permissions on create, so
   writable `bank_account` fields use `OwnedBankAccountField`
-  (`moneypools/api/v1/fields.py`), which resolves the UUID only among
-  the requesting user's accounts (400 otherwise).
+  (`moneypools/api/v1/serializers/fields.py`), which resolves the UUID
+  only among the requesting user's accounts (400 otherwise).
 - Create, defense in depth: `AccountOwnerCreateMixin.create` re-checks
   every validated related object before `perform_create` runs and
   returns 403 if any belongs to an account the user does not own.
