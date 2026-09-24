@@ -41,6 +41,7 @@ than wait or duplicate work.
 # system imports
 #
 import logging
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -64,6 +65,7 @@ from moneypools.models import (
 )
 from moneypools.notification_kinds import RECURRING_BUDGET_REFRESHED
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service._locking import locked_many
 from moneypools.service.funding_strategy import BUDGET_TYPE_TO_STRATEGY
 from moneypools.service.schedules import (
     enumerate_schedule,
@@ -818,55 +820,69 @@ def _process_fund_event(
         else budget
     )
 
-    unallocated.refresh_from_db()
-    target.refresh_from_db()
-    budget.refresh_from_db()
+    # The intended amount depends on the balances of the budgets the
+    # event touches, so it is computed under their row locks.  The
+    # nested internal_transaction_svc.create re-enters the Redis locks
+    # taken here.
+    #
+    fund_kind = InternalTransaction.SystemEventKind.FUND
+    budgets_to_lock = sorted(
+        {str(b.id): b for b in (unallocated, target, budget)}.values(),
+        key=lambda b: str(b.id),
+    )
+    with ExitStack() as stack:
+        for b in budgets_to_lock:
+            stack.enter_context(acquire_lock(b.lock_key))
+        with db_transaction.atomic():
+            locked_many(budgets_to_lock)
+            strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
+            intended = strategy.intended_for_event(
+                budget, ev.date, kind=EventKind.FUND
+            )
 
-    strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
-    intended = strategy.intended_for_event(budget, ev.date, kind=EventKind.FUND)
+            already_moved = sum(
+                (
+                    itx.amount.amount
+                    for itx in InternalTransaction.objects.filter(
+                        dst_budget=target,
+                        system_event_kind=fund_kind,
+                        system_event_date=ev.date,
+                    )
+                ),
+                Decimal("0"),
+            )
+            net = max(Decimal("0"), intended.amount - already_moved)
 
-    already_moved = sum(
-        (
-            itx.amount.amount
-            for itx in InternalTransaction.objects.filter(
+            # Nothing left to move (intended already covered by prior
+            # runs, or intended was zero to begin with -- e.g. a Capped
+            # budget already at target).  The event has done its job;
+            # mark it complete and advance.
+            #
+            if net <= Decimal("0"):
+                _mark_occurrence_complete(
+                    occurrence, budget, EventKind.FUND, ev.date, report
+                )
+                return
+
+            amount = Money(net, intended.currency)
+            # Use the event date as effective_date so the
+            # InternalTransaction slots into the correct position in the
+            # historical timeline when running a backfill for past
+            # periods.
+            effective_date = datetime(
+                ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
+            )
+
+            internal_transaction_svc.create(
+                bank_account=account,
+                src_budget=unallocated,
                 dst_budget=target,
-                system_event_kind=InternalTransaction.SystemEventKind.FUND,
+                amount=amount,
+                actor=actor,
+                effective_date=effective_date,
+                system_event_kind=fund_kind,
                 system_event_date=ev.date,
             )
-        ),
-        Decimal("0"),
-    )
-    net = max(Decimal("0"), intended.amount - already_moved)
-
-    # Nothing left to move (intended already covered by prior runs, or
-    # intended was zero to begin with -- e.g. a Capped budget already at
-    # target).  The event has done its job; mark it complete and advance.
-    #
-    if net <= Decimal("0"):
-        _mark_occurrence_complete(
-            occurrence, budget, EventKind.FUND, ev.date, report
-        )
-        return
-
-    amount = Money(net, intended.currency)
-    # Use the event date as effective_date so the InternalTransaction
-    # slots into the correct position in the historical timeline when
-    # running a backfill for past periods.
-    effective_date = datetime(
-        ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
-    )
-
-    with db_transaction.atomic():
-        internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=unallocated,
-            dst_budget=target,
-            amount=amount,
-            actor=actor,
-            effective_date=effective_date,
-            system_event_kind=InternalTransaction.SystemEventKind.FUND,
-            system_event_date=ev.date,
-        )
 
     target.refresh_from_db()
     # For GOAL budgets, internal_transaction_svc latches complete=True once
@@ -944,80 +960,90 @@ def _process_recur_event(
         )
         return
 
-    budget.refresh_from_db()
-    fillup.refresh_from_db()
-
-    # New cycle: clear the "complete" latch so the recurring budget can
-    # be re-evaluated against its target as money sweeps in.
+    # The sweep is capped at the fill-up's balance, so the balances are
+    # read under row locks.  The nested internal_transaction_svc.create
+    # re-enters the Redis locks taken here.
     #
-    if budget.complete:
-        Budget.objects.filter(pkid=budget.pkid).update(complete=False)
-        budget.complete = False
+    recur_kind = InternalTransaction.SystemEventKind.RECUR
+    budgets_to_lock = sorted([budget, fillup], key=lambda b: str(b.id))
+    with ExitStack() as stack:
+        for b in budgets_to_lock:
+            stack.enter_context(acquire_lock(b.lock_key))
+        with db_transaction.atomic():
+            locked_many(budgets_to_lock)
+            # New cycle: clear the "complete" latch so the recurring
+            # budget can be re-evaluated against its target as money
+            # sweeps in.
+            #
+            if budget.complete:
+                Budget.objects.filter(pkid=budget.pkid).update(complete=False)
+                budget.complete = False
 
-    strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
-    intended = strategy.intended_for_event(
-        budget, ev.date, kind=EventKind.RECUR
-    )
+            strategy = BUDGET_TYPE_TO_STRATEGY[budget.budget_type]
+            intended = strategy.intended_for_event(
+                budget, ev.date, kind=EventKind.RECUR
+            )
 
-    already_moved = sum(
-        (
-            itx.amount.amount
-            for itx in InternalTransaction.objects.filter(
-                dst_budget=budget,
-                system_event_kind=InternalTransaction.SystemEventKind.RECUR,
-                system_event_date=ev.date,
+            already_moved = sum(
+                (
+                    itx.amount.amount
+                    for itx in InternalTransaction.objects.filter(
+                        dst_budget=budget,
+                        system_event_kind=recur_kind,
+                        system_event_date=ev.date,
+                    )
+                ),
+                Decimal("0"),
             )
-        ),
-        Decimal("0"),
-    )
-    net = max(Decimal("0"), intended.amount - already_moved)
+            net = max(Decimal("0"), intended.amount - already_moved)
 
-    amount_received = Money(Decimal("0"), budget.balance.currency)
+            amount_received = Money(Decimal("0"), budget.balance.currency)
 
-    # Sweep from fill-up to recurring, capped at min(gap-to-target,
-    # fill-up balance).  If the fill-up is empty, we still mark the
-    # occurrence COMPLETE below -- "clean break" semantics.
-    #
-    if net > Decimal("0"):
-        fillup_available = fillup.balance.amount
-        if fillup_available <= Decimal("0"):
-            report.warnings.append(
-                f"[{ev.date}] {budget.name}: fill-up goal is empty; "
-                "transfer skipped."
-            )
-        else:
-            transfer = min(net, fillup_available)
-            if transfer < net:
-                report.warnings.append(
-                    f"[{ev.date}] {budget.name}: fill-up only had "
-                    f"{fillup.balance}; needed "
-                    f"{Money(net, budget.balance.currency)}; underfunded."
-                )
-            amount = Money(transfer, budget.balance.currency)
-            amount_received = amount
-            effective_date = datetime(
-                ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
-            )
-            with db_transaction.atomic():
-                internal_transaction_svc.create(
-                    bank_account=account,
-                    src_budget=fillup,
-                    dst_budget=budget,
-                    amount=amount,
-                    actor=actor,
-                    effective_date=effective_date,
-                    system_event_kind=InternalTransaction.SystemEventKind.RECUR,
-                    system_event_date=ev.date,
-                )
-            budget.refresh_from_db()
-            report.transfers += 1
-            logger.debug(
-                "fund_account: recur %s -> %s  amount=%s  date=%s",
-                fillup.name,
-                budget.name,
-                amount,
-                ev.date,
-            )
+            # Sweep from fill-up to recurring, capped at
+            # min(gap-to-target, fill-up balance).  If the fill-up is
+            # empty, we still mark the occurrence COMPLETE below --
+            # "clean break" semantics.
+            #
+            if net > Decimal("0"):
+                fillup_available = fillup.balance.amount
+                if fillup_available <= Decimal("0"):
+                    report.warnings.append(
+                        f"[{ev.date}] {budget.name}: fill-up goal is empty; "
+                        "transfer skipped."
+                    )
+                else:
+                    transfer = min(net, fillup_available)
+                    if transfer < net:
+                        report.warnings.append(
+                            f"[{ev.date}] {budget.name}: fill-up only had "
+                            f"{fillup.balance}; needed "
+                            f"{Money(net, budget.balance.currency)}; "
+                            "underfunded."
+                        )
+                    amount = Money(transfer, budget.balance.currency)
+                    amount_received = amount
+                    effective_date = datetime(
+                        ev.date.year, ev.date.month, ev.date.day, tzinfo=UTC
+                    )
+                    internal_transaction_svc.create(
+                        bank_account=account,
+                        src_budget=fillup,
+                        dst_budget=budget,
+                        amount=amount,
+                        actor=actor,
+                        effective_date=effective_date,
+                        system_event_kind=recur_kind,
+                        system_event_date=ev.date,
+                    )
+                    budget.refresh_from_db()
+                    report.transfers += 1
+                    logger.debug(
+                        "fund_account: recur %s -> %s  amount=%s  date=%s",
+                        fillup.name,
+                        budget.name,
+                        amount,
+                        ev.date,
+                    )
 
     # Latch Budget.complete based on whether the recurring budget hit
     # its target this cycle; this is independent of occurrence status.

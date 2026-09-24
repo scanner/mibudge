@@ -30,6 +30,7 @@ Operations:
 
 # system imports
 #
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -52,6 +53,7 @@ from moneypools.models import (
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
 )
+from moneypools.service._locking import locked, locked_many
 
 
 ########################################################################
@@ -113,7 +115,7 @@ def create(
 
     with acquire_lock(bank_account.lock_key):
         with db_transaction.atomic():
-            bank_account.refresh_from_db()
+            locked(bank_account)
             bank_account.available_balance += amount
             if not pending:
                 bank_account.posted_balance += amount
@@ -196,7 +198,7 @@ def update(transaction: Transaction, **changes: Any) -> Transaction:
 
         with acquire_lock(bank_account.lock_key):
             with db_transaction.atomic():
-                bank_account.refresh_from_db()
+                locked(bank_account)
 
                 # Always reverse the old available contribution and apply new.
                 if amount_changed:
@@ -236,19 +238,35 @@ def delete(transaction: Transaction) -> None:
         transaction: The Transaction to delete.
     """
     bank_account = transaction.bank_account
-    allocations = list(
-        TransactionAllocation.objects.filter(
-            transaction=transaction
-        ).select_related("budget")
+    budgets_to_lock = sorted(
+        Budget.objects.filter(
+            transaction_allocations__transaction=transaction
+        ).distinct(),
+        key=lambda b: str(b.id),
     )
 
-    with acquire_lock(bank_account.lock_key):
+    with ExitStack() as stack:
+        stack.enter_context(acquire_lock(bank_account.lock_key))
+        for b in budgets_to_lock:
+            stack.enter_context(acquire_lock(b.lock_key))
         with db_transaction.atomic():
+            # Lock order bank_account -> transaction -> budget, budgets
+            # in `id` order; the allocation deletes below re-enter these
+            # locks.  `pending` and `amount` are re-read under the
+            # transaction's row lock.
+            #
+            locked(bank_account)
+            locked(transaction)
+            locked_many(budgets_to_lock)
+            allocations = list(
+                TransactionAllocation.objects.filter(
+                    transaction=transaction
+                ).select_related("budget")
+            )
             for alloc in allocations:
                 if alloc.budget is not None:
                     transaction_allocation_svc.delete(alloc)
 
-            bank_account.refresh_from_db()
             bank_account.available_balance -= transaction.amount
             if not transaction.pending:
                 bank_account.posted_balance -= transaction.amount
@@ -329,7 +347,7 @@ def resolve_pending_to_posted(
 
     with acquire_lock(bank_account.lock_key):
         with db_transaction.atomic():
-            bank_account.refresh_from_db()
+            locked(bank_account)
             # Pending → posted always credits posted_balance.
             bank_account.posted_balance += final_amount
             if amount_changed:
@@ -403,8 +421,30 @@ def split(
 
     unallocated = account.unallocated_budget
 
-    with acquire_lock(transaction.lock_key):
+    # Every budget the split may touch: the declared targets, the
+    # Unallocated remainder, and any budget whose allocation is removed.
+    # Their Redis locks and row locks are taken up front in `id` order,
+    # so the per-allocation service calls below re-enter locks this
+    # thread already holds instead of acquiring them in split order.
+    #
+    budgets_to_lock = list(budgets_by_id.values())
+    if unallocated is not None:
+        budgets_to_lock.append(unallocated)
+    budgets_to_lock.extend(
+        Budget.objects.filter(transaction_allocations__transaction=transaction)
+    )
+    budgets_to_lock = sorted(
+        {str(b.id): b for b in budgets_to_lock}.values(),
+        key=lambda b: str(b.id),
+    )
+
+    with ExitStack() as stack:
+        stack.enter_context(acquire_lock(transaction.lock_key))
+        for b in budgets_to_lock:
+            stack.enter_context(acquire_lock(b.lock_key))
         with db_transaction.atomic():
+            locked(transaction)
+            locked_many(budgets_to_lock)
             existing = list(
                 TransactionAllocation.objects.filter(
                     transaction=transaction

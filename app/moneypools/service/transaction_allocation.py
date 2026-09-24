@@ -51,6 +51,7 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
 )
+from moneypools.service._locking import locked
 
 
 ########################################################################
@@ -88,7 +89,7 @@ def create(
     kwargs.setdefault("category", transaction.category)
     with acquire_lock(budget.lock_key):
         with db_transaction.atomic():
-            budget.refresh_from_db()
+            locked(budget)
             budget.balance += amount
             allocation = TransactionAllocation(
                 transaction=transaction,
@@ -126,8 +127,8 @@ def update_amount(
     transaction = allocation.transaction
     with acquire_lock(budget.lock_key):
         with db_transaction.atomic():
-            allocation.refresh_from_db()
-            budget.refresh_from_db()
+            locked(budget)
+            locked(allocation)
             budget.balance = budget.balance - allocation.amount + new_amount
             allocation.amount = new_amount
             allocation.save()
@@ -158,8 +159,8 @@ def delete(allocation: TransactionAllocation) -> None:
     transaction = allocation.transaction
     with acquire_lock(budget.lock_key):
         with db_transaction.atomic():
-            budget.refresh_from_db()
-            allocation.refresh_from_db()
+            locked(budget)
+            locked(allocation)
             budget.balance -= allocation.amount
             budget.save()
             allocation.delete()

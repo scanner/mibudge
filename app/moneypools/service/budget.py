@@ -42,6 +42,7 @@ from djmoney.money import Money
 from common.locks import acquire_lock
 from moneypools.models import BankAccount, Budget
 from moneypools.service import internal_transaction as internal_transaction_svc
+from moneypools.service._locking import locked_many
 from moneypools.service.schedules import (
     enumerate_schedule,
     normalize_dtstart,
@@ -174,12 +175,16 @@ def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
     ):
         fillup = Budget.objects.get(id=budget.fillup_goal_id)
 
+    budgets_to_lock = [budget] if fillup is None else [budget, fillup]
     with ExitStack() as stack:
-        stack.enter_context(acquire_lock(budget.lock_key))
-        if fillup is not None:
-            stack.enter_context(acquire_lock(fillup.lock_key))
+        for b in sorted(budgets_to_lock, key=lambda b: str(b.id)):
+            stack.enter_context(acquire_lock(b.lock_key))
 
         with db_transaction.atomic():
+            # `save()` writes every column, balance included, so the row
+            # is re-read under lock before the changes are applied.
+            #
+            locked_many(budgets_to_lock)
             for field, value in changes.items():
                 setattr(budget, field, value)
             budget.save()
@@ -197,7 +202,8 @@ def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
 def archive(budget: Budget, actor: User) -> Budget:
     """Archive a budget, draining its balance (and fill-up's) to unallocated.
 
-    Sequence (all inside one atomic block):
+    Sequence (all inside one atomic block, holding the Redis and row
+    locks of this budget, its fill-up and the Unallocated budget):
         1. If a fill-up goal exists and has a positive balance, transfer
            it to unallocated via InternalTransactionService, then mark
            the fill-up archived.
@@ -227,38 +233,55 @@ def archive(budget: Budget, actor: User) -> Budget:
     if unallocated is None:
         raise ValueError("No unallocated budget found for this account.")
 
-    with db_transaction.atomic():
-        if budget.fillup_goal_id:
-            fillup = Budget.objects.get(id=budget.fillup_goal_id)
-            if fillup.balance.amount > 0:
-                # Fill-up is a system-internal construct; attribute its
-                # sweep to the funding-system user, not the archiving user.
+    fillup: Budget | None = None
+    if budget.fillup_goal_id:
+        fillup = Budget.objects.get(id=budget.fillup_goal_id)
+    budgets_to_lock = [budget, unallocated]
+    if fillup is not None:
+        budgets_to_lock.append(fillup)
+
+    # The drain amounts are read under the row locks, and the nested
+    # internal_transaction_svc.create calls re-enter the Redis locks
+    # taken here.
+    #
+    with ExitStack() as stack:
+        for b in sorted(budgets_to_lock, key=lambda b: str(b.id)):
+            stack.enter_context(acquire_lock(b.lock_key))
+        with db_transaction.atomic():
+            locked_many(budgets_to_lock)
+
+            if fillup is not None:
+                if fillup.balance.amount > 0:
+                    # Fill-up is a system-internal construct; attribute
+                    # its sweep to the funding-system user, not the
+                    # archiving user.
+                    #
+                    internal_transaction_svc.create(
+                        bank_account=budget.bank_account,
+                        src_budget=fillup,
+                        dst_budget=unallocated,
+                        amount=fillup.balance,
+                        actor=funding_system_user(),
+                        system_event_kind=None,
+                        system_event_date=None,
+                    )
+                fillup.refresh_from_db()
+                fillup.archived = True
+                fillup.save()
+
+            budget.refresh_from_db()
+            if budget.balance.amount > 0:
                 internal_transaction_svc.create(
                     bank_account=budget.bank_account,
-                    src_budget=fillup,
+                    src_budget=budget,
                     dst_budget=unallocated,
-                    amount=fillup.balance,
-                    actor=funding_system_user(),
-                    system_event_kind=None,
-                    system_event_date=None,
+                    amount=budget.balance,
+                    actor=actor,
                 )
-            fillup.refresh_from_db()
-            fillup.archived = True
-            fillup.save()
 
-        budget.refresh_from_db()
-        if budget.balance.amount > 0:
-            internal_transaction_svc.create(
-                bank_account=budget.bank_account,
-                src_budget=budget,
-                dst_budget=unallocated,
-                amount=budget.balance,
-                actor=actor,
-            )
-
-        budget.refresh_from_db()
-        budget.archived = True
-        budget.save()
+            budget.refresh_from_db()
+            budget.archived = True
+            budget.save()
 
     budget.refresh_from_db()
     return budget
@@ -311,8 +334,7 @@ def delete(budget: Budget, actor: User) -> None:
             stack.enter_context(acquire_lock(b.lock_key))
 
         with db_transaction.atomic():
-            budget.refresh_from_db()
-            unallocated.refresh_from_db()
+            locked_many(budgets_to_lock)
 
             amount = budget.balance.amount
             if amount > 0:

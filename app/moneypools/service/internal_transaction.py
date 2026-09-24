@@ -31,6 +31,7 @@ from djmoney.money import Money
 from common.locks import acquire_lock
 from moneypools.models import BankAccount, Budget, InternalTransaction
 from moneypools.service import transaction_allocation as alloc_svc
+from moneypools.service._locking import locked, locked_many
 from users.models import User
 
 
@@ -89,8 +90,7 @@ def create(
             stack.enter_context(acquire_lock(b.lock_key))
 
         with db_transaction.atomic():
-            src_budget.refresh_from_db()
-            dst_budget.refresh_from_db()
+            locked_many([src_budget, dst_budget])
 
             src_budget.balance -= amount
             dst_budget.balance += amount
@@ -174,8 +174,12 @@ def delete(internal_transaction: InternalTransaction) -> None:
             stack.enter_context(acquire_lock(b.lock_key))
 
         with db_transaction.atomic():
-            src_budget.refresh_from_db()
-            dst_budget.refresh_from_db()
+            locked_many([src_budget, dst_budget])
+            # Re-reading the row under lock makes a second concurrent
+            # delete of the same transfer raise `DoesNotExist` instead
+            # of reversing the balances twice.
+            #
+            locked(internal_transaction)
 
             src_budget.balance += amount
             dst_budget.balance -= amount
