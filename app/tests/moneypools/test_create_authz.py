@@ -3,14 +3,19 @@
 Covers the create endpoints whose request body names a bank account
 (budgets, transactions, internal transactions) under both interactive
 (JWT) and machine (API key) authentication, plus the defense-in-depth
-check in `AccountOwnerQuerySetMixin` and the `funding_type` default on
+check in `AccountOwnerCreateMixin` and the `funding_type` default on
 budget create.
+
+The auth-mode matrix comes from the root `any_auth_client` fixture;
+the per-endpoint payload builders are plain helpers because they are
+passed through `pytest.mark.parametrize`, which is evaluated before
+fixtures exist.
 """
 
 # system imports
 from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 # 3rd party imports
 import pytest
@@ -18,6 +23,7 @@ from django.urls import reverse
 from djmoney.money import Money
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.request import Request
 from rest_framework.test import APIClient
 
 # Project imports
@@ -33,7 +39,7 @@ from moneypools.permissions import (
     AccountOwnerCreateMixin,
     AccountOwnerQuerySetMixin,
 )
-from users.models import APIKey, User
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 
@@ -98,43 +104,49 @@ CREATE_ENDPOINTS = [
     ),
 ]
 
-AUTH_MODES = ["jwt", "api_key"]
+# An account plus its two budgets (funded source, empty destination),
+# as returned by `make_account_with_budgets`.
+#
+AccountWithBudgets = tuple[BankAccount, list[Budget]]
 
 
 ####################################################################
 #
-def _client_for(user: User, auth_mode: str) -> APIClient:
-    """Return a client authenticated as `user` via `auth_mode`.
-
-    Args:
-        user: The user the client acts as.
-        auth_mode: `"jwt"` for an interactive (force-authenticated)
-            session, `"api_key"` for an `Authorization: Api-Key` header.
-
-    Returns:
-        An authenticated `APIClient`.
-    """
-    client = APIClient()
-    if auth_mode == "api_key":
-        _, plaintext = APIKey.make(user, "create authz test")
-        client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
-    else:
-        client.force_authenticate(user=user)
-    return client
-
-
-####################################################################
-#
-def _account_with_budgets(
-    owner: User,
+@pytest.fixture
+def make_account_with_budgets(
     bank_account_factory: Callable[..., BankAccount],
     budget_factory: Callable[..., Budget],
-) -> tuple[BankAccount, list[Budget]]:
-    """Create an account owned by `owner` with a funded and an empty budget."""
-    account = bank_account_factory(owners=[owner])
-    src = budget_factory(bank_account=account, balance=Money(500, "USD"))
-    dst = budget_factory(bank_account=account)
-    return account, [src, dst]
+) -> Callable[[User], AccountWithBudgets]:
+    """Return a factory for an account with a funded and an empty budget.
+
+    Tests call it once for the caller and once for another user, so it
+    is a factory rather than a single-object fixture.
+
+    Returns:
+        A callable `(owner) -> (account, [src_budget, dst_budget])`
+        where `src_budget` holds $500 and `dst_budget` is empty.
+    """
+
+    def _make(owner: User) -> AccountWithBudgets:
+        account = bank_account_factory(owners=[owner])
+        src = budget_factory(bank_account=account, balance=Money(500, "USD"))
+        dst = budget_factory(bank_account=account)
+        return account, [src, dst]
+
+    return _make
+
+
+####################################################################
+#
+@pytest.fixture
+def budget_viewset(user: User) -> BudgetViewSet:
+    """A `BudgetViewSet` bound to a request from the default `user`."""
+    # `check_create_ownership` reads only `self.request.user`, so a
+    # minimal stand-in request is enough to exercise it directly.
+    #
+    view = BudgetViewSet()
+    view.request = cast(Request, SimpleNamespace(user=user))
+    return view
 
 
 ########################################################################
@@ -145,18 +157,15 @@ class TestCreateScopedToOwnedAccounts:
 
     ####################################################################
     #
-    @pytest.mark.parametrize("auth_mode", AUTH_MODES)
     @pytest.mark.parametrize("url_name,build_payload,model", CREATE_ENDPOINTS)
     def test_create_in_unowned_account_rejected(
         self,
-        user: User,
+        any_auth_client: APIClient,
         user_factory: Callable[..., User],
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
+        make_account_with_budgets: Callable[[User], AccountWithBudgets],
         url_name: str,
         build_payload: Callable[[BankAccount, list[Budget]], dict],
         model: type[Budget | Transaction | InternalTransaction],
-        auth_mode: str,
     ) -> None:
         """
         GIVEN: a bank account (with budgets) owned by another user
@@ -169,9 +178,7 @@ class TestCreateScopedToOwnedAccounts:
         AND:   no object is created on that account
         AND:   the account's budget balances are unchanged
         """
-        victim, victim_budgets = _account_with_budgets(
-            user_factory(), bank_account_factory, budget_factory
-        )
+        victim, victim_budgets = make_account_with_budgets(user_factory())
         posted_before = victim.posted_balance
         available_before = victim.available_balance
         budget_balances_before = {
@@ -179,8 +186,10 @@ class TestCreateScopedToOwnedAccounts:
         }
         count_before = model.objects.filter(bank_account=victim).count()
 
-        client = _client_for(user, auth_mode)
-        response = client.post(
+        # `any_auth_client` runs this test once per authentication
+        # method (JWT session, API key).
+        #
+        response = any_auth_client.post(
             reverse(url_name),
             build_payload(victim, victim_budgets),
             format="json",
@@ -203,17 +212,15 @@ class TestCreateScopedToOwnedAccounts:
 
     ####################################################################
     #
-    @pytest.mark.parametrize("auth_mode", AUTH_MODES)
     @pytest.mark.parametrize("url_name,build_payload,model", CREATE_ENDPOINTS)
     def test_create_in_owned_account_succeeds(
         self,
+        any_auth_client: APIClient,
         user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
+        make_account_with_budgets: Callable[[User], AccountWithBudgets],
         url_name: str,
         build_payload: Callable[[BankAccount, list[Budget]], dict],
         model: type[Budget | Transaction | InternalTransaction],
-        auth_mode: str,
     ) -> None:
         """
         GIVEN: a bank account (with budgets) owned by the caller
@@ -223,12 +230,12 @@ class TestCreateScopedToOwnedAccounts:
         THEN:  201 Created is returned
         AND:   the new object belongs to that account
         """
-        account, budgets = _account_with_budgets(
-            user, bank_account_factory, budget_factory
-        )
+        account, budgets = make_account_with_budgets(user)
 
-        client = _client_for(user, auth_mode)
-        response = client.post(
+        # `any_auth_client` runs this test once per authentication
+        # method (JWT session, API key).
+        #
+        response = any_auth_client.post(
             reverse(url_name),
             build_payload(account, budgets),
             format="json",
@@ -240,14 +247,12 @@ class TestCreateScopedToOwnedAccounts:
 
     ####################################################################
     #
-    @pytest.mark.parametrize("auth_mode", AUTH_MODES)
     def test_budget_fillup_goal_not_writable(
         self,
+        any_auth_client: APIClient,
         user: User,
         user_factory: Callable[..., User],
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
-        auth_mode: str,
+        make_account_with_budgets: Callable[[User], AccountWithBudgets],
     ) -> None:
         """
         GIVEN: a budget owned by another user
@@ -256,22 +261,13 @@ class TestCreateScopedToOwnedAccounts:
         THEN:  the budget is created without that link -- `fillup_goal`
                is managed by the budget service, not the request body
         """
-        other_account = bank_account_factory(owners=[user_factory()])
-        other_budget = budget_factory(bank_account=other_account)
-        account = bank_account_factory(owners=[user])
+        _, [other_budget, _] = make_account_with_budgets(user_factory())
+        account, budgets = make_account_with_budgets(user)
+        payload = _budget_payload(account, budgets)
+        payload["fillup_goal"] = str(other_budget.id)
 
-        client = _client_for(user, auth_mode)
-        response = client.post(
-            reverse("api_v1:budget-list"),
-            {
-                "name": "Groceries",
-                "bank_account": str(account.id),
-                "budget_type": "G",
-                "funding_type": "D",
-                "target_balance": "100.00",
-                "fillup_goal": str(other_budget.id),
-            },
-            format="json",
+        response = any_auth_client.post(
+            reverse("api_v1:budget-list"), payload, format="json"
         )
 
         assert response.status_code == status.HTTP_201_CREATED
@@ -283,19 +279,7 @@ class TestCreateScopedToOwnedAccounts:
 ########################################################################
 #
 class TestCreateOwnershipDefenseInDepth:
-    """`AccountOwnerQuerySetMixin` re-checks related-object ownership."""
-
-    ####################################################################
-    #
-    @staticmethod
-    def _view_for(user: User) -> BudgetViewSet:
-        """Return a `BudgetViewSet` bound to a request for `user`."""
-        # `check_create_ownership` reads only `self.request.user`, so a
-        # minimal stand-in request is enough to exercise it directly.
-        #
-        view = BudgetViewSet()
-        view.request = SimpleNamespace(user=user)
-        return view
+    """`AccountOwnerCreateMixin` re-checks related-object ownership."""
 
     ####################################################################
     #
@@ -330,10 +314,9 @@ class TestCreateOwnershipDefenseInDepth:
     #
     def test_unowned_related_object_denied(
         self,
-        user: User,
+        budget_viewset: BudgetViewSet,
         user_factory: Callable[..., User],
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
+        make_account_with_budgets: Callable[[User], AccountWithBudgets],
     ) -> None:
         """
         GIVEN: validated create data naming an account and a budget that
@@ -342,31 +325,29 @@ class TestCreateOwnershipDefenseInDepth:
         WHEN:  the view's create-path ownership check runs
         THEN:  the request is denied with 403 Permission Denied
         """
-        victim = bank_account_factory(owners=[user_factory()])
-        victim_budget = budget_factory(bank_account=victim)
-        view = self._view_for(user)
+        victim, [victim_budget, _] = make_account_with_budgets(user_factory())
 
         data: dict[str, Any] = {"bank_account": victim, "name": "x"}
         with pytest.raises(PermissionDenied):
-            view.check_create_ownership(data)
+            budget_viewset.check_create_ownership(data)
 
         data = {"src_budget": victim_budget}
         with pytest.raises(PermissionDenied):
-            view.check_create_ownership(data)
+            budget_viewset.check_create_ownership(data)
 
         # A `many=True` related field validates to a list of instances.
         #
         data = {"budgets": [victim_budget]}
         with pytest.raises(PermissionDenied):
-            view.check_create_ownership(data)
+            budget_viewset.check_create_ownership(data)
 
     ####################################################################
     #
     def test_owned_related_objects_allowed(
         self,
+        budget_viewset: BudgetViewSet,
         user: User,
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
+        make_account_with_budgets: Callable[[User], AccountWithBudgets],
     ) -> None:
         """
         GIVEN: validated create data naming the caller's own account and
@@ -374,11 +355,9 @@ class TestCreateOwnershipDefenseInDepth:
         WHEN:  the view's create-path ownership check runs
         THEN:  the check passes
         """
-        account = bank_account_factory(owners=[user])
-        budget = budget_factory(bank_account=account)
-        view = self._view_for(user)
+        account, [budget, _] = make_account_with_budgets(user)
 
-        view.check_create_ownership(
+        budget_viewset.check_create_ownership(
             {
                 "bank_account": account,
                 "src_budget": budget,
@@ -419,13 +398,7 @@ class TestBudgetCreateFundingTypeDefault:
                and Target Date funding type
         """
         account = bank_account_factory(owners=[user])
-        payload = {
-            "name": "Vacation",
-            "bank_account": str(account.id),
-            "budget_type": "G",
-            "funding_type": "D",
-            "target_balance": "100.00",
-        }
+        payload = _budget_payload(account, [])
         for key in omitted:
             payload.pop(key)
 

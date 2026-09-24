@@ -1,7 +1,7 @@
 # system imports
 #
 import types
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from unittest.mock import MagicMock
 
 # 3rd party imports
@@ -13,11 +13,12 @@ from django.db import connections
 from fakeredis import FakeConnection, FakeServer
 from pytest_factoryboy import register
 from pytest_mock import MockerFixture
+from rest_framework.test import APIClient
 
 # project imports
 import notifications.service as notifications_service
 from tests.users.factories import UserFactory
-from users.models import User
+from users.models import APIKey, User
 
 register(UserFactory)  # UserFactory -> user_factory fixture
 
@@ -171,3 +172,78 @@ def user() -> User:
     # factory-boy stubs don't express that UserFactory() returns a User
     # instance -- revisit if factory-boy stubs improve
     return UserFactory()  # type: ignore[return-value]
+
+
+####################################################################
+#
+@pytest.fixture
+def api_client() -> APIClient:
+    """An unauthenticated DRF test client."""
+    return APIClient()
+
+
+####################################################################
+#
+@pytest.fixture
+def auth_client(user: User) -> APIClient:
+    """A DRF test client authenticated as the default `user` fixture."""
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
+
+
+####################################################################
+#
+@pytest.fixture
+def make_api_key_client() -> Callable[..., APIClient]:
+    """Return a factory for clients that authenticate with an API key.
+
+    Each call mints a new `APIKey` for the given user and returns a
+    client sending it as `Authorization: Api-Key <plaintext>`, the
+    same path the importers and 3rd-party services take.
+
+    Returns:
+        A callable `(user, name="test key") -> APIClient`.
+    """
+
+    def _make(user: User, name: str = "test key") -> APIClient:
+        _, plaintext = APIKey.make(user, name)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
+        return client
+
+    return _make
+
+
+####################################################################
+#
+@pytest.fixture(params=["jwt", "api_key"])
+def any_auth_client(
+    request: pytest.FixtureRequest,
+    user: User,
+    make_api_key_client: Callable[..., APIClient],
+) -> APIClient:
+    """A client for the default `user`, once per authentication method.
+
+    Tests that use this fixture run twice: once with an interactive
+    (force-authenticated, as for a JWT session) client and once with an
+    API-key client.  Use it for endpoints that machine credentials may
+    reach, to show both paths behave the same.
+
+    Args:
+        request: The pytest request; `request.param` names the method.
+        user: The default `user` fixture the client acts as.
+        make_api_key_client: Factory for API-key clients.
+
+    Returns:
+        An `APIClient` authenticated as `user`.
+    """
+    # Built directly from `user` rather than from `auth_client`, so a
+    # module that overrides `auth_client` with another user still gets
+    # the same user on both parametrizations.
+    #
+    if request.param == "api_key":
+        return make_api_key_client(user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client

@@ -192,6 +192,29 @@ from tests.moneypools.factories import BankFactory, BankAccountFactory
 def test_something(factory_cls) -> None: ...
 ```
 
+#### Helpers vs fixtures vs fixture factories
+
+- **Plain helper function**: pure -- builds a value from its arguments,
+  requests no fixtures, writes nothing to the DB (payload/URL builders,
+  header-to-client wrappers). Anything passed through
+  `@pytest.mark.parametrize` must be a helper, since parametrize values
+  are evaluated before fixtures exist.
+- **Fixture**: one object a test needs, built from other fixtures or the
+  DB (`user`, `auth_client`, `system_user`, an account owned by `user`).
+- **Fixture factory**: a fixture returning a callable, named `make_*`,
+  for when a test needs several instances or varies the inputs
+  (`make_account`, `make_api_key_client`). Model factories keep the
+  pytest-factoryboy `*_factory` names.
+- **Placement**: define a fixture in the lowest `conftest.py` covering
+  every module that uses it; a module-local fixture is fine while only
+  that module needs it. Never copy a fixture into a second module --
+  move it up. App-agnostic fixtures live in `app/tests/conftest.py`:
+  `api_client`, `auth_client`, `make_api_key_client`, and
+  `any_auth_client` (parametrized: runs a test once with a JWT session
+  and once with an API key; use it for endpoints machine credentials
+  can reach). A module may override a shared fixture (e.g.
+  `auth_client` for a different user) when its tests need that.
+
 ### Code Quality
 
 - **Python**: ruff (formatter + linter, line-length 80) + mypy. `make lint` runs all three.

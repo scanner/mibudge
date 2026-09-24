@@ -1,7 +1,14 @@
-import pytest
-from pytest_factoryboy import register
-from rest_framework.test import APIClient
+# system imports
+from collections.abc import Callable
+from datetime import date, datetime
 
+# 3rd party imports
+import pytest
+from django.conf import settings
+from pytest_factoryboy import register
+
+# Project imports
+from moneypools.models import BankAccount
 from users.models import User
 
 from .factories import (
@@ -41,15 +48,35 @@ register(
 )  # MerchantIntermediaryPatternFactory -> merchant_intermediary_pattern_factory
 
 
+####################################################################
+#
 @pytest.fixture
-def api_client() -> APIClient:
-    """An unauthenticated DRF test client."""
-    return APIClient()
+def system_user() -> User:
+    """Return the funding-system user seeded by migration 0024."""
+    return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
 
 
+####################################################################
+#
 @pytest.fixture
-def auth_client(user: User) -> APIClient:
-    """A DRF test client authenticated as the default ``user`` fixture."""
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
+def make_account(
+    bank_account_factory: Callable[..., BankAccount],
+) -> Callable[..., BankAccount]:
+    """Return a factory for bank accounts with optional freshness fields.
+
+    Returns:
+        A callable `(posted_through=None, imported_at=None) ->
+        BankAccount` setting `last_posted_through` and
+        `last_imported_at`.
+    """
+
+    def _make(
+        posted_through: date | None = None,
+        imported_at: datetime | None = None,
+    ) -> BankAccount:
+        return bank_account_factory(
+            last_posted_through=posted_through,
+            last_imported_at=imported_at,
+        )
+
+    return _make

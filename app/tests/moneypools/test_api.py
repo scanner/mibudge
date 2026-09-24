@@ -31,7 +31,7 @@ from tests.moneypools.factories import (
     BudgetFactory,
     TransactionFactory,
 )
-from users.models import APIKey, User
+from users.models import User
 
 # Monthly schedule anchored Jan 1 -- dtstart controls which day-of-month fires.
 _MONTHLY = recurrence.Recurrence(
@@ -2274,6 +2274,7 @@ class TestAPIKeyAuthParity:
         auth_client: APIClient,
         user: User,
         bank_account_factory: Callable[..., BankAccount],
+        make_api_key_client: Callable[..., APIClient],
     ) -> None:
         """
         GIVEN: a user with several bank accounts, and an API key for
@@ -2287,9 +2288,7 @@ class TestAPIKeyAuthParity:
         bank_account_factory(owners=[user])
         bank_account_factory(owners=[user])
 
-        _, plaintext = APIKey.make(user, "parity check")
-        key_client = APIClient()
-        key_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
+        key_client = make_api_key_client(user, "parity check")
 
         url = reverse("api_v1:bankaccount-list")
         jwt_response = auth_client.get(url)
