@@ -1,14 +1,19 @@
 #!/usr/bin/env python
 #
 """
-Concurrency tests for balance updates, run against a real Postgres.
+Concurrency tests for balance updates.
 
-These tests only run in the opt-in Postgres test mode
-(`MIBUDGE_TEST_DATABASE_URL`); SQLite has no row locks.  Each test
-races two writers the way two HTTP requests race in production: every
-writer runs inside its own outer `atomic()`, as `ATOMIC_REQUESTS` wraps
-a request, so the service's own `atomic()` is a savepoint and its Redis
-lock is released before the outer transaction commits.
+Each test races two writers the way two HTTP requests race in
+production: every writer runs inside its own outer `atomic()`, as
+`ATOMIC_REQUESTS` wraps a request, so the service's own `atomic()` is a
+savepoint and its Redis lock is released before the outer transaction
+commits.
+
+The tests run on the default SQLite test database (a file opened with
+`BEGIN IMMEDIATE`, see `common.db`) and, in the Postgres test mode
+(`MIBUDGE_TEST_DATABASE_URL`), on Postgres.  On Postgres the second
+writer waits on the row lock taken by `_locking.locked`; on SQLite it
+waits at `BEGIN` for the database write lock.
 """
 
 # system imports
@@ -43,7 +48,7 @@ from users.models import User
 # system user) that the post-test flush would otherwise remove.
 #
 pytestmark = [
-    pytest.mark.postgres,
+    pytest.mark.concurrency,
     pytest.mark.django_db(transaction=True, serialized_rollback=True),
 ]
 
@@ -51,6 +56,12 @@ pytestmark = [
 # hanging the run.
 #
 _TIMEOUT = 15.0
+
+# How long thread B must stay unfinished on SQLite before A is released.
+# Shorter than SQLite's 5 second busy timeout, so B is still waiting
+# for the write lock rather than giving up.
+#
+_SQLITE_BLOCK_CHECK = 0.5
 
 
 ########################################################################
@@ -73,6 +84,40 @@ def _lock_waiters() -> int:
 ########################################################################
 ########################################################################
 #
+def _wait_until_blocked(
+    thread_b: threading.Thread,
+    b_done: threading.Event,
+    errors_b: list[BaseException],
+) -> None:
+    """Return once thread B is waiting for a lock held by thread A.
+
+    Args:
+        thread_b: The second writer's thread.
+        b_done: Set when thread B exits.
+        errors_b: Exceptions raised in thread B, for the failure message.
+    """
+    if connection.vendor == "postgresql":
+        deadline = time.monotonic() + _TIMEOUT
+        while _lock_waiters() == 0:
+            assert thread_b.is_alive(), (
+                f"thread B finished without blocking: {errors_b}"
+            )
+            assert time.monotonic() < deadline, "thread B never blocked"
+            time.sleep(0.01)
+        return
+
+    # SQLite has no view of lock waiters.  While A holds the database
+    # write lock, B cannot get past `BEGIN IMMEDIATE`, so B still being
+    # unfinished after a bounded wait stands in for "B is blocked".
+    #
+    assert not b_done.wait(_SQLITE_BLOCK_CHECK), (
+        f"thread B finished without blocking: {errors_b}"
+    )
+
+
+########################################################################
+########################################################################
+#
 def _race(
     first: Callable[[], object], second: Callable[[], object]
 ) -> tuple[list[BaseException], list[BaseException]]:
@@ -82,9 +127,11 @@ def _race(
        transaction open once `first` returns.  Its Redis locks are
        released at that point; its row changes are not yet committed.
     2. Thread B opens an outer `atomic()` and calls `second`, which
-       blocks on a row lock held by A.
-    3. Once `pg_stat_activity` shows B waiting on a lock, A commits,
-       B proceeds, and both threads are joined.
+       waits for a database lock held by A: a row lock on Postgres, the
+       database write lock on SQLite.
+    3. Once B is waiting, A commits, B proceeds, and both threads are
+       joined.  B checks that its write completed only after A was
+       released, so B read the balance A committed.
 
     Args:
         first: The writer run (and held open) by thread A.
@@ -95,6 +142,7 @@ def _race(
     """
     first_done = threading.Event()
     release_first = threading.Event()
+    b_done = threading.Event()
     errors_a: list[BaseException] = []
     errors_b: list[BaseException] = []
 
@@ -115,10 +163,15 @@ def _race(
         try:
             with db_transaction.atomic():
                 second()
+                if not release_first.is_set():
+                    raise AssertionError(
+                        "thread B wrote while thread A was uncommitted"
+                    )
         except BaseException as exc:
             errors_b.append(exc)
         finally:
             connection.close()
+            b_done.set()
 
     thread_a = threading.Thread(target=_thread_a, daemon=True)
     thread_b = threading.Thread(target=_thread_b, daemon=True)
@@ -128,13 +181,7 @@ def _race(
         assert not errors_a, errors_a
 
         thread_b.start()
-        deadline = time.monotonic() + _TIMEOUT
-        while _lock_waiters() == 0:
-            assert thread_b.is_alive(), (
-                f"thread B finished without blocking: {errors_b}"
-            )
-            assert time.monotonic() < deadline, "thread B never blocked"
-            time.sleep(0.01)
+        _wait_until_blocked(thread_b, b_done, errors_b)
     finally:
         release_first.set()
         thread_a.join(_TIMEOUT)
@@ -162,7 +209,6 @@ def _no_link_task(mocker: MockerFixture) -> None:
 @pytest.fixture
 def account(bank_account_factory: Callable[..., BankAccount]) -> BankAccount:
     """A committed bank account with $100 in Unallocated."""
-    assert connection.vendor == "postgresql"
     return bank_account_factory(
         available_balance=Money(100, "USD"),
         posted_balance=Money(100, "USD"),
@@ -338,6 +384,7 @@ class TestConcurrentBalanceUpdates:
 ########################################################################
 ########################################################################
 #
+@pytest.mark.postgres
 class TestLockedHelper:
     """Contract of `moneypools.service._locking.locked` on Postgres."""
 

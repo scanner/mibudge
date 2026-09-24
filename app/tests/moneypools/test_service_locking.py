@@ -5,7 +5,7 @@ Tests that the service layer re-reads balance rows under a row lock.
 
 SQLite ignores `SELECT ... FOR UPDATE`, so these tests record the calls
 to `moneypools.service._locking.locked` rather than observing blocking.
-The threaded tests in `test_concurrency_postgres.py` exercise the real
+The threaded tests in `test_concurrency.py` exercise the real
 row locks against Postgres.
 """
 

@@ -64,7 +64,8 @@ steps:
       - uv run pytest --cov=moneypools --cov=users --cov-report=term-missing:skip-covered --durations=20
 
   - name: python postgres tests
-    # Runs the tests marked `postgres` (row-lock concurrency) against the
+    # Runs the `concurrency` tests (which the `python tests` step also
+    # runs on SQLite) and the Postgres-only `postgres` tests against the
     # `postgres` service below.  Keep the image tag in sync with
     # docker-compose.yml.
     image: "python:3.13.12"
@@ -82,7 +83,7 @@ steps:
       MIBUDGE_TEST_DATABASE_URL: "postgres://mibudge:mibudge@postgres:5432/mibudge"
     commands:
       - pip install uv
-      - uv run pytest -m postgres -v
+      - uv run pytest -m "postgres or concurrency" -v
 
   - name: frontend build
     image: "node:22"
