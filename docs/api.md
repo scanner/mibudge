@@ -724,7 +724,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -744,7 +743,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -764,7 +762,6 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -791,7 +788,7 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
+- **`fillup_goal`** (`string`) *(required, read-only)*
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
@@ -853,7 +850,7 @@ Return a single budget by UUID.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
+- **`fillup_goal`** (`string`) *(required, read-only)*
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
@@ -908,7 +905,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -928,7 +924,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -948,7 +943,6 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -975,7 +969,7 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
+- **`fillup_goal`** (`string`) *(required, read-only)*
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
@@ -1030,7 +1024,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -1050,7 +1043,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -1070,7 +1062,6 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -1097,7 +1088,7 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
+- **`fillup_goal`** (`string`) *(required, read-only)*
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
@@ -1164,7 +1155,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -1184,7 +1174,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -1204,7 +1193,6 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -1231,7 +1219,7 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
+- **`fillup_goal`** (`string`) *(required, read-only)*
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
@@ -2950,7 +2938,7 @@ signal and is not accepted from the client.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
+- **`fillup_goal`** (`string`) *(required, read-only)*
 - **`archived`** (`boolean`) *(required, read-only)*
 - **`archived_at`** (`string`) *(required, read-only)*
 - **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
@@ -3005,7 +2993,6 @@ signal and is not accepted from the client.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
@@ -3334,7 +3321,6 @@ signal and is not accepted from the client.
 - **`funding_type`** (`string`) — * `D` - Target Date
 * `F` - Fixed Amount Enum: ['D', 'F']
 - **`target_date`** (`string`)
-- **`fillup_goal`** (`string`)
 - **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
 - **`funding_schedule`** (`string`)
 - **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.

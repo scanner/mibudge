@@ -100,6 +100,11 @@ class UserSerializer(serializers.ModelSerializer):
     whether to enable the change-email and change-password forms.
     """
 
+    # The unscoped queryset is narrowed by `validate_default_bank_account`,
+    # which requires the account to be owned by the user being updated.
+    # `UserViewSet` has no create action, so every write carries an
+    # instance for that check.
+    #
     default_bank_account = serializers.SlugRelatedField(
         slug_field="id",
         queryset=BankAccount.objects.all(),

@@ -126,7 +126,7 @@ Money values everywhere use `djmoney` `MoneyField` (14 digits, 2 decimal places,
 
 - **Banks**: read-only, any authenticated user.
 - **Users**: list/retrieve/update restricted to staff; `/api/v1/users/me/` available to all authenticated users.
-- **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership via `IsAccountOwner` permission and `AccountOwnerQuerySetMixin`. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does **not** bypass ownership checks in the REST API (the django-admin is a separate access path).
+- **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership via `IsAccountOwner` permission and `AccountOwnerQuerySetMixin`. Only users in an account's `owners` M2M can access that account and its related objects. Object-level permissions never run on create, so a writable serializer field that names a bank account must be `OwnedBankAccountField` (`moneypools/api/v1/fields.py`), which resolves only accounts the requesting user owns; owned-resource viewsets that support create also include `AccountOwnerCreateMixin`, which re-checks every account-owned object in the validated data as a fallback (a test in `app/tests/moneypools/test_create_authz.py` fails if a create-capable moneypools viewset omits it). Staff and superuser status does **not** bypass ownership checks in the REST API (the django-admin is a separate access path).
 
 ### Async / Scheduled Work
 

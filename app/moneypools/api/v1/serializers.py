@@ -34,6 +34,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 # Project imports
+from moneypools.api.v1.fields import OwnedBankAccountField
 from moneypools.models import (
     DECIMAL_PLACES,
     MAX_DIGITS,
@@ -482,10 +483,19 @@ class BudgetSerializer(serializers.ModelSerializer):
     """
 
     # bank_account is editable=False on the model.  Override for create.
+    # `OwnedBankAccountField` resolves the UUID only among the requesting
+    # user's accounts, so a budget cannot be created in another user's
+    # account.
     #
-    bank_account = serializers.SlugRelatedField(
-        slug_field="id",
-        queryset=BankAccount.objects.all(),
+    bank_account = OwnedBankAccountField()
+
+    # `fillup_goal` is set by `budget_svc` when it creates a Recurring
+    # budget's fill-up child.  Read-only here so a request body cannot
+    # point it at an arbitrary budget, including one in another user's
+    # account (the service mirrors parent edits onto the fill-up goal).
+    #
+    fillup_goal = serializers.SlugRelatedField(
+        slug_field="id", read_only=True, allow_null=True
     )
 
     # djmoney's auto-mapped DRF MoneyField reads default_currency from
@@ -859,12 +869,10 @@ class TransactionSerializer(serializers.ModelSerializer):
     """
 
     # These fields are editable=False on the model.  Override for
-    # create.
+    # create.  `OwnedBankAccountField` resolves the UUID only among the
+    # requesting user's accounts.
     #
-    bank_account = serializers.SlugRelatedField(
-        slug_field="id",
-        queryset=BankAccount.objects.all(),
-    )
+    bank_account = OwnedBankAccountField()
     amount = DRFMoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
@@ -909,7 +917,9 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     # What the transaction was spent on.  Nullable (null = unassigned);
     # user-editable.  Exposed as the category UUID; the read-only
-    # category_full_name saves the UI a lookup for display.
+    # category_full_name saves the UI a lookup for display.  The
+    # unscoped queryset is narrowed by `validate_category`, which
+    # requires `TransactionCategory.objects.visible_to(user)`.
     #
     category = serializers.SlugRelatedField(
         slug_field="id",
@@ -1187,7 +1197,13 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     """
 
     # These fields are editable=False on the model.  Override for
-    # create.
+    # create.  `TransactionAllocationViewSet` is read-only (allocations
+    # are written through the transaction `splits` action, which scopes
+    # budgets to the transaction's account in `transaction_svc.split`),
+    # so no endpoint writes through `transaction` or `budget` here.
+    # `validate` also requires `budget` to share the transaction's bank
+    # account.  A future writable allocation endpoint must scope
+    # `transaction` to the requesting user's accounts.
     #
     transaction = serializers.SlugRelatedField(
         slug_field="id",
@@ -1208,7 +1224,8 @@ class TransactionAllocationSerializer(serializers.ModelSerializer):
     # What this portion was spent on.  Nullable (null = unassigned).
     # Defaults to the transaction's category at creation (service-layer
     # copy hook); edits never propagate between transaction and
-    # allocation afterwards.
+    # allocation afterwards.  Visibility is checked in
+    # `validate_category` via `TransactionCategory.objects.visible_to`.
     #
     category = serializers.SlugRelatedField(
         slug_field="id",
@@ -1460,12 +1477,11 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
     """
 
     # All these fields are editable=False on the model.  Override for
-    # create.
+    # create.  `OwnedBankAccountField` resolves the UUID only among the
+    # requesting user's accounts; `validate` then requires both budgets
+    # to belong to that account, which scopes them transitively.
     #
-    bank_account = serializers.SlugRelatedField(
-        slug_field="id",
-        queryset=BankAccount.objects.all(),
-    )
+    bank_account = OwnedBankAccountField()
     amount = DRFMoneyField(
         max_digits=MAX_DIGITS,
         decimal_places=DECIMAL_PLACES,
