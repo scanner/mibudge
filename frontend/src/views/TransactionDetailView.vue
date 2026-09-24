@@ -32,8 +32,8 @@ import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
-import { TRANSACTION_TYPE_LABELS } from "@/types/api";
-import { formatTxDateLong } from "@/utils/dates";
+import { transactionTypeLabel } from "@/domain/labels";
+import { formatTxDateLong } from "@/domain/dates";
 import type { Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -103,11 +103,7 @@ const partyName = computed(() => {
   return tx.party || tx.description || tx.raw_description;
 });
 
-const typeLabel = computed(() => {
-  const t = transaction.value?.transaction_type;
-  if (!t) return "";
-  return TRANSACTION_TYPE_LABELS[t] ?? t;
-});
+const typeLabel = computed(() => transactionTypeLabel(transaction.value?.transaction_type));
 
 const formattedDate = computed(() => {
   const tx = transaction.value;

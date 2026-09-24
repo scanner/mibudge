@@ -1,7 +1,7 @@
 //
 // Minimal RRULE parser and generator for the subset of RFC 2445
 // patterns used by MiBudge (Weekly / Monthly / Yearly funding and
-// recurrence schedules).
+// recurrence schedules).  Domain layer: pure TypeScript.
 //
 // Produces strings like:
 //   RRULE:FREQ=WEEKLY;BYDAY=MO,FR
@@ -148,12 +148,22 @@ function ordinal(n: number): string {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// A DTSTART calendar date (`"YYYY-MM-DD"`) as UTC midnight, so its
+// weekday and day of month read the same in every browser zone.
+//
+function dtstartUtc(dtstart: string): Date {
+  const [y, m, d] = dtstart.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 export function rruleHuman(rule: string): string {
   const parsed = parseRrule(rule);
   if (!parsed) return rule;
 
   const { dtstart } = extractDtstart(rule);
-  const dtstartDay = dtstart ? new Date(dtstart + "T00:00:00").getDate() : null;
+  const dtstartDay = dtstart ? dtstartUtc(dtstart).getUTCDate() : null;
 
   // Mirror the backend's (dateutil's) precedence: explicit BY* parts
   // override the DTSTART anchor.  Displaying DTSTART when a BY* part
@@ -169,7 +179,7 @@ export function rruleHuman(rule: string): string {
       const days = parsed.byday.map((d) => WEEKDAY_SHORT[d]).join(", ");
       text = `${prefix} on ${days}`;
     } else if (dtstart) {
-      const dow = new Date(dtstart + "T00:00:00").getDay();
+      const dow = dtstartUtc(dtstart).getUTCDay();
       const weekday = (["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const)[dow]!;
       text = `${prefix} on ${WEEKDAY_SHORT[weekday]}`;
     } else {
@@ -192,8 +202,8 @@ export function rruleHuman(rule: string): string {
       const day = ordinal(parsed.bymonthday ?? 1);
       text = `${prefix} on ${month} ${day}`;
     } else if (dtstart) {
-      const d = new Date(dtstart + "T00:00:00");
-      text = `${prefix} on ${MONTH_NAMES[d.getMonth()]} ${ordinal(d.getDate())}`;
+      const d = dtstartUtc(dtstart);
+      text = `${prefix} on ${MONTH_NAMES[d.getUTCMonth()]} ${ordinal(d.getUTCDate())}`;
     } else {
       text = prefix;
     }

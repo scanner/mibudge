@@ -24,8 +24,10 @@ import FillUpBand from "./FillUpBand.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
+import { formatInstantDate, formatLocalDate, toLocalDate } from "@/domain/dates";
+import { BUDGET_TYPE_LABELS } from "@/domain/labels";
 import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
-import { rruleHuman } from "@/utils/rrule";
+import { rruleHuman } from "@/domain/rrule";
 import type { Budget } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -41,33 +43,23 @@ const pct = computed(() => budgetProgress(props.budget));
 const tone = computed(() => progressTone(status.value));
 const meta = computed(() => budgetMeta(props.budget));
 
-const typeLabel = computed(() => {
-  switch (props.budget.budget_type) {
-    case "G":
-      return "Goal";
-    case "R":
-      return "Recurring";
-    case "A":
-      return "Fill-up";
-    case "C":
-      return "Capped";
-  }
-});
+const typeLabel = computed(() => BUDGET_TYPE_LABELS[props.budget.budget_type]);
 
 const nextFunding = computed(() => {
   if (!props.budget.funding_schedule) return null;
   return rruleHuman(props.budget.funding_schedule);
 });
 
-const startDate = computed(() => {
-  const d = new Date(props.budget.created_at);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-});
+const SHORT_DATE: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
 
+const startDate = computed(() => formatInstantDate(props.budget.created_at, SHORT_DATE));
+
+// `target_date` is a calendar date; `formatLocalDate` renders that day
+// in every browser zone.
+//
 const endDate = computed(() => {
-  if (!props.budget.target_date) return null;
-  const d = new Date(props.budget.target_date);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const target = toLocalDate(props.budget.target_date);
+  return target ? formatLocalDate(target, SHORT_DATE) : null;
 });
 </script>
 

@@ -25,7 +25,7 @@ import EmptyState from "@/components/shared/EmptyState.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import { listBudgets } from "@/api/budgets";
 import { fundingSummary } from "@/api/bankAccounts";
-import { parseLocalDate } from "@/utils/budget";
+import { formatLocalDate, toLocalDate } from "@/domain/dates";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 import type { Budget, FundingSummary } from "@/types/api";
@@ -257,10 +257,10 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
         size="sm"
         class="font-medium"
       />
-      <template v-if="summary.schedules.length > 0 && summary.schedules[0].next_date">
+      <template v-if="summary.schedules.length > 0 && toLocalDate(summary.schedules[0].next_date)">
         on
         {{
-          parseLocalDate(summary.schedules[0].next_date).toLocaleDateString(undefined, {
+          formatLocalDate(toLocalDate(summary.schedules[0].next_date)!, {
             month: "short",
             day: "numeric",
           })

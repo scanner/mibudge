@@ -19,8 +19,9 @@ import { computed, ref } from "vue";
 //
 import SchedulePicker from "./SchedulePicker.vue";
 import { createBudget, updateBudget } from "@/api/budgets";
+import { toDecimal } from "@/domain/money";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { combineDtstart, DEFAULT_RRULE, extractDtstart, stripToIntervalOnly } from "@/utils/rrule";
+import { combineDtstart, DEFAULT_RRULE, extractDtstart, stripToIntervalOnly } from "@/domain/rrule";
 import type { Budget, BudgetType } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -44,10 +45,14 @@ const ctx = useAccountContextStore();
 //
 const budgetType = ref<BudgetType>(props.budget?.budget_type ?? "R");
 const name = ref(props.budget?.name ?? "");
-const targetBalance = ref(props.budget?.target_balance ?? "");
+// `v-model` on an `<input type="number">` yields a JS number once the
+// user types; `decimalField` turns either form into an API decimal
+// string.
+//
+const targetBalance = ref<string | number>(props.budget?.target_balance ?? "");
 const targetDate = ref(props.budget?.target_date ?? "");
 const fundingType = ref<"D" | "F">(props.budget?.funding_type ?? "D");
-const fundingAmount = ref(props.budget?.funding_amount ?? "");
+const fundingAmount = ref<string | number>(props.budget?.funding_amount ?? "");
 const fundingSchedule = ref(props.budget?.funding_schedule ?? DEFAULT_RRULE);
 
 const existingRecurrence = extractDtstart(props.budget?.recurrence_schedule ?? DEFAULT_RRULE);
@@ -72,6 +77,12 @@ const canSubmit = computed(() => name.value.trim().length > 0 && !saving.value);
 
 ////////////////////////////////////////////////////////////////////////
 //
+function decimalField(value: string | number): string | null {
+  return toDecimal(value)?.toFixed(2) ?? null;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 async function submit() {
   if (!canSubmit.value) return;
   saving.value = true;
@@ -84,14 +95,15 @@ async function submit() {
     paused: paused.value,
   };
 
-  if (targetBalance.value) payload.target_balance = targetBalance.value;
+  const target = decimalField(targetBalance.value);
+  if (target) payload.target_balance = target;
 
   if (isGoal.value) {
     if (fundingType.value === "D") {
       if (targetDate.value) payload.target_date = targetDate.value;
     } else {
       payload.target_date = null;
-      payload.funding_amount = fundingAmount.value || null;
+      payload.funding_amount = decimalField(fundingAmount.value);
     }
   } else if (isRecurring.value) {
     // The refresh-cycle picker is interval-only; the chosen date is the
@@ -106,7 +118,7 @@ async function submit() {
   } else if (isCapped.value) {
     // Capped always uses Fixed Amount funding.
     payload.funding_type = "F";
-    payload.funding_amount = fundingAmount.value || null;
+    payload.funding_amount = decimalField(fundingAmount.value);
   }
 
   if (props.mode === "create") {

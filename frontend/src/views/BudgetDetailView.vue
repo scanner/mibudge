@@ -49,9 +49,17 @@ import { fetchAllPages } from "@/api/util";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
-import { parseLocalDate } from "@/utils/budget";
-import { formatDateHeader, todayDateStr, txDateStr } from "@/utils/dates";
-import { rruleHuman } from "@/utils/rrule";
+import {
+  daysBetween,
+  formatDateHeader,
+  formatLocalDate,
+  toLocalDate,
+  todayDateStr,
+  txDateStr,
+} from "@/domain/dates";
+import type { LocalDate } from "@/domain/dates";
+import { Money, toDecimal } from "@/domain/money";
+import { rruleHuman } from "@/domain/rrule";
 import type { Budget, InternalTransaction, Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -147,7 +155,7 @@ const displayTransactions = computed(() => {
     const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
-      group = { date, label: formatDateHeader(date, today, tz), rows: [] };
+      group = { date, label: formatDateHeader(date, today), rows: [] };
       map.set(date, group);
     }
     group.rows.push({ kind: "tx", tx });
@@ -158,7 +166,7 @@ const displayTransactions = computed(() => {
       const date = txDateStr(itx.effective_date, tz);
       let group = map.get(date);
       if (!group) {
-        group = { date, label: formatDateHeader(date, today, tz), rows: [] };
+        group = { date, label: formatDateHeader(date, today), rows: [] };
         map.set(date, group);
       }
       group.rows.push({ kind: "itx", itx });
@@ -202,7 +210,7 @@ async function loadBudgetTransactions() {
       .filter((tx) => {
         const allocs = allocMap.get(tx.id);
         if (!allocs || allocs.length !== 1) return false;
-        return Math.abs(parseFloat(allocs[0].amount)) !== Math.abs(parseFloat(tx.amount));
+        return !Money.of(allocs[0].amount).abs().equals(Money.of(tx.amount).abs());
       })
       .map(async (tx) => {
         const page = await listAllocations({ transaction: tx.id });
@@ -307,7 +315,7 @@ async function onRemoveTransaction(transactionId: string) {
     const splits: Record<string, string> = {};
     for (const a of allTxAllocs.results) {
       if (a.budget && a.budget !== props.id) {
-        splits[a.budget] = Math.abs(parseFloat(a.amount)).toString();
+        splits[a.budget] = Money.of(a.amount).abs().toDecimalString();
       }
     }
     await splitTransaction(transactionId, splits);
@@ -375,7 +383,10 @@ const otherBudgets = ref<Budget[]>([]);
 const moveDirection = ref<"into" | "outof">("outof");
 const moveTargetFillup = ref(false);
 const moveOtherId = ref("");
-const moveAmount = ref("");
+// `v-model` on the `type="number"` amount input yields a JS number;
+// `submitMove` sends it as a two-decimal string.
+//
+const moveAmount = ref<string | number>("");
 const moveSaving = ref(false);
 const moveError = ref<string | null>(null);
 const moveAmountInput = ref<HTMLInputElement | null>(null);
@@ -402,7 +413,7 @@ const movePickerBudgets = computed(() => {
 // (or from fillupBudget.next_funding for RECURRING+with_fillup budgets).
 //
 interface NextFundingDisplay {
-  date: Date;
+  date: LocalDate;
   amount: string;
   amount_currency: string;
   daysAway: number;
@@ -413,24 +424,21 @@ const nextFundingDisplay = computed((): NextFundingDisplay | null => {
   const b = budget.value;
   if (!b) return null;
 
-  const today = parseLocalDate(todayDateStr(auth.timezone));
+  const today = todayDateStr(auth.timezone);
 
   // For RECURRING budgets (which always have a fill-up goal), next_funding
   // lives on the fill-up child, not the parent -- display it here instead.
   const isRecurringWithFillup = b.budget_type === "R" && !!b.fillup_goal;
   const nf = isRecurringWithFillup ? (fillupBudget.value?.next_funding ?? null) : b.next_funding;
 
-  if (!nf) return null;
-
-  const eventDate = parseLocalDate(nf.date);
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const daysAway = Math.round((eventDate.getTime() - today.getTime()) / msPerDay);
+  const eventDate = toLocalDate(nf?.date);
+  if (!nf || !eventDate) return null;
 
   return {
     date: eventDate,
     amount: nf.amount,
     amount_currency: nf.amount_currency,
-    daysAway,
+    daysAway: daysBetween(today, eventDate),
     isFillup: isRecurringWithFillup,
   };
 });
@@ -485,7 +493,7 @@ async function submitMove() {
       bank_account: budget.value.bank_account,
       src_budget: srcId,
       dst_budget: dstId,
-      amount: moveAmount.value,
+      amount: toDecimal(moveAmount.value)?.toFixed(2) ?? "",
     });
     showMoveMoneyForm.value = false;
     await Promise.all([store.fetchOne(srcId), store.fetchOne(dstId)]);
@@ -585,7 +593,7 @@ async function submitMove() {
               <span class="text-sm text-secondary">
                 {{
                   budget.target_date
-                    ? parseLocalDate(budget.target_date).toLocaleDateString(undefined, {
+                    ? formatLocalDate(toLocalDate(budget.target_date)!, {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
@@ -651,7 +659,7 @@ async function submitMove() {
               <span class="text-sm text-secondary">
                 {{
                   budget.next_recurrence
-                    ? parseLocalDate(budget.next_recurrence).toLocaleDateString(undefined, {
+                    ? formatLocalDate(toLocalDate(budget.next_recurrence)!, {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
@@ -697,7 +705,7 @@ async function submitMove() {
               />
               <div class="mt-0.5 text-xs text-secondary">
                 {{
-                  nextFundingDisplay.date.toLocaleDateString(undefined, {
+                  formatLocalDate(nextFundingDisplay.date, {
                     month: "short",
                     day: "numeric",
                     year: "numeric",

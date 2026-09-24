@@ -19,8 +19,9 @@ export interface Paginated<T> {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export type AccountType = "C" | "S" | "X";
-export type BudgetType = "G" | "R" | "A" | "C";
+import type { AccountType, BudgetType, TransactionType } from "@/domain/labels";
+
+export type { AccountType, BudgetType, TransactionType };
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -110,64 +111,6 @@ export interface FundingSummary {
   total_amount: string; // decimal string
   currency: string;
 }
-
-////////////////////////////////////////////////////////////////////////
-//
-export type TransactionType =
-  | "signature_purchase"
-  | "ach"
-  | "round-up_transfer"
-  | "protected_goal_account_transfer"
-  | "fee"
-  | "pin_purchase"
-  | "signature_credit"
-  | "interest_credit"
-  | "shared_transfer"
-  | "courtesy_credit"
-  | "atm_withdrawal"
-  | "bill_payment"
-  | "bank_generated_credit"
-  | "wire_transfer"
-  | "check_deposit"
-  | "check"
-  | "c2c"
-  | "migration_interbank_transfer"
-  | "balance_sweep"
-  | "ach_reversal"
-  | "adjustment"
-  | "signature_return"
-  | "fx_order";
-
-////////////////////////////////////////////////////////////////////////
-//
-// Human-friendly labels for TransactionType (UI_SPEC §9).  Any
-// TransactionType not listed here falls back to the raw value.
-//
-export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
-  signature_purchase: "Signature purchase",
-  ach: "ACH transfer",
-  "round-up_transfer": "Round-up transfer",
-  protected_goal_account_transfer: "Goal transfer",
-  fee: "Fee",
-  pin_purchase: "PIN purchase",
-  signature_credit: "Credit",
-  interest_credit: "Interest",
-  shared_transfer: "Shared transfer",
-  courtesy_credit: "Courtesy credit",
-  atm_withdrawal: "ATM withdrawal",
-  bill_payment: "Bill payment",
-  bank_generated_credit: "Bank credit",
-  wire_transfer: "Wire transfer",
-  check_deposit: "Check deposit",
-  check: "Check",
-  c2c: "Card-to-card",
-  migration_interbank_transfer: "Interbank transfer",
-  balance_sweep: "Balance sweep",
-  ach_reversal: "ACH reversal",
-  adjustment: "Adjustment",
-  signature_return: "Return",
-  fx_order: "FX order",
-};
 
 ////////////////////////////////////////////////////////////////////////
 //

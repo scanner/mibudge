@@ -22,8 +22,8 @@ import {
   rruleHuman,
   WEEKDAY_ORDER,
   WEEKDAY_SHORT,
-} from "@/utils/rrule";
-import type { RruleMonthly, RruleWeekly, RruleYearly, Weekday } from "@/utils/rrule";
+} from "@/domain/rrule";
+import type { RruleMonthly, RruleWeekly, RruleYearly, Weekday } from "@/domain/rrule";
 
 ////////////////////////////////////////////////////////////////////////
 //

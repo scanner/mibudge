@@ -26,7 +26,8 @@ import { useRouter } from "vue-router";
 // app imports
 //
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { TRANSACTION_TYPE_LABELS } from "@/types/api";
+import { transactionTypeLabel } from "@/domain/labels";
+import { formatMoney, Money } from "@/domain/money";
 import type { Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -55,11 +56,7 @@ const partyName = computed(() => {
   return tx.party || tx.description || tx.raw_description;
 });
 
-const typeLabel = computed(() => {
-  const t = props.transaction.transaction_type;
-  if (!t) return "";
-  return TRANSACTION_TYPE_LABELS[t] ?? t;
-});
+const typeLabel = computed(() => transactionTypeLabel(props.transaction.transaction_type));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -110,22 +107,11 @@ const allocInfo = computed<{
 });
 
 function fmtMoney(raw: string): string {
-  const n = Number.parseFloat(raw);
-  const currency = props.transaction.amount_currency ?? "USD";
-  const formatted = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Math.abs(n));
-  return n < 0 ? `-${formatted}` : formatted;
+  return formatMoney(Money.of(raw, props.transaction.amount_currency));
 }
 
 function fmtAccountBalance(raw: string, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Number.parseFloat(raw));
+  return formatMoney(Money.of(raw, currency));
 }
 </script>
 

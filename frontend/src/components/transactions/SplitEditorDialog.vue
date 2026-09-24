@@ -17,6 +17,7 @@ import { computed, nextTick, ref, watch } from "vue";
 
 // app imports
 //
+import { formatMoney, Money, toDecimal } from "@/domain/money";
 import type { Budget } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -108,18 +109,13 @@ function availableForRow(rowIndex: number): Budget[] {
   return selectableBudgets.value.filter((b) => !taken.has(b.id));
 }
 
-// Format the budget's current balance for the option label.  Each
-// budget can carry its own currency, so we honour `balance_currency`
-// rather than assuming USD.  Falls back to a plain placeholder if the
-// value is unparseable (shouldn't happen with API-supplied data, but
-// keeps the dropdown rendering robust).
+// Format the budget's current balance for the option label in the
+// budget's own `balance_currency`.  An unparseable balance renders as
+// an empty string.
+//
 function formatBalance(b: Budget): string {
-  const n = Number(b.balance);
-  if (Number.isNaN(n)) return "";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: b.balance_currency || "USD",
-  }).format(n);
+  if (!toDecimal(b.balance)) return "";
+  return formatMoney(Money.of(b.balance, b.balance_currency));
 }
 
 // Label rendered in the <option>: budget name + its current balance,
@@ -284,7 +280,7 @@ function onKeydown(e: KeyboardEvent) {
               <span
                 :class="['font-mono font-medium', isOver ? 'text-coral-600' : 'text-ocean-600']"
               >
-                ${{ remainder.abs().toFixed(2) }}
+                {{ formatMoney(Money.of(remainder.abs(), transactionCurrency)) }}
               </span>
             </div>
 

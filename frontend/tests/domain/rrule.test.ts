@@ -1,11 +1,11 @@
 //
 // RRULE helper tests: parse / build round-trips, human-readable text,
-// DTSTART handling, and interval-only reduction.
+// DTSTART handling, and interval-only reduction (`src/domain/rrule.ts`).
 //
 
 // 3rd party imports
 //
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // app imports
 //
@@ -16,7 +16,7 @@ import {
   parseRrule,
   rruleHuman,
   stripToIntervalOnly,
-} from "@/utils/rrule";
+} from "@/domain/rrule";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -177,5 +177,22 @@ describe("stripToIntervalOnly", () => {
     ["RRULE:FREQ=DAILY;BYHOUR=3", "RRULE:FREQ=DAILY;BYHOUR=3"],
   ])("%j → %j", (rule, expected) => {
     expect(stripToIntervalOnly(rule)).toBe(expected);
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("rruleHuman across browser zones", () => {
+  // GIVEN: a rule anchored by a DTSTART date and no BY* parts
+  // WHEN:  it is rendered in a browser west of UTC
+  // THEN:  the anchor's weekday / day of month is the DTSTART calendar day
+  //
+  it.each([
+    ["DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;INTERVAL=2", "Every 2 weeks on Mo"],
+    ["DTSTART:20260122T000000Z\nRRULE:FREQ=MONTHLY", "Every month on the 22nd"],
+    ["DTSTART:20261103T000000Z\nRRULE:FREQ=YEARLY", "Every year on November the 3rd"],
+  ])("%j → %j in Pacific/Honolulu", (rule, text) => {
+    vi.stubEnv("TZ", "Pacific/Honolulu");
+    expect(rruleHuman(rule)).toBe(text);
   });
 });

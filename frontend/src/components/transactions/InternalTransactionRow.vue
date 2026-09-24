@@ -19,6 +19,7 @@ import { computed } from "vue";
 // app imports
 //
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import { formatMoney, Money } from "@/domain/money";
 import type { InternalTransaction } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
@@ -37,21 +38,14 @@ const dstName = computed(() => props.budgetNames?.get(itx.value.dst_budget) ?? "
 // In budget-relative mode, sign the amount: positive if this budget
 // received the transfer (dst), negative if it sent (src).
 const displayAmount = computed(() => {
+  const amount = Money.of(itx.value.amount, itx.value.amount_currency);
   const rel = props.relativeToBudgetId;
-  if (!rel) return itx.value.amount;
-  if (itx.value.dst_budget === rel) return itx.value.amount;
-  return `-${itx.value.amount}`;
+  if (!rel || itx.value.dst_budget === rel) return amount;
+  return amount.negated();
 });
 
 function fmt(amount: string): string {
-  const n = Number.parseFloat(amount);
-  const currency = itx.value.amount_currency ?? "USD";
-  const formatted = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Math.abs(n));
-  return n < 0 ? `-${formatted}` : formatted;
+  return formatMoney(Money.of(amount, itx.value.amount_currency));
 }
 </script>
 
@@ -63,12 +57,7 @@ function fmt(amount: string): string {
         <IconArrowsRightLeft class="h-3.5 w-3.5 flex-none text-neutral-400" />
         <span class="text-[15px] font-medium text-secondary">Transfer</span>
       </div>
-      <MoneyAmount
-        :amount="displayAmount"
-        :currency="itx.amount_currency"
-        size="md"
-        :coloured="!!relativeToBudgetId"
-      />
+      <MoneyAmount :amount="displayAmount" size="md" :coloured="!!relativeToBudgetId" />
     </div>
 
     <!-- Row 2: "Src (now $X) → Dst (now $Y)" -->

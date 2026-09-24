@@ -48,6 +48,7 @@ import { ApiError } from "@/api/client";
 import type { BankAccount, BankAccountInvitation, FundingSummary } from "@/types/api";
 import { getBank } from "@/api/banks";
 import { listBudgets } from "@/api/budgets";
+import { accountTypeLabel } from "@/domain/labels";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -141,12 +142,6 @@ async function triggerFunding() {
 
 ////////////////////////////////////////////////////////////////////////
 //
-const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-  C: "Checking",
-  S: "Savings",
-  X: "Credit card",
-};
-
 const unallocated = computed(() => {
   if (!account.value?.unallocated_budget) return null;
   return budgetsStore.byId(account.value.unallocated_budget);
@@ -475,7 +470,7 @@ async function deleteAccount() {
           </button>
         </div>
         <p class="text-sm text-secondary">
-          {{ ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type }}
+          {{ accountTypeLabel(account.account_type) }}
           <template v-if="bankName"> · {{ bankName }}</template>
         </p>
       </div>

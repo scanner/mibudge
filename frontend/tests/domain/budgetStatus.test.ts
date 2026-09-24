@@ -1,41 +1,28 @@
 //
-// Budget domain helper tests: local-date parsing, progress, status,
-// tone, and the one-line meta text.
+// Budget presentation rule tests (`src/domain/budgetStatus.ts`):
+// progress, status, tone, and the one-line meta text.
 //
 
 // 3rd party imports
 //
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 // app imports
 //
-import {
-  budgetMeta,
-  budgetProgress,
-  budgetStatus,
-  parseLocalDate,
-  progressTone,
-} from "@/utils/budget";
+import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import type { BudgetFigures } from "@/domain/budgetStatus";
 import type { Budget } from "@/types/api";
+import { budgetFigures } from "@/utils/budget";
 import { makeBudget } from "../mocks/factories";
 
 ////////////////////////////////////////////////////////////////////////
 //
-describe("parseLocalDate", () => {
-  // GIVEN: a date-only string
-  // WHEN:  it is parsed in a browser east or west of UTC
-  // THEN:  the result is local midnight on that same calendar day
-  //
-  it.each(["Pacific/Honolulu", "America/New_York", "UTC", "Asia/Tokyo"])("in %s", (tz) => {
-    // `vi.stubEnv` changes the process zone for this test only;
-    // `unstubEnvs` in vitest.config.ts restores America/New_York.
-    //
-    vi.stubEnv("TZ", tz);
-    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(tz);
-    const d = parseLocalDate("2026-08-01");
-    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 7, 1, 0]);
-  });
-});
+// The rules read `BudgetFigures`; build them from a factory DTO so the
+// table rows stay in API terms.
+//
+function figures(overrides: Partial<Budget> = {}): BudgetFigures {
+  return budgetFigures(makeBudget(overrides));
+}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -52,7 +39,7 @@ describe("budgetProgress", () => {
     ["10.00", "0.00", 100],
     ["10.00", null, 100],
   ])("balance %s / target %s → %d", (balance, target, expected) => {
-    expect(budgetProgress(makeBudget({ balance, target_balance: target }))).toBe(expected);
+    expect(budgetProgress(figures({ balance, target_balance: target }))).toBe(expected);
   });
 });
 
@@ -71,7 +58,7 @@ describe("budgetStatus / progressTone", () => {
     ["behind pace", { funding_pace: "behind" }, "warn", "amber"],
     ["in progress", {}, "progress", "ocean"],
   ])("%s", (_label, overrides, status, tone) => {
-    const s = budgetStatus(makeBudget(overrides));
+    const s = budgetStatus(figures(overrides));
     expect(s).toBe(status);
     expect(progressTone(s)).toBe(tone);
   });
@@ -105,6 +92,6 @@ describe("budgetMeta", () => {
       "Recurring · refreshes Every month on the 1st · next refresh Oct 1, 2026",
     ],
   ])("%s", (_label, overrides, expected) => {
-    expect(budgetMeta(makeBudget(overrides))).toBe(expected);
+    expect(budgetMeta(figures(overrides))).toBe(expected);
   });
 });

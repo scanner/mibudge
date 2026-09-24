@@ -28,6 +28,7 @@ import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
 import { updateCurrentUser } from "@/api/users";
+import { accountTypeMeta as formatAccountTypeMeta } from "@/domain/labels";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -56,20 +57,8 @@ const initials = computed(() => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Account-type display labels.
-//
-const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-  C: "Checking",
-  S: "Savings",
-  X: "Credit card",
-};
-
 function accountTypeMeta(account: (typeof ctx.accounts)[0]): string {
-  const type = ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type;
-  if (account.account_number) {
-    return `${type} ····${account.account_number.slice(-4)}`;
-  }
-  return type;
+  return formatAccountTypeMeta(account.account_type, account.account_number);
 }
 
 ////////////////////////////////////////////////////////////////////////

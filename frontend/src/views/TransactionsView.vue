@@ -34,7 +34,8 @@ import { useAuthStore } from "@/stores/auth";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import type { InternalTransaction, Transaction, TransactionAllocation } from "@/types/api";
-import { formatDateHeader, todayDateStr, txDateStr } from "@/utils/dates";
+import { addDays, formatDateHeader, todayDateStr, txDateStr } from "@/domain/dates";
+import { Money } from "@/domain/money";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -122,7 +123,7 @@ const displayTransactions = computed(() => {
     const date = txDateStr(tx.transaction_date, tz);
     let group = map.get(date);
     if (!group) {
-      group = { date, label: formatDateHeader(date, today, tz), rows: [] };
+      group = { date, label: formatDateHeader(date, today), rows: [] };
       map.set(date, group);
     }
     group.rows.push({ kind: "tx", tx });
@@ -133,7 +134,7 @@ const displayTransactions = computed(() => {
       const date = txDateStr(itx.effective_date, tz);
       let group = map.get(date);
       if (!group) {
-        group = { date, label: formatDateHeader(date, today, tz), rows: [] };
+        group = { date, label: formatDateHeader(date, today), rows: [] };
         map.set(date, group);
       }
       group.rows.push({ kind: "itx", itx });
@@ -170,12 +171,10 @@ function applyActiveFilter(list: Transaction[]): Transaction[] {
     case "pending":
       return list.filter((tx) => tx.pending);
     case "income":
-      return list.filter((tx) => Number.parseFloat(tx.amount) > 0);
+      return list.filter((tx) => Money.of(tx.amount).isPositive());
     case "last30": {
       const tz = auth.timezone;
-      const cutoff = new Date(todayDateStr(tz) + "T00:00:00");
-      cutoff.setDate(cutoff.getDate() - 30);
-      const cutoffStr = cutoff.toLocaleDateString("sv-SE");
+      const cutoffStr = addDays(todayDateStr(tz), -30);
       return list.filter((tx) => txDateStr(tx.transaction_date, tz) >= cutoffStr);
     }
     default:

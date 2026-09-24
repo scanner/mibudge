@@ -25,7 +25,7 @@ import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
 import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
-import { rruleHuman } from "@/utils/rrule";
+import { rruleHuman } from "@/domain/rrule";
 import type { Budget } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
