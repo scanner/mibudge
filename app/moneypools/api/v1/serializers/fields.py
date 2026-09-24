@@ -1,6 +1,9 @@
 """
 Reusable DRF serializer fields for the moneypools v1 API.
 
+`RecurrenceSerializerField` round-trips django-recurrence values as
+RFC 2445 strings.
+
 `OwnedBankAccountField` resolves a bank account UUID only among the
 accounts the requesting user owns.  Serializers that accept a
 `bank_account` on create use it so a request body cannot name an
@@ -8,14 +11,71 @@ account outside the caller's ownership.  The object-level
 `IsAccountOwner` permission never runs on create, so this field is
 the primary create-path ownership check (see
 `moneypools.permissions.IsAccountOwner` for the full layering).
+
+This module imports no other serializer module, so every serializer
+module can depend on it without creating an import cycle.
 """
 
 # 3rd party imports
+import recurrence
 from django.db.models import QuerySet
 from rest_framework import serializers
 
 # Project imports
 from moneypools.models import BankAccount
+
+
+########################################################################
+########################################################################
+#
+class RecurrenceSerializerField(serializers.CharField):
+    """Serialize django-recurrence values as RFC 2445 strings.
+
+    Accepts iCal recurrence strings like 'RRULE:FREQ=MONTHLY' on
+    input and returns the same format on output.  Blank and null
+    handling is delegated to the CharField base via 'allow_blank'
+    and 'allow_null' -- 'to_internal_value' always receives a
+    non-empty string.
+    """
+
+    ####################################################################
+    #
+    def to_internal_value(self, data: str) -> recurrence.Recurrence:
+        """Deserialize an RFC 2445 string to a Recurrence object.
+
+        Args:
+            data: An iCal recurrence string (e.g. 'RRULE:FREQ=MONTHLY').
+
+        Returns:
+            A recurrence.Recurrence instance.
+
+        Raises:
+            ValidationError: If the string cannot be parsed.
+        """
+        try:
+            return recurrence.deserialize(data)
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError(
+                f"Invalid recurrence string: {e}"
+            ) from e
+
+    ####################################################################
+    #
+    def to_representation(
+        self, value: recurrence.Recurrence | None
+    ) -> str | None:
+        """Serialize a Recurrence object to an RFC 2445 string.
+
+        Args:
+            value: A recurrence.Recurrence instance, or None.
+
+        Returns:
+            The iCal string representation, or None if the value is
+            null.
+        """
+        if value is None:
+            return None
+        return recurrence.serialize(value)
 
 
 ########################################################################

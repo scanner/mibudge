@@ -26,11 +26,11 @@ transfers.
 
 The engine is invoked from three places:
 
-| Caller                | Where                                                           | Frequency           |
-|-----------------------|-----------------------------------------------------------------|---------------------|
-| Celery Beat scheduler | `app/moneypools/tasks.py:schedule_funding_runs`                 | Every 30 minutes    |
-| REST API              | `app/moneypools/api/v1/views.py:BankAccountViewSet.run_funding` | On user request     |
-| Management command    | `app/moneypools/management/commands/fund_budgets.py`            | On operator request |
+| Caller                | Where                                                                          | Frequency           |
+|-----------------------|--------------------------------------------------------------------------------|---------------------|
+| Celery Beat scheduler | `app/moneypools/tasks.py:schedule_funding_runs`                                | Every 30 minutes    |
+| REST API              | `app/moneypools/api/v1/views/funding.py:BankAccountFundingActions.run_funding` | On user request     |
+| Management command    | `app/moneypools/management/commands/fund_budgets.py`                           | On operator request |
 
 The three entry points differ in two ways: which event kinds they process
 and whether they send notifications.  Details in §5.
@@ -156,7 +156,7 @@ RRULE:FREQ=MONTHLY
 - `BY*` parts, `COUNT`, `UNTIL`, `EXRULE`/`RDATE`/`EXDATE`, and multiple
   RRULEs are **rejected with a 400** by
   `BudgetSerializer.validate_recurrence_schedule`
-  (`app/moneypools/api/v1/serializers.py`).  Two reasons: `BY*` parts
+  (`app/moneypools/api/v1/serializers/budgets.py`).  Two reasons: `BY*` parts
   silently override the DTSTART anchor during dateutil evaluation (the
   historical wrong-refresh-day bug), and the proration formula in §4.4
   assumes exactly one boundary per cycle.
@@ -359,7 +359,8 @@ schedule_funding_runs
 
 ### 5.2 REST API endpoint (manual funding)
 
-**File:** `app/moneypools/api/v1/views.py:BankAccountViewSet.run_funding`
+**File:** `app/moneypools/api/v1/views/funding.py:BankAccountFundingActions.run_funding`
+(a mixin composed into `BankAccountViewSet`)
 
 `POST /api/v1/bank-accounts/<id>/run-funding/`
 
