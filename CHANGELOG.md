@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/v1/bank-accounts/{id}/transaction-details/` applies scraped detail records; `sync-scrape` responses report `details_needed` so importers know exactly which rows still need enrichment
 - Saved scrape files (format v3) include fetched details and `import_bofa_saved` replays them; `--save-only --details-all` captures every detail dialog for offline import
 - Editing a transaction's description now marks it user-edited, so detail enrichment never overwrites your text
+- SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/stores`, `src/utils`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
 
 ### Changed
 
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)
 - Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
+- Returning to a tab after the access token expired could log you out ("Session expired") even though your session was valid: several requests refreshed the token at once, and every refresh after the first was rejected because the backend had already rotated the refresh cookie. Concurrent refreshes now share a single request
 - Two concurrent changes to the same budget or bank account (for example two imports or two transfers at once) could lose one of the updates: the service layer released its lock before the request's database transaction committed, so the second writer read the stale balance and overwrote the first. Balance updates now re-read the row under a database row lock held until commit
 - Resolving the same pending transaction twice at once (or updating it to posted twice) could credit the account's posted balance twice; the second attempt now sees the transaction is already posted
 - Resolving a pending transaction to a different date with an unchanged amount left the Unallocated budget's running balances out of order; they are now recalculated from the earlier of the two dates

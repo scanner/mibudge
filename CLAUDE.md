@@ -25,6 +25,7 @@ make shell          # Bash into the backend container
 make manage_shell   # Django shell_plus inside the container
 
 make test           # Run pytest locally (not inside Docker)
+make test-frontend  # Run the SPA unit tests (Vitest) locally
 make lint           # Run ruff formatter + linter + mypy locally
 ```
 
@@ -63,8 +64,11 @@ cd frontend
 pnpm install      # Install dependencies
 pnpm dev          # Vite dev server on :5173 (HMR)
 pnpm build        # Production build → frontend/dist/
-pnpm type-check   # vue-tsc
+pnpm type-check   # vue-tsc (src/ and tests/)
 pnpm fmt          # Format with oxfmt
+pnpm test         # Run the Vitest suite once
+pnpm test:watch   # Re-run affected tests on file changes
+pnpm test:coverage  # Run with v8 coverage and per-directory thresholds
 ```
 
 ---
@@ -100,7 +104,7 @@ Two-token JWT pattern:
 - **Access token**: short-lived (60 min), stored in JS memory only, sent as `Authorization: Bearer` header.
 - **Refresh token**: long-lived (14 days sliding), httpOnly cookie, refreshed via `/api/token/refresh/`.
 
-The Vue `auth` Pinia store manages the access token lifecycle and provides an authenticated `apiFetch` wrapper that silently refreshes before expiry.
+The Vue `auth` Pinia store manages the access token lifecycle and provides an authenticated `request()` wrapper around `apiFetch`: when a request gets 401 it refreshes the access token once (single-flight, so concurrent 401s share one `POST /api/token/refresh/`) and retries the request with the new token.
 
 **API keys (machine credentials).** 3rd-party services and the importers authenticate with a long-lived API key (`Authorization: Api-Key <key>`) instead of a password/JWT. The `APIKey` model lives in `users/models.py` (SHA-256 hash stored, plaintext shown once at creation, soft-revoked for audit); `users/authentication.py` provides the DRF authentication class; management endpoints are at `/api/v1/users/me/api-keys/`. Machine credentials get blanket access to the budgeting domain but are denied on user/security endpoints (password/email change, invitations, user management, API-key management) via `users.permissions.RequiresInteractiveAuth` -- a blocklist gate that will become a scope check when fine-grained scopes land. Exception: `GET /api/v1/users/me/` is allowed for machine credentials (importers read `timezone`); the `me` action uses the read-only variant `RequiresInteractiveAuthForWrites`, which gates only mutating methods. When adding a new sensitive user/security endpoint, remember to attach `RequiresInteractiveAuth` (or the ForWrites variant if machine consumers need the reads).
 
@@ -254,6 +258,10 @@ window these tests exist to cover. Use
 `@pytest.mark.django_db(transaction=True, serialized_rollback=True)`,
 close each thread's connection at thread exit, and give every wait a
 timeout.
+
+#### Frontend tests
+
+SPA tests live in `frontend/tests/` (mirroring `frontend/src/`) and run under Vitest with happy-dom, against an MSW mock REST API that fails any unmocked request. `tests/setup.ts` is the `conftest.py` analogue, `tests/mocks/factories.ts` holds the `make*` DTO factories, and `tests/helpers/` the fixtures (`withAuth`, `expire`, `respondOnce401`, `mountWithApp`). Every test carries a Gherkin comment block describing what the production code guarantees; known bugs are recorded as `it.fails(...)`. See [docs/spa/testing.md](docs/spa/testing.md) for running, writing, and the "which tests do I add" checklist.
 
 ### Code Quality
 
