@@ -31,7 +31,13 @@ API_KEYS_URL = reverse("api_v1:api-key-list")
 ####################################################################
 #
 def key_client(plaintext: str) -> APIClient:
-    """Return an APIClient sending the given plaintext API key."""
+    """Return an APIClient sending the given plaintext API key.
+
+    A plain helper rather than the root `make_api_key_client` fixture:
+    its callers send malformed, revoked or expired keys, or need the
+    `APIKey` row that `APIKey.make` returns, so they mint the key
+    themselves and pass only the plaintext here.
+    """
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
     return client
@@ -255,7 +261,12 @@ class TestRequiresInteractiveAuth:
         ],
     )
     def test_api_key_access_by_endpoint(
-        self, user: User, method: str, url_name: str, expected_status: int
+        self,
+        user: User,
+        make_api_key_client: Callable[..., APIClient],
+        method: str,
+        url_name: str,
+        expected_status: int,
     ):
         """
         GIVEN: a valid API key
@@ -264,21 +275,23 @@ class TestRequiresInteractiveAuth:
                with 403, while profile reads and budgeting-domain
                endpoints allow it
         """
-        _, plaintext = APIKey.make(user, "importer")
-        response = getattr(key_client(plaintext), method)(reverse(url_name))
+        client = make_api_key_client(user, "importer")
+        response = getattr(client, method)(reverse(url_name))
         assert response.status_code == expected_status
 
     ####################################################################
     #
-    def test_api_key_can_read_own_profile(self, user: User):
+    def test_api_key_can_read_own_profile(
+        self, user: User, make_api_key_client: Callable[..., APIClient]
+    ):
         """
         GIVEN: a valid API key
         WHEN:  GET /users/me/ is requested with it
         THEN:  the profile body includes the fields machine consumers
                rely on (importers read the timezone)
         """
-        _, plaintext = APIKey.make(user, "importer")
-        response = key_client(plaintext).get(reverse("api_v1:user-me"))
+        client = make_api_key_client(user, "importer")
+        response = client.get(reverse("api_v1:user-me"))
         assert response.status_code == 200
         assert response.data["username"] == user.username
         assert response.data["timezone"] == user.timezone

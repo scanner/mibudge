@@ -15,7 +15,6 @@ from decimal import Decimal
 #
 import pytest
 import recurrence
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from djmoney.money import Money
 
@@ -63,28 +62,6 @@ _SEMI_MONTHLY_15_EOM = recurrence.Recurrence(
     dtstart=datetime(2026, 5, 15),
     rrules=[recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])],
 )
-
-
-####################################################################
-#
-@pytest.fixture
-def system_user() -> User:  # type: ignore[valid-type]
-    """Return the funding-system user seeded by migration 0024."""
-    return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
-
-
-####################################################################
-#
-@pytest.fixture
-def make_account(
-    bank_account_factory: Callable[..., BankAccount],
-) -> Callable[..., BankAccount]:
-    """Return a factory for BankAccounts with optional last_posted_through."""
-
-    def _make(posted_through: date | None = None) -> BankAccount:
-        return bank_account_factory(last_posted_through=posted_through)
-
-    return _make
 
 
 ########################################################################

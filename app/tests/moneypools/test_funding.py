@@ -18,7 +18,6 @@ from unittest.mock import patch
 #
 import pytest
 import recurrence
-from django.conf import settings
 from django.urls import reverse
 from djmoney.money import Money
 from freezegun import freeze_time
@@ -93,35 +92,6 @@ _YEARLY_SEP_15 = recurrence.Recurrence(
     dtstart=datetime(2026, 9, 15),
     rrules=[recurrence.Rule(recurrence.YEARLY)],
 )
-
-
-########################################################################
-########################################################################
-#
-@pytest.fixture
-def system_user() -> User:
-    """Return the funding-system user seeded by migration 0024."""
-    return User.objects.get(username=settings.FUNDING_SYSTEM_USERNAME)
-
-
-####################################################################
-#
-@pytest.fixture
-def make_account(
-    bank_account_factory: Callable[..., BankAccount],
-) -> Callable[..., BankAccount]:
-    """Return a factory that creates a BankAccount with optional freshness fields."""
-
-    def _make(
-        posted_through: date | None = None,
-        imported_at: datetime | None = None,
-    ) -> BankAccount:
-        return bank_account_factory(
-            last_posted_through=posted_through,
-            last_imported_at=imported_at,
-        )
-
-    return _make
 
 
 ########################################################################

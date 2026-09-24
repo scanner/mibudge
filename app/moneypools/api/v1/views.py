@@ -5,7 +5,8 @@ All viewsets use UUID-based lookup (``id`` field) and require JWT
 authentication.  Object-level access is enforced by
 ``AccountOwnerQuerySetMixin`` (filters list queries to owned objects)
 and ``IsAccountOwner`` (guards retrieve/update/delete on individual
-objects).
+objects).  Create is scoped by `OwnedBankAccountField` on the
+serializer and re-checked by `AccountOwnerCreateMixin`.
 
 Banks are read-only reference data.  All other resources support the
 standard CRUD operations with restrictions documented per-viewset.
@@ -46,7 +47,11 @@ from moneypools.models import (
     TransactionAllocation,
     TransactionCategory,
 )
-from moneypools.permissions import AccountOwnerQuerySetMixin, IsAccountOwner
+from moneypools.permissions import (
+    AccountOwnerCreateMixin,
+    AccountOwnerQuerySetMixin,
+    IsAccountOwner,
+)
 from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
 from moneypools.service import categories as categories_svc
@@ -166,7 +171,9 @@ class BankViewSet(viewsets.ReadOnlyModelViewSet):
         ),
     ),
 )
-class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
+class BankAccountViewSet(
+    AccountOwnerCreateMixin, AccountOwnerQuerySetMixin, viewsets.ModelViewSet
+):
     """Bank accounts (checking, savings, credit card) owned by the user."""
 
     serializer_class = BankAccountSerializer
@@ -915,7 +922,9 @@ class BankAccountViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         ),
     ),
 )
-class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
+class BudgetViewSet(
+    AccountOwnerCreateMixin, AccountOwnerQuerySetMixin, viewsets.ModelViewSet
+):
     """Virtual sub-accounts (goals, recurring budgets) within a bank account."""
 
     serializer_class = BudgetSerializer
@@ -941,8 +950,16 @@ class BudgetViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
         validated = serializer.validated_data
         bank_account = validated.pop("bank_account")
         name = validated.pop("name")
-        budget_type = validated.pop("budget_type")
-        funding_type = validated.pop("funding_type")
+        # `budget_type` and `funding_type` are optional in the serializer
+        # because the model fields have defaults, and DRF leaves omitted
+        # optional fields out of `validated_data`.  Fall back to the
+        # model defaults (Goal, Target Date) so an omitted field creates
+        # the documented default budget instead of raising `KeyError`.
+        #
+        budget_type = validated.pop("budget_type", Budget.BudgetType.GOAL)
+        funding_type = validated.pop(
+            "funding_type", Budget.FundingType.TARGET_DATE
+        )
         target_balance = validated.pop("target_balance")
         budget = budget_svc.create(
             bank_account=bank_account,
@@ -1244,7 +1261,9 @@ class TransactionCategoryViewSet(viewsets.ModelViewSet):
         ),
     ),
 )
-class TransactionViewSet(AccountOwnerQuerySetMixin, viewsets.ModelViewSet):
+class TransactionViewSet(
+    AccountOwnerCreateMixin, AccountOwnerQuerySetMixin, viewsets.ModelViewSet
+):
     """Bank transactions (purchases, deposits, transfers) on user accounts."""
 
     serializer_class = TransactionSerializer
@@ -1500,6 +1519,7 @@ class TransactionAllocationViewSet(
     ),
 )
 class InternalTransactionViewSet(
+    AccountOwnerCreateMixin,
     AccountOwnerQuerySetMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,

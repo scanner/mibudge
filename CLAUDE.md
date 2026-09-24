@@ -126,7 +126,7 @@ Money values everywhere use `djmoney` `MoneyField` (14 digits, 2 decimal places,
 
 - **Banks**: read-only, any authenticated user.
 - **Users**: list/retrieve/update restricted to staff; `/api/v1/users/me/` available to all authenticated users.
-- **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership via `IsAccountOwner` permission and `AccountOwnerQuerySetMixin`. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does **not** bypass ownership checks in the REST API (the django-admin is a separate access path).
+- **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership via `IsAccountOwner` permission and `AccountOwnerQuerySetMixin`. Only users in an account's `owners` M2M can access that account and its related objects. Object-level permissions never run on create, so a writable serializer field that names a bank account must be `OwnedBankAccountField` (`moneypools/api/v1/fields.py`), which resolves only accounts the requesting user owns; owned-resource viewsets that support create also include `AccountOwnerCreateMixin`, which re-checks every account-owned object in the validated data as a fallback (a test in `app/tests/moneypools/test_create_authz.py` fails if a create-capable moneypools viewset omits it). Staff and superuser status does **not** bypass ownership checks in the REST API (the django-admin is a separate access path).
 
 ### Async / Scheduled Work
 
@@ -191,6 +191,29 @@ from tests.moneypools.factories import BankFactory, BankAccountFactory
 @pytest.mark.parametrize("factory_cls", [BankFactory, BankAccountFactory])
 def test_something(factory_cls) -> None: ...
 ```
+
+#### Helpers vs fixtures vs fixture factories
+
+- **Plain helper function**: pure -- builds a value from its arguments,
+  requests no fixtures, writes nothing to the DB (payload/URL builders,
+  header-to-client wrappers). Anything passed through
+  `@pytest.mark.parametrize` must be a helper, since parametrize values
+  are evaluated before fixtures exist.
+- **Fixture**: one object a test needs, built from other fixtures or the
+  DB (`user`, `auth_client`, `system_user`, an account owned by `user`).
+- **Fixture factory**: a fixture returning a callable, named `make_*`,
+  for when a test needs several instances or varies the inputs
+  (`make_account`, `make_api_key_client`). Model factories keep the
+  pytest-factoryboy `*_factory` names.
+- **Placement**: define a fixture in the lowest `conftest.py` covering
+  every module that uses it; a module-local fixture is fine while only
+  that module needs it. Never copy a fixture into a second module --
+  move it up. App-agnostic fixtures live in `app/tests/conftest.py`:
+  `api_client`, `auth_client`, `make_api_key_client`, and
+  `any_auth_client` (parametrized: runs a test once with a JWT session
+  and once with an API key; use it for endpoints machine credentials
+  can reach). A module may override a shared fixture (e.g.
+  `auth_client` for a different user) when its tests need that.
 
 ### Code Quality
 

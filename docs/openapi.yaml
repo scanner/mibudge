@@ -3231,6 +3231,7 @@ components:
         fillup_goal:
           type: string
           format: uuid
+          readOnly: true
           nullable: true
         archived:
           type: boolean
@@ -3320,6 +3321,7 @@ components:
       - bank_account
       - complete
       - created_at
+      - fillup_goal
       - funded_amount
       - funded_amount_currency
       - funding_amount_currency
@@ -3367,10 +3369,6 @@ components:
         target_date:
           type: string
           format: date
-          nullable: true
-        fillup_goal:
-          type: string
-          format: uuid
           nullable: true
         paused:
           type: boolean
@@ -4134,10 +4132,6 @@ components:
         target_date:
           type: string
           format: date
-          nullable: true
-        fillup_goal:
-          type: string
-          format: uuid
           nullable: true
         paused:
           type: boolean
