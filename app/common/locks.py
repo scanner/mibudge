@@ -1,14 +1,39 @@
 """
 Redis-backed distributed locking.
 
+Two-layer locking model
+-----------------------
+Balance-bearing rows (`BankAccount`, `Budget`, `Transaction`) are
+protected by two layers that do different jobs:
+
+1. **Redis locks (this module)** serialize work across processes before
+   the database is touched, and give single-flight behaviour to jobs
+   that should not run twice at once (the non-blocking funding lock).
+   A Redis lock is released when its `with` block exits, which is often
+   before the enclosing database transaction commits: an HTTP request
+   runs inside `ATOMIC_REQUESTS`, and a service called by another
+   service runs inside the caller's `atomic()`.
+
+2. **Postgres row locks** (`SELECT ... FOR UPDATE`, taken by
+   `moneypools.service._locking.locked`) make balance read-modify-write
+   correct.  A row lock is held until the *outermost* transaction
+   commits or rolls back, so a second writer re-reads the committed
+   value instead of overwriting it.
+
+Correctness of balances rests on the row locks.  The Redis lock
+narrows contention and orders work across processes; it does not have
+to outlive the commit.
+
 Usage
 -----
 Any model that needs locking exposes a `lock_key` property.  Callers
-acquire the lock via `acquire_lock`::
+acquire the Redis lock, open `atomic()`, then re-read the rows they
+mutate under a row lock::
 
     with acquire_lock(budget.lock_key):
         with db_transaction.atomic():
-            # safe to mutate state here
+            locked(budget)
+            # safe to mutate budget here
             ...
 
 Multiple locks (deadlock prevention)
