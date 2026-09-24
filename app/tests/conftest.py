@@ -92,9 +92,14 @@ def django_db_modify_db_settings(
     if postgres_test_mode():
         # Overwrite only the keys the URL defines; Django has already
         # filled in its defaults (AUTOCOMMIT, TEST, ...) on this dict.
+        # OPTIONS is replaced rather than merged: when the settings
+        # started from SQLite it holds SQLite-only options, such as
+        # `transaction_mode`, that psycopg rejects.
         #
         url = os.environ[POSTGRES_TEST_URL_ENV]
-        db.update(environ.Env.db_url_config(url))
+        config = environ.Env.db_url_config(url)
+        db["OPTIONS"] = config.pop("OPTIONS", {})
+        db.update(config)
     else:
         db["ENGINE"] = SQLITE_ENGINE
         db["NAME"] = ":memory:"
