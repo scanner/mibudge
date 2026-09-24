@@ -225,7 +225,7 @@ def recalculate_from_transaction(
     allocation snapshots as anchors.
 
     Must be called inside `atomic()` while holding the budget's Redis
-    lock and its row lock (`_locking.locked(budget)`), so a concurrent
+    lock and its database lock (`_locking.locked(budget)`), so a concurrent
     allocation or InternalTransaction cannot modify the budget mid-scan
     and produce inconsistent snapshots.
 
@@ -287,7 +287,7 @@ def recalculate_itx_snapshots_from_dt(
     be used as anchors.
 
     Must be called inside `atomic()` while holding the budget's Redis
-    lock and its row lock (`_locking.locked(budget)`), so a concurrent
+    lock and its database lock (`_locking.locked(budget)`), so a concurrent
     allocation or InternalTransaction cannot modify the budget mid-scan
     and produce inconsistent snapshots.
 
@@ -404,7 +404,7 @@ def _recalculate_running_balances(
     out-of-chronological-session order.
 
     Must be called inside `atomic()` while holding the budget's Redis
-    lock and its row lock (`_locking.locked(budget)`), so a concurrent
+    lock and its database lock (`_locking.locked(budget)`), so a concurrent
     allocation or InternalTransaction cannot modify the budget mid-scan
     and produce inconsistent snapshots.
 

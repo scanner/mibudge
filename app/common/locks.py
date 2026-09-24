@@ -14,13 +14,15 @@ protected by two layers that do different jobs:
    runs inside `ATOMIC_REQUESTS`, and a service called by another
    service runs inside the caller's `atomic()`.
 
-2. **Postgres row locks** (`SELECT ... FOR UPDATE`, taken by
-   `moneypools.service._locking.locked`) make balance read-modify-write
-   correct.  A row lock is held until the *outermost* transaction
-   commits or rolls back, so a second writer re-reads the committed
-   value instead of overwriting it.
+2. **Database write locks** make balance read-modify-write correct.
+   `moneypools.service._locking.locked` re-reads each row it changes
+   under a lock held until the *outermost* transaction commits or rolls
+   back, so a second writer re-reads the committed value instead of
+   overwriting it.  On Postgres that is a row lock
+   (`SELECT ... FOR UPDATE`); on SQLite it is the database write lock
+   taken by `BEGIN IMMEDIATE` (`common.db.apply_sqlite_locking`).
 
-Correctness of balances rests on the row locks.  The Redis lock
+Correctness of balances rests on the database locks.  The Redis lock
 narrows contention and orders work across processes; it does not have
 to outlive the commit.
 
@@ -28,7 +30,7 @@ Usage
 -----
 Any model that needs locking exposes a `lock_key` property.  Callers
 acquire the Redis lock, open `atomic()`, then re-read the rows they
-mutate under a row lock::
+mutate under a database lock::
 
     with acquire_lock(budget.lock_key):
         with db_transaction.atomic():
@@ -50,9 +52,9 @@ locking more than one object at once::
 Nesting rule
 ------------
 Always acquire the Redis lock BEFORE opening `db_transaction.atomic()`
-and before taking the matching row lock.  A thread that holds a row
-lock and then waits for a Redis lock can deadlock against a thread
-that holds the Redis lock and waits for the row.
+and before taking the matching database lock.  A thread that holds a
+database lock and then waits for a Redis lock can deadlock against a
+thread that holds the Redis lock and waits for the database.
 
 Re-entrancy
 -----------

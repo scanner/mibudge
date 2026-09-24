@@ -1,17 +1,26 @@
 """
-Row-lock helpers for balance read-modify-write in the service layer.
+Locked re-reads for balance read-modify-write in the service layer.
 
-`locked` re-reads a model instance with `SELECT ... FOR UPDATE` and
-refreshes it in place.  Postgres holds the row lock until the outermost
-transaction commits, so a concurrent writer blocks at its own locked
-read and then sees the committed value.  See `moneypools.service` for
-the lock order and `common.locks` for how row locks relate to the Redis
-locks.
+`locked` re-reads a model instance and refreshes it in place so that
+the read happens under a database write lock that lasts until the
+outermost transaction commits.  A concurrent writer to the same row
+then waits and reads the committed value instead of overwriting it.
+Each supported database provides that lock differently:
 
+- **Postgres**: `SELECT ... FOR UPDATE` locks the row until the
+  outermost commit.
+- **SQLite**: `FOR UPDATE` is ignored.  The connection runs with
+  `transaction_mode="IMMEDIATE"` (`common.db.apply_sqlite_locking`), so
+  the enclosing `atomic()` already holds the database write lock from
+  `BEGIN` to commit, and the re-read sees the committed row.
+
+See `moneypools.service` for the lock order and `common.locks` for how
+these database locks relate to the Redis locks.
+
+Every call must run inside `db_transaction.atomic()`.  On Postgres,
 `select_for_update()` raises `TransactionManagementError` outside a
-transaction, so every call must run inside `db_transaction.atomic()`.
-SQLite ignores `FOR UPDATE`; the Postgres test mode exercises the real
-locking (see `CLAUDE.md`).
+transaction; on SQLite no lock would be held.  The race tests in
+`app/tests/moneypools/test_concurrency.py` run on both databases.
 
 Keep this module free of imports from other moneypools service modules
 so any of them can import it.
@@ -30,7 +39,7 @@ from django.db import models
 ########################################################################
 #
 def locked[M: models.Model](obj: M) -> M:
-    """Re-read `obj` under a row lock and refresh it in place.
+    """Re-read `obj` under a database write lock and refresh it in place.
 
     Args:
         obj: A saved model instance.  Its current field values are
@@ -55,7 +64,7 @@ def locked[M: models.Model](obj: M) -> M:
 ########################################################################
 #
 def _id_key(obj: models.Model) -> str:
-    """Return the sort key used to order row locks: `str(obj.id)`."""
+    """Return the sort key used to order database locks: `str(obj.id)`."""
     return str(obj.id)  # type: ignore[attr-defined]
 
 
@@ -73,7 +82,7 @@ def locked_many[M: models.Model](objs: Iterable[M]) -> list[M]:
 
     Returns:
         The distinct instances, sorted by `str(id)`, each refreshed in
-        place under a row lock.
+        place under a database lock.
     """
     distinct: dict[object, M] = {}
     for obj in objs:

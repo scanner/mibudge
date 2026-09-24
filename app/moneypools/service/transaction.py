@@ -186,7 +186,7 @@ def update(transaction: Transaction, **changes: Any) -> Transaction:
     with acquire_lock(bank_account.lock_key):
         with db_transaction.atomic():
             # Lock order bank_account -> transaction.  `amount` and
-            # `pending` are read under the transaction's row lock, so a
+            # `pending` are read under the transaction's database lock, so a
             # second concurrent pending -> posted update sees the first
             # one's result instead of crediting posted_balance again.
             #
@@ -256,7 +256,7 @@ def delete(transaction: Transaction) -> None:
             # Lock order bank_account -> transaction -> budget, budgets
             # in `id` order; the allocation deletes below re-enter these
             # locks.  `pending` and `amount` are re-read under the
-            # transaction's row lock.
+            # transaction's database lock.
             #
             locked(bank_account)
             locked(transaction)
@@ -447,7 +447,7 @@ def split(
 
     # Every budget the split may touch: the declared targets, the
     # Unallocated remainder, and any budget whose allocation is removed.
-    # Their Redis locks and row locks are taken up front in `id` order,
+    # Their Redis locks and database locks are taken up front in `id` order,
     # so the per-allocation service calls below re-enter locks this
     # thread already holds instead of acquiring them in split order.
     #

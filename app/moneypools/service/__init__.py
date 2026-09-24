@@ -17,16 +17,18 @@ its `pending` state and snapshots) are protected by two layers:
   released before the enclosing transaction commits: HTTP requests run
   inside `ATOMIC_REQUESTS`, and a service called by another service
   runs inside the caller's `atomic()`.
-- **Row locks** (`_locking.locked` / `_locking.locked_many`, i.e.
-  `SELECT ... FOR UPDATE`) make every balance read-modify-write
-  correct.  Each mutator re-reads the row it changes under a row lock
-  instead of `refresh_from_db()`.  Postgres holds the lock until the
-  outermost transaction commits, so a concurrent writer waits and then
-  reads the committed value.
+- **Database write locks** (`_locking.locked` / `_locking.locked_many`)
+  make every balance read-modify-write correct.  Each mutator re-reads
+  the row it changes with `locked()` instead of `refresh_from_db()`,
+  so the read happens under a lock held until the outermost
+  transaction commits; a concurrent writer waits and then reads the
+  committed value.  On Postgres the lock is a row lock
+  (`SELECT ... FOR UPDATE`).  On SQLite it is the database write lock
+  that `BEGIN IMMEDIATE` takes for the whole transaction
+  (`common.db.apply_sqlite_locking`).
 
-Correctness of balances rests on the row locks.  Every
-`locked()` call runs inside `db_transaction.atomic()`; outside one,
-`select_for_update()` raises `TransactionManagementError`.
+Correctness of balances rests on the database locks, not on Redis.
+Every `locked()` call runs inside `db_transaction.atomic()`.
 
 Lock order
 ----------
@@ -37,8 +39,11 @@ than one lock, acquire in this order:
 
 Multiple budgets are locked sorted by `str(budget.id)`
 (`locked_many` sorts for you).  Take each Redis lock before the
-matching row lock.  `acquire_lock` is re-entrant per thread, so a
-service that locks every budget it will touch up front (for example
-`transaction.split` or `budget.archive`) can call other services that
-lock the same budgets.  See `common.locks` for details.
+matching database lock.  On SQLite the database lock covers every row
+at once, so the order matters only for the Redis locks.
+
+`acquire_lock` is re-entrant per thread, so a service that locks every
+budget it will touch up front (for example `transaction.split` or
+`budget.archive`) can call other services that lock the same budgets.
+See `common.locks` for details.
 """

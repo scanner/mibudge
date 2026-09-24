@@ -248,7 +248,7 @@ def archive(budget: Budget, actor: User) -> Budget:
     if fillup is not None:
         budgets_to_lock.append(fillup)
 
-    # The drain amounts are read under the row locks, and the nested
+    # The drain amounts are read under the database locks, and the nested
     # internal_transaction_svc.create calls re-enter the Redis locks
     # taken here.
     #
@@ -307,7 +307,7 @@ def delete(budget: Budget, actor: User) -> None:
           transaction allocations (caller should archive instead).
 
     Deleting a budget cascades away every InternalTransaction that
-    touches it or its fill-up.  Under the Redis and row locks of the
+    touches it or its fill-up.  Under the Redis and database locks of the
     deleted budgets, Unallocated and every other budget those transfers
     touched:
 
@@ -432,9 +432,9 @@ def _delete_locked(
     Args:
         budget: The budget being deleted.
         doomed: `budget` and its fill-up goal (if any), refreshed under
-            row locks.
+            database locks.
         others: Unallocated and every counterparty budget, by id,
-            refreshed under row locks.
+            refreshed under database locks.
         unallocated: The account's Unallocated budget (also in `others`).
     """
     _raise_if_allocated(doomed)

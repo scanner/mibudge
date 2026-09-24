@@ -821,7 +821,7 @@ def _process_fund_event(
     )
 
     # The intended amount depends on the balances of the budgets the
-    # event touches, so it is computed under their row locks.  The
+    # event touches, so it is computed under their database locks.  The
     # nested internal_transaction_svc.create re-enters the Redis locks
     # taken here.
     #
@@ -961,7 +961,7 @@ def _process_recur_event(
         return
 
     # The sweep is capped at the fill-up's balance, so the balances are
-    # read under row locks.  The nested internal_transaction_svc.create
+    # read under database locks.  The nested internal_transaction_svc.create
     # re-enters the Redis locks taken here.
     #
     recur_kind = InternalTransaction.SystemEventKind.RECUR
