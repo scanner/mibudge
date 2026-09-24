@@ -1,5 +1,6 @@
 # system imports
 #
+import os
 import types
 from collections.abc import Callable, Generator
 from unittest.mock import MagicMock
@@ -23,13 +24,48 @@ from users.models import APIKey, User
 register(UserFactory)  # UserFactory -> user_factory fixture
 
 
+# When set, tests run against this Postgres database instead of the
+# in-memory SQLite default.  pytest-django creates and destroys a
+# `test_<name>` database next to it, so the role needs CREATEDB.
+#
+POSTGRES_TEST_URL_ENV = "MIBUDGE_TEST_DATABASE_URL"
+
+
+####################################################################
+#
+def postgres_test_mode() -> bool:
+    """Return True when the opt-in Postgres test mode is active."""
+    return bool(os.environ.get(POSTGRES_TEST_URL_ENV))
+
+
+####################################################################
+#
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Skip `postgres`-marked tests unless the Postgres mode is active.
+
+    Args:
+        config: The pytest config (unused).
+        items: The collected test items, modified in place.
+    """
+    if postgres_test_mode():
+        return
+    skip = pytest.mark.skip(
+        reason=f"needs Postgres; set {POSTGRES_TEST_URL_ENV} to run"
+    )
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip)
+
+
 ####################################################################
 #
 @pytest.fixture(scope="session")
 def django_db_modify_db_settings() -> None:
     """
-    Override the database configuration to use in-memory SQLite so tests
-    always use SQLite for their database.
+    Point the test database at in-memory SQLite, or at Postgres when
+    `MIBUDGE_TEST_DATABASE_URL` is set.
 
     pytest-django calls this session-scoped fixture inside
     ``django_db_setup``, just before ``setup_databases()`` runs, making it
@@ -39,15 +75,23 @@ def django_db_modify_db_settings() -> None:
     Returns:
         None
     """
+    import environ
     from django.conf import settings
 
     db = settings.DATABASES["default"]
-    db["ENGINE"] = "django.db.backends.sqlite3"
-    db["NAME"] = ":memory:"
+    if postgres_test_mode():
+        # Overwrite only the keys the URL defines; Django has already
+        # filled in its defaults (AUTOCOMMIT, TEST, ...) on this dict.
+        #
+        url = os.environ[POSTGRES_TEST_URL_ENV]
+        db.update(environ.Env.db_url_config(url))
+    else:
+        db["ENGINE"] = "django.db.backends.sqlite3"
+        db["NAME"] = ":memory:"
 
-    # Discard the cached DatabaseWrapper -- it is still a PostgreSQL class
-    # instance even after the settings change above. Deleting it forces the
-    # next access to construct a fresh SQLite wrapper from the updated dict.
+    # Discard the cached DatabaseWrapper -- it was built from the
+    # original settings. Deleting it forces the next access to construct
+    # a fresh wrapper from the updated dict.
     try:
         del connections["default"]
     except Exception:
