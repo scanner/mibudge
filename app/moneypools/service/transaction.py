@@ -182,43 +182,46 @@ def update(transaction: Transaction, **changes: Any) -> Transaction:
             f"Field(s) {sorted(bad)} cannot be changed after creation."
         )
 
-    new_amount: moneyed.Money | None = changes.get("amount")
-    new_pending = changes.get("pending")
-    amount_changed = new_amount is not None and new_amount != transaction.amount
-    pending_to_posted = new_pending is False and transaction.pending is True
+    bank_account = transaction.bank_account
+    with acquire_lock(bank_account.lock_key):
+        with db_transaction.atomic():
+            # Lock order bank_account -> transaction.  `amount` and
+            # `pending` are read under the transaction's row lock, so a
+            # second concurrent pending -> posted update sees the first
+            # one's result instead of crediting posted_balance again.
+            #
+            locked(bank_account)
+            locked(transaction)
 
-    if amount_changed or pending_to_posted:
-        bank_account = transaction.bank_account
-        old_amount = transaction.amount
-        was_pending = transaction.pending
-        final_amount = new_amount if amount_changed else old_amount
-        will_be_pending = (
-            new_pending if new_pending is not None else was_pending
-        )
+            new_amount: moneyed.Money | None = changes.get("amount")
+            new_pending = changes.get("pending")
+            old_amount = transaction.amount
+            was_pending = transaction.pending
+            amount_changed = new_amount is not None and new_amount != old_amount
+            pending_to_posted = new_pending is False and was_pending is True
 
-        with acquire_lock(bank_account.lock_key):
-            with db_transaction.atomic():
-                locked(bank_account)
+            if amount_changed or pending_to_posted:
+                final_amount = new_amount if amount_changed else old_amount
+                will_be_pending = (
+                    new_pending if new_pending is not None else was_pending
+                )
 
                 # Always reverse the old available contribution and apply new.
                 if amount_changed:
                     bank_account.available_balance -= old_amount
                     bank_account.available_balance += final_amount
 
-                # Reverse old posted contribution; apply new posted contribution.
+                # Reverse old posted contribution; apply new one.
                 if not was_pending:
                     bank_account.posted_balance -= old_amount
                 if not will_be_pending:
                     bank_account.posted_balance += final_amount
 
                 bank_account.save()
-                for field, value in changes.items():
-                    setattr(transaction, field, value)
-                transaction.save()
-    else:
-        for field, value in changes.items():
-            setattr(transaction, field, value)
-        transaction.save()
+
+            for field, value in changes.items():
+                setattr(transaction, field, value)
+            transaction.save()
 
     transaction.refresh_from_db()
     return transaction
@@ -307,23 +310,10 @@ def resolve_pending_to_posted(
         ValueError: If the transaction is not pending, has no Unallocated
             allocation, or its account has no unallocated budget.
     """
-    if not transaction.pending:
-        raise ValueError("Transaction is not pending.")
-
     bank_account = transaction.bank_account
-    old_amount = transaction.amount
-    final_amount = new_amount if new_amount is not None else old_amount
-    amount_changed = new_amount is not None and new_amount != old_amount
-
     unallocated = bank_account.unallocated_budget
     if unallocated is None:
         raise ValueError("Account has no unallocated budget.")
-
-    unalloc_alloc = TransactionAllocation.objects.filter(
-        transaction=transaction, budget=unallocated
-    ).first()
-    if unalloc_alloc is None:
-        raise ValueError("Pending transaction has no unallocated allocation.")
 
     if isinstance(new_posted_date, str):
         new_posted_date = datetime.fromisoformat(
@@ -345,9 +335,33 @@ def resolve_pending_to_posted(
     ).astimezone(UTC)
     new_posted_date = new_posted_date.astimezone(UTC)
 
-    with acquire_lock(bank_account.lock_key):
+    with ExitStack() as stack:
+        stack.enter_context(acquire_lock(bank_account.lock_key))
+        stack.enter_context(acquire_lock(unallocated.lock_key))
         with db_transaction.atomic():
+            # Lock order bank_account -> transaction -> budget.  The
+            # pending check runs on the locked row, so a second resolve
+            # of the same transaction raises instead of crediting
+            # posted_balance twice.
+            #
             locked(bank_account)
+            locked(transaction)
+            if not transaction.pending:
+                raise ValueError("Transaction is not pending.")
+
+            unalloc_alloc = TransactionAllocation.objects.filter(
+                transaction=transaction, budget=unallocated
+            ).first()
+            if unalloc_alloc is None:
+                raise ValueError(
+                    "Pending transaction has no unallocated allocation."
+                )
+
+            old_amount = transaction.amount
+            old_transaction_date = transaction.transaction_date
+            final_amount = new_amount if new_amount is not None else old_amount
+            amount_changed = new_amount is not None and new_amount != old_amount
+
             # Pending → posted always credits posted_balance.
             bank_account.posted_balance += final_amount
             if amount_changed:
@@ -364,10 +378,20 @@ def resolve_pending_to_posted(
             transaction.save()
 
             if amount_changed:
-                # update_amount acquires the budget lock (bank_account →
-                # budget ordering is consistent with create()).
+                # update_amount re-enters the budget lock taken above.
                 transaction_allocation_svc.update_amount(
                     unalloc_alloc, final_amount
+                )
+
+            # A new transaction_date moves the allocation within the
+            # budget's timeline.  Recalculating from the earlier of the
+            # two dates covers every snapshot between the old and new
+            # positions.
+            #
+            if new_transaction_date != old_transaction_date:
+                transaction_allocation_svc.recalculate_from_dt(
+                    locked(unallocated),
+                    min(old_transaction_date, new_transaction_date),
                 )
 
     transaction.refresh_from_db()
@@ -444,6 +468,8 @@ def split(
             stack.enter_context(acquire_lock(b.lock_key))
         with db_transaction.atomic():
             locked(transaction)
+            if transaction.pending:
+                raise ValueError("Cannot split a pending transaction.")
             locked_many(budgets_to_lock)
             existing = list(
                 TransactionAllocation.objects.filter(

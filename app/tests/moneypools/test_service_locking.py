@@ -280,6 +280,52 @@ class TestTransactionLocking:
 
         assert locked_rows[:4] == expected
 
+    ####################################################################
+    #
+    def test_update_locks_account_then_transaction(
+        self,
+        account: BankAccount,
+        transaction_factory: Callable[..., Transaction],
+        locked_rows: list[LockedRow],
+    ) -> None:
+        """
+        GIVEN: a pending transaction
+        WHEN:  it is updated to posted
+        THEN:  the account row and then the transaction row are
+               re-read under row locks
+        """
+        tx = transaction_factory(bank_account=account, amount=-5, pending=True)
+        locked_rows.clear()
+
+        transaction_svc.update(tx, pending=False)
+
+        assert locked_rows[:2] == [_row(account), _row(tx)]
+
+    ####################################################################
+    #
+    def test_resolve_pending_locks_account_then_transaction(
+        self,
+        account: BankAccount,
+        transaction_factory: Callable[..., Transaction],
+        locked_rows: list[LockedRow],
+    ) -> None:
+        """
+        GIVEN: a pending transaction
+        WHEN:  it is resolved to posted
+        THEN:  the account row and then the transaction row are
+               re-read under row locks
+        """
+        tx = transaction_factory(bank_account=account, amount=-5, pending=True)
+        locked_rows.clear()
+
+        transaction_svc.resolve_pending_to_posted(
+            tx, new_posted_date=datetime(2026, 3, 2, tzinfo=UTC)
+        )
+
+        assert locked_rows[:2] == [_row(account), _row(tx)]
+
+    ####################################################################
+    #
     def test_split_locks_transaction_then_budgets_in_id_order(
         self,
         account: BankAccount,

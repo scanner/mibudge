@@ -299,6 +299,41 @@ class TestConcurrentBalanceUpdates:
             goal.refresh_from_db()
             assert goal.balance == Money(10, "USD")
 
+    ####################################################################
+    #
+    def test_concurrent_resolves_credit_posted_balance_once(
+        self, account: BankAccount
+    ) -> None:
+        """
+        GIVEN: a pending -$10 transaction on an account with $100 posted
+        WHEN:  two requests resolve it to posted concurrently
+        THEN:  posted_balance drops by $10 exactly once
+        AND:   the second resolve raises ValueError
+        """
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-10, "USD"),
+            posted_date=datetime(2026, 3, 1, tzinfo=UTC),
+            raw_description="PENDING PURCHASE",
+            pending=True,
+        )
+
+        # Each thread loads the still-pending row, as each request would.
+        #
+        def _resolve() -> Transaction:
+            return transaction_svc.resolve_pending_to_posted(
+                Transaction.objects.get(pk=tx.pk),
+                new_posted_date=datetime(2026, 3, 2, tzinfo=UTC),
+            )
+
+        errors_a, errors_b = _race(_resolve, _resolve)
+
+        assert not errors_a, errors_a
+        assert len(errors_b) == 1
+        assert isinstance(errors_b[0], ValueError)
+        account.refresh_from_db()
+        assert account.posted_balance == Money(90, "USD")
+
 
 ########################################################################
 ########################################################################

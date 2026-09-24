@@ -99,7 +99,7 @@ def create(
             )
             allocation.save()
             budget.save()
-        recalculate_from_transaction(budget, transaction)
+            recalculate_from_transaction(budget, transaction)
     return allocation
 
 
@@ -133,7 +133,7 @@ def update_amount(
             allocation.amount = new_amount
             allocation.save()
             budget.save()
-        recalculate_from_transaction(budget, transaction)
+            recalculate_from_transaction(budget, transaction)
     allocation.refresh_from_db()
     return allocation
 
@@ -164,7 +164,7 @@ def delete(allocation: TransactionAllocation) -> None:
             budget.balance -= allocation.amount
             budget.save()
             allocation.delete()
-        recalculate_from_transaction(budget, transaction)
+            recalculate_from_transaction(budget, transaction)
 
 
 ########################################################################
@@ -224,9 +224,10 @@ def recalculate_from_transaction(
     _recalculate_running_balances so it can use the freshly updated
     allocation snapshots as anchors.
 
-    Must be called while holding the budget lock (acquire_lock(budget.lock_key))
-    to prevent a concurrent allocation or InternalTransaction from modifying
-    the budget mid-scan and producing inconsistent snapshots.
+    Must be called inside `atomic()` while holding the budget's Redis
+    lock and its row lock (`_locking.locked(budget)`), so a concurrent
+    allocation or InternalTransaction cannot modify the budget mid-scan
+    and produce inconsistent snapshots.
 
     Args:
         budget: The budget whose snapshots need updating.
@@ -285,9 +286,10 @@ def recalculate_itx_snapshots_from_dt(
     so that TransactionAllocation budget_balance snapshots are fresh and can
     be used as anchors.
 
-    Must be called while holding the budget lock (acquire_lock(budget.lock_key))
-    to prevent a concurrent allocation or InternalTransaction from modifying
-    the budget mid-scan and producing inconsistent snapshots.
+    Must be called inside `atomic()` while holding the budget's Redis
+    lock and its row lock (`_locking.locked(budget)`), so a concurrent
+    allocation or InternalTransaction cannot modify the budget mid-scan
+    and produce inconsistent snapshots.
 
     Args:
         budget: The budget whose ITx snapshots need updating.
@@ -401,9 +403,10 @@ def _recalculate_running_balances(
     from being captured multiple times when allocations are added
     out-of-chronological-session order.
 
-    Must be called while holding the budget lock (acquire_lock(budget.lock_key))
-    to prevent a concurrent allocation or InternalTransaction from modifying
-    the budget mid-scan and producing inconsistent snapshots.
+    Must be called inside `atomic()` while holding the budget's Redis
+    lock and its row lock (`_locking.locked(budget)`), so a concurrent
+    allocation or InternalTransaction cannot modify the budget mid-scan
+    and produce inconsistent snapshots.
 
     Args:
         budget: The budget whose allocations need recalculation.

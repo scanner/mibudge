@@ -13,6 +13,7 @@ demonstrates Redis lock serialization.
 import threading
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 # 3rd party imports
 #
@@ -24,6 +25,9 @@ from freezegun import freeze_time
 # Project imports
 #
 from common.locks import acquire_lock
+from moneypools.management.commands.verify_balances import (
+    _check_budget_chain,
+)
 from moneypools.models import (
     Bank,
     BankAccount,
@@ -839,6 +843,118 @@ class TestTransactionService:
             transaction_svc.resolve_pending_to_posted(
                 tx, new_posted_date=datetime.now(UTC)
             )
+
+    ####################################################################
+    #
+    def test_resolve_pending_twice_credits_posted_balance_once(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a pending -$50 transaction, loaded by two callers
+        WHEN:  both callers resolve it to posted, one after the other
+        THEN:  posted_balance drops by $50 exactly once
+        AND:   the second resolve raises ValueError
+        """
+        account = bank_account_factory(
+            available_balance=Money(1000, "USD"),
+            posted_balance=Money(1000, "USD"),
+        )
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-50, "USD"),
+            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+            raw_description="PENDING PURCHASE",
+            pending=True,
+        )
+        # Both copies are loaded while the row is still pending, as two
+        # concurrent requests would load it.
+        #
+        first_copy = Transaction.objects.get(pk=tx.pk)
+        second_copy = Transaction.objects.get(pk=tx.pk)
+        posted_date = datetime(2026, 5, 3, tzinfo=UTC)
+
+        transaction_svc.resolve_pending_to_posted(
+            first_copy, new_posted_date=posted_date
+        )
+        with pytest.raises(ValueError, match="not pending"):
+            transaction_svc.resolve_pending_to_posted(
+                second_copy, new_posted_date=posted_date
+            )
+
+        account.refresh_from_db()
+        assert account.posted_balance == Money(950, "USD")
+
+    ####################################################################
+    #
+    def test_update_to_posted_twice_credits_posted_balance_once(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a pending -$50 transaction, loaded by two callers
+        WHEN:  both callers update it to `pending=False`
+        THEN:  posted_balance drops by $50 exactly once
+        """
+        account = bank_account_factory(
+            available_balance=Money(1000, "USD"),
+            posted_balance=Money(1000, "USD"),
+        )
+        tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-50, "USD"),
+            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+            raw_description="PENDING PURCHASE",
+            pending=True,
+        )
+        first_copy = Transaction.objects.get(pk=tx.pk)
+        second_copy = Transaction.objects.get(pk=tx.pk)
+
+        transaction_svc.update(first_copy, pending=False)
+        transaction_svc.update(second_copy, pending=False)
+
+        account.refresh_from_db()
+        assert account.posted_balance == Money(950, "USD")
+
+    ####################################################################
+    #
+    def test_resolve_with_new_date_keeps_unallocated_chain_valid(
+        self,
+        bank_account_factory: Callable[..., BankAccount],
+    ) -> None:
+        """
+        GIVEN: a pending -$10 transaction dated May 1 and a posted -$5
+               transaction dated May 5, both in Unallocated
+        WHEN:  the pending transaction resolves with the same amount
+               and a May 10 posted date, moving it after the May 5 one
+        THEN:  Unallocated's running-balance chain is valid
+        """
+        account = bank_account_factory(
+            available_balance=Money(100, "USD"),
+            posted_balance=Money(100, "USD"),
+        )
+        pending_tx = transaction_svc.create(
+            bank_account=account,
+            amount=Money(-10, "USD"),
+            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+            raw_description="PENDING PURCHASE",
+            pending=True,
+        )
+        transaction_svc.create(
+            bank_account=account,
+            amount=Money(-5, "USD"),
+            posted_date=datetime(2026, 5, 5, tzinfo=UTC),
+            raw_description="POSTED PURCHASE",
+        )
+
+        transaction_svc.resolve_pending_to_posted(
+            pending_tx, new_posted_date=datetime(2026, 5, 10, tzinfo=UTC)
+        )
+
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        unallocated.refresh_from_db()
+        assert _check_budget_chain(unallocated, Decimal("0")) == []
 
 
 ########################################################################
