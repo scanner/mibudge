@@ -181,7 +181,7 @@ UUIDs**, deliberately: an export/import must stay portable across
 deployments, and category UUIDs are not stable between them.
 
 `BudgetSerializer.validate_auto_spend`
-(`app/moneypools/api/v1/serializers.py`) validates each entry against the
+(`app/moneypools/api/v1/serializers/budgets.py`) validates each entry against the
 categories visible to the requester and rewrites it to the matched
 category's canonical full name.
 
