@@ -215,6 +215,34 @@ def test_something(factory_cls) -> None: ...
   can reach). A module may override a shared fixture (e.g.
   `auth_client` for a different user) when its tests need that.
 
+#### Postgres test mode
+
+The suite runs against in-memory SQLite by default
+(`django_db_modify_db_settings` in `app/tests/conftest.py`). SQLite
+ignores `SELECT ... FOR UPDATE`, so row-lock behaviour needs a real
+Postgres: when `MIBUDGE_TEST_DATABASE_URL` is set, the same fixture
+points the test database at that server instead (pytest-django creates
+and drops a `test_<name>` database, so the role needs `CREATEDB`).
+Tests marked `@pytest.mark.postgres` are skipped unless the mode is
+active; Drone runs them in the `python postgres tests` step.
+
+```bash
+docker compose up -d postgres
+MIBUDGE_TEST_DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge \
+    uv run pytest -m postgres -v
+```
+
+The concurrency tests in `app/tests/moneypools/test_concurrency_postgres.py`
+race two writers the way `ATOMIC_REQUESTS` does: each thread opens its
+own outer `atomic()` before calling the service, the first holds its
+transaction open after the service returns, and the second is released
+only once `pg_stat_activity` shows it waiting on a lock. Calling the
+service directly from each thread makes the service's `atomic()` the
+outermost one, which hides the window these tests exist to cover. Use
+`@pytest.mark.django_db(transaction=True, serialized_rollback=True)`,
+close each thread's connection at thread exit, and give every wait a
+timeout.
+
 ### Code Quality
 
 - **Python**: ruff (formatter + linter, line-length 80) + mypy. `make lint` runs all three.

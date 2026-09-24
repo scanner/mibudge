@@ -213,6 +213,12 @@ make makemigrations
 # Run tests (locally via uv, not in Docker)
 make test
 
+# Run the Postgres-only tests (row-lock concurrency) against the compose
+# Postgres on localhost:6432; credentials are in deployment/dot-env.dev
+docker compose up -d postgres
+MIBUDGE_TEST_DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge \
+    uv run pytest -m postgres -v
+
 # Run linter + formatter + mypy (locally via uv)
 make lint
 
