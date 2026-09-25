@@ -2,18 +2,20 @@
 // `useNotificationPrefs`: per-kind delivery modes and the email digest
 // frequency.  Feature composable (settings).
 //
-// A delivery-mode change applies at once and reverts if the server
-// refuses it.
+// Both settings save as soon as they change and apply optimistically
+// (`useOptimistic`): the new value shows at once, and a refused change
+// shows the saved value again with the server's reason.
 //
 
 // 3rd party imports
 //
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 // app imports
 //
 import { api } from "@/api";
 import { describeError } from "@/api/errors";
+import { useOptimistic } from "@/composables/useOptimistic";
 import type {
   DeliveryMode,
   DigestFrequency,
@@ -45,9 +47,10 @@ export const DELIVERY_MODE_OPTIONS: { value: DeliveryMode; label: string }[] = [
 //
 export function useNotificationPrefs() {
   const prefs = ref<NotificationPreference[]>([]);
-  const emailDigestFrequency = ref<DigestFrequency>("daily_evening");
+  // The server's email digest frequency.
+  const savedDigest = ref<DigestFrequency>("daily_evening");
   const loading = ref(true);
-  const error = ref<string | null>(null);
+  const loadError = ref<string | null>(null);
 
   onMounted(async () => {
     try {
@@ -59,9 +62,9 @@ export function useNotificationPrefs() {
       const email = channels
         .map(channelPreferenceFromDto)
         .find((c) => c.channel === "email");
-      if (email) emailDigestFrequency.value = email.digestFrequency;
+      if (email) savedDigest.value = email.digestFrequency;
     } catch (err) {
-      error.value = describeError(
+      loadError.value = describeError(
         err,
         "Failed to load notification preferences.",
       );
@@ -70,42 +73,65 @@ export function useNotificationPrefs() {
     }
   });
 
-  async function setDeliveryMode(
-    pref: NotificationPreference,
-    mode: DeliveryMode,
-  ) {
-    const idx = prefs.value.findIndex((p) => p.kind === pref.kind);
-    if (idx === -1) return;
-    prefs.value[idx] = { ...pref, deliveryMode: mode };
-    try {
-      await api.notifications.updatePreference(pref.kind, mode);
-    } catch (err) {
-      prefs.value[idx] = pref;
-      error.value = describeError(
-        err,
-        "Failed to update notification preference.",
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Per-kind delivery mode, keyed by kind.  A saved change replaces the
+  // kind's row with the server's answer.
+  //
+  const deliveryModes = useOptimistic(
+    (kind: string) =>
+      prefs.value.find((p) => p.kind === kind)?.deliveryMode ?? "off",
+    async (kind: string, mode: DeliveryMode) => {
+      const saved = notificationPreferenceFromDto(
+        await api.notifications.updatePreference(kind, mode),
       );
-    }
+      prefs.value = prefs.value.map((p) => (p.kind === kind ? saved : p));
+    },
+    { errorMessage: "Failed to update notification preference." },
+  );
+
+  function deliveryModeOf(pref: NotificationPreference): DeliveryMode {
+    return deliveryModes.value(pref.kind);
   }
 
-  async function saveEmailDigest(): Promise<void> {
-    error.value = null;
-    try {
-      await api.notifications.updateChannel(
-        "email",
-        emailDigestFrequency.value,
-      );
-    } catch (err) {
-      error.value = describeError(err, "Failed to save email preference.");
-    }
+  function setDeliveryMode(
+    pref: NotificationPreference,
+    mode: DeliveryMode,
+  ): Promise<void> {
+    return deliveryModes.set(pref.kind, mode);
   }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Email digest frequency (the only active channel).
+  //
+  const emailDigest = useOptimistic(
+    (_channel: "email") => savedDigest.value,
+    async (channel: "email", frequency: DigestFrequency) => {
+      savedDigest.value = channelPreferenceFromDto(
+        await api.notifications.updateChannel(channel, frequency),
+      ).digestFrequency;
+    },
+    { errorMessage: "Failed to save email preference." },
+  );
+  const emailDigestFrequency = computed(() => emailDigest.value("email"));
+
+  function setEmailDigest(frequency: DigestFrequency): Promise<void> {
+    return emailDigest.set("email", frequency);
+  }
+
+  const error = computed(
+    () =>
+      loadError.value ?? deliveryModes.error.value ?? emailDigest.error.value,
+  );
 
   return {
     prefs,
     emailDigestFrequency,
     loading,
     error,
+    deliveryModeOf,
     setDeliveryMode,
-    saveEmailDigest,
+    setEmailDigest,
   };
 }

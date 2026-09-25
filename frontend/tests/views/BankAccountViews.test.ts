@@ -200,6 +200,49 @@ describe("BankAccountDetailView", () => {
     expect(patch.body).toEqual({ auto_funding_enabled: false });
   });
 
+  // GIVEN: automatic funding on, and a first toggle's request in flight
+  // WHEN:  the user toggles again, then the first request finishes
+  // THEN:  the switch keeps showing the second choice until its own
+  //        request finishes, and the server ends with that choice
+  //
+  it("keeps the latest toggle while an earlier one finishes", async () => {
+    const gates: (() => void)[] = [];
+    server.use(
+      http.patch(
+        `/api/v1/bank-accounts/${account.id}/`,
+        async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          await new Promise<void>((release) => gates.push(release));
+          return HttpResponse.json({ ...account, ...body });
+        },
+      ),
+    );
+    const { wrapper } = await open();
+    const toggle = wrapper.get('input[type="checkbox"]');
+
+    await toggle.trigger("change");
+    await toggle.trigger("change");
+    await vi.waitFor(() => expect(gates.length).toBeGreaterThanOrEqual(1));
+    gates[0]();
+    await flushPromises();
+
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+
+    await vi.waitFor(() => expect(gates).toHaveLength(2));
+    gates[1]();
+    await flushPromises();
+
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+    const patches = await requestsTo(
+      "PATCH",
+      `/api/v1/bank-accounts/${account.id}/`,
+    );
+    expect(patches.map((p) => p.body)).toEqual([
+      { auto_funding_enabled: false },
+      { auto_funding_enabled: true },
+    ]);
+  });
+
   // GIVEN: the account page
   // WHEN:  the user confirms delete
   // THEN:  the account is deleted and the Account tab opens

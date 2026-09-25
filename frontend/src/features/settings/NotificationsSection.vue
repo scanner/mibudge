@@ -7,7 +7,7 @@
 
 // app imports
 //
-import type { DeliveryMode } from "@/models/notification";
+import type { DeliveryMode, DigestFrequency } from "@/models/notification";
 import { useSessionStore } from "@/stores/session";
 import {
   DELIVERY_MODE_OPTIONS,
@@ -23,8 +23,9 @@ const {
   emailDigestFrequency,
   loading,
   error,
+  deliveryModeOf,
   setDeliveryMode,
-  saveEmailDigest,
+  setEmailDigest,
 } = useNotificationPrefs();
 </script>
 
@@ -70,9 +71,13 @@ const {
             </p>
           </div>
           <select
-            v-model="emailDigestFrequency"
+            :value="emailDigestFrequency"
             class="rounded-subcard border border-neutral-200 bg-white py-1.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-            @change="saveEmailDigest"
+            @change="
+              setEmailDigest(
+                ($event.target as HTMLSelectElement).value as DigestFrequency,
+              )
+            "
           >
             <option
               v-for="opt in DIGEST_OPTIONS"
@@ -95,7 +100,7 @@ const {
           <!-- Suppressible: 3-way delivery mode selector -->
           <select
             v-if="pref.canSuppress"
-            :value="pref.deliveryMode"
+            :value="deliveryModeOf(pref)"
             class="rounded-subcard border border-neutral-200 bg-white py-1.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
             @change="
               setDeliveryMode(
