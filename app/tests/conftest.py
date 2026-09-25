@@ -1,5 +1,6 @@
 # system imports
 #
+import os
 import types
 from collections.abc import Callable, Generator
 from unittest.mock import MagicMock
@@ -17,19 +18,64 @@ from rest_framework.test import APIClient
 
 # project imports
 import notifications.service as notifications_service
+from common.db import SQLITE_ENGINE, apply_sqlite_locking
 from tests.users.factories import UserFactory
 from users.models import APIKey, User
 
 register(UserFactory)  # UserFactory -> user_factory fixture
 
 
+# When set, tests run against this Postgres database instead of the
+# in-memory SQLite default.  pytest-django creates and destroys a
+# `test_<name>` database next to it, so the role needs CREATEDB.
+#
+POSTGRES_TEST_URL_ENV = "MIBUDGE_TEST_DATABASE_URL"
+
+
+####################################################################
+#
+def postgres_test_mode() -> bool:
+    """Return True when the opt-in Postgres test mode is active."""
+    return bool(os.environ.get(POSTGRES_TEST_URL_ENV))
+
+
+####################################################################
+#
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Skip `postgres`-marked tests unless the Postgres mode is active.
+
+    Args:
+        config: The pytest config (unused).
+        items: The collected test items, modified in place.
+    """
+    if postgres_test_mode():
+        return
+    skip = pytest.mark.skip(
+        reason=f"needs Postgres; set {POSTGRES_TEST_URL_ENV} to run"
+    )
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip)
+
+
 ####################################################################
 #
 @pytest.fixture(scope="session")
-def django_db_modify_db_settings() -> None:
+def django_db_modify_db_settings(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
     """
-    Override the database configuration to use in-memory SQLite so tests
-    always use SQLite for their database.
+    Point the test database at a SQLite file, or at Postgres when
+    `MIBUDGE_TEST_DATABASE_URL` is set.
+
+    The SQLite test database is a file, not `:memory:`, so threads in
+    the concurrency tests get their own connections with SQLite's
+    file-level write locking.  Django's in-memory test database uses a
+    shared cache, whose table-level locks fail at once instead of
+    waiting.  The file is opened with the same `BEGIN IMMEDIATE`
+    transaction mode as production SQLite (`common.db`).
 
     pytest-django calls this session-scoped fixture inside
     ``django_db_setup``, just before ``setup_databases()`` runs, making it
@@ -39,15 +85,32 @@ def django_db_modify_db_settings() -> None:
     Returns:
         None
     """
+    import environ
     from django.conf import settings
 
     db = settings.DATABASES["default"]
-    db["ENGINE"] = "django.db.backends.sqlite3"
-    db["NAME"] = ":memory:"
+    if postgres_test_mode():
+        # Overwrite only the keys the URL defines; Django has already
+        # filled in its defaults (AUTOCOMMIT, TEST, ...) on this dict.
+        # OPTIONS is replaced rather than merged: when the settings
+        # started from SQLite it holds SQLite-only options, such as
+        # `transaction_mode`, that psycopg rejects.
+        #
+        url = os.environ[POSTGRES_TEST_URL_ENV]
+        config = environ.Env.db_url_config(url)
+        db["OPTIONS"] = config.pop("OPTIONS", {})
+        db.update(config)
+    else:
+        db["ENGINE"] = SQLITE_ENGINE
+        db["NAME"] = ":memory:"
+        db.setdefault("TEST", {})["NAME"] = str(
+            tmp_path_factory.mktemp("db") / "test_mibudge.sqlite3"
+        )
+        apply_sqlite_locking(db)
 
-    # Discard the cached DatabaseWrapper -- it is still a PostgreSQL class
-    # instance even after the settings change above. Deleting it forces the
-    # next access to construct a fresh SQLite wrapper from the updated dict.
+    # Discard the cached DatabaseWrapper -- it was built from the
+    # original settings. Deleting it forces the next access to construct
+    # a fresh wrapper from the updated dict.
     try:
         del connections["default"]
     except Exception:

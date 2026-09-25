@@ -25,12 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
 - Internal: split moneypools API views and serializers into per-domain modules
+- A SQLite database now opens every transaction with `BEGIN IMMEDIATE`, so two concurrent writers wait for each other instead of the second failing with "database is locked"; the test suite uses a SQLite file with the same setting and runs the concurrency tests on both SQLite and Postgres
 
 ### Fixed
 
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)
 - Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
 - Returning to a tab after the access token expired could log you out ("Session expired") even though your session was valid: several requests refreshed the token at once, and every refresh after the first was rejected because the backend had already rotated the refresh cookie. Concurrent refreshes now share a single request
+- Two concurrent changes to the same budget or bank account (for example two imports or two transfers at once) could lose one of the updates: the service layer released its lock before the request's database transaction committed, so the second writer read the stale balance and overwrote the first. Balance updates now re-read the row under a database lock held until commit (a row lock on Postgres, the database write lock on SQLite)
+- Resolving the same pending transaction twice at once (or updating it to posted twice) could credit the account's posted balance twice; the second attempt now sees the transaction is already posted
+- Resolving a pending transaction to a different date with an unchanged amount left the Unallocated budget's running balances out of order; they are now recalculated from the earlier of the two dates
+- Deleting a Recurring budget discarded its fill-up goal's balance instead of returning it to Unallocated, so the account's budgets no longer added up to its available balance. Deleting a budget now also reverses its transfers with other budgets and recalculates their running balances, and is refused when the fill-up goal has transaction allocations
 
 ### Security
 

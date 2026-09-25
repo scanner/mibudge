@@ -2,6 +2,7 @@
 #
 """Tests for common.locks.acquire_lock."""
 
+import threading
 from contextlib import ExitStack
 
 # 3rd party imports
@@ -75,3 +76,44 @@ class TestAcquireLock:
 
         for k in keys:
             assert r.exists(k) == 0
+
+    ####################################################################
+    #
+    def test_reentrant_within_one_thread(self, use_fakeredis: object) -> None:
+        """
+        GIVEN: a thread that holds a lock
+        WHEN:  the same thread acquires the same key again
+        THEN:  the nested acquire succeeds immediately, and the lock
+               stays held until the outermost block exits
+        """
+        key = "test:lock:reentrant"
+        r = redis_client()
+
+        with acquire_lock(key) as outer:
+            with acquire_lock(key, blocking=False) as inner:
+                assert outer is True
+                assert inner is True
+            assert r.exists(key) == 1
+        assert r.exists(key) == 0
+
+    ####################################################################
+    #
+    def test_other_threads_still_excluded(self, use_fakeredis: object) -> None:
+        """
+        GIVEN: a thread that holds a lock
+        WHEN:  another thread tries a non-blocking acquire of that key
+        THEN:  the other thread does not get it
+        """
+        key = "test:lock:other-thread"
+        results: list[bool] = []
+
+        def _try() -> None:
+            with acquire_lock(key, blocking=False) as got:
+                results.append(got)
+
+        with acquire_lock(key):
+            t = threading.Thread(target=_try)
+            t.start()
+            t.join(timeout=5)
+
+        assert results == [False]

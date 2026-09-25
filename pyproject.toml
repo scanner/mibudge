@@ -155,6 +155,8 @@ pythonpath = ["app", "."]
 markers = [
     "smoke: marks tests as smoke",
     "integration",
+    "postgres: needs a real Postgres (set MIBUDGE_TEST_DATABASE_URL); skipped otherwise",
+    "concurrency: races threaded writers against the test database (runs on SQLite and Postgres)",
 ]
 filterwarnings = [
     # WhiteNoise fires this on every request when staticfiles/ doesn't exist
