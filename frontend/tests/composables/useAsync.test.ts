@@ -58,7 +58,8 @@ describe("useAsync", () => {
   it("records a UI message on failure", async () => {
     const state = useAsync(
       async (kind: string) => {
-        if (kind === "api") throw new ApiError(400, JSON.stringify({ detail: "Nope." }));
+        if (kind === "api")
+          throw new ApiError(400, JSON.stringify({ detail: "Nope." }));
         throw new Error("boom");
       },
       { errorMessage: "Failed to load." },

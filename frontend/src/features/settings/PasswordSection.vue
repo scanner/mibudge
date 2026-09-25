@@ -38,16 +38,21 @@ const {
 <template>
   <!-- Password change card -->
   <section>
-    <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+    <h2
+      class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+    >
       Change password
     </h2>
 
     <div class="rounded-card border border-neutral-200 bg-white px-4 py-4">
       <!-- No usable password: guide user to reset flow -->
-      <div v-if="!session.user?.hasUsablePassword" class="space-y-2 text-sm text-neutral-700">
+      <div
+        v-if="!session.user?.hasUsablePassword"
+        class="space-y-2 text-sm text-neutral-700"
+      >
         <p>
-          Your account doesn't have a password set yet — this happens when your account was created
-          via an invitation.
+          Your account doesn't have a password set yet — this happens when your
+          account was created via an invitation.
         </p>
         <a
           href="/accounts/password/reset/"
@@ -79,7 +84,10 @@ const {
         <form class="space-y-4" @submit.prevent="submit">
           <!-- Current password -->
           <div>
-            <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="current-password">
+            <label
+              class="mb-1.5 block text-sm font-medium text-neutral-700"
+              for="current-password"
+            >
               Current password
             </label>
             <input
@@ -94,14 +102,20 @@ const {
                   : 'border-neutral-200 focus:border-ocean-400 focus:ring-ocean-400'
               "
             />
-            <p v-if="fieldError('current_password')" class="mt-1 text-xs text-coral-600">
+            <p
+              v-if="fieldError('current_password')"
+              class="mt-1 text-xs text-coral-600"
+            >
               {{ fieldError("current_password") }}
             </p>
           </div>
 
           <!-- New password -->
           <div>
-            <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="new-password">
+            <label
+              class="mb-1.5 block text-sm font-medium text-neutral-700"
+              for="new-password"
+            >
               New password
             </label>
             <input
@@ -116,15 +130,24 @@ const {
                   : 'border-neutral-200 focus:border-ocean-400 focus:ring-ocean-400'
               "
             />
-            <PasswordStrengthMeter :password="newPassword" @score="strengthScore = $event" />
-            <p v-if="fieldError('new_password')" class="mt-1 text-xs text-coral-600">
+            <PasswordStrengthMeter
+              :password="newPassword"
+              @score="strengthScore = $event"
+            />
+            <p
+              v-if="fieldError('new_password')"
+              class="mt-1 text-xs text-coral-600"
+            >
               {{ fieldError("new_password") }}
             </p>
           </div>
 
           <!-- Confirm password -->
           <div>
-            <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="confirm-password">
+            <label
+              class="mb-1.5 block text-sm font-medium text-neutral-700"
+              for="confirm-password"
+            >
               Confirm new password
             </label>
             <input
@@ -139,7 +162,10 @@ const {
                   : 'border-neutral-200 focus:border-ocean-400 focus:ring-ocean-400'
               "
             />
-            <p v-if="fieldError('confirm_password')" class="mt-1 text-xs text-coral-600">
+            <p
+              v-if="fieldError('confirm_password')"
+              class="mt-1 text-xs text-coral-600"
+            >
               {{ fieldError("confirm_password") }}
             </p>
           </div>

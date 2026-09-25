@@ -26,7 +26,10 @@ const suggestions = ref<string[]>([]);
 
 // Cached module reference so we only dynamic-import once.
 let _zxcvbn:
-  | ((pw: string) => { score: number; feedback: { warning: string; suggestions: string[] } })
+  | ((pw: string) => {
+      score: number;
+      feedback: { warning: string; suggestions: string[] };
+    })
   | null = null;
 let _debounce: ReturnType<typeof setTimeout> | null = null;
 
@@ -73,7 +76,13 @@ const SCORE_META: { label: string; bar: string; text: string }[] = [
 <template>
   <div v-if="score !== null" class="mt-2 space-y-1.5">
     <!-- 5 bars, one per score level -->
-    <div class="flex gap-1" role="meter" :aria-valuenow="score" aria-valuemin="0" aria-valuemax="4">
+    <div
+      class="flex gap-1"
+      role="meter"
+      :aria-valuenow="score"
+      aria-valuemin="0"
+      aria-valuemax="4"
+    >
       <div
         v-for="i in [0, 1, 2, 3, 4]"
         :key="i"
@@ -84,11 +93,15 @@ const SCORE_META: { label: string; bar: string; text: string }[] = [
 
     <!-- Label + warning on the same line -->
     <p class="text-xs" :class="SCORE_META[score].text">
-      {{ SCORE_META[score].label }}<template v-if="warning"> — {{ warning }}</template>
+      {{ SCORE_META[score].label
+      }}<template v-if="warning"> — {{ warning }}</template>
     </p>
 
     <!-- Suggestions -->
-    <ul v-if="suggestions.length" class="list-disc pl-4 text-xs text-neutral-500">
+    <ul
+      v-if="suggestions.length"
+      class="list-disc pl-4 text-xs text-neutral-500"
+    >
       <li v-for="s in suggestions" :key="s">{{ s }}</li>
     </ul>
   </div>

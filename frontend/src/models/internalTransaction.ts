@@ -6,7 +6,10 @@
 
 // app imports
 //
-import type { InternalTransactionCreateDto, InternalTransactionDto } from "@/api/dto";
+import type {
+  InternalTransactionCreateDto,
+  InternalTransactionDto,
+} from "@/api/dto";
 import { DEFAULT_CURRENCY, Money } from "@/domain/money";
 
 ////////////////////////////////////////////////////////////////////////
@@ -28,7 +31,9 @@ export interface InternalTransaction {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function internalTransactionFromDto(dto: InternalTransactionDto): InternalTransaction {
+export function internalTransactionFromDto(
+  dto: InternalTransactionDto,
+): InternalTransaction {
   const currency = dto.amount_currency || DEFAULT_CURRENCY;
   return {
     id: dto.id,
@@ -37,8 +42,14 @@ export function internalTransactionFromDto(dto: InternalTransactionDto): Interna
     srcBudgetId: dto.src_budget,
     dstBudgetId: dto.dst_budget,
     effectiveDate: dto.effective_date ?? dto.created_at,
-    srcBudgetBalance: Money.of(dto.src_budget_balance, dto.src_budget_balance_currency || currency),
-    dstBudgetBalance: Money.of(dto.dst_budget_balance, dto.dst_budget_balance_currency || currency),
+    srcBudgetBalance: Money.of(
+      dto.src_budget_balance,
+      dto.src_budget_balance_currency || currency,
+    ),
+    dstBudgetBalance: Money.of(
+      dto.dst_budget_balance,
+      dto.dst_budget_balance_currency || currency,
+    ),
     createdAt: dto.created_at,
   };
 }
@@ -52,7 +63,9 @@ export interface TransferInput {
   amount: Money;
 }
 
-export function transferToCreateDto(input: TransferInput): InternalTransactionCreateDto {
+export function transferToCreateDto(
+  input: TransferInput,
+): InternalTransactionCreateDto {
   return {
     bank_account: input.bankAccountId,
     src_budget: input.srcBudgetId,
@@ -66,6 +79,9 @@ export function transferToCreateDto(input: TransferInput): InternalTransactionCr
 // The transfer's amount from one budget's point of view: positive when
 // the budget received it, negative when it sent it.
 //
-export function amountRelativeTo(itx: InternalTransaction, budgetId: string): Money {
+export function amountRelativeTo(
+  itx: InternalTransaction,
+  budgetId: string,
+): Money {
   return itx.dstBudgetId === budgetId ? itx.amount : itx.amount.negated();
 }

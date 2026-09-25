@@ -47,14 +47,19 @@ useModal(
         v-if="open"
         class="fixed inset-0 z-40 flex items-end justify-center md:items-start md:pt-20"
       >
-        <div class="absolute inset-0 bg-neutral-900/40" @click="emit('close')" />
+        <div
+          class="absolute inset-0 bg-neutral-900/40"
+          @click="emit('close')"
+        />
         <div
           class="relative max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl md:w-[420px] md:rounded-card"
           role="dialog"
           aria-modal="true"
           aria-label="Switch bank account"
         >
-          <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          <h2
+            class="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Your accounts
           </h2>
           <ul class="space-y-1">
@@ -66,7 +71,9 @@ useModal(
               >
                 <span class="h-2.5 w-2.5 flex-none rounded-full bg-ocean-400" />
                 <div class="min-w-0 flex-1">
-                  <div class="truncate text-[15px] font-medium text-neutral-900">
+                  <div
+                    class="truncate text-[15px] font-medium text-neutral-900"
+                  >
                     {{ account.name }}
                   </div>
                   <div class="text-xs text-neutral-500">

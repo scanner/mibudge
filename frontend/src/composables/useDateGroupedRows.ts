@@ -42,14 +42,20 @@ export function groupRowsByDate<T>(
   now: Date = new Date(),
 ): DateGroup<T>[] {
   const today = todayDateStr(timezone, now);
-  const groups = new Map<LocalDate, { group: DateGroup<T>; instants: string[] }>();
+  const groups = new Map<
+    LocalDate,
+    { group: DateGroup<T>; instants: string[] }
+  >();
 
   for (const row of rows) {
     const instant = instantOf(row);
     const date = txDateStr(instant, timezone);
     let entry = groups.get(date);
     if (!entry) {
-      entry = { group: { date, label: formatDateHeader(date, today), rows: [] }, instants: [] };
+      entry = {
+        group: { date, label: formatDateHeader(date, today), rows: [] },
+        instants: [],
+      };
       groups.set(date, entry);
     }
     entry.group.rows.push(row);
@@ -58,8 +64,14 @@ export function groupRowsByDate<T>(
 
   const out: DateGroup<T>[] = [];
   for (const { group, instants } of groups.values()) {
-    const order = group.rows.map((row, i) => ({ row, instant: instants[i], i }));
-    order.sort((a, b) => (a.instant > b.instant ? -1 : a.instant < b.instant ? 1 : a.i - b.i));
+    const order = group.rows.map((row, i) => ({
+      row,
+      instant: instants[i],
+      i,
+    }));
+    order.sort((a, b) =>
+      a.instant > b.instant ? -1 : a.instant < b.instant ? 1 : a.i - b.i,
+    );
     out.push({ ...group, rows: order.map((o) => o.row) });
   }
   return out.sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : 0));
@@ -72,6 +84,11 @@ export function useDateGroupedRows<T>(
   options: UseDateGroupedRowsOptions<T>,
 ): ComputedRef<DateGroup<T>[]> {
   return computed(() =>
-    groupRowsByDate(rows(), options.instantOf, options.timezone(), options.now?.() ?? new Date()),
+    groupRowsByDate(
+      rows(),
+      options.instantOf,
+      options.timezone(),
+      options.now?.() ?? new Date(),
+    ),
   );
 }

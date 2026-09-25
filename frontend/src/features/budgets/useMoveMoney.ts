@@ -26,7 +26,10 @@ export type MoveDirection = "into" | "outof";
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Budget | null) {
+export function useMoveMoney(
+  budget: () => Budget | null,
+  fillupBudget: () => Budget | null,
+) {
   const ctx = useAccountContextStore();
   const store = useBudgetsStore();
 
@@ -56,14 +59,18 @@ export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Bu
   //
   const pickerBudgets = computed(() => {
     const fillup = fillupBudget();
-    if (targetFillup.value && fillup) return otherBudgets.value.filter((b) => b.id !== fillup.id);
+    if (targetFillup.value && fillup)
+      return otherBudgets.value.filter((b) => b.id !== fillup.id);
     return otherBudgets.value;
   });
 
   const parsedAmount = computed(() => toDecimal(amount.value));
   const canSubmit = computed(
     () =>
-      !!otherId.value && !!parsedAmount.value && parsedAmount.value.isPositive() && !saving.value,
+      !!otherId.value &&
+      !!parsedAmount.value &&
+      parsedAmount.value.isPositive() &&
+      !saving.value,
   );
 
   function pickerLabel(b: Budget): string {
@@ -93,7 +100,10 @@ export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Bu
     const accountId = ctx.activeBankAccountId ?? b?.bankAccountId;
     if (!accountId) return;
     try {
-      const list = await store.fetchList({ bank_account: accountId, archived: false });
+      const list = await store.fetchList({
+        bank_account: accountId,
+        archived: false,
+      });
       otherBudgets.value = list.filter((o) => o.id !== b?.id);
     } catch (err) {
       otherBudgets.value = [];
@@ -121,7 +131,9 @@ export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Bu
     const fillup = fillupBudget();
     const thisId = targetFillup.value && fillup ? fillup.id : b.id;
     const [srcBudgetId, dstBudgetId] =
-      direction.value === "outof" ? [thisId, otherId.value] : [otherId.value, thisId];
+      direction.value === "outof"
+        ? [thisId, otherId.value]
+        : [otherId.value, thisId];
     try {
       await store.transfer({
         bankAccountId: b.bankAccountId,
@@ -131,7 +143,10 @@ export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Bu
       });
       return true;
     } catch (err) {
-      error.value = describeError(err, "Transfer failed. Check the amount and try again.");
+      error.value = describeError(
+        err,
+        "Transfer failed. Check the amount and try again.",
+      );
       return false;
     } finally {
       saving.value = false;

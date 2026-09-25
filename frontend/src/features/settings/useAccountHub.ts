@@ -39,7 +39,9 @@ export function useAccountHub() {
   const ctx = useAccountContextStore();
   const budgets = useBudgetsStore();
 
-  const initials = computed(() => initialsOf(session.user?.name || session.user?.username || ""));
+  const initials = computed(() =>
+    initialsOf(session.user?.name || session.user?.username || ""),
+  );
   const fundingSummaries = ref(new Map<string, FundingSummary>());
   const settingDefault = ref(false);
   const defaultAccountError = ref<string | null>(null);
@@ -56,7 +58,8 @@ export function useAccountHub() {
     const tasks: Promise<unknown>[] = [];
     for (const account of ctx.accounts) {
       const unallocId = account.unallocatedBudgetId;
-      if (unallocId && !budgets.byId(unallocId)) tasks.push(budgets.fetchOne(unallocId));
+      if (unallocId && !budgets.byId(unallocId))
+        tasks.push(budgets.fetchOne(unallocId));
       tasks.push(
         api.bankAccounts.fundingSummary(account.id).then((dto) => {
           fundingSummaries.value.set(account.id, fundingSummaryFromDto(dto));
@@ -85,7 +88,10 @@ export function useAccountHub() {
     try {
       await session.updateProfile({ defaultBankAccountId: accountId || null });
     } catch (err) {
-      defaultAccountError.value = describeError(err, "Failed to set the default account.");
+      defaultAccountError.value = describeError(
+        err,
+        "Failed to set the default account.",
+      );
     } finally {
       settingDefault.value = false;
     }

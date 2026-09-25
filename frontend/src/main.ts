@@ -37,7 +37,11 @@ async function bootstrap() {
   app.use(pinia);
 
   const router = createAppRouter();
-  initApi(createSessionHttpClient({ onAuthFailure: () => void redirectToLogin(router) }));
+  initApi(
+    createSessionHttpClient({
+      onAuthFailure: () => void redirectToLogin(router),
+    }),
+  );
 
   // A failed refresh is expected on a cold boot with no session; the
   // guard then sends the visitor to the login page.

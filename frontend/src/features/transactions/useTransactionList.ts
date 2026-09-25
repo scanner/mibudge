@@ -21,7 +21,15 @@
 
 // 3rd party imports
 //
-import { computed, getCurrentScope, nextTick, onScopeDispose, ref, shallowRef, watch } from "vue";
+import {
+  computed,
+  getCurrentScope,
+  nextTick,
+  onScopeDispose,
+  ref,
+  shallowRef,
+  watch,
+} from "vue";
 
 // app imports
 //
@@ -48,7 +56,12 @@ import { useTransactionNavStore } from "@/stores/transactionNav";
 
 ////////////////////////////////////////////////////////////////////////
 //
-export type TransactionFilter = "all" | "unallocated" | "pending" | "income" | "last30";
+export type TransactionFilter =
+  | "all"
+  | "unallocated"
+  | "pending"
+  | "income"
+  | "last30";
 
 export const FILTER_CHIPS: { key: TransactionFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -81,10 +94,17 @@ export function useTransactionList() {
   const list = useInfiniteList(
     async () =>
       pageFromDto(
-        await api.transactions.list({ bank_account: accountId.value!, ordering: ORDERING }),
+        await api.transactions.list({
+          bank_account: accountId.value!,
+          ordering: ORDERING,
+        }),
         transactionFromDto,
       ),
-    async (url) => pageFromDto(await api.pages.fetchPage<TransactionDto>(url), transactionFromDto),
+    async (url) =>
+      pageFromDto(
+        await api.pages.fetchPage<TransactionDto>(url),
+        transactionFromDto,
+      ),
     { errorMessage: "Failed to load transactions." },
   );
 
@@ -95,16 +115,21 @@ export function useTransactionList() {
   // The index refetch; its `error` is the server's message.  A failed
   // refetch is reported beside the list, which still shows the loaded
   // transactions.
-  const indexLoad = useAsync((id: string) => allocations.loadForAccount(id, true), {
-    errorMessage: "Failed to load budget assignments.",
-  });
+  const indexLoad = useAsync(
+    (id: string) => allocations.loadForAccount(id, true),
+    {
+      errorMessage: "Failed to load budget assignments.",
+    },
+  );
   const awaitingIndex = computed(
     () => !!accountId.value && !allocationsByTx.value && !indexLoad.error.value,
   );
 
   ////////////////////////////////////////////////////////////////////
   //
-  const activeFilter = ref<TransactionFilter>((nav.savedFilter as TransactionFilter) || "all");
+  const activeFilter = ref<TransactionFilter>(
+    (nav.savedFilter as TransactionFilter) || "all",
+  );
 
   function applyFilter(txs: readonly Transaction[]): Transaction[] {
     const unallocId = ctx.unallocatedBudgetId;
@@ -114,7 +139,9 @@ export function useTransactionList() {
         if (!index) return [];
         // A transaction the index has not seen is newer than the index
         // (a sync since it loaded); new transactions start unassigned.
-        return txs.filter((tx) => isUnallocated(index.get(tx.id) ?? [], unallocId));
+        return txs.filter((tx) =>
+          isUnallocated(index.get(tx.id) ?? [], unallocId),
+        );
       }
       case "pending":
         return txs.filter((tx) => tx.pending);
@@ -179,7 +206,9 @@ export function useTransactionList() {
     const localResults = local.results.value;
     if (!localResults) return null;
     const seen = new Set(localResults.map((tx) => tx.id));
-    const extra = applyFilter(serverMatches.value).filter((tx) => !seen.has(tx.id));
+    const extra = applyFilter(serverMatches.value).filter(
+      (tx) => !seen.has(tx.id),
+    );
     return [...localResults, ...extra];
   });
 
@@ -217,7 +246,9 @@ export function useTransactionList() {
 
   // The transaction rows on screen, in display order.
   const visibleIds = computed(() =>
-    groups.value.flatMap((g) => g.rows.flatMap((r) => (r.kind === "tx" ? [r.tx.id] : []))),
+    groups.value.flatMap((g) =>
+      g.rows.flatMap((r) => (r.kind === "tx" ? [r.tx.id] : [])),
+    ),
   );
 
   ////////////////////////////////////////////////////////////////////

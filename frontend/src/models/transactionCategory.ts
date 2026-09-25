@@ -20,7 +20,9 @@ export interface TransactionCategory {
   archived: boolean;
 }
 
-export function transactionCategoryFromDto(dto: TransactionCategoryDto): TransactionCategory {
+export function transactionCategoryFromDto(
+  dto: TransactionCategoryDto,
+): TransactionCategory {
   return {
     id: dto.id,
     group: dto.group,

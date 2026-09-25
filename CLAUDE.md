@@ -270,7 +270,7 @@ SPA tests live in `frontend/tests/` (mirroring `frontend/src/`) and run under Vi
 ### Code Quality
 
 - **Python**: ruff (formatter + linter, line-length 80) + mypy. `make lint` runs all three.
-- **Frontend**: oxfmt (formatter), vue-tsc (type checking).
+- **Frontend**: oxfmt (formatter, print width 80 via `frontend/.oxfmtrc.json`), vue-tsc (type checking).
 - **Pre-commit hooks**: configured in `.pre-commit-config.yaml`.
 
 The mypy config disables the `django-manager-missing` error due to a `django-money` compatibility issue.

@@ -73,16 +73,26 @@ async function submitMove() {
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="open" class="fixed inset-0 z-40 flex items-end justify-center md:items-center">
-        <div class="absolute inset-0 bg-neutral-900/40" @click="emit('close')" />
+      <div
+        v-if="open"
+        class="fixed inset-0 z-40 flex items-end justify-center md:items-center"
+      >
+        <div
+          class="absolute inset-0 bg-neutral-900/40"
+          @click="emit('close')"
+        />
         <div
           class="relative w-full rounded-t-2xl bg-white p-5 shadow-xl md:w-[480px] md:rounded-card"
         >
-          <h2 class="mb-4 text-[18px] font-medium text-neutral-900">Move money</h2>
+          <h2 class="mb-4 text-[18px] font-medium text-neutral-900">
+            Move money
+          </h2>
 
           <div class="space-y-3">
             <div>
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700">Direction</label>
+              <label class="mb-1 block text-[13px] font-medium text-neutral-700"
+                >Direction</label
+              >
               <div class="flex rounded-subcard border border-neutral-200">
                 <button
                   type="button"
@@ -112,7 +122,9 @@ async function submitMove() {
             </div>
 
             <div v-if="fillupBudget">
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700">This budget</label>
+              <label class="mb-1 block text-[13px] font-medium text-neutral-700"
+                >This budget</label
+              >
               <div class="flex rounded-subcard border border-neutral-200">
                 <button
                   type="button"
@@ -142,21 +154,29 @@ async function submitMove() {
             </div>
 
             <div>
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700">
+              <label
+                class="mb-1 block text-[13px] font-medium text-neutral-700"
+              >
                 {{ moveDirection === "outof" ? "To" : "From" }}
               </label>
               <select
                 v-model="moveOtherId"
                 class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
               >
-                <option v-for="b in movePickerBudgets" :key="b.id" :value="b.id">
+                <option
+                  v-for="b in movePickerBudgets"
+                  :key="b.id"
+                  :value="b.id"
+                >
                   {{ budgetPickerLabel(b) }}
                 </option>
               </select>
             </div>
 
             <div>
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700">Amount</label>
+              <label class="mb-1 block text-[13px] font-medium text-neutral-700"
+                >Amount</label
+              >
               <input
                 ref="moveAmountInput"
                 v-model="moveAmount"
@@ -169,7 +189,9 @@ async function submitMove() {
               />
             </div>
 
-            <p v-if="moveError" class="text-sm text-coral-600">{{ moveError }}</p>
+            <p v-if="moveError" class="text-sm text-coral-600">
+              {{ moveError }}
+            </p>
 
             <div class="flex gap-2 pt-1">
               <button

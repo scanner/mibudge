@@ -36,7 +36,9 @@ export function invitationsResource(http: HttpClient) {
     },
 
     cancel(accountId: string, token: string): Promise<null> {
-      return http.post(`${V1}/bank-accounts/${accountId}/invitations/${token}/cancel/`);
+      return http.post(
+        `${V1}/bank-accounts/${accountId}/invitations/${token}/cancel/`,
+      );
     },
   };
 }

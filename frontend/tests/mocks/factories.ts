@@ -77,7 +77,9 @@ export function makeBank(overrides: Partial<Bank> = {}): Bank {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function makeBankAccount(overrides: Partial<BankAccount> = {}): BankAccount {
+export function makeBankAccount(
+  overrides: Partial<BankAccount> = {},
+): BankAccount {
   return {
     id: uuid(),
     name: "Checking",
@@ -138,7 +140,9 @@ export function makeBudget(overrides: Partial<Budget> = {}): Budget {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
+export function makeTransaction(
+  overrides: Partial<Transaction> = {},
+): Transaction {
   return {
     id: uuid(),
     bank_account: uuid(),
@@ -231,7 +235,9 @@ export function makeInternalTransaction(
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function makeFundingSummary(overrides: Partial<FundingSummary> = {}): FundingSummary {
+export function makeFundingSummary(
+  overrides: Partial<FundingSummary> = {},
+): FundingSummary {
   return { schedules: [], total_amount: "0.00", currency: "USD", ...overrides };
 }
 
@@ -339,6 +345,15 @@ export function makeChannelPreference(
 // DRF pagination envelope around `results`.  A single page by default;
 // pass `next` to model a multi-page result.
 //
-export function makePage<T>(results: T[], overrides: Partial<Paginated<T>> = {}): Paginated<T> {
-  return { count: results.length, next: null, previous: null, results, ...overrides };
+export function makePage<T>(
+  results: T[],
+  overrides: Partial<Paginated<T>> = {},
+): Paginated<T> {
+  return {
+    count: results.length,
+    next: null,
+    previous: null,
+    results,
+    ...overrides,
+  };
 }

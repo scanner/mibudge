@@ -49,7 +49,9 @@ function onBack() {
 
 ////////////////////////////////////////////////////////////////////////
 //
-const unallocated = computed(() => budgets.byId(ctx.unallocatedBudgetId)?.balance ?? null);
+const unallocated = computed(
+  () => budgets.byId(ctx.unallocatedBudgetId)?.balance ?? null,
+);
 
 // Load the Unallocated budget whenever the active account changes, so
 // the balance shows without waiting for a view to load it.  A failure
@@ -58,7 +60,8 @@ const unallocated = computed(() => budgets.byId(ctx.unallocatedBudgetId)?.balanc
 watch(
   () => ctx.unallocatedBudgetId,
   (id) => {
-    if (id && !budgets.byId(id)) void budgets.fetchOne(id).catch(() => undefined);
+    if (id && !budgets.byId(id))
+      void budgets.fetchOne(id).catch(() => undefined);
   },
   { immediate: true },
 );

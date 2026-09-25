@@ -83,7 +83,9 @@ async function submit() {
           :class="budgetType === 'G' ? 'text-ocean-500' : 'text-neutral-400'"
         />
         <div class="mt-1 text-[14px] font-medium text-neutral-900">Goal</div>
-        <div class="mt-0.5 text-[11px] text-neutral-500">Save toward a target</div>
+        <div class="mt-0.5 text-[11px] text-neutral-500">
+          Save toward a target
+        </div>
       </button>
       <button
         type="button"
@@ -99,8 +101,12 @@ async function submit() {
           class="h-5 w-5"
           :class="budgetType === 'R' ? 'text-ocean-500' : 'text-neutral-400'"
         />
-        <div class="mt-1 text-[14px] font-medium text-neutral-900">Recurring</div>
-        <div class="mt-0.5 text-[11px] text-neutral-500">Refills on a schedule</div>
+        <div class="mt-1 text-[14px] font-medium text-neutral-900">
+          Recurring
+        </div>
+        <div class="mt-0.5 text-[11px] text-neutral-500">
+          Refills on a schedule
+        </div>
       </button>
       <button
         type="button"
@@ -123,13 +129,17 @@ async function submit() {
 
     <!-- Read-only type + account in edit mode -->
     <div v-if="mode === 'edit'" class="space-y-1">
-      <div class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3">
+      <div
+        class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3"
+      >
         <span class="text-sm text-neutral-500">Type</span>
         <span class="text-sm font-medium text-neutral-900">
           {{ budget?.budgetType === "G" ? "Goal" : "Recurring" }}
         </span>
       </div>
-      <div class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3">
+      <div
+        class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3"
+      >
         <span class="text-sm text-neutral-500">Account</span>
         <span class="text-sm font-medium text-neutral-900">
           {{ accountName }}
@@ -139,7 +149,10 @@ async function submit() {
 
     <!-- Name -->
     <div>
-      <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="budget-name">
+      <label
+        class="mb-1 block text-[13px] font-medium text-neutral-700"
+        for="budget-name"
+      >
         Name
       </label>
       <input
@@ -154,7 +167,10 @@ async function submit() {
 
     <!-- Target amount (both types) -->
     <div>
-      <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="target-balance">
+      <label
+        class="mb-1 block text-[13px] font-medium text-neutral-700"
+        for="target-balance"
+      >
         Target amount
       </label>
       <input
@@ -172,7 +188,9 @@ async function submit() {
     <template v-if="isGoal">
       <!-- Funding type toggle -->
       <div>
-        <p class="mb-1.5 text-[13px] font-medium text-neutral-700">Funding type</p>
+        <p class="mb-1.5 text-[13px] font-medium text-neutral-700">
+          Funding type
+        </p>
         <div class="flex gap-2">
           <button
             type="button"
@@ -203,7 +221,10 @@ async function submit() {
 
       <template v-if="fundingType === 'D'">
         <div>
-          <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="target-date">
+          <label
+            class="mb-1 block text-[13px] font-medium text-neutral-700"
+            for="target-date"
+          >
             Target date
           </label>
           <input
@@ -217,7 +238,10 @@ async function submit() {
 
       <template v-else>
         <div>
-          <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="funding-amount">
+          <label
+            class="mb-1 block text-[13px] font-medium text-neutral-700"
+            for="funding-amount"
+          >
             Amount per funding event
           </label>
           <input
@@ -237,12 +261,17 @@ async function submit() {
 
     <!-- Capped-specific fields -->
     <template v-else-if="isCapped">
-      <p class="rounded-subcard bg-ocean-50 px-3 py-2 text-[12px] text-ocean-600">
-        Funds a fixed amount on a schedule up to the cap above. Resumes automatically whenever
-        spending brings the balance below the cap.
+      <p
+        class="rounded-subcard bg-ocean-50 px-3 py-2 text-[12px] text-ocean-600"
+      >
+        Funds a fixed amount on a schedule up to the cap above. Resumes
+        automatically whenever spending brings the balance below the cap.
       </p>
       <div>
-        <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="funding-amount">
+        <label
+          class="mb-1 block text-[13px] font-medium text-neutral-700"
+          for="funding-amount"
+        >
           Amount per funding event
         </label>
         <input
@@ -278,11 +307,18 @@ async function submit() {
 
     <!-- Recurring-specific fields -->
     <template v-else-if="isRecurring">
-      <SchedulePicker v-model="recurrenceSchedule" label="Refresh cycle" interval-only />
+      <SchedulePicker
+        v-model="recurrenceSchedule"
+        label="Refresh cycle"
+        interval-only
+      />
 
       <!-- Next refresh date (stored as DTSTART in recurrence_schedule) -->
       <div>
-        <label class="mb-1 block text-[13px] font-medium text-neutral-700" for="next-refresh-date">
+        <label
+          class="mb-1 block text-[13px] font-medium text-neutral-700"
+          for="next-refresh-date"
+        >
           Next refresh date
         </label>
         <p class="mb-1.5 text-[11px] text-neutral-500">
@@ -318,7 +354,10 @@ async function submit() {
     </template>
 
     <!-- Error -->
-    <p v-if="error" class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600">
+    <p
+      v-if="error"
+      class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600"
+    >
       {{ error }}
     </p>
 
@@ -335,7 +374,11 @@ async function submit() {
         type="submit"
         :disabled="!canSubmit"
         class="flex-1 rounded-full py-3 text-sm font-medium text-white transition-colors"
-        :class="canSubmit ? 'bg-ocean-400 hover:bg-ocean-600' : 'cursor-not-allowed bg-neutral-300'"
+        :class="
+          canSubmit
+            ? 'bg-ocean-400 hover:bg-ocean-600'
+            : 'cursor-not-allowed bg-neutral-300'
+        "
       >
         {{ saving ? "Saving…" : mode === "create" ? "Create" : "Save" }}
       </button>

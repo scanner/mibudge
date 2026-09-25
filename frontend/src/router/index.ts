@@ -18,7 +18,12 @@
 // 3rd party imports
 //
 import { createRouter, createWebHistory } from "vue-router";
-import type { RouteLocationNormalized, RouteRecordRaw, Router, RouterHistory } from "vue-router";
+import type {
+  RouteLocationNormalized,
+  RouteRecordRaw,
+  Router,
+  RouterHistory,
+} from "vue-router";
 
 // app imports
 //
@@ -31,7 +36,10 @@ export type { AppRouteName, RouteAccess } from "@/router/types";
 //
 // A route record with its name and access level spelled out.
 //
-type AppRouteRecord = RouteRecordRaw & { name: AppRouteName; meta: { access: RouteAccess } };
+type AppRouteRecord = RouteRecordRaw & {
+  name: AppRouteName;
+  meta: { access: RouteAccess };
+};
 
 const PUBLIC = { access: "public" } as const;
 const AUTHENTICATED = { access: "authenticated" } as const;
@@ -174,7 +182,9 @@ export function redirectToLogin(router: Router): Promise<unknown> {
 // A router with the app's routes and auth guard.  The app uses browser
 // history under `/app/`; tests pass a memory history.
 //
-export function createAppRouter(history: RouterHistory = createWebHistory("/app/")): Router {
+export function createAppRouter(
+  history: RouterHistory = createWebHistory("/app/"),
+): Router {
   const router = createRouter({ history, routes });
   router.beforeEach(authGuard);
   return router;

@@ -37,7 +37,10 @@ export function listRows(
   transactions: readonly Transaction[],
   transfers: readonly InternalTransaction[] | null,
 ): TransactionListRow[] {
-  const rows: TransactionListRow[] = transactions.map((tx) => ({ kind: "tx", tx }));
+  const rows: TransactionListRow[] = transactions.map((tx) => ({
+    kind: "tx",
+    tx,
+  }));
   if (transfers) for (const itx of transfers) rows.push({ kind: "itx", itx });
   return rows;
 }

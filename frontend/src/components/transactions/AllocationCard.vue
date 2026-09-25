@@ -63,7 +63,9 @@ const budgetId = computed(() => props.allocation.budgetId);
 </script>
 
 <template>
-  <div class="group relative rounded-card border border-neutral-200 bg-white px-4 py-3">
+  <div
+    class="group relative rounded-card border border-neutral-200 bg-white px-4 py-3"
+  >
     <!-- Remove button -->
     <button
       type="button"
@@ -117,7 +119,11 @@ const budgetId = computed(() => props.allocation.budgetId);
     <div class="mt-1 flex items-center gap-2 text-xs text-secondary">
       <span class="flex-none">Budget balance after</span>
       <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
-      <MoneyAmount class="flex-none" :amount="allocation.budgetBalance" size="sm" />
+      <MoneyAmount
+        class="flex-none"
+        :amount="allocation.budgetBalance"
+        size="sm"
+      />
     </div>
 
     <!-- Category -->

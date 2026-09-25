@@ -24,7 +24,10 @@ const props = defineProps<Props>();
 
 ////////////////////////////////////////////////////////////////////////
 //
-const palette: Record<BudgetStatus, { bg: string; text: string; label: string }> = {
+const palette: Record<
+  BudgetStatus,
+  { bg: string; text: string; label: string }
+> = {
   funded: { bg: "bg-mint-50", text: "text-mint-600", label: "Funded" },
   progress: { bg: "bg-ocean-50", text: "text-ocean-600", label: "In progress" },
   warn: { bg: "bg-amber-50", text: "text-amber-600", label: "Behind pace" },

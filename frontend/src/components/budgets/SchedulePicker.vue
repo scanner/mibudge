@@ -23,7 +23,12 @@ import {
   WEEKDAY_ORDER,
   WEEKDAY_SHORT,
 } from "@/domain/rrule";
-import type { RruleMonthly, RruleWeekly, RruleYearly, Weekday } from "@/domain/rrule";
+import type {
+  RruleMonthly,
+  RruleWeekly,
+  RruleYearly,
+  Weekday,
+} from "@/domain/rrule";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -55,14 +60,17 @@ const yearlyDay = ref<number>(1);
 ////////////////////////////////////////////////////////////////////////
 //
 function applyParsed(rule: string) {
-  const parsed = parseRrule(rule ?? DEFAULT_RRULE) ?? parseRrule(DEFAULT_RRULE)!;
+  const parsed =
+    parseRrule(rule ?? DEFAULT_RRULE) ?? parseRrule(DEFAULT_RRULE)!;
   freq.value = parsed.freq;
   if (parsed.freq === "WEEKLY") {
     weeklyInterval.value = parsed.interval;
     weeklyDays.value = new Set(parsed.byday.length > 0 ? parsed.byday : ["MO"]);
   } else if (parsed.freq === "MONTHLY") {
     monthlyInterval.value = parsed.interval;
-    monthlyDays.value = new Set(parsed.bymonthday.length > 0 ? parsed.bymonthday : [1]);
+    monthlyDays.value = new Set(
+      parsed.bymonthday.length > 0 ? parsed.bymonthday : [1],
+    );
   } else {
     yearlyInterval.value = parsed.interval;
     yearlyMonth.value = parsed.bymonth;
@@ -167,7 +175,8 @@ const MONTHLY_INTERVAL_OPTIONS: { value: 1 | 2 | 3 | 6; label: string }[] = [
 function yearlyDayLabel(n: number): string {
   if (n === -1) return "Last day";
   const v = n % 100;
-  const suffix = v >= 11 && v <= 13 ? "th" : (["th", "st", "nd", "rd"][v % 10] ?? "th");
+  const suffix =
+    v >= 11 && v <= 13 ? "th" : (["th", "st", "nd", "rd"][v % 10] ?? "th");
   return `${n}${suffix}`;
 }
 </script>
@@ -176,7 +185,9 @@ function yearlyDayLabel(n: number): string {
   <div class="rounded-card border border-neutral-200 bg-white">
     <!-- Label -->
     <div class="px-4 pt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+      <p
+        class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+      >
         {{ label }}
       </p>
     </div>
@@ -205,9 +216,17 @@ function yearlyDayLabel(n: number): string {
         <select
           :value="weeklyInterval"
           class="w-full rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
-          @change="weeklyInterval = Number(($event.target as HTMLSelectElement).value) as 1 | 2 | 4"
+          @change="
+            weeklyInterval = Number(
+              ($event.target as HTMLSelectElement).value,
+            ) as 1 | 2 | 4
+          "
         >
-          <option v-for="opt in WEEKLY_INTERVAL_OPTIONS" :key="opt.value" :value="opt.value">
+          <option
+            v-for="opt in WEEKLY_INTERVAL_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
+          >
             {{ opt.label }}
           </option>
         </select>
@@ -236,10 +255,16 @@ function yearlyDayLabel(n: number): string {
           :value="monthlyInterval"
           class="w-full rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
           @change="
-            monthlyInterval = Number(($event.target as HTMLSelectElement).value) as 1 | 2 | 3 | 6
+            monthlyInterval = Number(
+              ($event.target as HTMLSelectElement).value,
+            ) as 1 | 2 | 3 | 6
           "
         >
-          <option v-for="opt in MONTHLY_INTERVAL_OPTIONS" :key="opt.value" :value="opt.value">
+          <option
+            v-for="opt in MONTHLY_INTERVAL_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
+          >
             {{ opt.label }}
           </option>
         </select>
@@ -280,7 +305,11 @@ function yearlyDayLabel(n: number): string {
         <select
           :value="yearlyInterval"
           class="w-full rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
-          @change="yearlyInterval = Number(($event.target as HTMLSelectElement).value) as 1 | 2"
+          @change="
+            yearlyInterval = Number(
+              ($event.target as HTMLSelectElement).value,
+            ) as 1 | 2
+          "
         >
           <option :value="1">Every year</option>
           <option :value="2">Every 2 years</option>
@@ -290,9 +319,15 @@ function yearlyDayLabel(n: number): string {
           <select
             :value="yearlyMonth"
             class="rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
-            @change="yearlyMonth = Number(($event.target as HTMLSelectElement).value)"
+            @change="
+              yearlyMonth = Number(($event.target as HTMLSelectElement).value)
+            "
           >
-            <option v-for="(name, idx) in MONTH_NAMES" :key="idx" :value="idx + 1">
+            <option
+              v-for="(name, idx) in MONTH_NAMES"
+              :key="idx"
+              :value="idx + 1"
+            >
               {{ name }}
             </option>
           </select>
@@ -300,7 +335,9 @@ function yearlyDayLabel(n: number): string {
           <select
             :value="yearlyDay"
             class="rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
-            @change="yearlyDay = Number(($event.target as HTMLSelectElement).value)"
+            @change="
+              yearlyDay = Number(($event.target as HTMLSelectElement).value)
+            "
           >
             <option v-for="d in YEARLY_DAY_OPTIONS" :key="d" :value="d">
               {{ yearlyDayLabel(d) }}

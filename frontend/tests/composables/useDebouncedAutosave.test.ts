@@ -31,7 +31,9 @@ describe("useDebouncedAutosave", () => {
   //
   it("saves the last value once after the delay", async () => {
     const save = vi.fn(async () => undefined);
-    const { result } = withSetup(() => useDebouncedAutosave(() => "tx1", save, { delayMs: 800 }));
+    const { result } = withSetup(() =>
+      useDebouncedAutosave(() => "tx1", save, { delayMs: 800 }),
+    );
 
     result.schedule("a");
     result.schedule("ab");
@@ -50,7 +52,9 @@ describe("useDebouncedAutosave", () => {
   it("saves to the original key on key change", async () => {
     const key = ref("tx1");
     const save = vi.fn(async () => undefined);
-    const { result } = withSetup(() => useDebouncedAutosave(() => key.value, save));
+    const { result } = withSetup(() =>
+      useDebouncedAutosave(() => key.value, save),
+    );
 
     result.schedule("text for tx1");
     key.value = "tx2";
@@ -68,7 +72,9 @@ describe("useDebouncedAutosave", () => {
   //
   it("saves on unmount", async () => {
     const save = vi.fn(async () => undefined);
-    const { result, wrapper } = withSetup(() => useDebouncedAutosave(() => "tx1", save));
+    const { result, wrapper } = withSetup(() =>
+      useDebouncedAutosave(() => "tx1", save),
+    );
 
     result.schedule("x");
     wrapper.unmount();
@@ -113,7 +119,9 @@ describe("useDebouncedAutosave", () => {
     const save = vi.fn(async () => {
       throw new Error("down");
     });
-    const { result } = withSetup(() => useDebouncedAutosave(() => key.value, save));
+    const { result } = withSetup(() =>
+      useDebouncedAutosave(() => key.value, save),
+    );
 
     result.schedule("x");
     await result.flush();
@@ -131,8 +139,12 @@ describe("useDebouncedAutosave", () => {
   it("ignores a failure that lands after the key changed", async () => {
     const key = ref("tx1");
     let fail!: (err: Error) => void;
-    const save = vi.fn(() => new Promise<void>((_resolve, reject) => (fail = reject)));
-    const { result } = withSetup(() => useDebouncedAutosave(() => key.value, save));
+    const save = vi.fn(
+      () => new Promise<void>((_resolve, reject) => (fail = reject)),
+    );
+    const { result } = withSetup(() =>
+      useDebouncedAutosave(() => key.value, save),
+    );
 
     result.schedule("x");
     const flushed = result.flush();

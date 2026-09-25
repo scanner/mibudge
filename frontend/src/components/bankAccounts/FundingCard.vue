@@ -34,7 +34,9 @@ const emit = defineEmits<{
 
 <template>
   <!-- Funding -->
-  <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+  <section
+    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+  >
     <h2
       class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
     >
@@ -48,8 +50,8 @@ const emit = defineEmits<{
         </span>
       </div>
       <p class="text-xs text-secondary">
-        After importing transactions and finishing allocations, run the funding engine to move money
-        into budgets based on their schedules.
+        After importing transactions and finishing allocations, run the funding
+        engine to move money into budgets based on their schedules.
       </p>
       <div
         v-if="summary && !summary.total.isZero()"
@@ -119,13 +121,18 @@ const emit = defineEmits<{
           {{ result.transfers }} transfer{{ result.transfers === 1 ? "" : "s" }}
           completed.
         </template>
-        <ul v-if="result.warnings.length" class="mt-1.5 space-y-0.5 text-xs text-amber-600">
+        <ul
+          v-if="result.warnings.length"
+          class="mt-1.5 space-y-0.5 text-xs text-amber-600"
+        >
           <li v-for="w in result.warnings" :key="w">{{ w }}</li>
         </ul>
         <div v-if="result.skippedBudgets.length" class="mt-1.5">
           <span class="text-xs font-medium">Skipped (paused):</span>
           <ul class="mt-0.5 space-y-0.5 text-xs opacity-80">
-            <li v-for="name in result.skippedBudgets" :key="name">{{ name }}</li>
+            <li v-for="name in result.skippedBudgets" :key="name">
+              {{ name }}
+            </li>
           </ul>
         </div>
       </div>

@@ -31,7 +31,10 @@ export function accountTypeLabel(type: string): string {
 // `"Checking ····1234"`: the type label plus the last four digits of
 // the account number when there is one.
 //
-export function accountTypeMeta(type: string, accountNumber: string | null): string {
+export function accountTypeMeta(
+  type: string,
+  accountNumber: string | null,
+): string {
   const label = accountTypeLabel(type);
   return accountNumber ? `${label} ····${accountNumber.slice(-4)}` : label;
 }

@@ -30,7 +30,10 @@ export function transactionsResource(http: HttpClient) {
       return http.get(`${V1}/transactions/${id}/`);
     },
 
-    update(id: string, body: Pick<TransactionUpdateDto, "description" | "memo">) {
+    update(
+      id: string,
+      body: Pick<TransactionUpdateDto, "description" | "memo">,
+    ) {
       return http.patch<TransactionDto>(`${V1}/transactions/${id}/`, body);
     },
 
@@ -39,7 +42,10 @@ export function transactionsResource(http: HttpClient) {
     uploadAttachment(id: string, field: "image" | "document", file: File) {
       const form = new FormData();
       form.append(field, file);
-      return http.request<TransactionDto>(`${V1}/transactions/${id}/`, { method: "PATCH", form });
+      return http.request<TransactionDto>(`${V1}/transactions/${id}/`, {
+        method: "PATCH",
+        form,
+      });
     },
 
     // Replace the transaction's allocations with `splits` (budget id →
@@ -47,7 +53,10 @@ export function transactionsResource(http: HttpClient) {
     // resulting allocations as a plain array (the schema calls it a
     // page).
     //
-    split(id: string, splits: Record<string, string>): Promise<AllocationDto[]> {
+    split(
+      id: string,
+      splits: Record<string, string>,
+    ): Promise<AllocationDto[]> {
       return http.post(`${V1}/transactions/${id}/splits/`, { splits });
     },
   };

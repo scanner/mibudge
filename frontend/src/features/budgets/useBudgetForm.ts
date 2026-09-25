@@ -19,7 +19,12 @@ import { useFormErrors } from "@/composables/useFormErrors";
 import { toLocalDate } from "@/domain/dates";
 import type { BudgetType, FundingType } from "@/domain/labels";
 import { Money, toDecimal } from "@/domain/money";
-import { combineDtstart, DEFAULT_RRULE, extractDtstart, stripToIntervalOnly } from "@/domain/rrule";
+import {
+  combineDtstart,
+  DEFAULT_RRULE,
+  extractDtstart,
+  stripToIntervalOnly,
+} from "@/domain/rrule";
 import type { Budget, BudgetInput } from "@/models/budget";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -44,20 +49,28 @@ export function useBudgetForm(mode: "create" | "edit", budget?: Budget) {
   //
   const budgetType = ref<BudgetType>(budget?.budgetType ?? "R");
   const name = ref(budget?.name ?? "");
-  const targetBalance = ref<string | number>(budget?.targetBalance?.toDecimalString() ?? "");
+  const targetBalance = ref<string | number>(
+    budget?.targetBalance?.toDecimalString() ?? "",
+  );
   const targetDate = ref<string>(budget?.targetDate ?? "");
   const fundingType = ref<FundingType>(budget?.fundingType ?? "D");
-  const fundingAmount = ref<string | number>(budget?.fundingAmount?.toDecimalString() ?? "");
+  const fundingAmount = ref<string | number>(
+    budget?.fundingAmount?.toDecimalString() ?? "",
+  );
   const fundingSchedule = ref(budget?.fundingSchedule ?? DEFAULT_RRULE);
 
-  const existingRecurrence = extractDtstart(budget?.recurrenceSchedule ?? DEFAULT_RRULE);
+  const existingRecurrence = extractDtstart(
+    budget?.recurrenceSchedule ?? DEFAULT_RRULE,
+  );
   const recurrenceSchedule = ref(existingRecurrence.rrule);
   // Prefer the server-computed next refresh date; the schedule's
   // DTSTART is only the rule anchor and goes stale once a cycle has
   // elapsed.  Saving the next occurrence back as DTSTART is safe: it is
   // on-phase with the rule, so the schedule itself is unchanged.
   //
-  const nextRefreshDate = ref<string>(budget?.nextRecurrence ?? existingRecurrence.dtstart ?? "");
+  const nextRefreshDate = ref<string>(
+    budget?.nextRecurrence ?? existingRecurrence.dtstart ?? "",
+  );
 
   const paused = ref(budget?.paused ?? false);
   const saving = ref(false);
@@ -67,7 +80,9 @@ export function useBudgetForm(mode: "create" | "edit", budget?: Budget) {
   const isGoal = computed(() => budgetType.value === "G");
   const isRecurring = computed(() => budgetType.value === "R");
   const isCapped = computed(() => budgetType.value === "C");
-  const canSubmit = computed(() => name.value.trim().length > 0 && !saving.value);
+  const canSubmit = computed(
+    () => name.value.trim().length > 0 && !saving.value,
+  );
   const accountName = computed(() => ctx.activeBankAccount?.name ?? "—");
 
   ////////////////////////////////////////////////////////////////////
@@ -121,7 +136,8 @@ export function useBudgetForm(mode: "create" | "edit", budget?: Budget) {
     errors.clear();
     try {
       const input = toInput();
-      if (mode === "edit" && budget) return await store.update(budget.id, input);
+      if (mode === "edit" && budget)
+        return await store.update(budget.id, input);
       const accountId = ctx.activeBankAccountId;
       if (!accountId) {
         errors.setFormError("Select a bank account first.");

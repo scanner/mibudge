@@ -51,7 +51,8 @@ function parseParams(rule: string): Record<string, string> {
 //
 export function parseRrule(rule: string): RruleParsed | null {
   if (!rule) return null;
-  const rruleLine = rule.split("\n").find((l) => l.startsWith("RRULE:")) ?? rule;
+  const rruleLine =
+    rule.split("\n").find((l) => l.startsWith("RRULE:")) ?? rule;
   const p = parseParams(rruleLine);
   const interval = p.INTERVAL ? parseInt(p.INTERVAL, 10) : 1;
 
@@ -65,10 +66,16 @@ export function parseRrule(rule: string): RruleParsed | null {
       };
     }
     case "MONTHLY": {
-      const bymonthday = p.BYMONTHDAY ? p.BYMONTHDAY.split(",").map(Number) : [];
+      const bymonthday = p.BYMONTHDAY
+        ? p.BYMONTHDAY.split(",").map(Number)
+        : [];
       return {
         freq: "MONTHLY",
-        interval: ([1, 2, 3, 6].includes(interval) ? interval : 1) as 1 | 2 | 3 | 6,
+        interval: ([1, 2, 3, 6].includes(interval) ? interval : 1) as
+          | 1
+          | 2
+          | 3
+          | 6,
         bymonthday,
       };
     }
@@ -97,7 +104,8 @@ export function buildRrule(parsed: RruleParsed): string {
   } else if (parsed.freq === "MONTHLY") {
     parts.push("RRULE:FREQ=MONTHLY");
     if (parsed.interval > 1) parts.push(`INTERVAL=${parsed.interval}`);
-    if (parsed.bymonthday.length > 0) parts.push(`BYMONTHDAY=${parsed.bymonthday.join(",")}`);
+    if (parsed.bymonthday.length > 0)
+      parts.push(`BYMONTHDAY=${parsed.bymonthday.join(",")}`);
   } else {
     parts.push("RRULE:FREQ=YEARLY");
     if (parsed.interval > 1) parts.push(`INTERVAL=${parsed.interval}`);
@@ -110,7 +118,15 @@ export function buildRrule(parsed: RruleParsed): string {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export const WEEKDAY_ORDER: Weekday[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+export const WEEKDAY_ORDER: Weekday[] = [
+  "MO",
+  "TU",
+  "WE",
+  "TH",
+  "FR",
+  "SA",
+  "SU",
+];
 
 export const WEEKDAY_SHORT: Record<Weekday, string> = {
   MO: "Mo",
@@ -142,7 +158,8 @@ export const MONTH_NAMES = [
 function ordinal(n: number): string {
   if (n === -1) return "the last day";
   const v = n % 100;
-  const suffix = v >= 11 && v <= 13 ? "th" : (["th", "st", "nd", "rd"][v % 10] ?? "th");
+  const suffix =
+    v >= 11 && v <= 13 ? "th" : (["th", "st", "nd", "rd"][v % 10] ?? "th");
   return `the ${n}${suffix}`;
 }
 
@@ -168,25 +185,30 @@ export function rruleHuman(rule: string): string {
   // Mirror the backend's (dateutil's) precedence: explicit BY* parts
   // override the DTSTART anchor.  Displaying DTSTART when a BY* part
   // is present would lie about when the rule actually fires.
-  const rruleLine = rule.split("\n").find((l) => l.startsWith("RRULE:")) ?? rule;
+  const rruleLine =
+    rule.split("\n").find((l) => l.startsWith("RRULE:")) ?? rule;
   const params = parseParams(rruleLine);
 
   let text: string;
 
   if (parsed.freq === "WEEKLY") {
-    const prefix = parsed.interval === 1 ? "Every week" : `Every ${parsed.interval} weeks`;
+    const prefix =
+      parsed.interval === 1 ? "Every week" : `Every ${parsed.interval} weeks`;
     if (parsed.byday.length > 0) {
       const days = parsed.byday.map((d) => WEEKDAY_SHORT[d]).join(", ");
       text = `${prefix} on ${days}`;
     } else if (dtstart) {
       const dow = dtstartUtc(dtstart).getUTCDay();
-      const weekday = (["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const)[dow]!;
+      const weekday = (["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const)[
+        dow
+      ]!;
       text = `${prefix} on ${WEEKDAY_SHORT[weekday]}`;
     } else {
       text = prefix;
     }
   } else if (parsed.freq === "MONTHLY") {
-    const prefix = parsed.interval === 1 ? "Every month" : `Every ${parsed.interval} months`;
+    const prefix =
+      parsed.interval === 1 ? "Every month" : `Every ${parsed.interval} months`;
     if (parsed.bymonthday.length > 0) {
       const days = parsed.bymonthday.map(ordinal).join(" and ");
       text = `${prefix} on ${days}`;
@@ -196,7 +218,8 @@ export function rruleHuman(rule: string): string {
       text = prefix;
     }
   } else {
-    const prefix = parsed.interval === 1 ? "Every year" : `Every ${parsed.interval} years`;
+    const prefix =
+      parsed.interval === 1 ? "Every year" : `Every ${parsed.interval} years`;
     if (params.BYMONTH || params.BYMONTHDAY) {
       const month = MONTH_NAMES[(parsed.bymonth ?? 1) - 1];
       const day = ordinal(parsed.bymonthday ?? 1);
@@ -217,7 +240,10 @@ export function rruleHuman(rule: string): string {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function extractDtstart(raw: string): { dtstart: string | null; rrule: string } {
+export function extractDtstart(raw: string): {
+  dtstart: string | null;
+  rrule: string;
+} {
   const lines = raw.split("\n");
   let dtstart: string | null = null;
   const rest: string[] = [];

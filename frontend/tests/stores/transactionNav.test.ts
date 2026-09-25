@@ -45,6 +45,10 @@ describe("reset", () => {
     nav.savedSearch = "x";
     nav.savedFilter = "pending";
     nav.reset();
-    expect([nav.orderedIds, nav.savedSearch, nav.savedFilter]).toEqual([[], "", ""]);
+    expect([nav.orderedIds, nav.savedSearch, nav.savedFilter]).toEqual([
+      [],
+      "",
+      "",
+    ]);
   });
 });

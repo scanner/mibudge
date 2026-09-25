@@ -32,7 +32,10 @@ export function usePasswordChange() {
   const errors = useFormErrors();
 
   const submitDisabled = computed(
-    () => saving.value || strengthScore.value === null || strengthScore.value < MIN_PASSWORD_SCORE,
+    () =>
+      saving.value ||
+      strengthScore.value === null ||
+      strengthScore.value < MIN_PASSWORD_SCORE,
   );
 
   async function submit(): Promise<void> {

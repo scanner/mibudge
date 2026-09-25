@@ -76,7 +76,9 @@ export const handlers = [
   // Users.
   //
   http.get(`${API}/users/me/`, () => json(makeUser())),
-  http.patch(`${API}/users/me/`, async ({ request }) => json(makeUser(await jsonBody(request)))),
+  http.patch(`${API}/users/me/`, async ({ request }) =>
+    json(makeUser(await jsonBody(request))),
+  ),
   http.post(`${API}/users/me/change-password/`, () => noContent()),
   http.post(`${API}/users/me/change-email/`, () => noContent()),
   http.get(`${API}/users/me/invitations/`, () => json([makeInvitation()])),
@@ -85,16 +87,26 @@ export const handlers = [
   //
   http.get(`${API}/users/me/api-keys/`, () => json(makePage([makeApiKey()]))),
   http.post(`${API}/users/me/api-keys/`, async ({ request }) =>
-    json({ ...makeApiKey(await jsonBody(request)), key: "mb_plaintext_key" }, 201),
+    json(
+      { ...makeApiKey(await jsonBody(request)), key: "mb_plaintext_key" },
+      201,
+    ),
   ),
   http.post(`${API}/users/me/api-keys/:uuid/revoke/`, ({ params }) =>
-    json(makeApiKey({ uuid: String(params.uuid), revoked_at: "2026-09-02T12:00:00Z" })),
+    json(
+      makeApiKey({
+        uuid: String(params.uuid),
+        revoked_at: "2026-09-02T12:00:00Z",
+      }),
+    ),
   ),
 
   // Banks.
   //
   http.get(`${API}/banks/`, () => json(makePage([makeBank()]))),
-  http.get(`${API}/banks/:id/`, ({ params }) => json(makeBank({ id: String(params.id) }))),
+  http.get(`${API}/banks/:id/`, ({ params }) =>
+    json(makeBank({ id: String(params.id) })),
+  ),
 
   // Bank accounts.
   //
@@ -106,16 +118,24 @@ export const handlers = [
     json(makeBankAccount({ id: String(params.id) })),
   ),
   http.patch(`${API}/bank-accounts/:id/`, async ({ params, request }) =>
-    json(makeBankAccount({ ...(await jsonBody(request)), id: String(params.id) })),
+    json(
+      makeBankAccount({ ...(await jsonBody(request)), id: String(params.id) }),
+    ),
   ),
   http.delete(`${API}/bank-accounts/:id/`, () => noContent()),
-  http.get(`${API}/bank-accounts/:id/funding-summary/`, () => json(makeFundingSummary())),
-  http.post(`${API}/bank-accounts/:id/run-funding/`, () => json(makeFundingRunResult())),
+  http.get(`${API}/bank-accounts/:id/funding-summary/`, () =>
+    json(makeFundingSummary()),
+  ),
+  http.post(`${API}/bank-accounts/:id/run-funding/`, () =>
+    json(makeFundingRunResult()),
+  ),
   http.get(`${API}/bank-accounts/:id/invitations/`, ({ params }) =>
     json([makeInvitation({ bank_account_id: String(params.id) })]),
   ),
   http.post(`${API}/bank-accounts/:id/invite/`, () => noContent()),
-  http.post(`${API}/bank-accounts/:id/invitations/:token/cancel/`, () => noContent()),
+  http.post(`${API}/bank-accounts/:id/invitations/:token/cancel/`, () =>
+    noContent(),
+  ),
 
   // Budgets.
   //
@@ -123,7 +143,9 @@ export const handlers = [
   http.post(`${API}/budgets/`, async ({ request }) =>
     json(makeBudget(await jsonBody(request)), 201),
   ),
-  http.get(`${API}/budgets/:id/`, ({ params }) => json(makeBudget({ id: String(params.id) }))),
+  http.get(`${API}/budgets/:id/`, ({ params }) =>
+    json(makeBudget({ id: String(params.id) })),
+  ),
   http.patch(`${API}/budgets/:id/`, async ({ params, request }) =>
     json(makeBudget({ ...(await jsonBody(request)), id: String(params.id) })),
   ),
@@ -148,26 +170,48 @@ export const handlers = [
 
   // Internal transactions.
   //
-  http.get(`${API}/internal-transactions/`, () => json(makePage([makeInternalTransaction()]))),
+  http.get(`${API}/internal-transactions/`, () =>
+    json(makePage([makeInternalTransaction()])),
+  ),
   http.post(`${API}/internal-transactions/`, async ({ request }) =>
     json(makeInternalTransaction(await jsonBody(request)), 201),
   ),
 
   // Transaction categories.
   //
-  http.get(`${API}/transaction-categories/`, () => json(makePage([makeCategory()]))),
+  http.get(`${API}/transaction-categories/`, () =>
+    json(makePage([makeCategory()])),
+  ),
   http.get(`${API}/transaction-categories/:id/`, ({ params }) =>
     json(makeCategory({ id: String(params.id) })),
   ),
 
   // Notification preferences.
   //
-  http.get(`${API}/notification-preferences/`, () => json([makeNotificationPreference()])),
-  http.patch(`${API}/notification-preferences/:kind/`, async ({ params, request }) =>
-    json(makeNotificationPreference({ ...(await jsonBody(request)), kind: String(params.kind) })),
+  http.get(`${API}/notification-preferences/`, () =>
+    json([makeNotificationPreference()]),
   ),
-  http.get(`${API}/channel-preferences/`, () => json([makeChannelPreference()])),
-  http.patch(`${API}/channel-preferences/:channel/`, async ({ params, request }) =>
-    json(makeChannelPreference({ ...(await jsonBody(request)), channel: String(params.channel) })),
+  http.patch(
+    `${API}/notification-preferences/:kind/`,
+    async ({ params, request }) =>
+      json(
+        makeNotificationPreference({
+          ...(await jsonBody(request)),
+          kind: String(params.kind),
+        }),
+      ),
+  ),
+  http.get(`${API}/channel-preferences/`, () =>
+    json([makeChannelPreference()]),
+  ),
+  http.patch(
+    `${API}/channel-preferences/:channel/`,
+    async ({ params, request }) =>
+      json(
+        makeChannelPreference({
+          ...(await jsonBody(request)),
+          channel: String(params.channel),
+        }),
+      ),
   ),
 ];

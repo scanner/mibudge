@@ -73,11 +73,17 @@ const formatted = computed(() =>
 // text that can be ambiguous to assistive tech; the raw decimal is
 // clearer.
 //
-const ariaLabel = computed(() => `${money.value.toDecimalString()} ${money.value.currency}`);
+const ariaLabel = computed(
+  () => `${money.value.toDecimalString()} ${money.value.currency}`,
+);
 </script>
 
 <template>
-  <span class="font-mono tabular-nums" :class="[sizeClass, colourClass]" :aria-label="ariaLabel">
+  <span
+    class="font-mono tabular-nums"
+    :class="[sizeClass, colourClass]"
+    :aria-label="ariaLabel"
+  >
     {{ formatted }}
   </span>
 </template>

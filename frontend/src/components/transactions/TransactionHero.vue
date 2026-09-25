@@ -24,7 +24,9 @@ defineProps<{
   <section class="pb-4 pt-2 text-center">
     <h1 class="text-lg font-medium text-neutral-900">{{ partyName }}</h1>
     <MoneyAmount :amount="amount" size="hero" coloured class="mt-1" />
-    <div class="mt-1.5 flex items-center justify-center gap-2 text-xs text-neutral-500">
+    <div
+      class="mt-1.5 flex items-center justify-center gap-2 text-xs text-neutral-500"
+    >
       <span>{{ formattedDate }}</span>
       <span
         v-if="pending"

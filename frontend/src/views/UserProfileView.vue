@@ -11,7 +11,10 @@ import { useRouter } from "vue-router";
 
 // app imports
 //
-import { TIMEZONE_OPTIONS, useProfileForm } from "@/features/settings/useProfileForm";
+import {
+  TIMEZONE_OPTIONS,
+  useProfileForm,
+} from "@/features/settings/useProfileForm";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
 
@@ -55,7 +58,10 @@ async function save() {
       <form class="space-y-4" @submit.prevent="save">
         <!-- Name -->
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="profile-name">
+          <label
+            class="mb-1.5 block text-sm font-medium text-neutral-700"
+            for="profile-name"
+          >
             Name
           </label>
           <input
@@ -80,7 +86,10 @@ async function save() {
 
         <!-- Timezone -->
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="profile-timezone">
+          <label
+            class="mb-1.5 block text-sm font-medium text-neutral-700"
+            for="profile-timezone"
+          >
             Timezone
           </label>
           <select
@@ -88,7 +97,11 @@ async function save() {
             v-model="timezone"
             class="w-full rounded-subcard border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
           >
-            <option v-for="opt in TIMEZONE_OPTIONS" :key="opt.value" :value="opt.value">
+            <option
+              v-for="opt in TIMEZONE_OPTIONS"
+              :key="opt.value"
+              :value="opt.value"
+            >
               {{ opt.label }}
             </option>
           </select>
@@ -118,13 +131,18 @@ async function save() {
 
       <!-- Change email — separate section, never nested inside the profile form -->
       <section class="mt-8">
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+        <h2
+          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        >
           Change email
         </h2>
 
         <div class="rounded-card border border-neutral-200 bg-white px-4 py-4">
           <!-- No usable password -->
-          <div v-if="!auth.user?.hasUsablePassword" class="text-sm text-neutral-500">
+          <div
+            v-if="!auth.user?.hasUsablePassword"
+            class="text-sm text-neutral-500"
+          >
             Your account doesn't have a password set yet.
             <a
               href="/accounts/password/reset/"
@@ -142,8 +160,8 @@ async function save() {
               class="rounded-subcard bg-mint-50 px-3 py-3 text-sm text-mint-600"
               role="alert"
             >
-              Check your new address for a verification link, and your current address for a
-              security notice.
+              Check your new address for a verification link, and your current
+              address for a security notice.
             </div>
 
             <template v-else>
@@ -174,9 +192,9 @@ async function save() {
                 </button>
               </form>
               <p class="mt-1.5 text-xs text-neutral-500">
-                A verification link will be sent to the new address. Your current address will
-                receive a security notice with a link to cancel the change for 7 days after
-                confirmation.
+                A verification link will be sent to the new address. Your
+                current address will receive a security notice with a link to
+                cancel the change for 7 days after confirmation.
               </p>
             </template>
           </template>

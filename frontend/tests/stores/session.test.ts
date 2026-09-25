@@ -38,7 +38,10 @@ describe("login", () => {
     expect(session.isAuthenticated).toBe(true);
     expect(session.user).toEqual(userFromDto(me));
     const [tokenReq] = await requestsTo("POST", "/api/token/");
-    expect(tokenReq.body).toEqual({ email: "alice@example.com", password: "hunter2" });
+    expect(tokenReq.body).toEqual({
+      email: "alice@example.com",
+      password: "hunter2",
+    });
     const [meReq] = await requestsTo("GET", "/api/v1/users/me/");
     expect(meReq.headers.authorization).toBe(`Bearer ${LOGIN_TOKEN}`);
   });
@@ -51,7 +54,9 @@ describe("login", () => {
     respondOnce401("/api/token/", "post");
     const session = useSessionStore();
 
-    await expect(session.login("alice@example.com", "wrong")).rejects.toMatchObject({
+    await expect(
+      session.login("alice@example.com", "wrong"),
+    ).rejects.toMatchObject({
       status: 401,
     });
     expect(session.isAuthenticated).toBe(false);
@@ -93,7 +98,12 @@ describe("loadUser", () => {
   //
   it("resolves to null when the profile cannot be loaded", async () => {
     const session = withAuth();
-    server.use(http.get("/api/v1/users/me/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/users/me/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
 
     expect(await session.loadUser(true)).toBeNull();
   });

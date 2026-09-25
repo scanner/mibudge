@@ -41,12 +41,30 @@ describe("TransactionsView", () => {
     const account = makeBankAccount();
     withAccounts([account]);
     const [t1, t2, t3] = [
-      makeTransaction({ bank_account: account.id, party: "Posted one", pending: false }),
-      makeTransaction({ bank_account: account.id, party: "Pending one", pending: true }),
-      makeTransaction({ bank_account: account.id, party: "Posted two", pending: false }),
+      makeTransaction({
+        bank_account: account.id,
+        party: "Posted one",
+        pending: false,
+      }),
+      makeTransaction({
+        bank_account: account.id,
+        party: "Pending one",
+        pending: true,
+      }),
+      makeTransaction({
+        bank_account: account.id,
+        party: "Posted two",
+        pending: false,
+      }),
     ];
-    server.use(http.get("/api/v1/transactions/", () => HttpResponse.json(makePage([t1, t2, t3]))));
-    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    server.use(
+      http.get("/api/v1/transactions/", () =>
+        HttpResponse.json(makePage([t1, t2, t3])),
+      ),
+    );
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
     await vi.waitFor(() => expect(wrapper.text()).toContain("Posted two"));
 
     await wrapper
@@ -74,12 +92,18 @@ describe("TransactionsView", () => {
         const accountId = new URL(request.url).searchParams.get("bank_account");
         if (accountId === a.id) {
           await gateA;
-          return HttpResponse.json(makePage([makeTransaction({ party: "From account A" })]));
+          return HttpResponse.json(
+            makePage([makeTransaction({ party: "From account A" })]),
+          );
         }
-        return HttpResponse.json(makePage([makeTransaction({ party: "From account B" })]));
+        return HttpResponse.json(
+          makePage([makeTransaction({ party: "From account B" })]),
+        );
       }),
     );
-    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
 
     useAccountContextStore().setActive(b.id);
     await vi.waitFor(() => expect(wrapper.text()).toContain("From account B"));
@@ -106,20 +130,34 @@ describe("TransactionsView", () => {
             search
               ? []
               : [
-                  makeTransaction({ bank_account: account.id, party: "Blue Bottle" }),
-                  makeTransaction({ bank_account: account.id, party: "Hardware Store" }),
+                  makeTransaction({
+                    bank_account: account.id,
+                    party: "Blue Bottle",
+                  }),
+                  makeTransaction({
+                    bank_account: account.id,
+                    party: "Hardware Store",
+                  }),
                 ],
           ),
         );
       }),
     );
-    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
     await vi.waitFor(() => expect(wrapper.text()).toContain("Hardware Store"));
 
-    await wrapper.get('button[aria-label="Search transactions"]').trigger("click");
-    await wrapper.get('input[placeholder="Search transactions…"]').setValue("bottle");
+    await wrapper
+      .get('button[aria-label="Search transactions"]')
+      .trigger("click");
+    await wrapper
+      .get('input[placeholder="Search transactions…"]')
+      .setValue("bottle");
 
-    await vi.waitFor(() => expect(wrapper.text()).not.toContain("Hardware Store"));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).not.toContain("Hardware Store"),
+    );
     expect(wrapper.text()).toContain("Blue Bottle");
     expect(useTransactionNavStore().savedSearch).toBe("bottle");
   });
@@ -130,9 +168,16 @@ describe("TransactionsView", () => {
   //
   it("shows the error state", async () => {
     withAccounts([makeBankAccount()]);
-    server.use(http.get("/api/v1/transactions/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/transactions/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
 
-    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
 
     await vi.waitFor(() => expect(wrapper.text()).toContain("HTTP 500"));
   });
@@ -154,13 +199,19 @@ describe("TransactionsView budget assignments", () => {
     groceries = makeBudget({ name: "Groceries", bank_account: account.id });
     rent = makeBudget({ name: "Rent", bank_account: account.id });
     server.use(
-      http.get("/api/v1/transactions/", () => HttpResponse.json(makePage([tx]))),
-      http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([groceries, rent]))),
+      http.get("/api/v1/transactions/", () =>
+        HttpResponse.json(makePage([tx])),
+      ),
+      http.get("/api/v1/budgets/", () =>
+        HttpResponse.json(makePage([groceries, rent])),
+      ),
     );
   });
 
   function allocatedTo(budget: BudgetDto) {
-    return makePage([makeAllocation({ transaction: tx.id, budget: budget.id })]);
+    return makePage([
+      makeAllocation({ transaction: tx.id, budget: budget.id }),
+    ]);
   }
 
   // GIVEN: the list was visited with a transaction assigned to Groceries
@@ -169,13 +220,25 @@ describe("TransactionsView budget assignments", () => {
   // THEN:  the list shows Rent
   //
   it("refetches budget assignments on every visit", async () => {
-    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(allocatedTo(groceries))));
-    const first = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    server.use(
+      http.get("/api/v1/allocations/", () =>
+        HttpResponse.json(allocatedTo(groceries)),
+      ),
+    );
+    const first = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
     await vi.waitFor(() => expect(first.wrapper.text()).toContain("Groceries"));
     first.wrapper.unmount();
 
-    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(allocatedTo(rent))));
-    const second = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    server.use(
+      http.get("/api/v1/allocations/", () =>
+        HttpResponse.json(allocatedTo(rent)),
+      ),
+    );
+    const second = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
 
     await vi.waitFor(() => expect(second.wrapper.text()).toContain("Rent"));
     expect(second.wrapper.text()).not.toContain("Groceries");
@@ -197,7 +260,9 @@ describe("TransactionsView budget assignments", () => {
       }),
     );
 
-    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(wrapper.text()).not.toContain("Corner Market");
 
@@ -215,13 +280,20 @@ describe("TransactionsView budget assignments", () => {
   it("reports a failed assignment load", async () => {
     server.use(
       http.get("/api/v1/allocations/", () =>
-        HttpResponse.json({ detail: "Allocations are unavailable." }, { status: 503 }),
+        HttpResponse.json(
+          { detail: "Allocations are unavailable." },
+          { status: 503 },
+        ),
       ),
     );
 
-    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Allocations are unavailable."));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Allocations are unavailable."),
+    );
     expect(wrapper.text()).toContain("Corner Market");
   });
 });

@@ -46,7 +46,9 @@ export function resetAllStores(pinia: Pinia): void {
 export interface SessionGuard {
   // `write`, bound to the current session: a no-op once `bump()` has
   // run since it was created.
-  whileCurrent<A extends unknown[]>(write: (...args: A) => void): (...args: A) => void;
+  whileCurrent<A extends unknown[]>(
+    write: (...args: A) => void,
+  ): (...args: A) => void;
   // The session a request started in, to compare with `isCurrent`.
   current(): number;
   isCurrent(started: number): boolean;

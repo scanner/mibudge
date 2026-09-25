@@ -24,7 +24,10 @@ import { requestsTo, server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
 //
-function button(wrapper: Awaited<ReturnType<typeof mountWithApp>>["wrapper"], text: string) {
+function button(
+  wrapper: Awaited<ReturnType<typeof mountWithApp>>["wrapper"],
+  text: string,
+) {
   return wrapper.findAll("button").find((b) => b.text().trim() === text)!;
 }
 
@@ -43,10 +46,15 @@ describe("AccountSettingsView", () => {
   it("shows DRF field errors from a failed password change", async () => {
     server.use(
       http.post("/api/v1/users/me/change-password/", () =>
-        HttpResponse.json({ current_password: ["Wrong password."] }, { status: 400 }),
+        HttpResponse.json(
+          { current_password: ["Wrong password."] },
+          { status: 400 },
+        ),
       ),
     );
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
 
     await wrapper.get("#current-password").setValue("nope");
     await wrapper.get("form").trigger("submit");
@@ -62,7 +70,9 @@ describe("AccountSettingsView", () => {
   //
   it("offers the set-password flow without a usable password", async () => {
     withAuth(undefined, makeUser({ has_usable_password: false }));
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
     expect(wrapper.text()).toContain("Set a password via email");
     expect(wrapper.find("#current-password").exists()).toBe(false);
   });
@@ -75,9 +85,13 @@ describe("AccountSettingsView", () => {
   it("creates and revokes API keys", async () => {
     const existing = makeApiKey({ name: "old importer" });
     server.use(
-      http.get("/api/v1/users/me/api-keys/", () => HttpResponse.json(makePage([existing]))),
+      http.get("/api/v1/users/me/api-keys/", () =>
+        HttpResponse.json(makePage([existing])),
+      ),
     );
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
 
     await wrapper.get("#new-key-name").setValue("importer");
     await wrapper.get("#new-key-expiry").setValue("never");
@@ -94,7 +108,10 @@ describe("AccountSettingsView", () => {
     confirm.click();
     await flushPromises();
     expect(
-      await requestsTo("POST", `/api/v1/users/me/api-keys/${existing.uuid}/revoke/`),
+      await requestsTo(
+        "POST",
+        `/api/v1/users/me/api-keys/${existing.uuid}/revoke/`,
+      ),
     ).toHaveLength(1);
     expect(wrapper.text()).toContain("Revoked");
   });
@@ -104,14 +121,18 @@ describe("AccountSettingsView", () => {
   // THEN:  it is refused before any request
   //
   it("validates a custom expiry", async () => {
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
     await wrapper.get("#new-key-name").setValue("importer");
     await wrapper.get("#new-key-expiry").setValue("custom");
     await wrapper.get("#new-key-days").setValue("-3");
     await wrapper.findAll("form")[1].trigger("submit");
     await flushPromises();
     expect(wrapper.text()).toContain("Enter a valid number of days.");
-    expect(await requestsTo("POST", "/api/v1/users/me/api-keys/")).toHaveLength(0);
+    expect(await requestsTo("POST", "/api/v1/users/me/api-keys/")).toHaveLength(
+      0,
+    );
   });
 
   // GIVEN: a suppressible notification kind
@@ -125,14 +146,20 @@ describe("AccountSettingsView", () => {
         () => new HttpResponse(null, { status: 500 }),
       ),
     );
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Budget overdrawn"));
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Budget overdrawn"),
+    );
 
     const select = wrapper.findAll("select").at(-1)!;
     await select.setValue("off");
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Failed to update notification preference.");
+    expect(wrapper.text()).toContain(
+      "Failed to update notification preference.",
+    );
     expect((select.element as HTMLSelectElement).value).toBe("immediate");
   });
 
@@ -141,13 +168,20 @@ describe("AccountSettingsView", () => {
   // THEN:  the email channel is updated
   //
   it("saves the email digest frequency", async () => {
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
     await vi.waitFor(() => expect(wrapper.text()).toContain("Email digest"));
-    const select = wrapper.findAll("select").find((s) => s.text().includes("Weekly on Friday"))!;
+    const select = wrapper
+      .findAll("select")
+      .find((s) => s.text().includes("Weekly on Friday"))!;
     await select.setValue("weekly_friday");
     await select.trigger("change");
     await flushPromises();
-    const [patch] = await requestsTo("PATCH", "/api/v1/channel-preferences/email/");
+    const [patch] = await requestsTo(
+      "PATCH",
+      "/api/v1/channel-preferences/email/",
+    );
     expect(patch.body).toEqual({ digest_frequency: "weekly_friday" });
   });
 
@@ -157,9 +191,15 @@ describe("AccountSettingsView", () => {
   //
   it("cancels an outgoing invitation", async () => {
     const inv = makeInvitation({ invitee_email: "friend@example.com" });
-    server.use(http.get("/api/v1/users/me/invitations/", () => HttpResponse.json([inv])));
-    const { wrapper } = await mountWithApp(AccountSettingsView, { route: "/account/settings/" });
-    await vi.waitFor(() => expect(wrapper.text()).toContain("friend@example.com"));
+    server.use(
+      http.get("/api/v1/users/me/invitations/", () => HttpResponse.json([inv])),
+    );
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("friend@example.com"),
+    );
 
     // The last "Cancel" is the invitation row's (the first is the
     // password form's).

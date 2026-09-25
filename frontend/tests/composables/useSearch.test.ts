@@ -83,7 +83,9 @@ describe("useFuzzySearch", () => {
 //
 describe("useFindShortcut", () => {
   function press(key: string, init: KeyboardEventInit = {}) {
-    window.dispatchEvent(new KeyboardEvent("keydown", { key, cancelable: true, ...init }));
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key, cancelable: true, ...init }),
+    );
   }
 
   // GIVEN: a page with a closed search bar
@@ -131,7 +133,9 @@ describe("useFindShortcut", () => {
   // THEN:  the search bar stays open (the modal owns the keyboard)
   //
   it("ignores shortcuts while a modal is open", async () => {
-    const { result } = withSetup(() => useFindShortcut({ input: ref(null), initiallyOpen: true }));
+    const { result } = withSetup(() =>
+      useFindShortcut({ input: ref(null), initiallyOpen: true }),
+    );
     withSetup(() => useModal(() => true, vi.fn()));
     await nextTick();
 

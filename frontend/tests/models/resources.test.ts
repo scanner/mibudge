@@ -11,7 +11,11 @@ import { describe, expect, it } from "vitest";
 // app imports
 //
 import { Money } from "@/domain/money";
-import { apiKeyFromDto, apiKeyToCreateDto, createdApiKeyFromDto } from "@/models/apiKey";
+import {
+  apiKeyFromDto,
+  apiKeyToCreateDto,
+  createdApiKeyFromDto,
+} from "@/models/apiKey";
 import { bankFromDto } from "@/models/bank";
 import {
   bankAccountFromDto,
@@ -22,7 +26,10 @@ import {
   fundingSummaryFromDto,
 } from "@/models/bankAccount";
 import { invitationFromDto } from "@/models/invitation";
-import { channelPreferenceFromDto, notificationPreferenceFromDto } from "@/models/notification";
+import {
+  channelPreferenceFromDto,
+  notificationPreferenceFromDto,
+} from "@/models/notification";
 import { pageFromDto } from "@/models/page";
 import { transactionCategoryFromDto } from "@/models/transactionCategory";
 import { userFromDto, userToUpdateDto } from "@/models/user";
@@ -59,7 +66,9 @@ describe("user", () => {
       name: "Ada",
       default_bank_account: null,
     });
-    expect(userToUpdateDto({ timezone: "Asia/Tokyo" })).toEqual({ timezone: "Asia/Tokyo" });
+    expect(userToUpdateDto({ timezone: "Asia/Tokyo" })).toEqual({
+      timezone: "Asia/Tokyo",
+    });
   });
 });
 
@@ -71,7 +80,10 @@ describe("bank and bank account", () => {
   // THEN:  balances are Money and dates are typed
   //
   it("maps from the API", () => {
-    expect(bankFromDto(makeBank({ name: "BofA", routing_number: null })).routingNumber).toBeNull();
+    expect(
+      bankFromDto(makeBank({ name: "BofA", routing_number: null }))
+        .routingNumber,
+    ).toBeNull();
     const account = bankAccountFromDto(
       makeBankAccount({
         posted_balance: "10.5",
@@ -110,7 +122,9 @@ describe("bank and bank account", () => {
       account_number: "123",
       posted_balance: "100.00",
     });
-    expect(bankAccountToUpdateDto({ accountNumber: "", autoFundingEnabled: false })).toEqual({
+    expect(
+      bankAccountToUpdateDto({ accountNumber: "", autoFundingEnabled: false }),
+    ).toEqual({
       account_number: null,
       auto_funding_enabled: false,
     });
@@ -137,9 +151,16 @@ describe("bank and bank account", () => {
       }),
     );
     expect(summary.total.toDecimalString()).toBe("55.00");
-    expect(summary.schedules[0]).toMatchObject({ nextDate: "2026-10-01", budgetCount: 2 });
-    expect(fundingRunIsNoop(fundingRunResultFromDto(makeFundingRunResult()))).toBe(true);
-    const run = fundingRunResultFromDto(makeFundingRunResult({ skipped_budgets: ["Rent"] }));
+    expect(summary.schedules[0]).toMatchObject({
+      nextDate: "2026-10-01",
+      budgetCount: 2,
+    });
+    expect(
+      fundingRunIsNoop(fundingRunResultFromDto(makeFundingRunResult())),
+    ).toBe(true);
+    const run = fundingRunResultFromDto(
+      makeFundingRunResult({ skipped_budgets: ["Rent"] }),
+    );
     expect(run.skippedBudgets).toEqual(["Rent"]);
     expect(fundingRunIsNoop(run)).toBe(false);
   });
@@ -155,18 +176,33 @@ describe("categories, invitations, API keys, notifications, pages", () => {
   //
   it("maps from the API", () => {
     expect(transactionCategoryFromDto(makeCategory()).ownerId).toBeNull();
-    expect(transactionCategoryFromDto(makeCategory({ owner: "u1" })).ownerId).toBe("u1");
+    expect(
+      transactionCategoryFromDto(makeCategory({ owner: "u1" })).ownerId,
+    ).toBe("u1");
 
-    const inv = invitationFromDto(makeInvitation({ invitee_email: "x@example.com" }));
+    const inv = invitationFromDto(
+      makeInvitation({ invitee_email: "x@example.com" }),
+    );
     expect(inv.inviteeEmail).toBe("x@example.com");
 
-    const key = apiKeyFromDto(makeApiKey({ revoked_at: "2026-09-02T00:00:00Z" }));
+    const key = apiKeyFromDto(
+      makeApiKey({ revoked_at: "2026-09-02T00:00:00Z" }),
+    );
     expect(key.revokedAt).toBe("2026-09-02T00:00:00Z");
-    expect(createdApiKeyFromDto({ ...makeApiKey(), key: "mb_secret" }).plaintext).toBe("mb_secret");
-    expect(apiKeyToCreateDto("importer", null)).toEqual({ name: "importer", expiry_days: null });
+    expect(
+      createdApiKeyFromDto({ ...makeApiKey(), key: "mb_secret" }).plaintext,
+    ).toBe("mb_secret");
+    expect(apiKeyToCreateDto("importer", null)).toEqual({
+      name: "importer",
+      expiry_days: null,
+    });
 
-    expect(notificationPreferenceFromDto(makeNotificationPreference()).canSuppress).toBe(true);
-    expect(channelPreferenceFromDto(makeChannelPreference()).digestFrequency).toBe("daily_evening");
+    expect(
+      notificationPreferenceFromDto(makeNotificationPreference()).canSuppress,
+    ).toBe(true);
+    expect(
+      channelPreferenceFromDto(makeChannelPreference()).digestFrequency,
+    ).toBe("daily_evening");
 
     const page = pageFromDto(makePage([1, 2]), (n: number) => n * 10);
     expect(page).toEqual({ count: 2, next: null, results: [10, 20] });

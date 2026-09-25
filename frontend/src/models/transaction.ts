@@ -5,12 +5,18 @@
 
 // app imports
 //
-import type { TransactionDto, TransactionTypeDto, TransactionUpdateDto } from "@/api/dto";
+import type {
+  TransactionDto,
+  TransactionTypeDto,
+  TransactionUpdateDto,
+} from "@/api/dto";
 import type { TransactionType } from "@/domain/labels";
 import { DEFAULT_CURRENCY, Money } from "@/domain/money";
 import type { Equal, Expect } from "@/models/schemaCheck";
 
-export type TransactionTypeMatchesSchema = Expect<Equal<TransactionType, TransactionTypeDto>>;
+export type TransactionTypeMatchesSchema = Expect<
+  Equal<TransactionType, TransactionTypeDto>
+>;
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -123,7 +129,9 @@ export function transactionFromDto(dto: TransactionDto): Transaction {
 // The instant a transaction happened: its transaction date, or its
 // posted date when the bank gave none.
 //
-export function occurredAt(tx: Pick<Transaction, "transactionDate" | "postedDate">): string {
+export function occurredAt(
+  tx: Pick<Transaction, "transactionDate" | "postedDate">,
+): string {
   return tx.transactionDate ?? tx.postedDate;
 }
 

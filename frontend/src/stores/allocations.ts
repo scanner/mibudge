@@ -28,9 +28,13 @@ import { allocationFromDto, indexByTransaction } from "@/models/allocation";
 
 ////////////////////////////////////////////////////////////////////////
 //
-async function fetchIndex(accountId: string): Promise<Map<string, Allocation[]>> {
+async function fetchIndex(
+  accountId: string,
+): Promise<Map<string, Allocation[]>> {
   const first = await api.allocations.list({ bank_account: accountId });
-  return indexByTransaction((await api.pages.all(first)).map(allocationFromDto));
+  return indexByTransaction(
+    (await api.pages.all(first)).map(allocationFromDto),
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -55,7 +59,10 @@ export const useAllocationsStore = defineStore("allocations", () => {
   // set or none is cached.  Concurrent unforced callers share one
   // fetch; a forced call starts a new one.
   //
-  function loadForAccount(accountId: string, force = false): Promise<Map<string, Allocation[]>> {
+  function loadForAccount(
+    accountId: string,
+    force = false,
+  ): Promise<Map<string, Allocation[]>> {
     const cached = byAccount.value.get(accountId);
     if (cached && !force) return Promise.resolve(cached);
     const pending = inFlight.get(accountId);
@@ -117,5 +124,12 @@ export const useAllocationsStore = defineStore("allocations", () => {
   }
 
   // The backing map is returned so Pinia treats it as state.
-  return { byAccount, indexFor, loadForAccount, setForTransaction, invalidate, reset };
+  return {
+    byAccount,
+    indexFor,
+    loadForAccount,
+    setForTransaction,
+    invalidate,
+    reset,
+  };
 });

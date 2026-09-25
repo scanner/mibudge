@@ -9,7 +9,12 @@ import { describe, expect, it } from "vitest";
 
 // app imports
 //
-import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import {
+  budgetMeta,
+  budgetProgress,
+  budgetStatus,
+  progressTone,
+} from "@/domain/budgetStatus";
 import type { BudgetFigures } from "@/domain/budgetStatus";
 import type { BudgetDto as Budget } from "@/api/dto";
 import { budgetFromDto } from "@/models/budget";
@@ -57,7 +62,12 @@ describe("budgetStatus / progressTone", () => {
     ["paused", { paused: true, balance: "-5.00" }, "paused", "neutral"],
     ["overdrawn", { balance: "-0.01" }, "over", "coral"],
     ["complete", { complete: true, balance: "1.00" }, "funded", "mint"],
-    ["at target", { balance: "500.00", target_balance: "500.00" }, "funded", "mint"],
+    [
+      "at target",
+      { balance: "500.00", target_balance: "500.00" },
+      "funded",
+      "mint",
+    ],
     ["behind pace", { funding_pace: "behind" }, "warn", "amber"],
     ["in progress", {}, "progress", "ocean"],
   ])("%s", (_label, overrides, status, tone) => {
@@ -76,13 +86,24 @@ describe("budgetMeta", () => {
   //        recurring budgets the refresh schedule and next refresh date
   //
   it.each<[string, Partial<Budget>, string]>([
-    ["goal with date", { budget_type: "G", target_date: "2026-08-01" }, "Goal · by Aug 2026"],
+    [
+      "goal with date",
+      { budget_type: "G", target_date: "2026-08-01" },
+      "Goal · by Aug 2026",
+    ],
     ["goal without date", { budget_type: "G", target_date: null }, "Goal"],
     ["capped", { budget_type: "C" }, "Capped"],
-    ["recurring without schedule", { budget_type: "R", recurrence_schedule: null }, "Recurring"],
+    [
+      "recurring without schedule",
+      { budget_type: "R", recurrence_schedule: null },
+      "Recurring",
+    ],
     [
       "recurring",
-      { budget_type: "R", recurrence_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1" },
+      {
+        budget_type: "R",
+        recurrence_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1",
+      },
       "Recurring · refreshes Every month on the 1st",
     ],
     [

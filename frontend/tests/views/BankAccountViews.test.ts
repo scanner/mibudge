@@ -33,9 +33,9 @@ function button(wrapper: Wrapper, text: string) {
 }
 
 function dialogButton(text: string) {
-  return Array.from(document.body.querySelectorAll('[role="dialog"] button')).find(
-    (b) => b.textContent?.trim() === text,
-  ) as HTMLButtonElement;
+  return Array.from(
+    document.body.querySelectorAll('[role="dialog"] button'),
+  ).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -45,19 +45,30 @@ describe("BankAccountDetailView", () => {
 
   beforeEach(() => {
     withAuth(undefined, makeUser({ email: "owner@example.com" }));
-    account = makeBankAccount({ name: "Household", account_number: "123456789" });
+    account = makeBankAccount({
+      name: "Household",
+      account_number: "123456789",
+    });
     withAccounts([account]);
     server.use(
-      http.get(`/api/v1/bank-accounts/${account.id}/`, () => HttpResponse.json(account)),
+      http.get(`/api/v1/bank-accounts/${account.id}/`, () =>
+        HttpResponse.json(account),
+      ),
       http.get(`/api/v1/banks/${account.bank}/`, () =>
-        HttpResponse.json(makeBank({ id: account.bank, name: "Bank of Testing" })),
+        HttpResponse.json(
+          makeBank({ id: account.bank, name: "Bank of Testing" }),
+        ),
       ),
     );
   });
 
   async function open() {
-    const mounted = await mountWithApp(App, { route: `/account/bank-accounts/${account.id}/` });
-    await vi.waitFor(() => expect(mounted.wrapper.find("h1").exists()).toBe(true));
+    const mounted = await mountWithApp(App, {
+      route: `/account/bank-accounts/${account.id}/`,
+    });
+    await vi.waitFor(() =>
+      expect(mounted.wrapper.find("h1").exists()).toBe(true),
+    );
     await flushPromises();
     return mounted;
   }
@@ -85,7 +96,10 @@ describe("BankAccountDetailView", () => {
     await button(wrapper, "Save").trigger("click");
     await flushPromises();
 
-    const [patch] = await requestsTo("PATCH", `/api/v1/bank-accounts/${account.id}/`);
+    const [patch] = await requestsTo(
+      "PATCH",
+      `/api/v1/bank-accounts/${account.id}/`,
+    );
     expect(patch.body).toEqual({ name: "Joint" });
     expect(useBankAccountsStore().byId(account.id)?.name).toBe("Joint");
   });
@@ -108,7 +122,10 @@ describe("BankAccountDetailView", () => {
     dialogButton("Send invitation").click();
     await flushPromises();
 
-    const [post] = await requestsTo("POST", `/api/v1/bank-accounts/${account.id}/invite/`);
+    const [post] = await requestsTo(
+      "POST",
+      `/api/v1/bank-accounts/${account.id}/invite/`,
+    );
     expect(post.body).toEqual({ invitee_email: "friend@example.com" });
     expect(wrapper.text()).toContain("already an owner");
   });
@@ -130,7 +147,9 @@ describe("BankAccountDetailView", () => {
   //
   it("cancels a pending invitation", async () => {
     const { wrapper } = await open();
-    await vi.waitFor(() => expect(wrapper.text()).toContain("invitee@example.com"));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("invitee@example.com"),
+    );
     await button(wrapper, "Cancel").trigger("click");
     await flushPromises();
     expect(wrapper.text()).not.toContain("invitee@example.com");
@@ -147,7 +166,9 @@ describe("BankAccountDetailView", () => {
         HttpResponse.json(makeFundingSummary({ total_amount: "40.00" })),
       ),
       http.post(`/api/v1/bank-accounts/${account.id}/run-funding/`, () =>
-        HttpResponse.json(makeFundingRunResult({ transfers: 2, warnings: ["Rent short"] })),
+        HttpResponse.json(
+          makeFundingRunResult({ transfers: 2, warnings: ["Rent short"] }),
+        ),
       ),
     );
     const { wrapper } = await open();
@@ -172,7 +193,10 @@ describe("BankAccountDetailView", () => {
     const { wrapper } = await open();
     await wrapper.get('input[type="checkbox"]').trigger("change");
     await flushPromises();
-    const [patch] = await requestsTo("PATCH", `/api/v1/bank-accounts/${account.id}/`);
+    const [patch] = await requestsTo(
+      "PATCH",
+      `/api/v1/bank-accounts/${account.id}/`,
+    );
     expect(patch.body).toEqual({ auto_funding_enabled: false });
   });
 
@@ -181,15 +205,21 @@ describe("BankAccountDetailView", () => {
   // THEN:  the account is deleted and the Account tab opens
   //
   it("deletes the account", async () => {
-    server.use(http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage([]))));
+    server.use(
+      http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage([]))),
+    );
     const { wrapper, router } = await open();
 
     await button(wrapper, "Delete account").trigger("click");
     dialogButton("Delete account").click();
     await flushPromises();
 
-    expect(await requestsTo("DELETE", `/api/v1/bank-accounts/${account.id}/`)).toHaveLength(1);
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("account"));
+    expect(
+      await requestsTo("DELETE", `/api/v1/bank-accounts/${account.id}/`),
+    ).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("account"),
+    );
   });
 });
 
@@ -204,11 +234,15 @@ describe("BankAccountCreateView", () => {
     withAuth();
     withAccounts([makeBankAccount()]);
     const bank = makeBank({ name: "Bank of Testing" });
-    server.use(http.get("/api/v1/banks/", () => HttpResponse.json(makePage([bank]))));
+    server.use(
+      http.get("/api/v1/banks/", () => HttpResponse.json(makePage([bank]))),
+    );
     const { wrapper, router } = await mountWithApp(App, {
       route: "/account/bank-accounts/create/",
     });
-    await vi.waitFor(() => expect(wrapper.find("#acct-bank").exists()).toBe(true));
+    await vi.waitFor(() =>
+      expect(wrapper.find("#acct-bank").exists()).toBe(true),
+    );
 
     await wrapper.get("#acct-name").setValue("Savings");
     await wrapper.get("#acct-bank").setValue(bank.id);
@@ -226,7 +260,9 @@ describe("BankAccountCreateView", () => {
       account_number: "5555",
       posted_balance: "100.50",
     });
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("bank-account-detail"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("bank-account-detail"),
+    );
   });
 
   // GIVEN: a form with no name
@@ -236,7 +272,9 @@ describe("BankAccountCreateView", () => {
   it("requires a name", async () => {
     withAuth();
     withAccounts([makeBankAccount()]);
-    const { wrapper } = await mountWithApp(App, { route: "/account/bank-accounts/create/" });
+    const { wrapper } = await mountWithApp(App, {
+      route: "/account/bank-accounts/create/",
+    });
     await vi.waitFor(() => expect(wrapper.find("form").exists()).toBe(true));
     await wrapper.get("form").trigger("submit");
     await flushPromises();

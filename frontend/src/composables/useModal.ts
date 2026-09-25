@@ -82,7 +82,10 @@ export function useModal(
   function activate(): void {
     if (active) return;
     active = true;
-    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    returnFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     stack.value = [...stack.value, token];
     if (locks) lockScroll();
     window.addEventListener("keydown", onKeydown);
@@ -99,7 +102,9 @@ export function useModal(
     if (target && target.isConnected) target.focus();
   }
 
-  watch(open, (isOpen) => (isOpen ? activate() : deactivate()), { immediate: true });
+  watch(open, (isOpen) => (isOpen ? activate() : deactivate()), {
+    immediate: true,
+  });
   if (getCurrentScope()) onScopeDispose(deactivate);
 
   return {

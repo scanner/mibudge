@@ -23,26 +23,41 @@ defineProps<{
   <!-- Hero balance grid (2×2) -->
   <section class="grid grid-cols-2 gap-3">
     <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+      <div
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      >
         Posted balance
       </div>
       <MoneyAmount :amount="account.postedBalance" size="md" />
     </div>
     <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+      <div
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      >
         Available balance
       </div>
       <MoneyAmount :amount="account.availableBalance" size="md" />
     </div>
     <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+      <div
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      >
         Unallocated
       </div>
-      <MoneyAmount v-if="unallocated" :amount="unallocated" size="md" :coloured="false" />
-      <span v-else class="font-mono text-[15px] font-medium text-secondary">—</span>
+      <MoneyAmount
+        v-if="unallocated"
+        :amount="unallocated"
+        size="md"
+        :coloured="false"
+      />
+      <span v-else class="font-mono text-[15px] font-medium text-secondary"
+        >—</span
+      >
     </div>
     <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+      <div
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      >
         Currency
       </div>
       <span class="font-mono text-[15px] font-medium text-neutral-900">

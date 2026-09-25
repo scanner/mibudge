@@ -48,9 +48,14 @@ describe("AppShell", () => {
       },
     });
     const budgets = useBudgetsStore(pinia);
-    vi.mocked(budgets.fetchOne).mockImplementation(() => new Promise(() => undefined));
+    vi.mocked(budgets.fetchOne).mockImplementation(
+      () => new Promise(() => undefined),
+    );
 
-    const { wrapper } = await mountWithApp(AppShell, { route: "/budgets/", pinia });
+    const { wrapper } = await mountWithApp(AppShell, {
+      route: "/budgets/",
+      pinia,
+    });
 
     expect(wrapper.text()).toContain("Household, Available:");
     expect(wrapper.text()).toContain("—");
@@ -64,16 +69,23 @@ describe("AppShell", () => {
   it("shows the unallocated balance fetched from the API", async () => {
     withAuth();
     const account = makeBankAccount();
-    const unallocated = makeBudget({ id: account.unallocated_budget!, balance: "42.50" });
+    const unallocated = makeBudget({
+      id: account.unallocated_budget!,
+      balance: "42.50",
+    });
     server.use(
-      http.get(`/api/v1/budgets/${unallocated.id}/`, () => HttpResponse.json(unallocated)),
+      http.get(`/api/v1/budgets/${unallocated.id}/`, () =>
+        HttpResponse.json(unallocated),
+      ),
     );
     withAccounts([account]);
 
     const { wrapper } = await mountWithApp(AppShell, { route: "/budgets/" });
 
     expect(wrapper.text()).toContain("42.50");
-    expect(await requestsTo("GET", `/api/v1/budgets/${unallocated.id}/`)).toHaveLength(1);
+    expect(
+      await requestsTo("GET", `/api/v1/budgets/${unallocated.id}/`),
+    ).toHaveLength(1);
   });
 });
 
@@ -86,11 +98,16 @@ describe("account switcher", () => {
   //
   it("switches the active account", async () => {
     withAuth();
-    const [a, b] = [makeBankAccount({ name: "One" }), makeBankAccount({ name: "Two" })];
+    const [a, b] = [
+      makeBankAccount({ name: "One" }),
+      makeBankAccount({ name: "Two" }),
+    ];
     withAccounts([a, b]);
 
     const { wrapper } = await mountWithApp(AppShell, { route: "/budgets/" });
-    await wrapper.get('button[aria-label="Switch bank account"]').trigger("click");
+    await wrapper
+      .get('button[aria-label="Switch bank account"]')
+      .trigger("click");
     const dialog = document.body.querySelector('[role="dialog"]');
     expect(dialog?.textContent).toContain("Two");
     const choice = Array.from(dialog!.querySelectorAll("button")).find((el) =>
@@ -115,18 +132,25 @@ describe("account switcher", () => {
     ["/transactions/00000000-0000-4000-8000-000000000001/", "transactions"],
   ])("leaves %s for its list on an account switch", async (route, listName) => {
     withAuth();
-    const [a, b] = [makeBankAccount({ name: "One" }), makeBankAccount({ name: "Two" })];
+    const [a, b] = [
+      makeBankAccount({ name: "One" }),
+      makeBankAccount({ name: "Two" }),
+    ];
     withAccounts([a, b]);
 
     const { wrapper, router } = await mountWithApp(AppShell, { route });
-    await wrapper.get('button[aria-label="Switch bank account"]').trigger("click");
+    await wrapper
+      .get('button[aria-label="Switch bank account"]')
+      .trigger("click");
     const dialog = document.body.querySelector('[role="dialog"]');
     const choice = Array.from(dialog!.querySelectorAll("button")).find((el) =>
       el.textContent?.includes("Two"),
     );
     choice!.click();
 
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe(listName));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe(listName),
+    );
   });
 
   // GIVEN: the switcher open
@@ -137,13 +161,19 @@ describe("account switcher", () => {
     withAuth();
     withAccounts([makeBankAccount()]);
 
-    const { wrapper, router } = await mountWithApp(AppShell, { route: "/budgets/" });
-    await wrapper.get('button[aria-label="Switch bank account"]').trigger("click");
-    const manage = Array.from(document.body.querySelectorAll("button")).find((el) =>
-      el.textContent?.includes("Manage accounts"),
+    const { wrapper, router } = await mountWithApp(AppShell, {
+      route: "/budgets/",
+    });
+    await wrapper
+      .get('button[aria-label="Switch bank account"]')
+      .trigger("click");
+    const manage = Array.from(document.body.querySelectorAll("button")).find(
+      (el) => el.textContent?.includes("Manage accounts"),
     );
     manage!.click();
 
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("account"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("account"),
+    );
   });
 });

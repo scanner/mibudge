@@ -33,7 +33,9 @@ describe("BudgetDetailView", () => {
     withAuth();
     account = makeBankAccount();
     withAccounts([account]);
-    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))));
+    server.use(
+      http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
+    );
   });
 
   function serveBudgets(budgets: ReturnType<typeof makeBudget>[]) {
@@ -53,7 +55,9 @@ describe("BudgetDetailView", () => {
     const a = makeBudget({ name: "Groceries", bank_account: account.id });
     const b = makeBudget({ name: "Vacation", bank_account: account.id });
     serveBudgets([a, b]);
-    const { wrapper, router } = await mountWithApp(App, { route: `/budgets/${a.id}/` });
+    const { wrapper, router } = await mountWithApp(App, {
+      route: `/budgets/${a.id}/`,
+    });
     await vi.waitFor(() => expect(wrapper.find("h1").text()).toBe("Groceries"));
 
     await router.push(`/budgets/${b.id}/`);
@@ -78,13 +82,21 @@ describe("BudgetDetailView", () => {
     server.use(
       http.get("/api/v1/allocations/", () =>
         HttpResponse.json(
-          makePage([makeAllocation({ transaction: tx.id, budget: budget.id, amount: "-12.34" })]),
+          makePage([
+            makeAllocation({
+              transaction: tx.id,
+              budget: budget.id,
+              amount: "-12.34",
+            }),
+          ]),
         ),
       ),
       http.get(`/api/v1/transactions/${tx.id}/`, () => HttpResponse.json(tx)),
     );
 
-    const { wrapper } = await mountWithApp(App, { route: `/budgets/${budget.id}/` });
+    const { wrapper } = await mountWithApp(App, {
+      route: `/budgets/${budget.id}/`,
+    });
 
     await vi.waitFor(() => expect(wrapper.text()).toContain("Corner Market"));
   });
@@ -94,9 +106,15 @@ describe("BudgetDetailView", () => {
   // THEN:  the PATCH is sent and the button offers to resume
   //
   it("pauses the budget", async () => {
-    const budget = makeBudget({ name: "Groceries", bank_account: account.id, paused: false });
+    const budget = makeBudget({
+      name: "Groceries",
+      bank_account: account.id,
+      paused: false,
+    });
     serveBudgets([budget]);
-    const { wrapper } = await mountWithApp(App, { route: `/budgets/${budget.id}/` });
+    const { wrapper } = await mountWithApp(App, {
+      route: `/budgets/${budget.id}/`,
+    });
     await vi.waitFor(() => expect(wrapper.find("h1").exists()).toBe(true));
 
     await wrapper
@@ -123,8 +141,14 @@ describe("BudgetDetailView", () => {
       bank_account: account.id,
     });
     serveBudgets([budget, unalloc]);
-    server.use(http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([budget, unalloc]))));
-    const { wrapper } = await mountWithApp(App, { route: `/budgets/${budget.id}/` });
+    server.use(
+      http.get("/api/v1/budgets/", () =>
+        HttpResponse.json(makePage([budget, unalloc])),
+      ),
+    );
+    const { wrapper } = await mountWithApp(App, {
+      route: `/budgets/${budget.id}/`,
+    });
     await vi.waitFor(() => expect(wrapper.find("h1").exists()).toBe(true));
 
     await wrapper
@@ -132,7 +156,9 @@ describe("BudgetDetailView", () => {
       .find((b) => b.text().includes("Move money"))!
       .trigger("click");
     await flushPromises();
-    const amount = document.body.querySelector<HTMLInputElement>('input[type="number"]')!;
+    const amount = document.body.querySelector<HTMLInputElement>(
+      'input[type="number"]',
+    )!;
     amount.value = "25";
     amount.dispatchEvent(new Event("input"));
     await flushPromises();

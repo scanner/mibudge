@@ -19,7 +19,9 @@ import type { AccountType } from "@/domain/labels";
 import { DEFAULT_CURRENCY, Money } from "@/domain/money";
 import type { Equal, Expect } from "@/models/schemaCheck";
 
-export type AccountTypeMatchesSchema = Expect<Equal<AccountType, AccountTypeDto>>;
+export type AccountTypeMatchesSchema = Expect<
+  Equal<AccountType, AccountTypeDto>
+>;
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -57,8 +59,14 @@ export function bankAccountFromDto(dto: BankAccountDto): BankAccount {
     accountType: dto.account_type ?? "C",
     accountNumber: dto.account_number ?? null,
     currency,
-    postedBalance: Money.of(dto.posted_balance, dto.posted_balance_currency || currency),
-    availableBalance: Money.of(dto.available_balance, dto.available_balance_currency || currency),
+    postedBalance: Money.of(
+      dto.posted_balance,
+      dto.posted_balance_currency || currency,
+    ),
+    availableBalance: Money.of(
+      dto.available_balance,
+      dto.available_balance_currency || currency,
+    ),
     unallocatedBudgetId: dto.unallocated_budget ?? null,
     autoFundingEnabled: dto.auto_funding_enabled ?? true,
     lastImportedAt: dto.last_imported_at ?? null,
@@ -80,7 +88,9 @@ export interface BankAccountInput {
   availableBalance: Money | null;
 }
 
-export function bankAccountToCreateDto(input: BankAccountInput): BankAccountCreateDto {
+export function bankAccountToCreateDto(
+  input: BankAccountInput,
+): BankAccountCreateDto {
   const dto: BankAccountCreateDto = {
     account_type: input.accountType,
     name: input.name,
@@ -88,8 +98,10 @@ export function bankAccountToCreateDto(input: BankAccountInput): BankAccountCrea
     currency: input.currency,
     account_number: input.accountNumber,
   };
-  if (input.postedBalance) dto.posted_balance = input.postedBalance.toDecimalString();
-  if (input.availableBalance) dto.available_balance = input.availableBalance.toDecimalString();
+  if (input.postedBalance)
+    dto.posted_balance = input.postedBalance.toDecimalString();
+  if (input.availableBalance)
+    dto.available_balance = input.availableBalance.toDecimalString();
   return dto;
 }
 
@@ -99,10 +111,13 @@ export type BankAccountUpdate = Partial<
   Pick<BankAccount, "name" | "accountNumber" | "autoFundingEnabled">
 >;
 
-export function bankAccountToUpdateDto(update: BankAccountUpdate): BankAccountUpdateDto {
+export function bankAccountToUpdateDto(
+  update: BankAccountUpdate,
+): BankAccountUpdateDto {
   const dto: BankAccountUpdateDto = {};
   if (update.name !== undefined) dto.name = update.name;
-  if (update.accountNumber !== undefined) dto.account_number = update.accountNumber || null;
+  if (update.accountNumber !== undefined)
+    dto.account_number = update.accountNumber || null;
   if (update.autoFundingEnabled !== undefined) {
     dto.auto_funding_enabled = update.autoFundingEnabled;
   }
@@ -150,7 +165,9 @@ export interface FundingRunResult {
   skippedBudgets: string[];
 }
 
-export function fundingRunResultFromDto(dto: FundingRunResultDto): FundingRunResult {
+export function fundingRunResultFromDto(
+  dto: FundingRunResultDto,
+): FundingRunResult {
   return {
     transfers: dto.transfers ?? 0,
     occurrencesCompleted: dto.occurrences_completed ?? 0,
@@ -166,6 +183,8 @@ export function fundingRunResultFromDto(dto: FundingRunResultDto): FundingRunRes
 //
 export function fundingRunIsNoop(result: FundingRunResult): boolean {
   return (
-    result.transfers === 0 && result.warnings.length === 0 && result.skippedBudgets.length === 0
+    result.transfers === 0 &&
+    result.warnings.length === 0 &&
+    result.skippedBudgets.length === 0
   );
 }

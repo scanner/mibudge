@@ -86,11 +86,15 @@ describe("route table", () => {
   // THEN:  every route has a name and declares its access level, and
   //        every route with an `:id` passes it to the view as a prop
   //
-  it.each(routes.map((r) => [r.name, r] as const))("%s is complete", (_name, route) => {
-    expect(route.name).toBeTruthy();
-    expect(["public", "authenticated"]).toContain(route.meta.access);
-    if (route.path.includes(":id")) expect("props" in route && route.props).toBe(true);
-  });
+  it.each(routes.map((r) => [r.name, r] as const))(
+    "%s is complete",
+    (_name, route) => {
+      expect(route.name).toBeTruthy();
+      expect(["public", "authenticated"]).toContain(route.meta.access);
+      if (route.path.includes(":id"))
+        expect("props" in route && route.props).toBe(true);
+    },
+  );
 
   // GIVEN: a path no route matches
   // WHEN:  a visitor, signed in or not, navigates to it
@@ -113,12 +117,12 @@ describe("route table", () => {
   //
   it("resolves named routes to their paths", () => {
     const router = makeRouter();
-    expect(router.resolve({ name: "budget-detail", params: { id: "abc" } }).path).toBe(
-      "/budgets/abc/",
-    );
-    expect(router.resolve({ name: "bank-account-detail", params: { id: "x" } }).path).toBe(
-      "/account/bank-accounts/x/",
-    );
+    expect(
+      router.resolve({ name: "budget-detail", params: { id: "abc" } }).path,
+    ).toBe("/budgets/abc/");
+    expect(
+      router.resolve({ name: "bank-account-detail", params: { id: "x" } }).path,
+    ).toBe("/account/bank-accounts/x/");
   });
 });
 
@@ -135,13 +139,19 @@ describe("session end", () => {
     withAuth();
     const router = makeRouter();
     await router.push("/budgets/?tab=paused");
-    initApi(createSessionHttpClient({ onAuthFailure: () => void redirectToLogin(router) }));
+    initApi(
+      createSessionHttpClient({
+        onAuthFailure: () => void redirectToLogin(router),
+      }),
+    );
     expire(TEST_TOKEN);
     respondOnce401("/api/token/refresh/", "post");
 
     await expect(api.budgets.list()).rejects.toBeInstanceOf(AuthError);
 
-    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe("/login/"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.path).toBe("/login/"),
+    );
     expect(router.currentRoute.value.query.next).toBe("/budgets/?tab=paused");
     expect(useSessionStore().isAuthenticated).toBe(false);
   });

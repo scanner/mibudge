@@ -80,10 +80,14 @@ const { signOut } = useSignOut();
         Section 2 — Bank accounts list
       -->
       <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+        <h2
+          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        >
           Bank accounts
         </h2>
-        <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+        <div
+          class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+        >
           <ul>
             <li
               v-for="(account, idx) in ctx.accounts"
@@ -93,15 +97,29 @@ const { signOut } = useSignOut();
               <button
                 type="button"
                 class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-neutral-50"
-                @click="router.push({ name: 'bank-account-detail', params: { id: account.id } })"
+                @click="
+                  router.push({
+                    name: 'bank-account-detail',
+                    params: { id: account.id },
+                  })
+                "
               >
-                <span class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-ocean-400" />
+                <span
+                  class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-ocean-400"
+                />
                 <div class="min-w-0 flex-1">
-                  <div class="truncate text-[15px] font-medium text-neutral-900">
+                  <div
+                    class="truncate text-[15px] font-medium text-neutral-900"
+                  >
                     {{ account.name }}
                   </div>
                   <div class="text-xs text-secondary">
-                    {{ accountTypeMeta(account.accountType, account.accountNumber) }}
+                    {{
+                      accountTypeMeta(
+                        account.accountType,
+                        account.accountNumber,
+                      )
+                    }}
                   </div>
                 </div>
                 <div class="flex flex-none flex-col items-end gap-0.5">
@@ -117,10 +135,16 @@ const { signOut } = useSignOut();
                     v-if="unallocatedFor(account)"
                     class="text-[11px] font-medium text-mint-600"
                   >
-                    <MoneyAmount :amount="unallocatedFor(account)!.balance" size="sm" />
+                    <MoneyAmount
+                      :amount="unallocatedFor(account)!.balance"
+                      size="sm"
+                    />
                     unallocated
                   </span>
-                  <span v-if="nextFundingFor(account)" class="text-[11px] text-ocean-500">
+                  <span
+                    v-if="nextFundingFor(account)"
+                    class="text-[11px] text-ocean-500"
+                  >
                     <MoneyAmount :amount="nextFundingFor(account)!" size="sm" />
                     next event
                   </span>
@@ -131,7 +155,11 @@ const { signOut } = useSignOut();
           </ul>
 
           <!-- Add bank account row -->
-          <div :class="ctx.accounts.length > 0 ? 'border-t border-neutral-100' : ''">
+          <div
+            :class="
+              ctx.accounts.length > 0 ? 'border-t border-neutral-100' : ''
+            "
+          >
             <button
               type="button"
               class="flex w-full items-center gap-3 rounded-b-card px-4 py-3.5 text-left text-sm font-medium text-ocean-600 hover:bg-ocean-50"
@@ -159,10 +187,14 @@ const { signOut } = useSignOut();
         Section 3 — Settings
       -->
       <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary">
+        <h2
+          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        >
           Settings
         </h2>
-        <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+        <div
+          class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+        >
           <!-- Default account -->
           <div class="flex items-center justify-between px-4 py-3.5">
             <div class="flex items-center gap-3 text-neutral-700">
@@ -173,7 +205,9 @@ const { signOut } = useSignOut();
               :value="auth.user?.defaultBankAccountId ?? ''"
               :disabled="settingDefault || ctx.accounts.length === 0"
               class="rounded-md border border-neutral-200 bg-white py-1 pl-2 pr-6 text-xs text-neutral-700 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400 disabled:opacity-50"
-              @change="setDefaultAccount(($event.target as HTMLSelectElement).value)"
+              @change="
+                setDefaultAccount(($event.target as HTMLSelectElement).value)
+              "
             >
               <option value="">None</option>
               <option v-for="a in ctx.accounts" :key="a.id" :value="a.id">
@@ -181,7 +215,11 @@ const { signOut } = useSignOut();
               </option>
             </select>
           </div>
-          <p v-if="defaultAccountError" class="px-4 pb-3 text-xs text-coral-600" role="alert">
+          <p
+            v-if="defaultAccountError"
+            class="px-4 pb-3 text-xs text-coral-600"
+            role="alert"
+          >
             {{ defaultAccountError }}
           </p>
 
@@ -193,7 +231,9 @@ const { signOut } = useSignOut();
               @click="router.push({ name: 'account-settings' })"
             >
               <IconLock class="h-4 w-4 text-neutral-700" />
-              <span class="flex-1 text-sm text-neutral-700">Security &amp; Notifications</span>
+              <span class="flex-1 text-sm text-neutral-700"
+                >Security &amp; Notifications</span
+              >
               <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
             </button>
           </div>

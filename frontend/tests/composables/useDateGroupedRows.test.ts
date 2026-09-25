@@ -10,7 +10,10 @@ import { ref } from "vue";
 
 // app imports
 //
-import { groupRowsByDate, useDateGroupedRows } from "@/composables/useDateGroupedRows";
+import {
+  groupRowsByDate,
+  useDateGroupedRows,
+} from "@/composables/useDateGroupedRows";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -44,7 +47,10 @@ describe("groupRowsByDate", () => {
       ["2026-09-23", "Yesterday"],
       ["2026-07-04", "Jul 4"],
     ]);
-    expect(groups[0].rows.map((r) => r.id)).toEqual(["today-late", "today-early"]);
+    expect(groups[0].rows.map((r) => r.id)).toEqual([
+      "today-late",
+      "today-early",
+    ]);
   });
 
   // GIVEN: an instant late in the evening in Los Angeles
@@ -53,10 +59,12 @@ describe("groupRowsByDate", () => {
   //
   it("uses the profile timezone", () => {
     const rows: Row[] = [{ id: "x", at: "2026-09-23T05:30:00Z" }];
-    expect(groupRowsByDate(rows, (r) => r.at, "America/Los_Angeles", NOW)[0].date).toBe(
-      "2026-09-22",
+    expect(
+      groupRowsByDate(rows, (r) => r.at, "America/Los_Angeles", NOW)[0].date,
+    ).toBe("2026-09-22");
+    expect(groupRowsByDate(rows, (r) => r.at, "Asia/Tokyo", NOW)[0].date).toBe(
+      "2026-09-23",
     );
-    expect(groupRowsByDate(rows, (r) => r.at, "Asia/Tokyo", NOW)[0].date).toBe("2026-09-23");
   });
 
   // GIVEN: rows with equal instants
@@ -69,10 +77,9 @@ describe("groupRowsByDate", () => {
       { id: "a", at },
       { id: "b", at },
     ];
-    expect(groupRowsByDate(rows, (r) => r.at, "UTC", NOW)[0].rows.map((r) => r.id)).toEqual([
-      "a",
-      "b",
-    ]);
+    expect(
+      groupRowsByDate(rows, (r) => r.at, "UTC", NOW)[0].rows.map((r) => r.id),
+    ).toEqual(["a", "b"]);
   });
 });
 

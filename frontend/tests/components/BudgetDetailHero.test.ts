@@ -23,7 +23,9 @@ describe("BudgetDetailHero", () => {
   // THEN:  the end label reads "Aug 1, 2026", not the day before
   //
   it("shows the target date without a UTC shift", () => {
-    const budget = budgetFromDto(makeBudget({ budget_type: "G", target_date: "2026-08-01" }));
+    const budget = budgetFromDto(
+      makeBudget({ budget_type: "G", target_date: "2026-08-01" }),
+    );
 
     const wrapper = mount(BudgetDetailHero, { props: { budget } });
 

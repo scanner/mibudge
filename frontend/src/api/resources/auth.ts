@@ -32,7 +32,10 @@ export function authResource(http: HttpClient) {
     // Rotate the refresh cookie and get a new access token.
     //
     refreshToken(): Promise<AccessTokenDto> {
-      return http.request(`${AUTH}/token/refresh/`, { method: "POST", auth: false });
+      return http.request(`${AUTH}/token/refresh/`, {
+        method: "POST",
+        auth: false,
+      });
     },
   };
 }

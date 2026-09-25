@@ -29,7 +29,10 @@ describe("useFormErrors", () => {
   it("splits a DRF 400", () => {
     const form = useFormErrors();
     form.setError(
-      apiError(400, { new_password: ["Too short.", "Too common."], non_field_errors: ["No."] }),
+      apiError(400, {
+        new_password: ["Too short.", "Too common."],
+        non_field_errors: ["No."],
+      }),
     );
     expect(form.fieldError("new_password")).toBe("Too short.");
     expect(form.fieldError("current_password")).toBeNull();
@@ -80,7 +83,10 @@ describe("useFormErrors", () => {
     [apiError(500, { detail: "Server exploded." }), "Server exploded."],
   ])("maps %s", (err, message) => {
     const form = useFormErrors();
-    form.setError(err, { fallback: "Save failed.", statusMessages: { 409: "Already invited." } });
+    form.setError(err, {
+      fallback: "Save failed.",
+      statusMessages: { 409: "Already invited." },
+    });
     expect(form.formError.value).toBe(message);
     expect(form.fieldErrors.value).toEqual({});
   });

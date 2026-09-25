@@ -24,7 +24,12 @@ import FillUpBand from "./FillUpBand.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
-import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import {
+  budgetMeta,
+  budgetProgress,
+  budgetStatus,
+  progressTone,
+} from "@/domain/budgetStatus";
 import { rruleHuman } from "@/domain/rrule";
 import type { Budget } from "@/models/budget";
 
@@ -43,7 +48,9 @@ const tone = computed(() => progressTone(status.value));
 const meta = computed(() => budgetMeta(props.budget));
 
 const fundingSchedule = computed(() =>
-  props.budget.fundingSchedule ? rruleHuman(props.budget.fundingSchedule) : null,
+  props.budget.fundingSchedule
+    ? rruleHuman(props.budget.fundingSchedule)
+    : null,
 );
 </script>
 
@@ -56,7 +63,10 @@ const fundingSchedule = computed(() =>
       <!-- Row 1: name + balance -->
       <div class="flex items-start justify-between gap-2">
         <div class="flex min-w-0 items-center gap-1.5">
-          <IconTarget v-if="budget.budgetType === 'G'" class="h-4 w-4 flex-none text-neutral-400" />
+          <IconTarget
+            v-if="budget.budgetType === 'G'"
+            class="h-4 w-4 flex-none text-neutral-400"
+          />
           <IconRepeat
             v-else-if="budget.budgetType === 'R'"
             class="h-4 w-4 flex-none text-neutral-400"
@@ -75,7 +85,10 @@ const fundingSchedule = computed(() =>
       <!-- Row 2: meta + target -->
       <div class="mt-0.5 flex items-center justify-between gap-2">
         <span class="truncate text-[12px] text-secondary">{{ meta }}</span>
-        <span v-if="budget.targetBalance" class="flex-none text-[12px] text-secondary">
+        <span
+          v-if="budget.targetBalance"
+          class="flex-none text-[12px] text-secondary"
+        >
           of&nbsp;<MoneyAmount :amount="budget.targetBalance" size="sm" />
         </span>
       </div>
@@ -85,9 +98,14 @@ const fundingSchedule = computed(() =>
 
       <!-- Row 3: funding info + status chip -->
       <div class="mt-2 flex items-center justify-between gap-2">
-        <span v-if="budget.nextFunding" class="truncate text-[12px] text-secondary">
-          <MoneyAmount :amount="budget.nextFunding.amount" size="sm" />/event<template
-            v-if="fundingSchedule"
+        <span
+          v-if="budget.nextFunding"
+          class="truncate text-[12px] text-secondary"
+        >
+          <MoneyAmount
+            :amount="budget.nextFunding.amount"
+            size="sm"
+          />/event<template v-if="fundingSchedule"
             >&thinsp;·&thinsp;{{ fundingSchedule }}</template
           >
         </span>
@@ -95,12 +113,17 @@ const fundingSchedule = computed(() =>
           v-else-if="budget.budgetType === 'C' && budget.fundingAmount"
           class="truncate text-[12px] text-secondary"
         >
-          <MoneyAmount :amount="budget.fundingAmount" size="sm" />/event<template
-            v-if="fundingSchedule"
+          <MoneyAmount
+            :amount="budget.fundingAmount"
+            size="sm"
+          />/event<template v-if="fundingSchedule"
             >&thinsp;·&thinsp;{{ fundingSchedule }}</template
           >
         </span>
-        <span v-else-if="fundingSchedule" class="truncate text-[12px] text-secondary">
+        <span
+          v-else-if="fundingSchedule"
+          class="truncate text-[12px] text-secondary"
+        >
           Funded&thinsp;·&thinsp;{{ fundingSchedule }}
         </span>
         <span v-else class="flex-1" />

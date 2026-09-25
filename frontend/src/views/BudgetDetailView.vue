@@ -17,7 +17,12 @@
 
 // 3rd party imports
 //
-import { IconArchive, IconArrowsRightLeft, IconPencil, IconPlayerPause } from "@tabler/icons-vue";
+import {
+  IconArchive,
+  IconArrowsRightLeft,
+  IconPencil,
+  IconPlayerPause,
+} from "@tabler/icons-vue";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
@@ -122,10 +127,14 @@ async function confirmArchive() {
           class="flex w-full items-start gap-3 rounded-card border border-neutral-200 bg-ocean-50 px-4 py-3 text-left"
           @click="showMoveMoneyForm = true"
         >
-          <IconArrowsRightLeft class="mt-0.5 h-5 w-5 flex-none text-ocean-400" />
+          <IconArrowsRightLeft
+            class="mt-0.5 h-5 w-5 flex-none text-ocean-400"
+          />
           <div>
             <div class="text-[15px] font-medium text-ocean-600">Move money</div>
-            <div class="text-xs text-secondary">Transfer to or from another budget</div>
+            <div class="text-xs text-secondary">
+              Transfer to or from another budget
+            </div>
           </div>
         </button>
 
@@ -161,7 +170,10 @@ async function confirmArchive() {
         <BudgetTransactionsSection :budget-id="id" />
 
         <!-- Inline error banner -->
-        <p v-if="error" class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600">
+        <p
+          v-if="error"
+          class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600"
+        >
           {{ error }}
         </p>
       </div>

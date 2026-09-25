@@ -25,7 +25,10 @@ export const TEST_TOKEN = "test-access-token";
 // access token in memory and a loaded user (from a DTO, as the API
 // sends it).  Returns the store.
 //
-export function withAuth(token: string = TEST_TOKEN, user: UserDto = makeUser()) {
+export function withAuth(
+  token: string = TEST_TOKEN,
+  user: UserDto = makeUser(),
+) {
   const session = useSessionStore();
   session.accessToken = token;
   session.user = userFromDto(user);
@@ -36,7 +39,10 @@ export function withAuth(token: string = TEST_TOKEN, user: UserDto = makeUser())
 //
 function unauthorized() {
   return HttpResponse.json(
-    { detail: "Given token not valid for any token type", code: "token_not_valid" },
+    {
+      detail: "Given token not valid for any token type",
+      code: "token_not_valid",
+    },
     { status: 401 },
   );
 }
@@ -50,7 +56,8 @@ function unauthorized() {
 export function expire(token: string = TEST_TOKEN): void {
   server.use(
     http.all("/api/v1/*", ({ request }) => {
-      if (request.headers.get("Authorization") === `Bearer ${token}`) return unauthorized();
+      if (request.headers.get("Authorization") === `Bearer ${token}`)
+        return unauthorized();
       return undefined;
     }),
   );

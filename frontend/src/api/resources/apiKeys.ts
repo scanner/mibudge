@@ -7,7 +7,12 @@
 
 // app imports
 //
-import type { ApiKeyCreateDto, ApiKeyCreatedDto, ApiKeyDto, Page } from "@/api/dto";
+import type {
+  ApiKeyCreateDto,
+  ApiKeyCreatedDto,
+  ApiKeyDto,
+  Page,
+} from "@/api/dto";
 import type { HttpClient } from "@/api/http";
 import { V1 } from "./paths";
 

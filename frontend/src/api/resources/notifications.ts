@@ -40,9 +40,12 @@ export function notificationsResource(http: HttpClient) {
     },
 
     updateChannel(channel: string, digestFrequency: DigestFrequencyDto) {
-      return http.patch<ChannelPreferenceDto>(`${V1}/channel-preferences/${channel}/`, {
-        digest_frequency: digestFrequency,
-      });
+      return http.patch<ChannelPreferenceDto>(
+        `${V1}/channel-preferences/${channel}/`,
+        {
+          digest_frequency: digestFrequency,
+        },
+      );
     },
   };
 }

@@ -153,7 +153,10 @@ export function createHttpClient(config: HttpClientConfig): HttpClient {
 
   //////////////////////////////////////////////////////////////////////
   //
-  async function send(path: string, options: RequestOptions): Promise<Response> {
+  async function send(
+    path: string,
+    options: RequestOptions,
+  ): Promise<Response> {
     const headers: Record<string, string> = {};
     let body: BodyInit | undefined;
     if (options.form) {
@@ -182,7 +185,10 @@ export function createHttpClient(config: HttpClientConfig): HttpClient {
 
   //////////////////////////////////////////////////////////////////////
   //
-  async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  async function request<T>(
+    path: string,
+    options: RequestOptions = {},
+  ): Promise<T> {
     let response = await send(path, options);
 
     if (response.status === 401 && options.auth !== false) {
@@ -204,8 +210,10 @@ export function createHttpClient(config: HttpClientConfig): HttpClient {
   return {
     request,
     get: <T>(path: string, query?: object) => request<T>(path, { query }),
-    post: <T>(path: string, json?: unknown) => request<T>(path, { method: "POST", json }),
-    patch: <T>(path: string, json: unknown) => request<T>(path, { method: "PATCH", json }),
+    post: <T>(path: string, json?: unknown) =>
+      request<T>(path, { method: "POST", json }),
+    patch: <T>(path: string, json: unknown) =>
+      request<T>(path, { method: "PATCH", json }),
     delete: <T = null>(path: string) => request<T>(path, { method: "DELETE" }),
     refresh,
   };

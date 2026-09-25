@@ -10,7 +10,12 @@
 
 // 3rd party imports
 //
-import { IconBucket, IconChevronRight, IconRepeat, IconTarget } from "@tabler/icons-vue";
+import {
+  IconBucket,
+  IconChevronRight,
+  IconRepeat,
+  IconTarget,
+} from "@tabler/icons-vue";
 import { useRouter } from "vue-router";
 
 // app imports
@@ -20,7 +25,11 @@ import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
-import { budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import {
+  budgetProgress,
+  budgetStatus,
+  progressTone,
+} from "@/domain/budgetStatus";
 import { formatLocalDate } from "@/domain/dates";
 import { useOverview } from "@/features/overview/useOverview";
 import AppShell from "@/features/shell/AppShell.vue";
@@ -58,23 +67,43 @@ function openTransaction(id: string) {
       <!-- Balance strip -->
       <section v-if="ctx.activeBankAccount" class="grid grid-cols-3 gap-2">
         <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
-          <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div
+            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Posted
           </div>
-          <MoneyAmount :amount="ctx.activeBankAccount.postedBalance" size="md" />
+          <MoneyAmount
+            :amount="ctx.activeBankAccount.postedBalance"
+            size="md"
+          />
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
-          <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div
+            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Available
           </div>
-          <MoneyAmount :amount="ctx.activeBankAccount.availableBalance" size="md" />
+          <MoneyAmount
+            :amount="ctx.activeBankAccount.availableBalance"
+            size="md"
+          />
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
-          <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+          <div
+            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Free
           </div>
-          <MoneyAmount v-if="unallocated" :amount="unallocated.balance" size="md" />
-          <span v-else class="font-mono text-[15px] font-medium text-neutral-400">—</span>
+          <MoneyAmount
+            v-if="unallocated"
+            :amount="unallocated.balance"
+            size="md"
+          />
+          <span
+            v-else
+            class="font-mono text-[15px] font-medium text-neutral-400"
+            >—</span
+          >
         </div>
       </section>
 
@@ -102,7 +131,11 @@ function openTransaction(id: string) {
       <!-- Loading skeleton -->
       <template v-if="loading">
         <div class="space-y-2">
-          <div v-for="i in 4" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
+          <div
+            v-for="i in 4"
+            :key="i"
+            class="h-16 animate-pulse rounded-card bg-neutral-100"
+          />
         </div>
       </template>
 
@@ -119,7 +152,9 @@ function openTransaction(id: string) {
         <!-- Budgets section -->
         <section v-if="budgets.length > 0">
           <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            <h2
+              class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+            >
               Budgets
             </h2>
             <button
@@ -131,7 +166,9 @@ function openTransaction(id: string) {
               <IconChevronRight class="h-3.5 w-3.5" />
             </button>
           </div>
-          <div class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+          <div
+            class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+          >
             <ul class="divide-y divide-neutral-100">
               <li
                 v-for="b in budgets"
@@ -154,11 +191,16 @@ function openTransaction(id: string) {
                         v-else-if="b.budgetType === 'C'"
                         class="h-3.5 w-3.5 flex-none text-neutral-400"
                       />
-                      <span class="min-w-0 truncate text-[14px] font-medium text-neutral-900">{{
-                        b.name
-                      }}</span>
+                      <span
+                        class="min-w-0 truncate text-[14px] font-medium text-neutral-900"
+                        >{{ b.name }}</span
+                      >
                     </div>
-                    <MoneyAmount :amount="b.balance" size="sm" class="flex-none" />
+                    <MoneyAmount
+                      :amount="b.balance"
+                      size="sm"
+                      class="flex-none"
+                    />
                   </div>
                   <ProgressBar
                     :value="budgetProgress(b)"
@@ -168,10 +210,16 @@ function openTransaction(id: string) {
                   />
                   <div class="flex items-center justify-between gap-2">
                     <span
-                      v-if="b.nextFunding && (b.budgetType === 'G' || b.budgetType === 'C')"
+                      v-if="
+                        b.nextFunding &&
+                        (b.budgetType === 'G' || b.budgetType === 'C')
+                      "
                       class="truncate text-[12px] text-secondary"
                     >
-                      <MoneyAmount :amount="b.nextFunding.amount" size="sm" />/event
+                      <MoneyAmount
+                        :amount="b.nextFunding.amount"
+                        size="sm"
+                      />/event
                     </span>
                     <span v-else class="flex-1" />
                     <StatusChip
@@ -190,7 +238,9 @@ function openTransaction(id: string) {
         <!-- Recent transactions -->
         <section v-if="recentTx.length > 0">
           <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            <h2
+              class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+            >
               Recent transactions
             </h2>
             <button

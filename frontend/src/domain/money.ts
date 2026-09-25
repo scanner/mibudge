@@ -42,7 +42,10 @@ export class Money {
     amount: string | number | Decimal | null | undefined,
     currency: string | null | undefined = DEFAULT_CURRENCY,
   ): Money {
-    return new Money(toDecimal(amount) ?? new Decimal(0), currency ?? DEFAULT_CURRENCY);
+    return new Money(
+      toDecimal(amount) ?? new Decimal(0),
+      currency ?? DEFAULT_CURRENCY,
+    );
   }
 
   static zero(currency: string = DEFAULT_CURRENCY): Money {
@@ -128,7 +131,9 @@ function operand(value: Money | Decimal | string): Decimal {
 // not a finite number.  Used for amounts typed by the user, e.g.
 // `toDecimal("12.5")` → `12.5`, `toDecimal("abc")` → `null`.
 //
-export function toDecimal(value: string | number | Decimal | null | undefined): Decimal | null {
+export function toDecimal(
+  value: string | number | Decimal | null | undefined,
+): Decimal | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Decimal) return value;
   if (typeof value === "string" && value.trim() === "") return null;
@@ -144,8 +149,14 @@ export function toDecimal(value: string | number | Decimal | null | undefined): 
 //
 // Sum a list of `Money` values in one currency.
 //
-export function sumMoney(values: Money[], currency: string = DEFAULT_CURRENCY): Money {
-  return values.reduce((sum, m) => sum.plus(m), Money.zero(values[0]?.currency ?? currency));
+export function sumMoney(
+  values: Money[],
+  currency: string = DEFAULT_CURRENCY,
+): Money {
+  return values.reduce(
+    (sum, m) => sum.plus(m),
+    Money.zero(values[0]?.currency ?? currency),
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -164,7 +175,10 @@ export interface FormatMoneyOptions {
 // `Intl.NumberFormat`; two-decimal amounts below 2^53 / 100 format
 // exactly.
 //
-export function formatMoney(money: Money, options: FormatMoneyOptions = {}): string {
+export function formatMoney(
+  money: Money,
+  options: FormatMoneyOptions = {},
+): string {
   return new Intl.NumberFormat(options.locale, {
     style: "currency",
     currency: money.currency || DEFAULT_CURRENCY,

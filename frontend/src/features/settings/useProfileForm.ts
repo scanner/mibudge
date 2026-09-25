@@ -60,7 +60,10 @@ export function useProfileForm() {
     saving.value = true;
     profileErrors.clear();
     try {
-      await session.updateProfile({ name: name.value, timezone: timezone.value });
+      await session.updateProfile({
+        name: name.value,
+        timezone: timezone.value,
+      });
       return true;
     } catch (err) {
       profileErrors.setError(err, { fallback: "Failed to save profile." });

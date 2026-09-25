@@ -46,7 +46,12 @@ const props = withDefaults(
     unallocatedBudgetId?: string | null;
     removable?: boolean;
   }>(),
-  { allocations: undefined, budgetNames: undefined, unallocatedBudgetId: null, removable: false },
+  {
+    allocations: undefined,
+    budgetNames: undefined,
+    unallocatedBudgetId: null,
+    removable: false,
+  },
 );
 
 const emit = defineEmits<{
@@ -58,7 +63,9 @@ const emit = defineEmits<{
 //
 const partyName = computed(() => displayName(props.transaction));
 
-const typeLabel = computed(() => transactionTypeLabel(props.transaction.transactionType));
+const typeLabel = computed(() =>
+  transactionTypeLabel(props.transaction.transactionType),
+);
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -79,7 +86,12 @@ const allocInfo = computed<{
   allLegs: AllocDisplay[];
 }>(() => {
   const allocs = props.allocations;
-  const empty = { isUnallocated: false, isSplit: false, single: null, allLegs: [] };
+  const empty = {
+    isUnallocated: false,
+    isSplit: false,
+    single: null,
+    allLegs: [],
+  };
   if (!allocs || allocs.length === 0) return empty;
 
   if (isUnallocated(allocs, props.unallocatedBudgetId)) {
@@ -94,7 +106,12 @@ const allocInfo = computed<{
   });
 
   if (allocs.length === 1) {
-    return { isUnallocated: false, isSplit: false, single: toDisplay(allocs[0]), allLegs: [] };
+    return {
+      isUnallocated: false,
+      isSplit: false,
+      single: toDisplay(allocs[0]),
+      allLegs: [],
+    };
   }
 
   return {
@@ -144,8 +161,14 @@ const allocInfo = computed<{
       </div>
 
       <!-- Row 2 (unallocated): balance info for pending, tap-to-assign prompt otherwise -->
-      <div v-if="allocInfo.isUnallocated" class="mt-0.5 flex items-center justify-between gap-2">
-        <span v-if="transaction.pending" class="min-w-0 truncate text-[12px] text-ocean-600">
+      <div
+        v-if="allocInfo.isUnallocated"
+        class="mt-0.5 flex items-center justify-between gap-2"
+      >
+        <span
+          v-if="transaction.pending"
+          class="min-w-0 truncate text-[12px] text-ocean-600"
+        >
           Unallocated
           <span v-if="allocations?.[0]" class="text-secondary">
             (now {{ formatMoney(allocations[0].budgetBalance) }})
@@ -161,15 +184,22 @@ const allocInfo = computed<{
           >
             Pending
           </span>
-          <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+          <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+            typeLabel
+          }}</span>
         </div>
       </div>
 
       <!-- Row 2 (single budget): name + running balance -->
-      <div v-else-if="allocInfo.single" class="mt-0.5 flex items-center justify-between gap-2">
+      <div
+        v-else-if="allocInfo.single"
+        class="mt-0.5 flex items-center justify-between gap-2"
+      >
         <span class="min-w-0 truncate text-[12px] text-ocean-600">
           {{ allocInfo.single.name }}
-          <span class="text-secondary">(now {{ formatMoney(allocInfo.single.balance) }})</span>
+          <span class="text-secondary"
+            >(now {{ formatMoney(allocInfo.single.balance) }})</span
+          >
         </span>
         <div class="flex flex-none items-center gap-1.5">
           <span
@@ -178,7 +208,9 @@ const allocInfo = computed<{
           >
             Pending
           </span>
-          <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+          <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+            typeLabel
+          }}</span>
         </div>
       </div>
 
@@ -197,7 +229,9 @@ const allocInfo = computed<{
             >
               Pending
             </span>
-            <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+            <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+              typeLabel
+            }}</span>
           </div>
         </div>
         <div
@@ -207,7 +241,9 @@ const allocInfo = computed<{
         >
           <span class="min-w-0 flex-1 truncate text-[12px] text-ocean-600">
             {{ leg.name }}
-            <span class="text-secondary">(now {{ formatMoney(leg.balance) }})</span>
+            <span class="text-secondary"
+              >(now {{ formatMoney(leg.balance) }})</span
+            >
           </span>
           <span class="flex-none text-[12px] font-medium text-neutral-700">
             {{ formatMoney(leg.amount) }}
@@ -216,14 +252,19 @@ const allocInfo = computed<{
       </div>
 
       <!-- Row 2 (no alloc info): type label + optional pending badge -->
-      <div v-else-if="typeLabel || transaction.pending" class="mt-0.5 flex justify-end gap-1.5">
+      <div
+        v-else-if="typeLabel || transaction.pending"
+        class="mt-0.5 flex justify-end gap-1.5"
+      >
         <span
           v-if="transaction.pending"
           class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
         >
           Pending
         </span>
-        <span v-if="typeLabel" class="text-[12px] text-secondary">{{ typeLabel }}</span>
+        <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+          typeLabel
+        }}</span>
       </div>
     </div>
   </article>

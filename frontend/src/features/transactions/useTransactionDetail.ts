@@ -37,7 +37,10 @@ import {
   splitsOf,
 } from "@/models/allocation";
 import type { Transaction } from "@/models/transaction";
-import { transactionFromDto, transactionToUpdateDto } from "@/models/transaction";
+import {
+  transactionFromDto,
+  transactionToUpdateDto,
+} from "@/models/transaction";
 import { useAllocationsStore } from "@/stores/allocations";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -99,7 +102,8 @@ export function useTransactionDetail(id: () => string) {
   // Apply a server answer only while it is still the transaction shown.
   //
   function applyIfCurrent(txId: string, updated: Transaction): void {
-    if (txId === id() && transaction.value?.id === txId) transaction.value = updated;
+    if (txId === id() && transaction.value?.id === txId)
+      transaction.value = updated;
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -118,7 +122,8 @@ export function useTransactionDetail(id: () => string) {
         );
         applyIfCurrent(txId, transactionFromDto(dto));
       } catch (err) {
-        if (txId === id()) description.value = transaction.value?.description ?? "";
+        if (txId === id())
+          description.value = transaction.value?.description ?? "";
         throw err;
       }
     },
@@ -130,7 +135,10 @@ export function useTransactionDetail(id: () => string) {
     async (txId: string, value: string) => {
       if ((value || null) === (transaction.value?.memo ?? null)) return;
       try {
-        const dto = await api.transactions.update(txId, transactionToUpdateDto({ memo: value }));
+        const dto = await api.transactions.update(
+          txId,
+          transactionToUpdateDto({ memo: value }),
+        );
         applyIfCurrent(txId, transactionFromDto(dto));
       } catch (err) {
         if (txId === id()) memo.value = transaction.value?.memo ?? "";
@@ -146,16 +154,22 @@ export function useTransactionDetail(id: () => string) {
       : null,
   );
   const memoError = computed(() =>
-    memoSave.error.value ? `Couldn't save the memo: ${memoSave.error.value}` : null,
+    memoSave.error.value
+      ? `Couldn't save the memo: ${memoSave.error.value}`
+      : null,
   );
 
   ////////////////////////////////////////////////////////////////////
   //
   // The transaction's own account, which need not be the active one
   // (e.g. a link to another account's transaction).
-  const account = computed(() => bankAccounts.byId(transaction.value?.bankAccountId));
+  const account = computed(() =>
+    bankAccounts.byId(transaction.value?.bankAccountId),
+  );
   const accountName = computed(() => account.value?.name ?? "");
-  const unallocatedBudgetId = computed(() => account.value?.unallocatedBudgetId ?? null);
+  const unallocatedBudgetId = computed(
+    () => account.value?.unallocatedBudgetId ?? null,
+  );
   const visibleAllocations = computed(() =>
     assignedAllocations(allocations.value, unallocatedBudgetId.value),
   );
@@ -167,9 +181,14 @@ export function useTransactionDetail(id: () => string) {
   const initialSplits = computed(() =>
     visibleAllocations.value
       .filter((a) => a.budgetId)
-      .map((a) => ({ budgetId: a.budgetId!, amount: a.amount.abs().toDecimalString() })),
+      .map((a) => ({
+        budgetId: a.budgetId!,
+        amount: a.amount.abs().toDecimalString(),
+      })),
   );
-  const accountBudgets = computed(() => budgets.forAccount(transaction.value?.bankAccountId));
+  const accountBudgets = computed(() =>
+    budgets.forAccount(transaction.value?.bankAccountId),
+  );
 
   function budgetName(budgetId: string | null): string {
     if (!budgetId) return "Unallocated";
@@ -189,7 +208,9 @@ export function useTransactionDetail(id: () => string) {
     splitError.value = null;
     let updated: Allocation[];
     try {
-      updated = (await api.transactions.split(tx.id, splits)).map(allocationFromDto);
+      updated = (await api.transactions.split(tx.id, splits)).map(
+        allocationFromDto,
+      );
     } catch (err) {
       if (tx.id !== id()) return;
       splitError.value = `Couldn't save the split: ${describeError(err, "save failed.")}`;
@@ -202,7 +223,10 @@ export function useTransactionDetail(id: () => string) {
     await budgets.refreshAccount(tx.bankAccountId).catch(() => undefined);
   }
 
-  async function updateAllocation(allocationId: string, amount: string): Promise<void> {
+  async function updateAllocation(
+    allocationId: string,
+    amount: string,
+  ): Promise<void> {
     const alloc = visibleAllocations.value.find((a) => a.id === allocationId);
     if (!alloc?.budgetId) return;
     const splits = splitsOf(visibleAllocations.value);
@@ -220,7 +244,10 @@ export function useTransactionDetail(id: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
-  async function uploadAttachment(field: AttachmentField, file: File): Promise<void> {
+  async function uploadAttachment(
+    field: AttachmentField,
+    file: File,
+  ): Promise<void> {
     const txId = id();
     attachmentError.value = null;
     try {

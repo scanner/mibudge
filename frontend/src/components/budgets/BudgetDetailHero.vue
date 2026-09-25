@@ -24,7 +24,12 @@ import FillUpBand from "./FillUpBand.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
-import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import {
+  budgetMeta,
+  budgetProgress,
+  budgetStatus,
+  progressTone,
+} from "@/domain/budgetStatus";
 import { formatInstantDate, formatLocalDate } from "@/domain/dates";
 import { BUDGET_TYPE_LABELS } from "@/domain/labels";
 import { rruleHuman } from "@/domain/rrule";
@@ -50,15 +55,23 @@ const nextFunding = computed(() => {
   return rruleHuman(props.budget.fundingSchedule);
 });
 
-const SHORT_DATE: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+const SHORT_DATE: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
 
-const startDate = computed(() => formatInstantDate(props.budget.createdAt, SHORT_DATE));
+const startDate = computed(() =>
+  formatInstantDate(props.budget.createdAt, SHORT_DATE),
+);
 
 // `targetDate` is a calendar date; `formatLocalDate` renders that day
 // in every browser zone.
 //
 const endDate = computed(() =>
-  props.budget.targetDate ? formatLocalDate(props.budget.targetDate, SHORT_DATE) : null,
+  props.budget.targetDate
+    ? formatLocalDate(props.budget.targetDate, SHORT_DATE)
+    : null,
 );
 </script>
 
@@ -91,7 +104,10 @@ const endDate = computed(() =>
       <ProgressBar class="mt-3" :value="pct" :tone="tone" :height="8" />
 
       <!-- Axis labels -->
-      <div v-if="endDate" class="mt-1 flex justify-between text-[11px] text-neutral-400">
+      <div
+        v-if="endDate"
+        class="mt-1 flex justify-between text-[11px] text-neutral-400"
+      >
         <span>{{ startDate }}</span>
         <span>{{ endDate }}</span>
       </div>

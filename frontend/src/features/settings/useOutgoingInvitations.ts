@@ -28,10 +28,15 @@ export function useOutgoingInvitations() {
 
   onMounted(async () => {
     try {
-      invitations.value = (await api.invitations.listMine()).map(invitationFromDto);
+      invitations.value = (await api.invitations.listMine()).map(
+        invitationFromDto,
+      );
     } catch (err) {
       invitations.value = [];
-      error.value = describeError(err, "Failed to load your pending invitations.");
+      error.value = describeError(
+        err,
+        "Failed to load your pending invitations.",
+      );
     }
   });
 

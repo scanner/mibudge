@@ -56,16 +56,20 @@ function button(wrapper: Wrapper, text: string) {
 // A button inside a teleported sheet or dialog.
 //
 function bodyButton(text: string, within = "body") {
-  const found = Array.from(document.body.querySelectorAll(`${within} button`)).find(
-    (b) => b.textContent?.trim() === text,
-  ) as HTMLButtonElement | undefined;
+  const found = Array.from(
+    document.body.querySelectorAll(`${within} button`),
+  ).find((b) => b.textContent?.trim() === text) as
+    | HTMLButtonElement
+    | undefined;
   if (!found) throw new Error(`no body button "${text}"`);
   return found;
 }
 
 async function open(path: string) {
   const mounted = await mountWithApp(App, { route: path });
-  await vi.waitFor(() => expect(mounted.wrapper.find("main").exists()).toBe(true));
+  await vi.waitFor(() =>
+    expect(mounted.wrapper.find("main").exists()).toBe(true),
+  );
   await flushPromises();
   return mounted;
 }
@@ -76,7 +80,11 @@ beforeEach(() => {
   withAuth(undefined, makeUser({ email: "owner@example.com" }));
   account = makeBankAccount({ name: "Household" });
   withAccounts([account]);
-  server.use(http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage([account]))));
+  server.use(
+    http.get("/api/v1/bank-accounts/", () =>
+      HttpResponse.json(makePage([account])),
+    ),
+  );
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -84,7 +92,9 @@ beforeEach(() => {
 describe("budget pages", () => {
   function serveBudget(budget: ReturnType<typeof makeBudget>) {
     server.use(
-      http.get(`/api/v1/budgets/${budget.id}/`, () => HttpResponse.json(budget)),
+      http.get(`/api/v1/budgets/${budget.id}/`, () =>
+        HttpResponse.json(budget),
+      ),
       http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([budget]))),
       http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
     );
@@ -95,7 +105,9 @@ describe("budget pages", () => {
   // THEN:  the server's reason is shown, not a generic load failure
   //
   it("shows why a budget failed to load", async () => {
-    server.use(http.get("/api/v1/budgets/:id/", refuse("No such budget.", 404)));
+    server.use(
+      http.get("/api/v1/budgets/:id/", refuse("No such budget.", 404)),
+    );
 
     const { wrapper } = await open("/budgets/missing/");
 
@@ -109,7 +121,9 @@ describe("budget pages", () => {
   it("shows why a pause failed", async () => {
     const budget = makeBudget({ name: "Groceries", bank_account: account.id });
     serveBudget(budget);
-    server.use(http.patch(`/api/v1/budgets/${budget.id}/`, refuse("Budget is locked.")));
+    server.use(
+      http.patch(`/api/v1/budgets/${budget.id}/`, refuse("Budget is locked.")),
+    );
     const { wrapper } = await open(`/budgets/${budget.id}/`);
 
     await button(wrapper, "Pause budget").trigger("click");
@@ -127,9 +141,14 @@ describe("budget pages", () => {
     const other = makeBudget({ name: "Rent", bank_account: account.id });
     serveBudget(budget);
     server.use(
-      http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([budget, other]))),
+      http.get("/api/v1/budgets/", () =>
+        HttpResponse.json(makePage([budget, other])),
+      ),
       http.post("/api/v1/internal-transactions/", () =>
-        HttpResponse.json({ amount: ["Rent has only $5.00."] }, { status: 400 }),
+        HttpResponse.json(
+          { amount: ["Rent has only $5.00."] },
+          { status: 400 },
+        ),
       ),
     );
     const { wrapper } = await open(`/budgets/${budget.id}/`);
@@ -139,7 +158,9 @@ describe("budget pages", () => {
       .find((b) => b.text().includes("Move money"))!
       .trigger("click");
     await flushPromises();
-    const amount = document.body.querySelector<HTMLInputElement>('input[placeholder="0.00"]')!;
+    const amount = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="0.00"]',
+    )!;
     amount.value = "20";
     amount.dispatchEvent(new Event("input"));
     await flushPromises();
@@ -156,11 +177,18 @@ describe("budget pages", () => {
   it("shows why the budget's transactions failed to load", async () => {
     const budget = makeBudget({ name: "Groceries", bank_account: account.id });
     serveBudget(budget);
-    server.use(http.get("/api/v1/allocations/", refuse("Allocations are unavailable.", 503)));
+    server.use(
+      http.get(
+        "/api/v1/allocations/",
+        refuse("Allocations are unavailable.", 503),
+      ),
+    );
 
     const { wrapper } = await open(`/budgets/${budget.id}/`);
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Allocations are unavailable."));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Allocations are unavailable."),
+    );
     expect(wrapper.text()).not.toContain("No transactions assigned");
   });
 
@@ -171,24 +199,40 @@ describe("budget pages", () => {
   //
   it("shows why removing a transaction failed", async () => {
     const budget = makeBudget({ name: "Groceries", bank_account: account.id });
-    const tx = makeTransaction({ bank_account: account.id, party: "Corner Market" });
+    const tx = makeTransaction({
+      bank_account: account.id,
+      party: "Corner Market",
+    });
     serveBudget(budget);
     server.use(
       http.get("/api/v1/allocations/", () =>
         HttpResponse.json(
-          makePage([makeAllocation({ transaction: tx.id, budget: budget.id, amount: tx.amount })]),
+          makePage([
+            makeAllocation({
+              transaction: tx.id,
+              budget: budget.id,
+              amount: tx.amount,
+            }),
+          ]),
         ),
       ),
       http.get(`/api/v1/transactions/${tx.id}/`, () => HttpResponse.json(tx)),
-      http.post(`/api/v1/transactions/${tx.id}/splits/`, refuse("Transaction is pending.")),
+      http.post(
+        `/api/v1/transactions/${tx.id}/splits/`,
+        refuse("Transaction is pending."),
+      ),
     );
     const { wrapper } = await open(`/budgets/${budget.id}/`);
     await vi.waitFor(() => expect(wrapper.text()).toContain("Corner Market"));
 
-    await wrapper.get('button[aria-label="Remove from budget"]').trigger("click");
+    await wrapper
+      .get('button[aria-label="Remove from budget"]')
+      .trigger("click");
     await flushPromises();
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Transaction is pending."));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Transaction is pending."),
+    );
     expect(wrapper.text()).toContain("Corner Market");
   });
 });
@@ -208,7 +252,11 @@ describe("transaction detail", () => {
   // THEN:  the memo reverts and the page says it was not saved, and why
   //
   it("shows why a memo was not saved", async () => {
-    const tx = makeTransaction({ bank_account: account.id, memo: "Team lunch", pending: false });
+    const tx = makeTransaction({
+      bank_account: account.id,
+      memo: "Team lunch",
+      pending: false,
+    });
     serveTransaction(tx);
     server.use(
       http.patch(`/api/v1/transactions/${tx.id}/`, () =>
@@ -229,7 +277,9 @@ describe("transaction detail", () => {
     expect(wrapper.text()).toContain(
       "Couldn't save the memo: Ensure this field has no more than 5 characters.",
     );
-    expect((wrapper.get("textarea").element as HTMLTextAreaElement).value).toBe("Team lunch");
+    expect((wrapper.get("textarea").element as HTMLTextAreaElement).value).toBe(
+      "Team lunch",
+    );
   });
 
   // GIVEN: a split the server refuses
@@ -238,12 +288,19 @@ describe("transaction detail", () => {
   //
   it("shows why a split was not saved", async () => {
     const tx = makeTransaction({ bank_account: account.id, amount: "-20.00" });
-    const rent = makeBudget({ name: "Rent", bank_account: account.id, budget_type: "R" });
+    const rent = makeBudget({
+      name: "Rent",
+      bank_account: account.id,
+      budget_type: "R",
+    });
     serveTransaction(tx);
     server.use(
       http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([rent]))),
       http.post(`/api/v1/transactions/${tx.id}/splits/`, () =>
-        HttpResponse.json({ splits: ["Splits exceed the transaction amount."] }, { status: 400 }),
+        HttpResponse.json(
+          { splits: ["Splits exceed the transaction amount."] },
+          { status: 400 },
+        ),
       ),
     );
     const { wrapper } = await open(`/transactions/${tx.id}/`);
@@ -252,7 +309,8 @@ describe("transaction detail", () => {
       .findAll("button")
       .find((b) => b.text().includes("Assign to budget"))!
       .trigger("click");
-    const select = document.body.querySelector<HTMLSelectElement>(".split-row-select")!;
+    const select =
+      document.body.querySelector<HTMLSelectElement>(".split-row-select")!;
     select.value = rent.id;
     select.dispatchEvent(new Event("change"));
     await flushPromises();
@@ -280,16 +338,24 @@ describe("transaction list", () => {
         if (new URL(request.url).searchParams.get("page") === "2") {
           if (failNext) {
             failNext = false;
-            return HttpResponse.json({ detail: "Try again shortly." }, { status: 503 });
+            return HttpResponse.json(
+              { detail: "Try again shortly." },
+              { status: 503 },
+            );
           }
           return HttpResponse.json(
-            makePage([makeTransaction({ bank_account: account.id, party: "Older one" })]),
+            makePage([
+              makeTransaction({ bank_account: account.id, party: "Older one" }),
+            ]),
           );
         }
         return HttpResponse.json(
-          makePage([makeTransaction({ bank_account: account.id, party: "Newest" })], {
-            next: "http://localhost/api/v1/transactions/?page=2",
-          }),
+          makePage(
+            [makeTransaction({ bank_account: account.id, party: "Newest" })],
+            {
+              next: "http://localhost/api/v1/transactions/?page=2",
+            },
+          ),
         );
       }),
       http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
@@ -303,7 +369,9 @@ describe("transaction list", () => {
     await button(wrapper, "Pending").trigger("click");
     await button(wrapper, "All").trigger("click");
     await vi.waitFor(() =>
-      expect(wrapper.text()).toContain("Couldn't load more transactions: Try again shortly."),
+      expect(wrapper.text()).toContain(
+        "Couldn't load more transactions: Try again shortly.",
+      ),
     );
 
     await button(wrapper, "Try again").trigger("click");
@@ -327,7 +395,9 @@ describe("settings pages", () => {
       ),
     );
     const { wrapper } = await open("/account/settings/");
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Budget overdrawn"));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Budget overdrawn"),
+    );
 
     await wrapper.findAll("select").at(-1)!.setValue("off");
     await flushPromises();
@@ -342,7 +412,9 @@ describe("settings pages", () => {
   it("shows why revoking an API key failed", async () => {
     const key = makeApiKey({ name: "importer" });
     server.use(
-      http.get("/api/v1/users/me/api-keys/", () => HttpResponse.json(makePage([key]))),
+      http.get("/api/v1/users/me/api-keys/", () =>
+        HttpResponse.json(makePage([key])),
+      ),
       http.post(
         `/api/v1/users/me/api-keys/${key.uuid}/revoke/`,
         refuse("Key is in use by a running import.", 409),
@@ -370,7 +442,9 @@ describe("settings pages", () => {
       ),
     );
     const { wrapper } = await open("/account/settings/");
-    await vi.waitFor(() => expect(wrapper.text()).toContain("invitee@example.com"));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("invitee@example.com"),
+    );
 
     await rowCancel(wrapper, "invitee@example.com").trigger("click");
     await flushPromises();
@@ -405,9 +479,15 @@ describe("settings pages", () => {
 //
 describe("bank-account pages", () => {
   async function openAccount() {
-    server.use(http.get(`/api/v1/bank-accounts/${account.id}/`, () => HttpResponse.json(account)));
+    server.use(
+      http.get(`/api/v1/bank-accounts/${account.id}/`, () =>
+        HttpResponse.json(account),
+      ),
+    );
     const mounted = await open(`/account/bank-accounts/${account.id}/`);
-    await vi.waitFor(() => expect(mounted.wrapper.find("h1").exists()).toBe(true));
+    await vi.waitFor(() =>
+      expect(mounted.wrapper.find("h1").exists()).toBe(true),
+    );
     return mounted;
   }
 
@@ -417,7 +497,10 @@ describe("bank-account pages", () => {
   //
   it("shows why automatic funding did not change", async () => {
     server.use(
-      http.patch(`/api/v1/bank-accounts/${account.id}/`, refuse("Funding run in progress.", 409)),
+      http.patch(
+        `/api/v1/bank-accounts/${account.id}/`,
+        refuse("Funding run in progress.", 409),
+      ),
     );
     const { wrapper } = await openAccount();
 
@@ -444,7 +527,9 @@ describe("bank-account pages", () => {
     bodyButton("Delete account", '[role="dialog"]').click();
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Only the last owner can delete an account.");
+    expect(wrapper.text()).toContain(
+      "Only the last owner can delete an account.",
+    );
     expect(router.currentRoute.value.name).toBe("bank-account-detail");
   });
 
@@ -460,7 +545,9 @@ describe("bank-account pages", () => {
       ),
     );
     const { wrapper } = await openAccount();
-    await vi.waitFor(() => expect(wrapper.text()).toContain("invitee@example.com"));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("invitee@example.com"),
+    );
 
     await rowCancel(wrapper, "invitee@example.com").trigger("click");
     await flushPromises();
@@ -474,10 +561,14 @@ describe("bank-account pages", () => {
   // THEN:  the server's reason is shown
   //
   it("shows why the bank list failed to load", async () => {
-    server.use(http.get("/api/v1/banks/", refuse("Bank directory unavailable.", 503)));
+    server.use(
+      http.get("/api/v1/banks/", refuse("Bank directory unavailable.", 503)),
+    );
 
     const { wrapper } = await open("/account/bank-accounts/create/");
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Bank directory unavailable."));
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Bank directory unavailable."),
+    );
   });
 });

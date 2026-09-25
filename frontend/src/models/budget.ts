@@ -24,8 +24,12 @@ import { DEFAULT_CURRENCY, Money } from "@/domain/money";
 import type { Equal, Expect } from "@/models/schemaCheck";
 
 export type BudgetTypeMatchesSchema = Expect<Equal<BudgetType, BudgetTypeDto>>;
-export type FundingTypeMatchesSchema = Expect<Equal<FundingType, FundingTypeDto>>;
-export type FundingPaceMatchesSchema = Expect<Equal<FundingPace, FundingPaceDto>>;
+export type FundingTypeMatchesSchema = Expect<
+  Equal<FundingType, FundingTypeDto>
+>;
+export type FundingPaceMatchesSchema = Expect<
+  Equal<FundingPace, FundingPaceDto>
+>;
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -70,11 +74,15 @@ export interface Budget extends BudgetFigures {
 // `next_funding` is an untyped object in the schema; read the three
 // fields the server sends and drop the value when any is unusable.
 //
-function nextFundingFromDto(raw: BudgetDto["next_funding"], currency: string): NextFunding | null {
+function nextFundingFromDto(
+  raw: BudgetDto["next_funding"],
+  currency: string,
+): NextFunding | null {
   if (!raw) return null;
   const date = toLocalDate(typeof raw.date === "string" ? raw.date : null);
   if (!date || typeof raw.amount !== "string") return null;
-  const amountCurrency = typeof raw.amount_currency === "string" ? raw.amount_currency : currency;
+  const amountCurrency =
+    typeof raw.amount_currency === "string" ? raw.amount_currency : currency;
   return { date, amount: Money.of(raw.amount, amountCurrency) };
 }
 
@@ -88,9 +96,18 @@ export function budgetFromDto(dto: BudgetDto): Budget {
     bankAccountId: dto.bank_account,
     budgetType: dto.budget_type ?? "G",
     balance: Money.of(dto.balance, currency),
-    fundedAmount: Money.of(dto.funded_amount, dto.funded_amount_currency || currency),
-    targetBalance: Money.ofNullable(dto.target_balance, dto.target_balance_currency || currency),
-    fundingAmount: Money.ofNullable(dto.funding_amount, dto.funding_amount_currency || currency),
+    fundedAmount: Money.of(
+      dto.funded_amount,
+      dto.funded_amount_currency || currency,
+    ),
+    targetBalance: Money.ofNullable(
+      dto.target_balance,
+      dto.target_balance_currency || currency,
+    ),
+    fundingAmount: Money.ofNullable(
+      dto.funding_amount,
+      dto.funding_amount_currency || currency,
+    ),
     fundingType: dto.funding_type ?? "D",
     targetDate: toLocalDate(dto.target_date),
     fillupGoalId: dto.fillup_goal ?? null,
@@ -132,14 +149,17 @@ export function budgetToUpdateDto(input: BudgetInput): BudgetUpdateDto {
   if (input.name !== undefined) dto.name = input.name;
   if (input.budgetType !== undefined) dto.budget_type = input.budgetType;
   if (input.bankAccountId !== undefined) dto.bank_account = input.bankAccountId;
-  if (input.targetBalance) dto.target_balance = input.targetBalance.toDecimalString();
+  if (input.targetBalance)
+    dto.target_balance = input.targetBalance.toDecimalString();
   if (input.targetDate !== undefined) dto.target_date = input.targetDate;
   if (input.fundingType !== undefined) dto.funding_type = input.fundingType;
   if (input.fundingAmount !== undefined) {
     dto.funding_amount = input.fundingAmount?.toDecimalString() ?? null;
   }
-  if (input.fundingSchedule !== undefined) dto.funding_schedule = input.fundingSchedule;
-  if (input.recurrenceSchedule !== undefined) dto.recurrence_schedule = input.recurrenceSchedule;
+  if (input.fundingSchedule !== undefined)
+    dto.funding_schedule = input.fundingSchedule;
+  if (input.recurrenceSchedule !== undefined)
+    dto.recurrence_schedule = input.recurrenceSchedule;
   if (input.paused !== undefined) dto.paused = input.paused;
   return dto;
 }
@@ -180,7 +200,9 @@ export function fillupIndex(budgets: Iterable<Budget>): Map<string, Budget> {
 //
 // Budget names keyed by id, for rows that show where money went.
 //
-export function budgetNameIndex(budgets: Iterable<Budget>): Map<string, string> {
+export function budgetNameIndex(
+  budgets: Iterable<Budget>,
+): Map<string, string> {
   const map = new Map<string, string>();
   for (const b of budgets) map.set(b.id, b.name);
   return map;
@@ -192,6 +214,13 @@ export function budgetNameIndex(budgets: Iterable<Budget>): Map<string, string> 
 // counterpart: not the account's Unallocated budget, not a fill-up
 // goal, not archived.
 //
-export function isAssignableBudget(budget: Budget, unallocatedBudgetId: string | null): boolean {
-  return budget.id !== unallocatedBudgetId && budget.budgetType !== "A" && !budget.archived;
+export function isAssignableBudget(
+  budget: Budget,
+  unallocatedBudgetId: string | null,
+): boolean {
+  return (
+    budget.id !== unallocatedBudgetId &&
+    budget.budgetType !== "A" &&
+    !budget.archived
+  );
 }

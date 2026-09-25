@@ -72,7 +72,9 @@ export function useBankAccountDetail(id: () => string) {
   );
 
   const account = computed(() => accounts.byId(resource.data.value?.id));
-  const unallocated = computed(() => budgets.byId(account.value?.unallocatedBudgetId));
+  const unallocated = computed(() =>
+    budgets.byId(account.value?.unallocatedBudgetId),
+  );
   const createdDate = computed(() =>
     account.value
       ? formatInstantDate(account.value.createdAt, {
@@ -118,7 +120,9 @@ export function useBankAccountDetail(id: () => string) {
       const number = editAccountNumber.value.trim();
       await accounts.update(current.id, {
         name: editName.value.trim(),
-        ...(number !== (current.accountNumber ?? "") ? { accountNumber: number || null } : {}),
+        ...(number !== (current.accountNumber ?? "")
+          ? { accountNumber: number || null }
+          : {}),
       });
       editing.value = false;
     } catch (err) {
@@ -136,7 +140,8 @@ export function useBankAccountDetail(id: () => string) {
   const autoFundingOverride = ref<boolean | null>(null);
   const autoFundingError = ref<string | null>(null);
   const autoFundingEnabled = computed(
-    () => autoFundingOverride.value ?? account.value?.autoFundingEnabled ?? false,
+    () =>
+      autoFundingOverride.value ?? account.value?.autoFundingEnabled ?? false,
   );
 
   async function toggleAutoFunding(): Promise<void> {
@@ -145,10 +150,15 @@ export function useBankAccountDetail(id: () => string) {
     autoFundingOverride.value = !autoFundingEnabled.value;
     autoFundingError.value = null;
     try {
-      await accounts.update(current.id, { autoFundingEnabled: autoFundingOverride.value });
+      await accounts.update(current.id, {
+        autoFundingEnabled: autoFundingOverride.value,
+      });
     } catch (err) {
       // The store still holds the server's value, so the toggle flips back.
-      autoFundingError.value = describeError(err, "Failed to change automatic funding.");
+      autoFundingError.value = describeError(
+        err,
+        "Failed to change automatic funding.",
+      );
     } finally {
       autoFundingOverride.value = null;
     }

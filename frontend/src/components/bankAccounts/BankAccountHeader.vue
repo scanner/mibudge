@@ -36,8 +36,14 @@ const emit = defineEmits<{
 
 <template>
   <!-- Inline name editor -->
-  <div v-if="editing" class="rounded-card border border-ocean-400 bg-white px-4 py-4">
-    <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="edit-name">
+  <div
+    v-if="editing"
+    class="rounded-card border border-ocean-400 bg-white px-4 py-4"
+  >
+    <label
+      class="mb-1.5 block text-sm font-medium text-neutral-700"
+      for="edit-name"
+    >
       Account name
     </label>
     <input
@@ -48,7 +54,10 @@ const emit = defineEmits<{
       @keydown.enter="emit('save')"
       @keydown.escape="emit('cancel')"
     />
-    <label class="mb-1.5 mt-3 block text-sm font-medium text-neutral-700" for="edit-account-number">
+    <label
+      class="mb-1.5 mt-3 block text-sm font-medium text-neutral-700"
+      for="edit-account-number"
+    >
       Account number
     </label>
     <input
@@ -83,7 +92,9 @@ const emit = defineEmits<{
   <!-- Account name heading (non-editing) -->
   <div v-else>
     <div class="flex items-center gap-2">
-      <h1 class="text-[22px] font-medium text-neutral-900">{{ account.name }}</h1>
+      <h1 class="text-[22px] font-medium text-neutral-900">
+        {{ account.name }}
+      </h1>
       <button
         type="button"
         class="flex h-7 w-7 flex-none items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"

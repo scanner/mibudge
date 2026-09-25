@@ -115,7 +115,9 @@ async function onDelete() {
       />
 
       <!-- Budgets -->
-      <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+      <section
+        class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+      >
         <button
           type="button"
           class="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-50"
@@ -128,7 +130,9 @@ async function onDelete() {
                 {{ budgetCount }}
               </span>
             </div>
-            <div class="text-xs text-secondary">View all budgets for this account</div>
+            <div class="text-xs text-secondary">
+              View all budgets for this account
+            </div>
           </div>
           <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
         </button>

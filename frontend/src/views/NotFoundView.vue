@@ -10,9 +10,12 @@
     <div
       class="w-full max-w-sm rounded-card border border-neutral-200 bg-white px-8 py-10 text-center shadow-sm"
     >
-      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">Page not found</h1>
+      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">
+        Page not found
+      </h1>
       <p class="mb-6 text-sm text-neutral-500">
-        There is nothing at this address. It may have moved, or the link may be incomplete.
+        There is nothing at this address. It may have moved, or the link may be
+        incomplete.
       </p>
       <router-link
         :to="{ name: 'overview' }"
