@@ -17,6 +17,7 @@ import {
   makeApiKey,
   makeBankAccount,
   makeInvitation,
+  makeNotificationPreference,
   makePage,
   makeUser,
 } from "../mocks/factories";
@@ -161,6 +162,81 @@ describe("AccountSettingsView", () => {
       "Failed to update notification preference.",
     );
     expect((select.element as HTMLSelectElement).value).toBe("immediate");
+  });
+
+  // GIVEN: a delivery-mode change whose request will fail, still in flight
+  // WHEN:  the user picks another mode, then the first request fails
+  // THEN:  the second choice is sent after it and shown; no error, since
+  //        the server ends with the user's last choice
+  //
+  it("keeps the latest delivery mode when an earlier change fails", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((r) => (releaseFirst = r));
+    let calls = 0;
+    server.use(
+      http.patch(
+        "/api/v1/notification-preferences/:kind/",
+        async ({ request, params }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          if (++calls === 1) {
+            await firstHeld;
+            return new HttpResponse(null, { status: 500 });
+          }
+          return HttpResponse.json(
+            makeNotificationPreference({ ...body, kind: String(params.kind) }),
+          );
+        },
+      ),
+    );
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Budget overdrawn"),
+    );
+
+    const select = wrapper.findAll("select").at(-1)!;
+    await select.setValue("off");
+    await select.setValue("digest");
+    await flushPromises();
+    releaseFirst();
+    await flushPromises();
+
+    expect((select.element as HTMLSelectElement).value).toBe("digest");
+    expect(wrapper.text()).not.toContain(
+      "Failed to update notification preference.",
+    );
+    const patches = await requestsTo(
+      "PATCH",
+      "/api/v1/notification-preferences/budget_overdrawn/",
+    );
+    expect(patches.at(-1)!.body).toEqual({ delivery_mode: "digest" });
+  });
+
+  // GIVEN: the email digest selector
+  // WHEN:  a new frequency is picked and the server refuses it
+  // THEN:  the selector shows the saved frequency again, with the error
+  //
+  it("shows the saved digest frequency after a refused change", async () => {
+    server.use(
+      http.patch(
+        "/api/v1/channel-preferences/:channel/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Email digest"));
+    const select = wrapper
+      .findAll("select")
+      .find((s) => s.text().includes("Weekly on Friday"))!;
+
+    await select.setValue("weekly_friday");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Failed to save email preference.");
+    expect((select.element as HTMLSelectElement).value).toBe("daily_evening");
   });
 
   // GIVEN: the email digest selector

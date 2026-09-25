@@ -40,7 +40,7 @@ const {
   initials,
   unallocatedFor,
   nextFundingFor,
-  settingDefault,
+  defaultAccountId,
   defaultAccountError,
   setDefaultAccount,
 } = useAccountHub();
@@ -202,8 +202,8 @@ const { signOut } = useSignOut();
               <span class="text-sm">Default account</span>
             </div>
             <select
-              :value="auth.user?.defaultBankAccountId ?? ''"
-              :disabled="settingDefault || ctx.accounts.length === 0"
+              :value="defaultAccountId"
+              :disabled="ctx.accounts.length === 0"
               class="rounded-md border border-neutral-200 bg-white py-1 pl-2 pr-6 text-xs text-neutral-700 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400 disabled:opacity-50"
               @change="
                 setDefaultAccount(($event.target as HTMLSelectElement).value)

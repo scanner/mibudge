@@ -455,7 +455,8 @@ describe("settings pages", () => {
 
   // GIVEN: a default account the server refuses
   // WHEN:  the user picks it on the Account tab
-  // THEN:  the server's reason is shown
+  // THEN:  the server's reason is shown, and the selector shows the
+  //        saved default again
   //
   it("shows why the default account was not saved", async () => {
     server.use(
@@ -468,10 +469,12 @@ describe("settings pages", () => {
     );
     const { wrapper } = await open("/account/");
 
-    await wrapper.get("select").setValue(account.id);
+    const select = wrapper.get("select");
+    await select.setValue(account.id);
     await flushPromises();
 
     expect(wrapper.text()).toContain("You no longer own this account.");
+    expect((select.element as HTMLSelectElement).value).toBe("");
   });
 });
 

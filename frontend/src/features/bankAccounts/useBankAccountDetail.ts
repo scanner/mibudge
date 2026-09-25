@@ -21,6 +21,7 @@ import { computed, ref } from "vue";
 import { api } from "@/api";
 import { describeError } from "@/api/errors";
 import { useFormErrors } from "@/composables/useFormErrors";
+import { useOptimistic } from "@/composables/useOptimistic";
 import { useResource } from "@/composables/useResource";
 import { formatInstantDate } from "@/domain/dates";
 import { bankFromDto } from "@/models/bank";
@@ -134,34 +135,26 @@ export function useBankAccountDetail(id: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
-  // Optimistic toggle: the switch flips at once and flips back if the
-  // update fails.
+  // Automatic funding toggle, applied optimistically per account
+  // (`useOptimistic`); a refused change shows the store's value again.
   //
-  const autoFundingOverride = ref<boolean | null>(null);
-  const autoFundingError = ref<string | null>(null);
-  const autoFundingEnabled = computed(
-    () =>
-      autoFundingOverride.value ?? account.value?.autoFundingEnabled ?? false,
+  const autoFunding = useOptimistic(
+    (accountId: string) =>
+      accounts.byId(accountId)?.autoFundingEnabled ?? false,
+    async (accountId: string, enabled: boolean) => {
+      await accounts.update(accountId, { autoFundingEnabled: enabled });
+    },
+    { errorMessage: "Failed to change automatic funding." },
   );
+  const autoFundingEnabled = computed(() =>
+    account.value ? autoFunding.value(account.value.id) : false,
+  );
+  const autoFundingError = autoFunding.error;
 
-  async function toggleAutoFunding(): Promise<void> {
+  function toggleAutoFunding(): Promise<void> {
     const current = account.value;
-    if (!current) return;
-    autoFundingOverride.value = !autoFundingEnabled.value;
-    autoFundingError.value = null;
-    try {
-      await accounts.update(current.id, {
-        autoFundingEnabled: autoFundingOverride.value,
-      });
-    } catch (err) {
-      // The store still holds the server's value, so the toggle flips back.
-      autoFundingError.value = describeError(
-        err,
-        "Failed to change automatic funding.",
-      );
-    } finally {
-      autoFundingOverride.value = null;
-    }
+    if (!current) return Promise.resolve();
+    return autoFunding.set(current.id, !autoFundingEnabled.value);
   }
 
   ////////////////////////////////////////////////////////////////////

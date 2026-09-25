@@ -12,7 +12,7 @@ import { computed, onMounted, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
-import { describeError } from "@/api/errors";
+import { useOptimistic } from "@/composables/useOptimistic";
 import type { BankAccount, FundingSummary } from "@/models/bankAccount";
 import { fundingSummaryFromDto } from "@/models/bankAccount";
 import { useAccountContextStore } from "@/stores/accountContext";
@@ -43,8 +43,6 @@ export function useAccountHub() {
     initialsOf(session.user?.name || session.user?.username || ""),
   );
   const fundingSummaries = ref(new Map<string, FundingSummary>());
-  const settingDefault = ref(false);
-  const defaultAccountError = ref<string | null>(null);
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -80,28 +78,29 @@ export function useAccountHub() {
     return summary && !summary.total.isZero() ? summary.total : null;
   }
 
-  // A failure says why; the select shows the saved value again.
+  // The default account ("" for none), applied optimistically
+  // (`useOptimistic`); a refused change shows the saved default again
+  // with the server's reason.
   //
-  async function setDefaultAccount(accountId: string): Promise<void> {
-    settingDefault.value = true;
-    defaultAccountError.value = null;
-    try {
+  const defaultAccount = useOptimistic(
+    (_setting: "default") => session.user?.defaultBankAccountId ?? "",
+    async (_setting: "default", accountId: string) => {
       await session.updateProfile({ defaultBankAccountId: accountId || null });
-    } catch (err) {
-      defaultAccountError.value = describeError(
-        err,
-        "Failed to set the default account.",
-      );
-    } finally {
-      settingDefault.value = false;
-    }
+    },
+    { errorMessage: "Failed to set the default account." },
+  );
+  const defaultAccountId = computed(() => defaultAccount.value("default"));
+  const defaultAccountError = defaultAccount.error;
+
+  function setDefaultAccount(accountId: string): Promise<void> {
+    return defaultAccount.set("default", accountId);
   }
 
   return {
     initials,
     unallocatedFor,
     nextFundingFor,
-    settingDefault,
+    defaultAccountId,
     defaultAccountError,
     setDefaultAccount,
   };
