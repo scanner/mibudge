@@ -14,6 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.views import AtomicWritesMixin
 from moneypools.models import Budget
 from moneypools.permissions import (
     AccountOwnerCreateMixin,
@@ -80,7 +81,10 @@ from ..serializers.budgets import BudgetSerializer
     ),
 )
 class BudgetViewSet(
-    AccountOwnerCreateMixin, AccountOwnerQuerySetMixin, viewsets.ModelViewSet
+    AtomicWritesMixin,
+    AccountOwnerCreateMixin,
+    AccountOwnerQuerySetMixin,
+    viewsets.ModelViewSet,
 ):
     """Virtual sub-accounts (goals, recurring budgets) within a bank account."""
 

@@ -12,6 +12,7 @@ from rest_framework.viewsets import GenericViewSet
 
 # Project imports
 #
+from common.views import AtomicWritesMixin
 from notifications.models import (
     Channel,
     ChannelPreference,
@@ -51,7 +52,7 @@ from .serializers import (
         responses={200: NotificationPreferenceSerializer},
     ),
 )
-class NotificationPreferenceViewSet(GenericViewSet):
+class NotificationPreferenceViewSet(AtomicWritesMixin, GenericViewSet):
     """Per-user notification kind preferences."""
 
     permission_classes = [IsAuthenticated]
@@ -143,7 +144,7 @@ class NotificationPreferenceViewSet(GenericViewSet):
         responses={200: ChannelPreferenceSerializer},
     ),
 )
-class ChannelPreferenceViewSet(GenericViewSet):
+class ChannelPreferenceViewSet(AtomicWritesMixin, GenericViewSet):
     """Per-user channel delivery preferences."""
 
     permission_classes = [IsAuthenticated]

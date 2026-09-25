@@ -28,6 +28,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.views import AtomicWritesMixin
 from moneypools.models import BankAccount, Budget, FundingEventOccurrence
 from moneypools.permissions import IsAccountOwner
 from moneypools.service import funding as funding_svc
@@ -351,7 +352,9 @@ class BankAccountFundingActions(viewsets.GenericViewSet):
         description="Return a single funding event occurrence by UUID.",
     ),
 )
-class FundingEventOccurrenceViewSet(viewsets.ReadOnlyModelViewSet):
+class FundingEventOccurrenceViewSet(
+    AtomicWritesMixin, viewsets.ReadOnlyModelViewSet
+):
     """Read-only access to FundingEventOccurrence rows for owned accounts."""
 
     serializer_class = FundingEventOccurrenceSerializer

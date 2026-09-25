@@ -23,6 +23,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from common.views import AtomicWritesMixin
 from moneypools.api.v1.serializers import BankAccountInvitationSerializer
 from moneypools.models import BankAccountInvitation
 from users.email_change import (
@@ -80,7 +81,11 @@ User = get_user_model()
     ),
 )
 class UserViewSet(
-    RetrieveModelMixin, ListModelMixin, UpdateModelMixin, GenericViewSet
+    AtomicWritesMixin,
+    RetrieveModelMixin,
+    ListModelMixin,
+    UpdateModelMixin,
+    GenericViewSet,
 ):
     """User profiles. List/retrieve/update restricted to staff; 'me' open to all."""
 
@@ -401,7 +406,9 @@ class UserViewSet(
         description="Return a single API key by its UUID.",
     ),
 )
-class APIKeyViewSet(ListModelMixin, RetrieveModelMixin, GenericViewSet):
+class APIKeyViewSet(
+    AtomicWritesMixin, ListModelMixin, RetrieveModelMixin, GenericViewSet
+):
     """API keys for the authenticated user.
 
     Keys are machine credentials that authenticate as their owner but

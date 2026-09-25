@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
 - When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on
 - A SQLite database now opens every transaction with `BEGIN IMMEDIATE`, so two concurrent writers wait for each other instead of the second failing with "database is locked"; the test suite uses a SQLite file with the same setting and runs the concurrency tests on both SQLite and Postgres
+- API read requests (GET/HEAD) no longer run inside a database transaction; writes still run each request in one, rolled back on any error. On SQLite, reads therefore no longer wait for, or block, a request that is writing
 
 ### Fixed
 

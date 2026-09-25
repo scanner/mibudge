@@ -23,6 +23,7 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 
 # Project imports
+from common.views import AtomicWritesMixin
 from moneypools.models import BankAccount
 from moneypools.permissions import (
     AccountOwnerCreateMixin,
@@ -87,6 +88,7 @@ from .invitations import BankAccountInvitationActions
     ),
 )
 class BankAccountViewSet(
+    AtomicWritesMixin,
     AccountOwnerCreateMixin,
     AccountOwnerQuerySetMixin,
     BankAccountImportActions,

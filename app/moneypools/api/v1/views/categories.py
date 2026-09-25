@@ -18,6 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.views import AtomicWritesMixin
 from moneypools.models import TransactionCategory
 
 from ..filters import TransactionCategoryFilter
@@ -87,7 +88,7 @@ from ..serializers.categories import TransactionCategorySerializer
         },
     ),
 )
-class TransactionCategoryViewSet(viewsets.ModelViewSet):
+class TransactionCategoryViewSet(AtomicWritesMixin, viewsets.ModelViewSet):
     """Shared + per-user transaction categories.
 
     Visibility is computed per request via

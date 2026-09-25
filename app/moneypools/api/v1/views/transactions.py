@@ -21,6 +21,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.views import AtomicWritesMixin
 from moneypools.models import Transaction, TransactionAllocation
 from moneypools.permissions import (
     AccountOwnerCreateMixin,
@@ -91,7 +92,10 @@ from ..serializers.transactions import (
     ),
 )
 class TransactionViewSet(
-    AccountOwnerCreateMixin, AccountOwnerQuerySetMixin, viewsets.ModelViewSet
+    AtomicWritesMixin,
+    AccountOwnerCreateMixin,
+    AccountOwnerQuerySetMixin,
+    viewsets.ModelViewSet,
 ):
     """Bank transactions (purchases, deposits, transfers) on user accounts."""
 
@@ -293,6 +297,7 @@ class TransactionViewSet(
     ),
 )
 class TransactionAllocationViewSet(
+    AtomicWritesMixin,
     AccountOwnerQuerySetMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
