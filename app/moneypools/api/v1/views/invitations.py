@@ -8,6 +8,7 @@ are the public token-based endpoints the invitee uses.
 """
 
 # 3rd party imports
+from django.db import transaction
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -216,6 +217,11 @@ class BankAccountInvitationActions(viewsets.GenericViewSet):
     ),
     responses={200: PublicInvitationDetailSerializer},
 )
+# A read-only view: `ATOMIC_REQUESTS` would open a transaction, which
+# on SQLite takes the database write lock (see
+# `common.views.AtomicWritesMixin`).
+#
+@transaction.non_atomic_requests
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def invitation_detail(request: Request, token: str) -> Response:

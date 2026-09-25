@@ -7,6 +7,7 @@ ISO 4217 currencies the system supports.
 
 # 3rd party imports
 import moneyed
+from django.db import transaction
 from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
@@ -20,6 +21,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.views import AtomicWritesMixin
 from moneypools.models import Bank
 
 from ..serializers.reference import BankSerializer
@@ -42,7 +44,7 @@ from ..serializers.reference import BankSerializer
         description="Return a single bank by UUID.",
     ),
 )
-class BankViewSet(viewsets.ReadOnlyModelViewSet):
+class BankViewSet(AtomicWritesMixin, viewsets.ReadOnlyModelViewSet):
     """Read-only reference data for financial institutions."""
 
     serializer_class = BankSerializer
@@ -70,6 +72,11 @@ class BankViewSet(viewsets.ReadOnlyModelViewSet):
         ),
     },
 )
+# A read-only view: `ATOMIC_REQUESTS` would open a transaction, which
+# on SQLite takes the database write lock (see
+# `common.views.AtomicWritesMixin`).
+#
+@transaction.non_atomic_requests
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def currencies(request: Request) -> Response:
