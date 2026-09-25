@@ -64,23 +64,49 @@ releases it.  This lets a service take the locks for every row it will
 touch up front, in sorted order, and then call other services that
 lock the same keys.
 
-Lock TTL
---------
-30 seconds.  A safety net against crashed processes holding locks -- not a
-substitute for fast critical sections.
+Lock TTL and renewal
+--------------------
+Each lock is created with a 30 second TTL, so a crashed process that
+held one frees it within 30 seconds.  While a `with acquire_lock(...)`
+block runs, a background thread resets the TTL every 10 seconds, so a
+critical section that runs longer than the TTL (a large scrape sync,
+a budget delete that recalculates many budgets) keeps its lock.  The
+renewal thread stops when the block exits, and dies with the process
+if it crashes.
+
+If a renewal finds the lock no longer ours (the process stalled for
+longer than the TTL and the key expired, possibly to be taken by
+another holder), the loss is logged as an error and renewal stops.
+Releasing a lost lock is logged too, instead of raising: balance
+correctness rests on the database locks, and raising there would
+discard work that is already correct.
 """
 
 # system imports
 #
+import logging
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+
+# 3rd party imports
+#
+from redis.exceptions import LockNotOwnedError, RedisError
+from redis.lock import Lock
 
 # Project imports
 #
 from common.redis import redis_client
 
+logger = logging.getLogger(__name__)
+
 _LOCK_TIMEOUT = 30  # seconds
+
+# How often a held lock's TTL is reset.  A third of the TTL leaves room
+# for two missed renewals (a slow Redis round trip, a GC pause) before
+# the key expires.
+#
+_RENEW_INTERVAL = _LOCK_TIMEOUT / 3  # seconds
 
 # Keys held by the current thread.  Checked before asking Redis so a
 # nested acquire of a key this thread already holds does not wait on
@@ -104,6 +130,61 @@ def _held_keys() -> set[str]:
 ########################################################################
 ########################################################################
 #
+class _Renewer:
+    """Background thread that resets a held lock's TTL until stopped.
+
+    Args:
+        lock: The acquired lock.  It must be created with
+            `thread_local=False` so this thread can see its token.
+        key: The lock's key, for log messages.
+    """
+
+    ####################################################################
+    #
+    def __init__(self, lock: Lock, key: str) -> None:
+        self._lock = lock
+        self._key = key
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, name=f"lock-renewer:{key}", daemon=True
+        )
+        self._thread.start()
+
+    ####################################################################
+    #
+    def _run(self) -> None:
+        """Reset the TTL every `_RENEW_INTERVAL` seconds until stopped."""
+        while not self._stop.wait(_RENEW_INTERVAL):
+            try:
+                self._lock.reacquire()
+            except LockNotOwnedError:
+                logger.error(
+                    "Redis lock %s expired before it could be renewed; "
+                    "another holder may have taken it.",
+                    self._key,
+                )
+                return
+            except RedisError:
+                # A failed round trip leaves the TTL where it was; the
+                # next interval tries again before the key can expire.
+                #
+                logger.warning(
+                    "Could not renew Redis lock %s; retrying.",
+                    self._key,
+                    exc_info=True,
+                )
+
+    ####################################################################
+    #
+    def stop(self) -> None:
+        """Stop renewing and wait for the thread to exit."""
+        self._stop.set()
+        self._thread.join()
+
+
+########################################################################
+########################################################################
+#
 @contextmanager
 def acquire_lock(key: str, blocking: bool = True) -> Iterator[bool]:
     """Acquire a named Redis lock for the duration of the block.
@@ -111,6 +192,9 @@ def acquire_lock(key: str, blocking: bool = True) -> Iterator[bool]:
     Re-entrant per thread: when the current thread already holds `key`
     this yields True without touching Redis, and the outer block keeps
     ownership of the release.
+
+    While the block runs, a background thread keeps resetting the lock's
+    TTL (see "Lock TTL and renewal" above).
 
     Args:
         key: The Redis key to lock on.  Use a model's `lock_key`
@@ -131,13 +215,28 @@ def acquire_lock(key: str, blocking: bool = True) -> Iterator[bool]:
         yield True
         return
 
-    lock = redis_client().lock(key, timeout=_LOCK_TIMEOUT)
+    # `thread_local=False` stores the lock token on the Lock object
+    # rather than in thread-local storage, so the renewal thread can
+    # reset the TTL.  Each Lock object belongs to this one `with` block.
+    #
+    lock = redis_client().lock(key, timeout=_LOCK_TIMEOUT, thread_local=False)
     acquired = lock.acquire(blocking=blocking)
-    if acquired:
-        held.add(key)
+    if not acquired:
+        yield False
+        return
+
+    held.add(key)
+    renewer = _Renewer(lock, key)
     try:
-        yield acquired
+        yield True
     finally:
-        if acquired:
-            held.discard(key)
+        held.discard(key)
+        renewer.stop()
+        try:
             lock.release()
+        except LockNotOwnedError:
+            logger.error(
+                "Redis lock %s was no longer held when released; the "
+                "block ran without its lock for part of the time.",
+                key,
+            )
