@@ -10,6 +10,8 @@
 //   the session is over.
 //
 // `describeError` turns any thrown value into a message for the UI.
+// Every place the SPA reports a failed load or action goes through it,
+// so the user sees the server's reason whenever the server gave one.
 //
 
 ////////////////////////////////////////////////////////////////////////
@@ -25,16 +27,17 @@ export class ApiError extends Error {
   readonly fieldErrors: Record<string, string[]>;
   // DRF's `non_field_errors`, or a top-level list of messages.
   readonly nonFieldErrors: string[];
+  // The most specific message the server sent, or `null` when the body
+  // had none (e.g. an HTML 502 page).
+  readonly serverMessage: string | null;
 
   constructor(status: number, body: string) {
     const parsed = parseDrfError(body);
-    super(
-      parsed.detail ??
-        parsed.nonFieldErrors[0] ??
-        firstFieldError(parsed.fieldErrors) ??
-        `HTTP ${status}`,
-    );
+    const serverMessage =
+      parsed.detail ?? parsed.nonFieldErrors[0] ?? firstFieldError(parsed.fieldErrors) ?? null;
+    super(serverMessage ?? `HTTP ${status}`);
     this.name = "ApiError";
+    this.serverMessage = serverMessage;
     this.status = status;
     this.body = body;
     this.detail = parsed.detail;
@@ -122,12 +125,15 @@ function firstFieldError(fieldErrors: Record<string, string[]>): string | undefi
 
 ////////////////////////////////////////////////////////////////////////
 //
-// A message for the UI from anything a request can throw: the server's
-// DRF message for an `ApiError`, a session notice for `AuthError`, a
-// network notice when `fetch` itself failed, otherwise `fallback`.
+// A message for the UI from anything a request can throw:
+// - an `ApiError`: the server's DRF message, or `fallback` plus the
+//   status (`"Failed to load budgets. (HTTP 500)"`) when it sent none;
+// - `AuthError`: a session notice;
+// - a `TypeError` (`fetch` itself failed): a connection notice;
+// - anything else: `fallback`.
 //
 export function describeError(err: unknown, fallback = "Something went wrong."): string {
-  if (err instanceof ApiError) return err.message;
+  if (err instanceof ApiError) return err.serverMessage ?? `${fallback} (HTTP ${err.status})`;
   if (err instanceof AuthError) return "Your session has expired. Please sign in again.";
   if (err instanceof TypeError) return "Could not reach the server. Check your connection.";
   return fallback;

@@ -36,8 +36,14 @@ import { useSessionStore } from "@/stores/session";
 const router = useRouter();
 const auth = useSessionStore();
 const ctx = useAccountContextStore();
-const { initials, unallocatedFor, nextFundingFor, settingDefault, setDefaultAccount } =
-  useAccountHub();
+const {
+  initials,
+  unallocatedFor,
+  nextFundingFor,
+  settingDefault,
+  defaultAccountError,
+  setDefaultAccount,
+} = useAccountHub();
 const { signOut } = useSignOut();
 </script>
 
@@ -175,6 +181,9 @@ const { signOut } = useSignOut();
               </option>
             </select>
           </div>
+          <p v-if="defaultAccountError" class="px-4 pb-3 text-xs text-coral-600" role="alert">
+            {{ defaultAccountError }}
+          </p>
 
           <!-- Security & notifications -->
           <div class="border-t border-neutral-100">

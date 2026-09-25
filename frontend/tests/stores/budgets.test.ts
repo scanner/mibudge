@@ -117,7 +117,7 @@ describe("fetchList", () => {
     const store = useBudgetsStore();
 
     await expect(store.fetchList()).rejects.toMatchObject({ status: 500 });
-    expect(store.error).toBe("HTTP 500");
+    expect(store.error).toBe("Failed to load budgets. (HTTP 500)");
     expect(store.loading).toBe(false);
   });
 });

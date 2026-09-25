@@ -33,6 +33,8 @@ const {
   allocationsByTx: allocsByTx,
   loading,
   loadingMore,
+  loadMoreError,
+  loadMore,
   error,
   sentinel,
   activeFilter,
@@ -165,6 +167,12 @@ function openTransaction(id: string) {
           class="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-ocean-400"
         />
       </div>
+      <p v-else-if="loadMoreError" class="py-4 text-center text-sm text-coral-600" role="alert">
+        Couldn't load more transactions: {{ loadMoreError }}
+        <button type="button" class="ml-1 font-medium underline" @click="loadMore">
+          Try again
+        </button>
+      </p>
     </template>
   </AppShell>
 </template>

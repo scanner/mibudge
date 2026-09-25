@@ -12,6 +12,11 @@
 // refetches the account's budgets, so balances everywhere (including
 // the top bar's Unallocated) are current.
 //
+// A failed autosave, split or upload leaves a message naming what was
+// not saved, with the server's reason (`descriptionError`,
+// `memoError`, `splitError`, `attachmentError`); each clears when the
+// transaction changes.
+//
 
 // 3rd party imports
 //
@@ -41,6 +46,9 @@ import { useTransactionNavStore } from "@/stores/transactionNav";
 //
 export type AttachmentField = "image" | "document";
 
+// Autosave failures read "Couldn't save the memo: <reason>".
+const SAVE_FAILED = { errorMessage: "save failed." };
+
 async function allocationsOf(transactionId: string): Promise<Allocation[]> {
   const first = await api.allocations.list({ transaction: transactionId });
   return (await api.pages.all(first)).map(allocationFromDto);
@@ -61,6 +69,7 @@ export function useTransactionDetail(id: () => string) {
   const description = ref("");
   const memo = ref("");
   const attachmentError = ref<string | null>(null);
+  const splitError = ref<string | null>(null);
 
   const resource = useResource(
     id,
@@ -69,7 +78,8 @@ export function useTransactionDetail(id: () => string) {
         api.transactions.get(txId).then(transactionFromDto),
         allocationsOf(txId),
       ]);
-      // The split editor lists the account's budgets.
+      // The split editor lists the account's budgets; a failed refresh
+      // leaves the cached ones.
       await budgets.refreshAccount(tx.bankAccountId).catch(() => undefined);
       return { tx, allocs };
     },
@@ -82,6 +92,7 @@ export function useTransactionDetail(id: () => string) {
     description.value = data?.tx.description ?? "";
     memo.value = data?.tx.memo ?? "";
     attachmentError.value = null;
+    splitError.value = null;
   });
 
   // Apply a server answer only while it is still the transaction shown.
@@ -93,32 +104,49 @@ export function useTransactionDetail(id: () => string) {
   ////////////////////////////////////////////////////////////////////
   //
   // Autosave (800ms after the last keystroke).  A failed save restores
-  // the saved text.
+  // the saved text and says why.
   //
-  const descriptionSave = useDebouncedAutosave(id, async (txId: string, value: string) => {
-    if (value === transaction.value?.description) return;
-    try {
-      const dto = await api.transactions.update(
-        txId,
-        transactionToUpdateDto({ description: value }),
-      );
-      applyIfCurrent(txId, transactionFromDto(dto));
-    } catch (err) {
-      if (txId === id()) description.value = transaction.value?.description ?? "";
-      throw err;
-    }
-  });
+  const descriptionSave = useDebouncedAutosave(
+    id,
+    async (txId: string, value: string) => {
+      if (value === transaction.value?.description) return;
+      try {
+        const dto = await api.transactions.update(
+          txId,
+          transactionToUpdateDto({ description: value }),
+        );
+        applyIfCurrent(txId, transactionFromDto(dto));
+      } catch (err) {
+        if (txId === id()) description.value = transaction.value?.description ?? "";
+        throw err;
+      }
+    },
+    SAVE_FAILED,
+  );
 
-  const memoSave = useDebouncedAutosave(id, async (txId: string, value: string) => {
-    if ((value || null) === (transaction.value?.memo ?? null)) return;
-    try {
-      const dto = await api.transactions.update(txId, transactionToUpdateDto({ memo: value }));
-      applyIfCurrent(txId, transactionFromDto(dto));
-    } catch (err) {
-      if (txId === id()) memo.value = transaction.value?.memo ?? "";
-      throw err;
-    }
-  });
+  const memoSave = useDebouncedAutosave(
+    id,
+    async (txId: string, value: string) => {
+      if ((value || null) === (transaction.value?.memo ?? null)) return;
+      try {
+        const dto = await api.transactions.update(txId, transactionToUpdateDto({ memo: value }));
+        applyIfCurrent(txId, transactionFromDto(dto));
+      } catch (err) {
+        if (txId === id()) memo.value = transaction.value?.memo ?? "";
+        throw err;
+      }
+    },
+    SAVE_FAILED,
+  );
+
+  const descriptionError = computed(() =>
+    descriptionSave.error.value
+      ? `Couldn't save the description: ${descriptionSave.error.value}`
+      : null,
+  );
+  const memoError = computed(() =>
+    memoSave.error.value ? `Couldn't save the memo: ${memoSave.error.value}` : null,
+  );
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -145,17 +173,28 @@ export function useTransactionDetail(id: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
+  // A failed split says why and reloads the allocations, so the list
+  // shows what the server has (or keeps what it showed, if that reload
+  // fails too).  After a split, a failed budget refresh leaves the
+  // cached balances.
+  //
   async function applySplits(splits: Record<string, string>): Promise<void> {
     const tx = transaction.value;
     if (!tx) return;
+    splitError.value = null;
+    let updated: Allocation[];
     try {
-      const updated = (await api.transactions.split(tx.id, splits)).map(allocationFromDto);
-      if (tx.id === id()) allocations.value = updated;
-      allocationsStore.setForTransaction(tx.bankAccountId, tx.id, updated);
-      await budgets.refreshAccount(tx.bankAccountId).catch(() => undefined);
-    } catch {
-      if (tx.id === id()) allocations.value = await allocationsOf(tx.id).catch(() => []);
+      updated = (await api.transactions.split(tx.id, splits)).map(allocationFromDto);
+    } catch (err) {
+      if (tx.id !== id()) return;
+      splitError.value = `Couldn't save the split: ${describeError(err, "save failed.")}`;
+      const current = await allocationsOf(tx.id).catch(() => null);
+      if (current && tx.id === id()) allocations.value = current;
+      return;
     }
+    if (tx.id === id()) allocations.value = updated;
+    allocationsStore.setForTransaction(tx.bankAccountId, tx.id, updated);
+    await budgets.refreshAccount(tx.bankAccountId).catch(() => undefined);
   }
 
   async function updateAllocation(allocationId: string, amount: string): Promise<void> {
@@ -204,6 +243,8 @@ export function useTransactionDetail(id: () => string) {
     onDescriptionBlur: () => descriptionSave.flush(),
     onMemoInput: () => memoSave.schedule(memo.value),
     onMemoBlur: () => memoSave.flush(),
+    descriptionError,
+    memoError,
     unallocatedBudgetId,
     visibleAllocations,
     coverage,
@@ -213,6 +254,7 @@ export function useTransactionDetail(id: () => string) {
     applySplits,
     updateAllocation,
     removeAllocation,
+    splitError,
     attachmentError,
     uploadAttachment,
     prevId,

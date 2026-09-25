@@ -48,6 +48,8 @@ const {
   onDescriptionBlur,
   onMemoInput,
   onMemoBlur,
+  descriptionError,
+  memoError,
   unallocatedBudgetId,
   visibleAllocations,
   coverage,
@@ -57,6 +59,7 @@ const {
   applySplits,
   updateAllocation,
   removeAllocation,
+  splitError,
   attachmentError,
   uploadAttachment,
   prevId: prevTxId,
@@ -194,6 +197,9 @@ function onAttach(field: AttachmentField) {
             @input="onDescriptionInput"
             @blur="onDescriptionBlur"
           />
+          <p v-if="descriptionError" class="mt-1 text-xs text-coral-600" role="alert">
+            {{ descriptionError }}
+          </p>
         </div>
 
         <div v-if="transaction.rawDescription !== transaction.description">
@@ -235,6 +241,9 @@ function onAttach(field: AttachmentField) {
         @assign="pickerOpen = true"
         @navigate-budget="navigateBudget"
       />
+      <p v-if="splitError" class="mt-2 text-sm text-coral-600" role="alert">
+        {{ splitError }}
+      </p>
 
       <!-- Memo + attachments.  All three are hidden on pending rows
            because the next sync wipes pending transactions and
@@ -254,6 +263,9 @@ function onAttach(field: AttachmentField) {
             @input="onMemoInput"
             @blur="onMemoBlur"
           />
+          <p v-if="memoError" class="mt-1 text-xs text-coral-600" role="alert">
+            {{ memoError }}
+          </p>
         </section>
 
         <!-- Attachments -->

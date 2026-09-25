@@ -75,7 +75,8 @@ class ApiError extends Error {
   detail: string | null;                    // DRF {"detail": "..."}
   fieldErrors: Record<string, string[]>;    // DRF {"field": ["..."]}, nested keys as "a.b"
   nonFieldErrors: string[];                 // non_field_errors, or a top-level list
-  // message: detail ?? nonFieldErrors[0] ?? first field error ?? `HTTP <status>`
+  serverMessage: string | null;             // detail ?? nonFieldErrors[0] ?? first field error
+  // message: serverMessage ?? `HTTP <status>`
 }
 
 class AuthError extends Error {}            // refresh failed; the session is over
@@ -83,10 +84,13 @@ class AuthError extends Error {}            // refresh failed; the session is ov
 
 Helpers:
 
-- `describeError(err, fallback?)` returns one line for the UI. For an
-  `ApiError` that is the server's message. For an `AuthError` it is a
-  session-expired notice, and for a `TypeError` (the network failed) a
-  connection notice. Anything else gets `fallback`.
+- `describeError(err, fallback?)` returns one line for the UI:
+  - an `ApiError`: the server's message, or, when the body had none (an
+    HTML 502 page, an empty 500), `fallback` plus the status, e.g.
+    `"Failed to load budgets. (HTTP 500)"`;
+  - an `AuthError`: a session-expired notice;
+  - a `TypeError` (the network failed): a connection notice;
+  - anything else: `fallback`.
 - `isApiError(err, status?)` narrows the type, optionally to one status:
   `if (isApiError(err, 409)) ...`.
 - `parseDrfError(body)` is what `ApiError` uses internally.
@@ -94,6 +98,25 @@ Helpers:
 In a form, `useFormErrors().setError(err, { fallback, statusMessages })`
 puts each field's message next to its input, and the rest into a
 form-level message.
+
+### Reporting failures
+
+Every failed page load or user action shows a message, and the message
+comes from `describeError(err, fallback)` (or `useFormErrors`), so the
+user sees the server's reason whenever it gave one. The fallback names
+what failed ("Failed to archive budget."). Don't replace the server's
+message with fixed text, and don't catch an error only to rethrow a
+plain `Error`: that throws away the status and the message.
+
+`useAsync`, `useResource`, `useInfiniteList` and `useDebouncedAutosave`
+already apply this: pass `errorMessage` as the fallback and render their
+`error`.
+
+A bare `catch {}` or `.catch(() => undefined)` is right only for work
+the user did not ask for and can do without. Examples: refetching
+balances after an action that succeeded, the top bar's Unallocated
+balance, or a cosmetic lookup like a bank's name. Say so in a comment
+next to it.
 
 ---
 

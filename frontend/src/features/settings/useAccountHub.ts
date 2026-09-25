@@ -12,6 +12,7 @@ import { computed, onMounted, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
+import { describeError } from "@/api/errors";
 import type { BankAccount, FundingSummary } from "@/models/bankAccount";
 import { fundingSummaryFromDto } from "@/models/bankAccount";
 import { useAccountContextStore } from "@/stores/accountContext";
@@ -41,12 +42,14 @@ export function useAccountHub() {
   const initials = computed(() => initialsOf(session.user?.name || session.user?.username || ""));
   const fundingSummaries = ref(new Map<string, FundingSummary>());
   const settingDefault = ref(false);
+  const defaultAccountError = ref<string | null>(null);
 
   ////////////////////////////////////////////////////////////////////
   //
   // Refresh the account list, then load each account's Unallocated
-  // budget and funding summary in parallel; individual failures leave
-  // that value blank.
+  // budget and funding summary in parallel.  These only decorate the
+  // page: a failed refresh leaves the cached account list, and each
+  // other failure leaves its value blank.
   //
   onMounted(async () => {
     await ctx.refresh().catch(() => undefined);
@@ -74,16 +77,26 @@ export function useAccountHub() {
     return summary && !summary.total.isZero() ? summary.total : null;
   }
 
+  // A failure says why; the select shows the saved value again.
+  //
   async function setDefaultAccount(accountId: string): Promise<void> {
     settingDefault.value = true;
+    defaultAccountError.value = null;
     try {
       await session.updateProfile({ defaultBankAccountId: accountId || null });
-    } catch {
-      // The select shows the saved value again.
+    } catch (err) {
+      defaultAccountError.value = describeError(err, "Failed to set the default account.");
     } finally {
       settingDefault.value = false;
     }
   }
 
-  return { initials, unallocatedFor, nextFundingFor, settingDefault, setDefaultAccount };
+  return {
+    initials,
+    unallocatedFor,
+    nextFundingFor,
+    settingDefault,
+    defaultAccountError,
+    setDefaultAccount,
+  };
 }

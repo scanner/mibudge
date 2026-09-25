@@ -9,6 +9,10 @@
 // edit can never be written to a different record.  `flush()` saves the
 // pending value now (bind it to `blur`).
 //
+// `error` is the last failed save's message for the current key: it
+// clears when the key changes, and a save for an earlier key that fails
+// after the key changed does not set it.
+//
 
 // 3rd party imports
 //
@@ -68,7 +72,7 @@ export function useDebouncedAutosave<K, V>(
     try {
       await save(job.key, job.value);
     } catch (err) {
-      error.value = describeError(err, options.errorMessage);
+      if (job.key === key()) error.value = describeError(err, options.errorMessage);
     } finally {
       saving.value = false;
     }
@@ -81,7 +85,10 @@ export function useDebouncedAutosave<K, V>(
     timer = setTimeout(() => void flush(), delayMs);
   }
 
-  watch(key, cancel);
+  watch(key, () => {
+    cancel();
+    error.value = null;
+  });
   if (getCurrentScope()) onScopeDispose(cancel);
 
   return {

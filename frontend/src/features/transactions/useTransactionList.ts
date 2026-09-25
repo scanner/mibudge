@@ -247,6 +247,8 @@ export function useTransactionList() {
     allocationsByTx,
     loading: computed(() => list.loading.value || awaitingIndex.value),
     loadingMore: list.loadingMore,
+    loadMoreError: list.loadMoreError,
+    loadMore: list.loadMore,
     error: computed(() => list.error.value ?? indexLoad.error.value),
     sentinel: list.sentinel,
     activeFilter,

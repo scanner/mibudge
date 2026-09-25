@@ -15,6 +15,7 @@ import { computed, ref } from "vue";
 
 // app imports
 //
+import { describeError } from "@/api/errors";
 import { useResource } from "@/composables/useResource";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -32,12 +33,8 @@ export function useBudgetDetail(id: () => string) {
     id,
     async (budgetId: string) => {
       actionError.value = null;
-      try {
-        const budget = await store.fetchOne(budgetId);
-        if (budget.fillupGoalId) await store.fetchOne(budget.fillupGoalId);
-      } catch {
-        throw new Error("load failed");
-      }
+      const budget = await store.fetchOne(budgetId);
+      if (budget.fillupGoalId) await store.fetchOne(budget.fillupGoalId);
       return budgetId;
     },
     { errorMessage: "Failed to load budget." },
@@ -55,10 +52,11 @@ export function useBudgetDetail(id: () => string) {
   async function togglePause(): Promise<void> {
     const b = budget.value;
     if (!b) return;
+    actionError.value = null;
     try {
       await store.update(b.id, { paused: !b.paused });
-    } catch {
-      actionError.value = "Failed to update budget.";
+    } catch (err) {
+      actionError.value = describeError(err, "Failed to update budget.");
     }
   }
 
@@ -67,11 +65,12 @@ export function useBudgetDetail(id: () => string) {
   async function archive(): Promise<boolean> {
     const b = budget.value;
     if (!b) return false;
+    actionError.value = null;
     try {
       await store.archive(b.id);
       return true;
-    } catch {
-      actionError.value = "Failed to archive budget.";
+    } catch (err) {
+      actionError.value = describeError(err, "Failed to archive budget.");
       return false;
     }
   }

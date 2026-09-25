@@ -3,7 +3,7 @@
 // OutgoingInvitationsSection — the co-owner invitations the user sent,
 // across all their accounts, with Cancel.  Feature component
 // (settings); data lives in `useOutgoingInvitations`.  Renders nothing
-// when there are none.
+// when there are none and nothing failed.
 //
 
 // app imports
@@ -13,7 +13,7 @@ import { useOutgoingInvitations } from "./useOutgoingInvitations";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const { invitations, cancellingId, cancel } = useOutgoingInvitations();
+const { invitations, cancellingId, error, cancel } = useOutgoingInvitations();
 
 function shortDate(iso: string): string {
   return formatInstantDate(iso, { month: "short", day: "numeric", year: "numeric" });
@@ -25,11 +25,12 @@ function shortDate(iso: string): string {
   <!-- Only rendered when there is at least one pending invitation so
        the section does not appear at all for users who have never
        invited anyone or whose invitations have all been resolved. -->
-  <template v-if="invitations.length > 0">
+  <template v-if="invitations.length > 0 || error">
     <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">Pending invitations</h1>
 
     <section>
-      <div class="rounded-card border border-neutral-200 bg-white">
+      <p v-if="error" class="mb-2 text-sm text-coral-600" role="alert">{{ error }}</p>
+      <div v-if="invitations.length > 0" class="rounded-card border border-neutral-200 bg-white">
         <ul class="divide-y divide-neutral-100">
           <li
             v-for="inv in invitations"

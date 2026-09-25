@@ -9,6 +9,10 @@
 // arrives for an older generation (e.g. the previous bank account) is
 // dropped.
 //
+// `error` is a failed first page (the list is then empty);
+// `loadMoreError` is a failed later page (the loaded rows stay, and the
+// caller offers `loadMore()` again).
+//
 // Bind `sentinel` to an element after the list (`ref="sentinel"`).
 //
 
@@ -36,6 +40,7 @@ export interface UseInfiniteList<T> {
   loading: ComputedRef<boolean>;
   loadingMore: ComputedRef<boolean>;
   error: ComputedRef<string | null>;
+  loadMoreError: ComputedRef<string | null>;
   sentinel: Ref<HTMLElement | null>;
   reload: () => Promise<void>;
   loadMore: () => Promise<void>;
@@ -55,6 +60,7 @@ export function useInfiniteList<T>(
   const loading = ref(false);
   const loadingMore = ref(false);
   const error = ref<string | null>(null);
+  const loadMoreError = ref<string | null>(null);
   const sentinel = ref<HTMLElement | null>(null);
   let generation = 0;
 
@@ -67,6 +73,7 @@ export function useInfiniteList<T>(
     loading.value = false;
     loadingMore.value = false;
     error.value = null;
+    loadMoreError.value = null;
   }
 
   async function reload(): Promise<void> {
@@ -74,6 +81,7 @@ export function useInfiniteList<T>(
     loading.value = true;
     loadingMore.value = false;
     error.value = null;
+    loadMoreError.value = null;
     try {
       const page = await fetchFirst();
       if (current !== generation) return;
@@ -102,6 +110,7 @@ export function useInfiniteList<T>(
     if (!nextUrl.value || loadingMore.value || loading.value) return;
     const current = generation;
     loadingMore.value = true;
+    loadMoreError.value = null;
     try {
       do {
         const page = await fetchNext(nextUrl.value!);
@@ -110,8 +119,8 @@ export function useInfiniteList<T>(
         nextUrl.value = page.next;
         await nextTick();
       } while (nextUrl.value && current === generation && sentinelNearViewport());
-    } catch {
-      // The next scroll retries.
+    } catch (err) {
+      if (current === generation) loadMoreError.value = describeError(err, options.errorMessage);
     } finally {
       if (current === generation) loadingMore.value = false;
     }
@@ -144,6 +153,7 @@ export function useInfiniteList<T>(
     loading: computed(() => loading.value),
     loadingMore: computed(() => loadingMore.value),
     error: computed(() => error.value),
+    loadMoreError: computed(() => loadMoreError.value),
     sentinel,
     reload,
     loadMore,

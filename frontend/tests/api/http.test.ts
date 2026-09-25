@@ -263,12 +263,16 @@ describe("error responses", () => {
 
   // GIVEN: anything a request can throw
   // WHEN:  it is described for the UI
-  // THEN:  API errors give the server's message, an ended session and a
+  // THEN:  API errors give the server's message, or the fallback and
+  //        status when the server sent none; an ended session and a
   //        network failure get their own notices, and anything else the
   //        fallback
   //
   it.each([
     [new ApiError(400, JSON.stringify({ detail: "Nope." })), "Nope."],
+    [new ApiError(400, JSON.stringify({ amount: ["Too large."] })), "Too large."],
+    [new ApiError(502, "<html>Bad gateway</html>"), "fallback (HTTP 502)"],
+    [new ApiError(500, ""), "fallback (HTTP 500)"],
     [new AuthError(), "Your session has expired. Please sign in again."],
     [new TypeError("Failed to fetch"), "Could not reach the server. Check your connection."],
     [new Error("boom"), "fallback"],

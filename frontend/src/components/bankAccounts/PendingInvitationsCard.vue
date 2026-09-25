@@ -3,7 +3,7 @@
 // PendingInvitationsCard — an account's pending co-owner invitations.
 // Presentational: `canCancel` decides which rows show Cancel (only the
 // sender's); emits `cancel` with the invitation.  Renders nothing when
-// there are no invitations.
+// there are no invitations and no `error`.
 //
 
 // app imports
@@ -17,6 +17,7 @@ defineProps<{
   invitations: Invitation[];
   cancellingId: string | null;
   canCancel: (inv: Invitation) => boolean;
+  error?: string | null;
 }>();
 
 const emit = defineEmits<{ (e: "cancel", inv: Invitation): void }>();
@@ -35,7 +36,7 @@ function fmtDate(iso: string): string {
        pending invitation; once all are accepted/declined/cancelled it
        disappears automatically. -->
   <section
-    v-if="invitations.length > 0"
+    v-if="invitations.length > 0 || error"
     class="overflow-hidden rounded-card border border-neutral-200 bg-white"
   >
     <h2
@@ -67,5 +68,6 @@ function fmtDate(iso: string): string {
         </button>
       </li>
     </ul>
+    <p v-if="error" class="px-4 pb-3 text-xs text-coral-600" role="alert">{{ error }}</p>
   </section>
 </template>

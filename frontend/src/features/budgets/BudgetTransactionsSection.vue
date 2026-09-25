@@ -31,6 +31,7 @@ const budgets = useBudgetsStore();
 const {
   allocationsByTx: budgetAllocsByTx,
   loading: txLoading,
+  error: txError,
   showTransfers: showInternalTxs,
   toggleTransfers: toggleInternalTxs,
   query: searchQuery,
@@ -102,6 +103,8 @@ function openTransaction(id: string) {
       </div>
     </Transition>
 
+    <p v-if="txError" class="mb-2 text-sm text-coral-600" role="alert">{{ txError }}</p>
+
     <div v-if="txLoading" class="space-y-2">
       <div v-for="i in 3" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
     </div>
@@ -119,7 +122,7 @@ function openTransaction(id: string) {
       @remove="onRemoveTransaction"
     />
 
-    <p v-else class="py-4 text-center text-sm text-secondary">
+    <p v-else-if="!txError" class="py-4 text-center text-sm text-secondary">
       {{
         searchQuery ? "No matching transactions." : "No transactions assigned to this budget yet."
       }}

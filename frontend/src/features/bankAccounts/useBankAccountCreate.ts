@@ -15,6 +15,7 @@ import { onMounted, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
+import { describeError } from "@/api/errors";
 import { useFormErrors } from "@/composables/useFormErrors";
 import type { AccountType } from "@/domain/labels";
 import { Money, toDecimal } from "@/domain/money";
@@ -61,8 +62,9 @@ export function useBankAccountCreate() {
     try {
       const first = await api.banks.list();
       banks.value = (await api.pages.all(first)).map(bankFromDto);
-    } catch {
+    } catch (err) {
       banks.value = [];
+      errors.setFormError(describeError(err, "Failed to load the list of banks."));
     } finally {
       banksLoading.value = false;
     }

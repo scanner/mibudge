@@ -7,6 +7,10 @@
 // in the account switcher and the top bar at once.  Loads follow the
 // `id` getter; a response for a previous id is ignored.
 //
+// A failed toggle or delete sets `autoFundingError` / `deleteError`
+// with the server's message when it sent one.  The bank's name is
+// cosmetic: when it cannot be loaded the page shows none.
+//
 
 // 3rd party imports
 //
@@ -15,6 +19,7 @@ import { computed, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
+import { describeError } from "@/api/errors";
 import { useFormErrors } from "@/composables/useFormErrors";
 import { useResource } from "@/composables/useResource";
 import { formatInstantDate } from "@/domain/dates";
@@ -129,6 +134,7 @@ export function useBankAccountDetail(id: () => string) {
   // update fails.
   //
   const autoFundingOverride = ref<boolean | null>(null);
+  const autoFundingError = ref<string | null>(null);
   const autoFundingEnabled = computed(
     () => autoFundingOverride.value ?? account.value?.autoFundingEnabled ?? false,
   );
@@ -137,10 +143,12 @@ export function useBankAccountDetail(id: () => string) {
     const current = account.value;
     if (!current) return;
     autoFundingOverride.value = !autoFundingEnabled.value;
+    autoFundingError.value = null;
     try {
       await accounts.update(current.id, { autoFundingEnabled: autoFundingOverride.value });
-    } catch {
-      // The store still holds the server's value.
+    } catch (err) {
+      // The store still holds the server's value, so the toggle flips back.
+      autoFundingError.value = describeError(err, "Failed to change automatic funding.");
     } finally {
       autoFundingOverride.value = null;
     }
@@ -153,20 +161,24 @@ export function useBankAccountDetail(id: () => string) {
   // once deleted.
   //
   const deleting = ref(false);
+  const deleteError = ref<string | null>(null);
 
   async function deleteAccount(): Promise<boolean> {
     const current = account.value;
     if (!current) return false;
     deleting.value = true;
+    deleteError.value = null;
     try {
       await accounts.remove(current.id);
-      await ctx.refresh();
-      return true;
-    } catch {
+    } catch (err) {
+      deleteError.value = describeError(err, "Failed to delete the account.");
       return false;
     } finally {
       deleting.value = false;
     }
+    // The account is gone; a failed refresh leaves the cached list.
+    await ctx.refresh().catch(() => undefined);
+    return true;
   }
 
   return {
@@ -187,7 +199,9 @@ export function useBankAccountDetail(id: () => string) {
     saveEdit,
     autoFundingEnabled,
     toggleAutoFunding,
+    autoFundingError,
     deleting,
+    deleteError,
     deleteAccount,
   };
 }

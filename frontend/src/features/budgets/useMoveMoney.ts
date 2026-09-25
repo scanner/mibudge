@@ -14,6 +14,7 @@ import { computed, ref } from "vue";
 
 // app imports
 //
+import { describeError } from "@/api/errors";
 import { Money, toDecimal } from "@/domain/money";
 import type { Budget } from "@/models/budget";
 import { useAccountContextStore } from "@/stores/accountContext";
@@ -94,8 +95,9 @@ export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Bu
     try {
       const list = await store.fetchList({ bank_account: accountId, archived: false });
       otherBudgets.value = list.filter((o) => o.id !== b?.id);
-    } catch {
+    } catch (err) {
       otherBudgets.value = [];
+      error.value = describeError(err, "Failed to load budgets.");
     }
     resetCounterpart();
   }
@@ -128,8 +130,8 @@ export function useMoveMoney(budget: () => Budget | null, fillupBudget: () => Bu
         amount: Money.of(value, b.balance.currency),
       });
       return true;
-    } catch {
-      error.value = "Transfer failed. Check the amount and try again.";
+    } catch (err) {
+      error.value = describeError(err, "Transfer failed. Check the amount and try again.");
       return false;
     } finally {
       saving.value = false;

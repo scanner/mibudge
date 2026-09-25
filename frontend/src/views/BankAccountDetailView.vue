@@ -110,6 +110,7 @@ async function onDelete() {
         :invitations="invite.invitations.value"
         :cancelling-id="invite.cancellingId.value"
         :can-cancel="invite.canCancel"
+        :error="invite.invitationsError.value"
         @cancel="invite.cancelInvitation"
       />
 
@@ -141,7 +142,7 @@ async function onDelete() {
         :result="funding.result.value"
         :nothing-due="funding.nothingDue.value"
         :next-date="funding.nextDate.value"
-        :error="funding.error.value"
+        :error="funding.error.value ?? detail.autoFundingError.value"
         @toggle-auto-funding="detail.toggleAutoFunding"
         @run="funding.run"
       />
@@ -157,6 +158,13 @@ async function onDelete() {
         </button>
         <p class="mt-2 px-1 text-center text-xs text-neutral-400">
           Deletes all budgets, transactions, and allocations for this account.
+        </p>
+        <p
+          v-if="detail.deleteError.value"
+          class="mt-2 text-center text-sm text-coral-600"
+          role="alert"
+        >
+          {{ detail.deleteError.value }}
         </p>
       </section>
     </div>

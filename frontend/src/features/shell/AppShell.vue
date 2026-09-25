@@ -51,7 +51,8 @@ function onBack() {
 const unallocated = computed(() => budgets.byId(ctx.unallocatedBudgetId)?.balance ?? null);
 
 // Load the Unallocated budget whenever the active account changes, so
-// the balance shows without waiting for a view to load it.
+// the balance shows without waiting for a view to load it.  A failure
+// leaves the placeholder; the page's own load reports errors.
 //
 watch(
   () => ctx.unallocatedBudgetId,

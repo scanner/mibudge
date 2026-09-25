@@ -46,6 +46,7 @@ export function useFundingRun(accountId: () => string) {
     error.value = null;
     try {
       result.value = fundingRunResultFromDto(await api.bankAccounts.runFunding(id));
+      // The run succeeded; a failed refresh leaves the cached balances.
       await Promise.all([
         accounts.fetchOne(id).catch(() => undefined),
         budgets.refreshAccount(id).catch(() => undefined),

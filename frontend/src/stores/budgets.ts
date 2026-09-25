@@ -109,7 +109,8 @@ export const useBudgetsStore = defineStore("budgets", () => {
   }
 
   // Archiving moves the balance to Unallocated, so the account's
-  // budgets are refetched.
+  // budgets are refetched; the archive succeeded, so a failed refetch
+  // leaves the cached balances.
   //
   async function archive(id: string): Promise<Budget> {
     const budget = budgetFromDto(await api.budgets.archive(id));

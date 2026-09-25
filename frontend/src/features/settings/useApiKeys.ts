@@ -15,7 +15,7 @@ import { computed, onMounted, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
-import { isApiError } from "@/api/errors";
+import { describeError, isApiError } from "@/api/errors";
 import { useFormErrors } from "@/composables/useFormErrors";
 import type { ApiKey, CreatedApiKey } from "@/models/apiKey";
 import { apiKeyFromDto, apiKeyToCreateDto, createdApiKeyFromDto } from "@/models/apiKey";
@@ -72,8 +72,8 @@ export function useApiKeys() {
     try {
       const first = await api.apiKeys.list();
       keys.value = (await api.pages.all(first)).map(apiKeyFromDto);
-    } catch {
-      error.value = "Failed to load API keys.";
+    } catch (err) {
+      error.value = describeError(err, "Failed to load API keys.");
     } finally {
       loading.value = false;
     }
@@ -102,7 +102,7 @@ export function useApiKeys() {
     } catch (err) {
       // The name is the only field a user can fix; show its message.
       const nameError = isApiError(err, 400) ? err.fieldErrors.name?.[0] : undefined;
-      createErrors.setFormError(nameError ?? "Failed to create key.");
+      createErrors.setFormError(nameError ?? describeError(err, "Failed to create key."));
     } finally {
       creating.value = false;
     }
@@ -125,8 +125,8 @@ export function useApiKeys() {
     try {
       const revoked = apiKeyFromDto(await api.apiKeys.revoke(key.id));
       keys.value = keys.value.map((k) => (k.id === key.id ? revoked : k));
-    } catch {
-      error.value = "Failed to revoke API key.";
+    } catch (err) {
+      error.value = describeError(err, "Failed to revoke API key.");
     } finally {
       revokingId.value = null;
       revokeTarget.value = null;

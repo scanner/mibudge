@@ -136,7 +136,7 @@ describe("init", () => {
 
     await ctx.init();
 
-    expect(ctx.error).toBe("HTTP 500");
+    expect(ctx.error).toBe("Failed to load bank accounts. (HTTP 500)");
     expect(ctx.loading).toBe(false);
   });
 

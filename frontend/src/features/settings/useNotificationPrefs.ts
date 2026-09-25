@@ -13,6 +13,7 @@ import { onMounted, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
+import { describeError } from "@/api/errors";
 import type { DeliveryMode, DigestFrequency, NotificationPreference } from "@/models/notification";
 import { channelPreferenceFromDto, notificationPreferenceFromDto } from "@/models/notification";
 
@@ -50,8 +51,8 @@ export function useNotificationPrefs() {
       prefs.value = kinds.map(notificationPreferenceFromDto);
       const email = channels.map(channelPreferenceFromDto).find((c) => c.channel === "email");
       if (email) emailDigestFrequency.value = email.digestFrequency;
-    } catch {
-      error.value = "Failed to load notification preferences.";
+    } catch (err) {
+      error.value = describeError(err, "Failed to load notification preferences.");
     } finally {
       loading.value = false;
     }
@@ -63,9 +64,9 @@ export function useNotificationPrefs() {
     prefs.value[idx] = { ...pref, deliveryMode: mode };
     try {
       await api.notifications.updatePreference(pref.kind, mode);
-    } catch {
+    } catch (err) {
       prefs.value[idx] = pref;
-      error.value = "Failed to update notification preference.";
+      error.value = describeError(err, "Failed to update notification preference.");
     }
   }
 
@@ -73,8 +74,8 @@ export function useNotificationPrefs() {
     error.value = null;
     try {
       await api.notifications.updateChannel("email", emailDigestFrequency.value);
-    } catch {
-      error.value = "Failed to save email preference.";
+    } catch (err) {
+      error.value = describeError(err, "Failed to save email preference.");
     }
   }
 

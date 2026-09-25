@@ -13,6 +13,8 @@
 // user's next step is the same either way.
 //
 // `cancelInvitation()` removes the row once the server confirms.
+// `invitationsError` is a failed load of the pending list or a failed
+// cancel, with the server's message when it sent one.
 //
 
 // 3rd party imports
@@ -22,6 +24,7 @@ import { computed, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
+import { describeError } from "@/api/errors";
 import { useFormErrors } from "@/composables/useFormErrors";
 import { useResource } from "@/composables/useResource";
 import type { Invitation } from "@/models/invitation";
@@ -33,9 +36,12 @@ import { useSessionStore } from "@/stores/session";
 export function useInviteFlow(accountId: () => string) {
   const session = useSessionStore();
 
-  const pending = useResource(accountId, async (id: string) =>
-    (await api.invitations.listForAccount(id)).map(invitationFromDto),
+  const pending = useResource(
+    accountId,
+    async (id: string) => (await api.invitations.listForAccount(id)).map(invitationFromDto),
+    { errorMessage: "Failed to load pending invitations." },
   );
+  const cancelError = ref<string | null>(null);
   const removed = ref(new Set<string>());
   const invitations = computed(() =>
     (pending.data.value ?? []).filter((inv) => !removed.value.has(inv.id)),
@@ -106,11 +112,13 @@ export function useInviteFlow(accountId: () => string) {
 
   async function cancelInvitation(inv: Invitation): Promise<void> {
     cancellingId.value = inv.id;
+    cancelError.value = null;
     try {
       await api.invitations.cancel(accountId(), inv.token);
       removed.value = new Set([...removed.value, inv.id]);
-    } catch {
+    } catch (err) {
       // The row stays; the user can retry.
+      cancelError.value = describeError(err, "Failed to cancel the invitation.");
     } finally {
       cancellingId.value = null;
     }
@@ -125,6 +133,7 @@ export function useInviteFlow(accountId: () => string) {
     sent,
     error: errors.formError,
     cancellingId,
+    invitationsError: computed(() => cancelError.value ?? pending.error.value),
     open,
     closeForm,
     review,

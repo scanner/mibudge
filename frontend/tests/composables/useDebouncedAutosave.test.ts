@@ -101,4 +101,44 @@ describe("useDebouncedAutosave", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(save).toHaveBeenCalledOnce();
   });
+
+  // GIVEN: a failed save for record 1
+  // WHEN:  the key changes to record 2
+  // THEN:  the error clears; record 1's failure is not shown on record 2
+  //
+  it("clears the error on key change", async () => {
+    const key = ref("tx1");
+    const save = vi.fn(async () => {
+      throw new Error("down");
+    });
+    const { result } = withSetup(() => useDebouncedAutosave(() => key.value, save));
+
+    result.schedule("x");
+    await result.flush();
+    expect(result.error.value).not.toBeNull();
+    key.value = "tx2";
+    await nextTick();
+
+    expect(result.error.value).toBeNull();
+  });
+
+  // GIVEN: a save for record 1 in flight
+  // WHEN:  the key changes to record 2, then the save fails
+  // THEN:  no error is recorded for record 2
+  //
+  it("ignores a failure that lands after the key changed", async () => {
+    const key = ref("tx1");
+    let fail!: (err: Error) => void;
+    const save = vi.fn(() => new Promise<void>((_resolve, reject) => (fail = reject)));
+    const { result } = withSetup(() => useDebouncedAutosave(() => key.value, save));
+
+    result.schedule("x");
+    const flushed = result.flush();
+    key.value = "tx2";
+    await nextTick();
+    fail(new Error("down"));
+    await flushed;
+
+    expect(result.error.value).toBeNull();
+  });
 });

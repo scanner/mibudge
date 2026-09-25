@@ -10,6 +10,9 @@
 // every budget.  Everything reloads when the budget id changes, and a
 // response for a previous id is dropped.
 //
+// `error` is the load's failure or the last failed removal, with the
+// server's message when it sent one.
+//
 
 // 3rd party imports
 //
@@ -18,6 +21,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 // app imports
 //
 import { api } from "@/api";
+import { describeError } from "@/api/errors";
 import { useDateGroupedRows } from "@/composables/useDateGroupedRows";
 import { useFuzzySearch } from "@/composables/useFuzzySearch";
 import { useResource } from "@/composables/useResource";
@@ -91,14 +95,18 @@ export function useBudgetTransactions(budgetId: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
-  const resource = useResource(budgetId, loadBudgetTransactions);
+  const resource = useResource(budgetId, loadBudgetTransactions, {
+    errorMessage: "Failed to load this budget's transactions.",
+  });
   const transactions = shallowRef<Transaction[]>([]);
   const allocationsByTx = shallowRef(new Map<string, Allocation[]>());
+  const actionError = ref<string | null>(null);
 
   watch(resource.data, (data) => {
     transactions.value = data?.transactions ?? [];
     allocationsByTx.value = data?.allocationsByTx ?? new Map();
   });
+  watch(budgetId, () => (actionError.value = null));
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -138,32 +146,42 @@ export function useBudgetTransactions(budgetId: () => string) {
   //
   // Take this budget's allocation off a transaction: the remaining
   // assigned amounts are re-declared and the rest goes to Unallocated.
-  // Budget balances (this budget and Unallocated) are then refetched.
+  // Budget balances (this budget and Unallocated) are then refetched;
+  // that refetch failing leaves the cached balances, since the removal
+  // itself succeeded.  A failed removal reloads the list, so it shows
+  // what the server has.
   //
   async function removeTransaction(transactionId: string): Promise<void> {
     const id = budgetId();
+    actionError.value = null;
+    let updated: Allocation[];
     try {
       const current = await allocationsFor({ transaction: transactionId });
       const splits: Record<string, string> = {};
       for (const a of current) {
         if (a.budgetId && a.budgetId !== id) splits[a.budgetId] = a.amount.abs().toDecimalString();
       }
-      const updated = (await api.transactions.split(transactionId, splits)).map(allocationFromDto);
+      updated = (await api.transactions.split(transactionId, splits)).map(allocationFromDto);
+    } catch (err) {
+      if (budgetId() === id) {
+        actionError.value = describeError(err, "Couldn't remove the transaction from this budget.");
+        await resource.reload();
+      }
+      return;
+    }
 
+    if (budgetId() === id) {
       transactions.value = transactions.value.filter((tx) => tx.id !== transactionId);
       const next = new Map(allocationsByTx.value);
       next.delete(transactionId);
       allocationsByTx.value = next;
-
-      const accountId = ctx.activeBankAccountId;
-      if (accountId) {
-        allocationsStore.setForTransaction(accountId, transactionId, updated);
-        await budgets.refreshAccount(accountId);
-      } else {
-        await budgets.fetchOne(id);
-      }
-    } catch {
-      await resource.reload();
+    }
+    const accountId = ctx.activeBankAccountId;
+    if (accountId) {
+      allocationsStore.setForTransaction(accountId, transactionId, updated);
+      await budgets.refreshAccount(accountId).catch(() => undefined);
+    } else {
+      await budgets.fetchOne(id).catch(() => undefined);
     }
   }
 
@@ -171,6 +189,7 @@ export function useBudgetTransactions(budgetId: () => string) {
     transactions: computed(() => transactions.value),
     allocationsByTx: computed(() => allocationsByTx.value),
     loading: resource.loading,
+    error: computed(() => actionError.value ?? resource.error.value),
     showTransfers: computed(() => showTransfers.value),
     toggleTransfers,
     query: search.query,
