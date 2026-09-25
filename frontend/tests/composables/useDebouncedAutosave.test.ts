@@ -45,9 +45,9 @@ describe("useDebouncedAutosave", () => {
 
   // GIVEN: a pending save for record 1
   // WHEN:  the key changes to record 2 before the delay elapses
-  // THEN:  the pending save is cancelled; nothing is written to either
+  // THEN:  the pending value is saved at once, to record 1 only
   //
-  it("cancels on key change", async () => {
+  it("saves to the original key on key change", async () => {
     const key = ref("tx1");
     const save = vi.fn(async () => undefined);
     const { result } = withSetup(() => useDebouncedAutosave(() => key.value, save));
@@ -57,15 +57,16 @@ describe("useDebouncedAutosave", () => {
     await nextTick();
     await vi.advanceTimersByTimeAsync(1000);
 
-    expect(save).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith("tx1", "text for tx1");
     expect(result.pending.value).toBe(false);
   });
 
   // GIVEN: a pending save
-  // WHEN:  the component unmounts
-  // THEN:  the save never runs
+  // WHEN:  the component unmounts (e.g. the browser's back button)
+  // THEN:  the pending value is saved at once
   //
-  it("cancels on unmount", async () => {
+  it("saves on unmount", async () => {
     const save = vi.fn(async () => undefined);
     const { result, wrapper } = withSetup(() => useDebouncedAutosave(() => "tx1", save));
 
@@ -73,7 +74,8 @@ describe("useDebouncedAutosave", () => {
     wrapper.unmount();
     await vi.advanceTimersByTimeAsync(1000);
 
-    expect(save).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith("tx1", "x");
   });
 
   // GIVEN: a pending save

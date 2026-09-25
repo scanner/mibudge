@@ -142,14 +142,21 @@ function fallbackBudgetLabel(id: string): string {
 //
 const txTotal = computed(() => props.transactionAmount.amount.abs());
 
+// A row's amount as it is sent: positive and rounded to cents.  The
+// remainder and the over-allocation check use the same value, so a
+// split that passes the check never exceeds the transaction once sent.
+// `null` when the text is not a number.
+//
+function rowAmount(row: SplitRow): Decimal | null {
+  try {
+    return new Decimal(row.amount || "0").abs().toDecimalPlaces(2);
+  } catch {
+    return null;
+  }
+}
+
 const splitTotal = computed(() =>
-  rows.value.reduce((sum, r) => {
-    try {
-      return sum.plus(new Decimal(r.amount || "0").abs());
-    } catch {
-      return sum;
-    }
-  }, new Decimal(0)),
+  rows.value.reduce((sum, r) => sum.plus(rowAmount(r) ?? 0), new Decimal(0)),
 );
 
 const remainder = computed(() => txTotal.value.minus(splitTotal.value));
@@ -160,14 +167,7 @@ const isOver = computed(() => remainder.value.lessThan(0));
 const canSave = computed(() => {
   if (isOver.value) return false;
   if (rows.value.length === 0) return true;
-  return rows.value.every((r) => {
-    if (!r.budgetId) return false;
-    try {
-      return new Decimal(r.amount || "0").abs().greaterThan(0);
-    } catch {
-      return false;
-    }
-  });
+  return rows.value.every((r) => !!r.budgetId && !!rowAmount(r)?.greaterThan(0));
 });
 
 function save() {
@@ -175,7 +175,7 @@ function save() {
   const splits: Record<string, string> = {};
   for (const row of rows.value) {
     if (row.budgetId) {
-      splits[row.budgetId] = new Decimal(row.amount || "0").abs().toFixed(2);
+      splits[row.budgetId] = rowAmount(row)!.toFixed(2);
     }
   }
   emit("save", splits);

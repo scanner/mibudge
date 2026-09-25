@@ -37,20 +37,35 @@ describe("useFormErrors", () => {
   });
 
   // GIVEN: a 400 with only field errors
-  // WHEN:  it is set on a form that shows field messages, and on one
-  //        that does not
+  // WHEN:  it is set on a form that shows that field's message, and on
+  //        one that shows no field messages
   // THEN:  the first shows no form message; the second shows the first
   //        field message as the form message
   //
   it("surfaces field messages for forms without inline fields", () => {
     const body = { name: ["Required."] };
     const inline = useFormErrors();
-    inline.setError(apiError(400, body));
+    inline.setError(apiError(400, body), { inlineFields: ["name"] });
+    expect(inline.fieldError("name")).toBe("Required.");
     expect(inline.formError.value).toBeNull();
 
     const plain = useFormErrors();
-    plain.setError(apiError(400, body), { inlineFields: false });
+    plain.setError(apiError(400, body));
     expect(plain.formError.value).toBe("Required.");
+  });
+
+  // GIVEN: a form that shows messages for `current_password` and
+  //        `new_password`
+  // WHEN:  a 400 names only a field the form does not show
+  // THEN:  that message becomes the form message, so the failure is
+  //        never silent
+  //
+  it("surfaces messages for fields the form does not show", () => {
+    const form = useFormErrors();
+    form.setError(apiError(400, { bank_account: ["Not yours."] }), {
+      inlineFields: ["current_password", "new_password"],
+    });
+    expect(form.formError.value).toBe("Not yours.");
   });
 
   // GIVEN: a 400 without a usable body, a 409 with a fixed message, and

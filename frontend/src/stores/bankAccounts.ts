@@ -23,6 +23,7 @@ import {
   bankAccountToCreateDto,
   bankAccountToUpdateDto,
 } from "@/models/bankAccount";
+import { createSessionGuard } from "@/stores/reset";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -53,12 +54,21 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
 
   ////////////////////////////////////////////////////////////////////
   //
+  // A request writes its answer to the list only if no sign-out
+  // (`reset()`) happened while it was in flight.
+  //
+  const guard = createSessionGuard();
+  const whileCurrent = guard.whileCurrent;
+
+  ////////////////////////////////////////////////////////////////////
+  //
   // The account list, fetched on first use (or when stale / forced).
   //
   async function loadAll(force = false): Promise<BankAccount[]> {
     if (loaded.value && !force) return accounts.value;
+    const put = whileCurrent(setAll);
     const first = await api.bankAccounts.list();
-    setAll((await api.pages.all(first)).map(bankAccountFromDto));
+    put((await api.pages.all(first)).map(bankAccountFromDto));
     return accounts.value;
   }
 
@@ -73,24 +83,27 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   ////////////////////////////////////////////////////////////////////
   //
   async function fetchOne(id: string): Promise<BankAccount> {
+    const put = whileCurrent(upsert);
     const account = bankAccountFromDto(await api.bankAccounts.get(id));
-    upsert(account);
+    put(account);
     return account;
   }
 
   async function create(input: BankAccountInput): Promise<BankAccount> {
+    const put = whileCurrent(upsert);
     const account = bankAccountFromDto(
       await api.bankAccounts.create(bankAccountToCreateDto(input)),
     );
-    upsert(account);
+    put(account);
     return account;
   }
 
   async function update(id: string, patch: BankAccountUpdate): Promise<BankAccount> {
+    const put = whileCurrent(upsert);
     const account = bankAccountFromDto(
       await api.bankAccounts.update(id, bankAccountToUpdateDto(patch)),
     );
-    upsert(account);
+    put(account);
     return account;
   }
 
@@ -102,6 +115,7 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   ////////////////////////////////////////////////////////////////////
   //
   function reset(): void {
+    guard.bump();
     accounts.value = [];
     loaded.value = false;
   }

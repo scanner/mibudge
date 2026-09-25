@@ -78,7 +78,7 @@ describe("TransactionDetailView", () => {
   //        not yet saved
   // WHEN:  the user moves to transaction B before the autosave delay
   //        ends
-  // THEN:  A's text is never written to B (nor to A)
+  // THEN:  A's text is saved to A at once, and never written to B
   //
   it("does not save one transaction's text onto the next", async () => {
     const a = makeTransaction({ bank_account: account.id, description: "Coffee" });
@@ -105,7 +105,8 @@ describe("TransactionDetailView", () => {
     await flushPromises();
 
     expect(await requestsTo("PATCH", `/api/v1/transactions/${b.id}/`)).toHaveLength(0);
-    expect(await requestsTo("PATCH", `/api/v1/transactions/${a.id}/`)).toHaveLength(0);
+    const patchesToA = await requestsTo("PATCH", `/api/v1/transactions/${a.id}/`);
+    expect(patchesToA.map((r) => r.body)).toEqual([{ description: "Coffee with Sam" }]);
     expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe("Rent");
   });
 

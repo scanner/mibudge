@@ -63,7 +63,7 @@ export function useProfileForm() {
       await session.updateProfile({ name: name.value, timezone: timezone.value });
       return true;
     } catch (err) {
-      profileErrors.setError(err, { fallback: "Failed to save profile.", inlineFields: false });
+      profileErrors.setError(err, { fallback: "Failed to save profile." });
       return false;
     } finally {
       saving.value = false;
@@ -88,7 +88,6 @@ export function useProfileForm() {
     } catch (err) {
       emailErrors.setError(err, {
         fallback: "Failed to request email change.",
-        inlineFields: false,
         statusMessages: {
           409: "That address is already in use, or an email change is already in progress. Please wait and try again.",
         },

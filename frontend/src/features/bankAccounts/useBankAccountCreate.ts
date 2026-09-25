@@ -95,7 +95,7 @@ export function useBankAccountCreate() {
       await ctx.refresh();
       return created;
     } catch (err) {
-      errors.setError(err, { fallback: "Failed to create account.", inlineFields: false });
+      errors.setError(err, { fallback: "Failed to create account." });
       return null;
     } finally {
       saving.value = false;

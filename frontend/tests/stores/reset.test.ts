@@ -5,6 +5,7 @@
 
 // 3rd party imports
 //
+import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 // app imports
@@ -18,7 +19,8 @@ import { useBudgetsStore } from "@/stores/budgets";
 import { useSessionStore } from "@/stores/session";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import { withAccounts, withAuth } from "../helpers";
-import { makeAllocation, makeBankAccount, makeBudget } from "../mocks/factories";
+import { makeAllocation, makeBankAccount, makeBudget, makePage } from "../mocks/factories";
+import { server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -74,5 +76,45 @@ describe("store reset", () => {
     expect(nav.orderedIds).toEqual([]);
     expect(nav.savedSearch).toBe("");
     expect(window.sessionStorage.getItem("mibudge.activeBankAccountId")).toBeNull();
+  });
+
+  // GIVEN: a list load in flight for the signed-in user
+  // WHEN:  the user signs out, then the load's response arrives
+  // THEN:  the store stays empty; the previous user's data is not
+  //        written back
+  //
+  it.each([
+    [
+      "budgets",
+      "/api/v1/budgets/",
+      () => makePage([makeBudget()]),
+      () => useBudgetsStore().fetchList(),
+      () => useBudgetsStore().all,
+    ],
+    [
+      "bank accounts",
+      "/api/v1/bank-accounts/",
+      () => makePage([makeBankAccount()]),
+      () => useBankAccountsStore().loadAll(true),
+      () => useBankAccountsStore().all,
+    ],
+  ])("sign-out drops a late %s response", async (_name, path, body, load, cached) => {
+    withAuth();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.get(path, async () => {
+        await gate;
+        return HttpResponse.json(body());
+      }),
+    );
+
+    const pending = load().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    useSessionStore().logout();
+    release();
+    await pending;
+
+    expect(cached()).toEqual([]);
   });
 });

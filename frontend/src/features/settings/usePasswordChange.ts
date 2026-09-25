@@ -51,7 +51,10 @@ export function usePasswordChange() {
       confirmPassword.value = "";
       strengthScore.value = null;
     } catch (err) {
-      errors.setError(err, { fallback: "Failed to change password." });
+      errors.setError(err, {
+        fallback: "Failed to change password.",
+        inlineFields: ["current_password", "new_password", "confirm_password"],
+      });
     } finally {
       saving.value = false;
     }

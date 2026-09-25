@@ -3,11 +3,13 @@
 // typing.  Composables layer.
 //
 // `schedule(value)` (re)starts the timer; when it fires, `save(key,
-// value)` runs with the key that was current when the value was typed.
-// A pending save is cancelled when the key changes (e.g. the route
-// moves to another transaction) and when the component unmounts, so an
-// edit can never be written to a different record.  `flush()` saves the
-// pending value now (bind it to `blur`).
+// value)` runs with the key that was current when the value was typed,
+// so an edit is only ever written to the record it was typed for.
+// `flush()` saves the pending value now (bind it to `blur`); a pending
+// save is also flushed when the key changes (e.g. the route moves to
+// another transaction) and when the component unmounts (e.g. the
+// browser's back button), so leaving a record never drops an edit.
+// `cancel()` discards the pending value.
 //
 // `error` is the last failed save's message for the current key: it
 // clears when the key changes, and a save for an earlier key that fails
@@ -86,10 +88,10 @@ export function useDebouncedAutosave<K, V>(
   }
 
   watch(key, () => {
-    cancel();
+    void flush();
     error.value = null;
   });
-  if (getCurrentScope()) onScopeDispose(cancel);
+  if (getCurrentScope()) onScopeDispose(() => void flush());
 
   return {
     pending: computed(() => pending.value),

@@ -92,7 +92,9 @@ export function useTransactionList() {
     accountId.value ? allocations.indexFor(accountId.value) : null,
   );
 
-  // The index refetch; its `error` is the server's message.
+  // The index refetch; its `error` is the server's message.  A failed
+  // refetch is reported beside the list, which still shows the loaded
+  // transactions.
   const indexLoad = useAsync((id: string) => allocations.loadForAccount(id, true), {
     errorMessage: "Failed to load budget assignments.",
   });
@@ -249,7 +251,8 @@ export function useTransactionList() {
     loadingMore: list.loadingMore,
     loadMoreError: list.loadMoreError,
     loadMore: list.loadMore,
-    error: computed(() => list.error.value ?? indexLoad.error.value),
+    error: list.error,
+    assignmentsError: indexLoad.error,
     sentinel: list.sentinel,
     activeFilter,
     query: local.query,

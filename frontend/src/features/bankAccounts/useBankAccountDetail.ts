@@ -122,7 +122,7 @@ export function useBankAccountDetail(id: () => string) {
       });
       editing.value = false;
     } catch (err) {
-      editErrors.setError(err, { fallback: "Failed to save.", inlineFields: false });
+      editErrors.setError(err, { fallback: "Failed to save." });
     } finally {
       saving.value = false;
     }

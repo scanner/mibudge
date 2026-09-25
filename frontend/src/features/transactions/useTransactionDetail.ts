@@ -4,8 +4,9 @@
 // previous / next navigation.  Feature composable (transactions).
 //
 // Everything follows the `id` getter.  Autosaves are keyed by id: a
-// pending save is cancelled when the id changes or the view unmounts,
-// so text typed for one transaction is never written to another.  A
+// pending save is flushed to the transaction it was typed for when the
+// id changes or the view unmounts, so text typed for one transaction is
+// saved there and never written to another.  A
 // cleared memo is sent as `null`, which clears it on the server.
 //
 // A split updates the allocation cache for the transaction list and

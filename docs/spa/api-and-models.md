@@ -95,9 +95,11 @@ Helpers:
   `if (isApiError(err, 409)) ...`.
 - `parseDrfError(body)` is what `ApiError` uses internally.
 
-In a form, `useFormErrors().setError(err, { fallback, statusMessages })`
-puts each field's message next to its input, and the rest into a
-form-level message.
+In a form, `useFormErrors().setError(err, { fallback, statusMessages,
+inlineFields })` puts the message for each field listed in
+`inlineFields` next to its input, and the rest (non-field errors, and
+messages for fields the form does not show) into a form-level message.
+A form that shows no per-field messages omits `inlineFields`.
 
 ### Reporting failures
 

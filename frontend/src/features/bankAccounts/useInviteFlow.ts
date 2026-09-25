@@ -92,7 +92,6 @@ export function useInviteFlow(accountId: () => string) {
     } catch (err) {
       errors.setError(err, {
         fallback: "Failed to send invitation.",
-        inlineFields: false,
         statusMessages: {
           409: "A pending invitation for this address already exists, or they are already an owner.",
         },

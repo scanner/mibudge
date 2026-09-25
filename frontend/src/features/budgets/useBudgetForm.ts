@@ -134,7 +134,7 @@ export function useBudgetForm(mode: "create" | "edit", budget?: Budget) {
         bankAccountId: accountId,
       });
     } catch (err) {
-      errors.setError(err, { fallback: "Failed to save budget.", inlineFields: false });
+      errors.setError(err, { fallback: "Failed to save budget." });
       return null;
     } finally {
       saving.value = false;

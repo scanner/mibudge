@@ -3,11 +3,12 @@
 // messages.  Composables layer.
 //
 // A DRF 400 answers `{"field": ["message"], "non_field_errors": [...]}`;
-// `setError(err)` puts the field messages under their field names and
-// the rest in `formError`.  A form that shows no per-field messages
-// passes `inlineFields: false`, and the first field message becomes
-// `formError`.  Any other failure becomes `formError` via
-// `describeError`, or a message given per HTTP status (e.g. a 409).
+// `setError(err, { inlineFields })` puts the field messages under their
+// field names and the rest in `formError`.  `inlineFields` names the
+// fields the form shows a message beside; a message for any other field
+// becomes `formError`, so a 400 is never silent.  A form that shows no
+// per-field messages omits it.  Any other failure becomes `formError`
+// via `describeError`, or a message given per HTTP status (e.g. a 409).
 //
 
 // 3rd party imports
@@ -26,8 +27,8 @@ export interface SetErrorOptions {
   fallback?: string;
   // A fixed message per HTTP status, e.g. `{ 409: "Already exists." }`.
   statusMessages?: Record<number, string>;
-  // `false` when the form renders no per-field messages.  Default `true`.
-  inlineFields?: boolean;
+  // The fields the form shows a message beside.  Default: none.
+  inlineFields?: readonly string[];
 }
 
 export interface UseFormErrors {
@@ -59,11 +60,12 @@ export function useFormErrors(): UseFormErrors {
         return;
       }
       if (err.status === 400) {
+        const shown = new Set(options.inlineFields ?? []);
+        const unshown = Object.entries(err.fieldErrors).find(([field]) => !shown.has(field));
         fieldErrors.value = err.fieldErrors;
-        formError.value = err.nonFieldErrors[0] ?? err.detail;
-        const hasFields = Object.keys(err.fieldErrors).length > 0;
-        if (!formError.value && (!hasFields || options.inlineFields === false)) {
-          formError.value = hasFields ? err.message : (options.fallback ?? err.message);
+        formError.value = err.nonFieldErrors[0] ?? err.detail ?? unshown?.[1][0] ?? null;
+        if (!formError.value && Object.keys(err.fieldErrors).length === 0) {
+          formError.value = options.fallback ?? err.message;
         }
         return;
       }

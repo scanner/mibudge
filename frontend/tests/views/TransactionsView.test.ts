@@ -210,6 +210,7 @@ describe("TransactionsView budget assignments", () => {
   // GIVEN: the budget assignments fail to load
   // WHEN:  the list opens
   // THEN:  the server's error message is shown
+  //  AND:  the transactions, which did load, are still listed
   //
   it("reports a failed assignment load", async () => {
     server.use(
@@ -221,5 +222,6 @@ describe("TransactionsView budget assignments", () => {
     const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
 
     await vi.waitFor(() => expect(wrapper.text()).toContain("Allocations are unavailable."));
+    expect(wrapper.text()).toContain("Corner Market");
   });
 });

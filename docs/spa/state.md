@@ -106,6 +106,15 @@ store has no `reset`. It also seeds every store, signs out, and checks
 that every store is empty and the tab's stored account is gone. When you
 add a store, add its state to that sign-out test.
 
+**A request in flight at sign-out must not write afterwards.** A store
+that caches server answers creates a guard with `createSessionGuard()`
+(`stores/reset.ts`), calls `guard.bump()` in `reset()`, and wraps each
+cache write in `guard.whileCurrent(...)` before it awaits the request.
+The budgets and bank-accounts stores do this; the session store and the
+allocations store compare their own in-flight promise instead.
+`tests/stores/reset.test.ts` checks that a late answer leaves the store
+empty.
+
 The refresh cookie stays valid after sign-out until it expires. There is
 no server-side logout endpoint yet.
 
