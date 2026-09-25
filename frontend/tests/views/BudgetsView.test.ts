@@ -10,11 +10,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 // app imports
 //
+import type { BankAccountDto as BankAccount } from "@/api/dto";
 import BudgetCard from "@/components/budgets/BudgetCard.vue";
-import { useAccountContextStore } from "@/stores/accountContext";
-import type { BankAccount } from "@/types/api";
 import BudgetsView from "@/views/BudgetsView.vue";
-import { mountWithApp, withAuth } from "../helpers";
+import { mountWithApp, withAccounts, withAuth } from "../helpers";
 import { makeBankAccount, makeBudget, makePage } from "../mocks/factories";
 import { requestsTo, server } from "../mocks/server";
 
@@ -26,9 +25,7 @@ describe("BudgetsView", () => {
   beforeEach(() => {
     withAuth();
     account = makeBankAccount({ name: "Household" });
-    const ctx = useAccountContextStore();
-    ctx.accounts = [account];
-    ctx.setActive(account.id);
+    withAccounts([account]);
   });
 
   // GIVEN: an active bank account with recurring, goal and fill-up budgets
@@ -44,7 +41,7 @@ describe("BudgetsView", () => {
       makeBudget({ name: "Vacation", budget_type: "G", bank_account: account.id }),
       makeBudget({ name: "Rent fill-up", budget_type: "A", bank_account: account.id }),
       makeBudget({
-        id: account.unallocated_budget,
+        id: account.unallocated_budget!,
         name: "Unallocated",
         bank_account: account.id,
       }),

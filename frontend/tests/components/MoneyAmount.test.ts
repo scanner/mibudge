@@ -16,18 +16,16 @@ import { Money } from "@/domain/money";
 ////////////////////////////////////////////////////////////////////////
 //
 describe("MoneyAmount", () => {
-  // GIVEN: an amount as an API decimal string plus currency, or as Money
+  // GIVEN: an amount
   // WHEN:  it renders
-  // THEN:  both forms show the same currency text and aria-label
+  // THEN:  it shows the currency text, with the raw decimal as the
+  //        aria-label
   //
-  it.each([[{ amount: "-12.3", currency: "USD" }], [{ amount: Money.of("-12.3", "USD") }]])(
-    "formats %j",
-    (props) => {
-      const wrapper = mount(MoneyAmount, { props });
-      expect(wrapper.text()).toBe("-$12.30");
-      expect(wrapper.attributes("aria-label")).toBe("-12.30 USD");
-    },
-  );
+  it("formats the amount", () => {
+    const wrapper = mount(MoneyAmount, { props: { amount: Money.of("-12.3", "USD") } });
+    expect(wrapper.text()).toBe("-$12.30");
+    expect(wrapper.attributes("aria-label")).toBe("-12.30 USD");
+  });
 
   // GIVEN: `coloured` and a negative, positive or zero amount
   // WHEN:  it renders
@@ -38,7 +36,7 @@ describe("MoneyAmount", () => {
     ["1", "text-mint-600"],
     ["0", null],
   ])("colours %s", (amount, cls) => {
-    const wrapper = mount(MoneyAmount, { props: { amount, currency: "USD", coloured: true } });
+    const wrapper = mount(MoneyAmount, { props: { amount: Money.of(amount), coloured: true } });
     const classes = wrapper.classes();
     expect(classes.includes("text-coral-600")).toBe(cls === "text-coral-600");
     expect(classes.includes("text-mint-600")).toBe(cls === "text-mint-600");
@@ -49,7 +47,7 @@ describe("MoneyAmount", () => {
   // THEN:  it carries a leading plus
   //
   it("shows the sign when asked", () => {
-    const wrapper = mount(MoneyAmount, { props: { amount: "5", currency: "USD", showSign: true } });
+    const wrapper = mount(MoneyAmount, { props: { amount: Money.of("5"), showSign: true } });
     expect(wrapper.text()).toBe("+$5.00");
   });
 });

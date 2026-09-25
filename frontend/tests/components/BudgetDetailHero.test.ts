@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 // app imports
 //
 import BudgetDetailHero from "@/components/budgets/BudgetDetailHero.vue";
+import { budgetFromDto } from "@/models/budget";
 import { makeBudget } from "../mocks/factories";
 
 ////////////////////////////////////////////////////////////////////////
@@ -22,7 +23,7 @@ describe("BudgetDetailHero", () => {
   // THEN:  the end label reads "Aug 1, 2026", not the day before
   //
   it("shows the target date without a UTC shift", () => {
-    const budget = makeBudget({ budget_type: "G", target_date: "2026-08-01" });
+    const budget = budgetFromDto(makeBudget({ budget_type: "G", target_date: "2026-08-01" }));
 
     const wrapper = mount(BudgetDetailHero, { props: { budget } });
 
@@ -40,7 +41,8 @@ describe("BudgetDetailHero", () => {
     ["A", "Fill-up"],
     ["C", "Capped"],
   ] as const)("labels type %s as %s", (budget_type, label) => {
-    const wrapper = mount(BudgetDetailHero, { props: { budget: makeBudget({ budget_type }) } });
+    const budget = budgetFromDto(makeBudget({ budget_type }));
+    const wrapper = mount(BudgetDetailHero, { props: { budget } });
     expect(wrapper.text()).toContain(label);
   });
 });

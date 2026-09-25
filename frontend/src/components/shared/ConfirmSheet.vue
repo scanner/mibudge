@@ -2,14 +2,15 @@
 //
 // ConfirmSheet — bottom sheet for destructive confirmations.
 //
-// Rendered via <Teleport to="body"> so backdrop click and Escape
-// detection don't fight ancestor scroll/overflow rules.  On mobile it
-// slides up from the bottom; on ≥md it centres as a modal.
+// Rendered via <Teleport to="body"> so backdrop clicks don't fight
+// ancestor scroll/overflow rules.  On mobile it slides up from the
+// bottom; on ≥md it centres as a modal.  `useModal` provides the
+// scroll lock, Escape-to-cancel and focus return.
 //
 
-// 3rd party imports
+// app imports
 //
-import { onBeforeUnmount, onMounted, watch } from "vue";
+import { useModal } from "@/composables/useModal";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -36,19 +37,9 @@ const emit = defineEmits<{
 
 ////////////////////////////////////////////////////////////////////////
 //
-function onKey(e: KeyboardEvent) {
-  if (e.key === "Escape" && props.open) emit("cancel");
-}
-
-onMounted(() => window.addEventListener("keydown", onKey));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
-
-// Lock body scroll while the sheet is visible.
-watch(
+useModal(
   () => props.open,
-  (isOpen) => {
-    document.body.style.overflow = isOpen ? "hidden" : "";
-  },
+  () => emit("cancel"),
 );
 </script>
 

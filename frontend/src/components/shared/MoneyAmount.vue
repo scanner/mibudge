@@ -3,8 +3,7 @@
 // MoneyAmount — the canonical way to render a monetary value.
 //
 // Always IBM Plex Mono.  Formatting goes through `formatMoney` in
-// `domain/money`, the SPA's single currency formatter.  `amount` is a
-// `Money`, or an API decimal string paired with `currency`.
+// `domain/money`, the SPA's single currency formatter.
 //
 // The `aria-label` carries the unformatted decimal so screen readers
 // hear "142 dollars and 80 cents" instead of glyph-by-glyph.
@@ -16,20 +15,19 @@ import { computed } from "vue";
 
 // app imports
 //
-import { formatMoney, Money } from "@/domain/money";
+import { formatMoney } from "@/domain/money";
+import type { Money } from "@/domain/money";
 
 ////////////////////////////////////////////////////////////////////////
 //
 interface Props {
-  amount: Money | string;
-  currency?: string;
+  amount: Money;
   size?: "sm" | "md" | "lg" | "hero";
   showSign?: boolean;
   coloured?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  currency: undefined,
   size: "md",
   showSign: false,
   coloured: false,
@@ -52,9 +50,7 @@ const sizeClass = computed(() => {
 
 ////////////////////////////////////////////////////////////////////////
 //
-const money = computed(() =>
-  props.amount instanceof Money ? props.amount : Money.of(props.amount, props.currency),
-);
+const money = computed(() => props.amount);
 
 ////////////////////////////////////////////////////////////////////////
 //

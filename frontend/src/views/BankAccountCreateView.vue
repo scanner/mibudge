@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // BankAccountCreateView — create a new bank account.
-// (UI_SPEC §4.9, /app/account/bank-accounts/create/)
+// (UI_SPEC §4.9)  Route shell over `useBankAccountCreate`.
 //
 // Fields: account type grid, name, bank picker, account number,
 // currency, posted balance, available balance.
@@ -12,99 +12,39 @@
 
 // 3rd party imports
 //
-import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
 //
-import AppShell from "@/components/layout/AppShell.vue";
-import { createBankAccount } from "@/api/bankAccounts";
-import { listBanks } from "@/api/banks";
-import { adminEmail } from "@/api/config";
-import { useAccountContextStore } from "@/stores/accountContext";
-import type { AccountType, Bank } from "@/types/api";
+import { useShellConfig } from "@/composables/useShellConfig";
+import {
+  ACCOUNT_TYPE_OPTIONS as ACCOUNT_TYPES,
+  useBankAccountCreate,
+} from "@/features/bankAccounts/useBankAccountCreate";
+import AppShell from "@/features/shell/AppShell.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const router = useRouter();
-const ctx = useAccountContextStore();
+const { adminEmail } = useShellConfig();
 
-////////////////////////////////////////////////////////////////////////
-//
-const accountType = ref<AccountType>("C");
-const name = ref("");
-const selectedBankId = ref<string | null>(null);
-const accountNumber = ref("");
-const currency = ref("USD");
-const postedBalance = ref("");
-const availableBalance = ref("");
+const {
+  accountType,
+  name,
+  selectedBankId,
+  accountNumber,
+  postedBalance,
+  availableBalance,
+  banks,
+  banksLoading,
+  saving,
+  error,
+  submit: create,
+} = useBankAccountCreate();
 
-const banks = ref<Bank[]>([]);
-const banksLoading = ref(false);
-
-const saving = ref(false);
-const error = ref<string | null>(null);
-
-////////////////////////////////////////////////////////////////////////
-//
-const ACCOUNT_TYPES: { value: AccountType; label: string; sub: string }[] = [
-  { value: "C", label: "Checking", sub: "Day-to-day spending" },
-  { value: "S", label: "Savings", sub: "Set aside funds" },
-  { value: "X", label: "Credit card", sub: "Track card charges" },
-];
-
-////////////////////////////////////////////////////////////////////////
-//
-onMounted(async () => {
-  banksLoading.value = true;
-  try {
-    const page = await listBanks();
-    banks.value = page.results;
-  } catch {
-    banks.value = [];
-  } finally {
-    banksLoading.value = false;
-  }
-});
-
-////////////////////////////////////////////////////////////////////////
-//
 async function submit() {
-  if (!name.value.trim()) {
-    error.value = "Account name is required.";
-    return;
-  }
-  if (!selectedBankId.value) {
-    error.value = "Please select a bank.";
-    return;
-  }
-  if (!accountNumber.value.trim()) {
-    error.value = "Account number is required.";
-    return;
-  }
-
-  saving.value = true;
-  error.value = null;
-
-  const body: Record<string, unknown> = {
-    account_type: accountType.value,
-    name: name.value.trim(),
-    bank: selectedBankId.value,
-    currency: currency.value,
-    account_number: accountNumber.value.trim(),
-  };
-  if (postedBalance.value.trim()) body.posted_balance = postedBalance.value.trim();
-  if (availableBalance.value.trim()) body.available_balance = availableBalance.value.trim();
-
-  try {
-    const created = await createBankAccount(body as Parameters<typeof createBankAccount>[0]);
-    await ctx.refresh();
-    router.push(`/account/bank-accounts/${created.id}/`);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to create account.";
-  } finally {
-    saving.value = false;
-  }
+  const created = await create();
+  if (created) router.push({ name: "bank-account-detail", params: { id: created.id } });
 }
 </script>
 
@@ -273,7 +213,7 @@ async function submit() {
           <button
             type="button"
             class="flex-1 rounded-subcard border border-neutral-200 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            @click="router.push('/account/')"
+            @click="router.push({ name: 'account' })"
           >
             Cancel
           </button>

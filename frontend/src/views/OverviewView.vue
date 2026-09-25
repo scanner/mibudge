@@ -1,6 +1,7 @@
 <script setup lang="ts">
 //
-// OverviewView — account health at a glance.
+// OverviewView — account health at a glance.  Route shell over
+// `useOverview`.
 //
 // Shows the active account's posted/available/unallocated balances,
 // top non-archived budgets with progress bars, and recent transactions
@@ -10,122 +11,45 @@
 // 3rd party imports
 //
 import { IconBucket, IconChevronRight, IconRepeat, IconTarget } from "@tabler/icons-vue";
-import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
 //
-import AppShell from "@/components/layout/AppShell.vue";
 import FillUpBand from "@/components/budgets/FillUpBand.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
 import TransactionRow from "@/components/transactions/TransactionRow.vue";
-import { formatLocalDate, toLocalDate } from "@/domain/dates";
-import { budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
-import { listAllocations } from "@/api/allocations";
-import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
-import { listBudgets } from "@/api/budgets";
-import { listTransactions } from "@/api/transactions";
+import { budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import { formatLocalDate } from "@/domain/dates";
+import { useOverview } from "@/features/overview/useOverview";
+import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { useBudgetsStore } from "@/stores/budgets";
-import type { Budget, FundingSummary, Transaction, TransactionAllocation } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const router = useRouter();
 const ctx = useAccountContextStore();
-const budgetsStore = useBudgetsStore();
 
-const budgets = ref<Budget[]>([]);
-const fillupMap = ref(new Map<string, Budget>());
-const recentTx = ref<Transaction[]>([]);
-const allocsByTx = ref(new Map<string, TransactionAllocation[]>());
-const summary = ref<FundingSummary | null>(null);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const {
+  budgets,
+  fillupFor,
+  unallocated,
+  budgetNames,
+  recentTransactions: recentTx,
+  allocationsByTx: allocsByTx,
+  summary,
+  loading,
+  error,
+} = useOverview();
 
-////////////////////////////////////////////////////////////////////////
-//
-const unallocated = computed(() => {
-  const id = ctx.unallocatedBudgetId;
-  if (!id) return null;
-  return budgetsStore.byId(id);
-});
-
-const budgetNames = computed(() => {
-  const map = new Map<string, string>();
-  for (const b of budgetsStore.all) {
-    map.set(b.id, b.name);
-  }
-  return map;
-});
-
-////////////////////////////////////////////////////////////////////////
-//
-function fillupFor(b: Budget): Budget | undefined {
-  if (!b.fillup_goal) return undefined;
-  return fillupMap.value.get(b.fillup_goal);
+function openBudget(id: string) {
+  router.push({ name: "budget-detail", params: { id } });
 }
 
-////////////////////////////////////////////////////////////////////////
-//
-async function load() {
-  const accountId = ctx.activeBankAccountId;
-  if (!accountId) return;
-  loading.value = true;
-  error.value = null;
-  try {
-    const [budgetsPage, txPage, sum] = await Promise.all([
-      listBudgets({ bank_account: accountId, archived: false, ordering: "name" }),
-      listTransactions({
-        bank_account: accountId,
-        ordering: "-transaction_date,-created_at",
-      }),
-      apiFundingSummary(accountId),
-    ]);
-    summary.value = sum;
-
-    for (const b of budgetsPage.results) budgetsStore.upsert(b);
-
-    const unallocId = ctx.unallocatedBudgetId;
-    budgets.value = budgetsPage.results
-      .filter((b) => b.budget_type !== "A" && b.id !== unallocId)
-      .slice(0, 6);
-    fillupMap.value = new Map(
-      budgetsPage.results.filter((b) => b.budget_type === "A").map((b) => [b.id, b]),
-    );
-
-    const top5 = txPage.results.slice(0, 5);
-    recentTx.value = top5;
-
-    // Fetch allocations for each of the 5 transactions in parallel so
-    // TransactionRow can show budget names and unallocated state.
-    if (top5.length > 0) {
-      const allocPages = await Promise.all(
-        top5.map((tx) => listAllocations({ transaction: tx.id })),
-      );
-      const map = new Map<string, TransactionAllocation[]>();
-      for (let i = 0; i < top5.length; i++) {
-        map.set(top5[i].id, allocPages[i].results);
-      }
-      allocsByTx.value = map;
-    }
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to load overview.";
-  } finally {
-    loading.value = false;
-  }
+function openTransaction(id: string) {
+  router.push({ name: "transaction-detail", params: { id } });
 }
-
-watch(() => ctx.activeBankAccountId, load, { immediate: true });
-
-onMounted(() => {
-  // Ensure the unallocated budget is in the store for the balance tile
-  // in case load() hasn't resolved yet on first render.
-  const id = ctx.unallocatedBudgetId;
-  if (id && !budgetsStore.byId(id)) budgetsStore.fetchOne(id);
-});
 </script>
 
 <template>
@@ -137,54 +61,34 @@ onMounted(() => {
           <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
             Posted
           </div>
-          <MoneyAmount
-            :amount="ctx.activeBankAccount.posted_balance"
-            :currency="ctx.activeBankAccount.posted_balance_currency"
-            size="md"
-          />
+          <MoneyAmount :amount="ctx.activeBankAccount.postedBalance" size="md" />
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
           <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
             Available
           </div>
-          <MoneyAmount
-            :amount="ctx.activeBankAccount.available_balance"
-            :currency="ctx.activeBankAccount.available_balance_currency"
-            size="md"
-          />
+          <MoneyAmount :amount="ctx.activeBankAccount.availableBalance" size="md" />
         </div>
         <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
           <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
             Free
           </div>
-          <MoneyAmount
-            v-if="unallocated"
-            :amount="unallocated.balance"
-            :currency="unallocated.balance_currency"
-            size="md"
-          />
+          <MoneyAmount v-if="unallocated" :amount="unallocated.balance" size="md" />
           <span v-else class="font-mono text-[15px] font-medium text-neutral-400">—</span>
         </div>
       </section>
 
       <!-- Funding summary banner -->
       <div
-        v-if="summary && summary.total_amount !== '0' && summary.total_amount !== '0.00'"
+        v-if="summary && !summary.total.isZero()"
         class="rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
       >
         Funded automatically:
-        <MoneyAmount
-          :amount="summary.total_amount"
-          :currency="summary.currency"
-          size="sm"
-          class="font-medium"
-        />
-        <template
-          v-if="summary.schedules.length > 0 && toLocalDate(summary.schedules[0].next_date)"
-        >
+        <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
+        <template v-if="summary.schedules[0]?.nextDate">
           on
           {{
-            formatLocalDate(toLocalDate(summary.schedules[0].next_date)!, {
+            formatLocalDate(summary.schedules[0].nextDate, {
               month: "short",
               day: "numeric",
             })
@@ -221,7 +125,7 @@ onMounted(() => {
             <button
               type="button"
               class="flex items-center gap-0.5 text-[11px] font-medium text-ocean-600 hover:text-ocean-700"
-              @click="router.push('/budgets/')"
+              @click="router.push({ name: 'budgets' })"
             >
               See all
               <IconChevronRight class="h-3.5 w-3.5" />
@@ -233,33 +137,28 @@ onMounted(() => {
                 v-for="b in budgets"
                 :key="b.id"
                 class="group cursor-pointer hover:bg-neutral-50"
-                @click="router.push(`/budgets/${b.id}/`)"
+                @click="openBudget(b.id)"
               >
                 <div class="px-4 py-3">
                   <div class="mb-1.5 flex items-baseline justify-between gap-2">
                     <div class="flex min-w-0 items-center gap-1.5">
                       <IconTarget
-                        v-if="b.budget_type === 'G'"
+                        v-if="b.budgetType === 'G'"
                         class="h-3.5 w-3.5 flex-none text-neutral-400"
                       />
                       <IconRepeat
-                        v-else-if="b.budget_type === 'R'"
+                        v-else-if="b.budgetType === 'R'"
                         class="h-3.5 w-3.5 flex-none text-neutral-400"
                       />
                       <IconBucket
-                        v-else-if="b.budget_type === 'C'"
+                        v-else-if="b.budgetType === 'C'"
                         class="h-3.5 w-3.5 flex-none text-neutral-400"
                       />
                       <span class="min-w-0 truncate text-[14px] font-medium text-neutral-900">{{
                         b.name
                       }}</span>
                     </div>
-                    <MoneyAmount
-                      :amount="b.balance"
-                      :currency="b.balance_currency"
-                      size="sm"
-                      class="flex-none"
-                    />
+                    <MoneyAmount :amount="b.balance" size="sm" class="flex-none" />
                   </div>
                   <ProgressBar
                     :value="budgetProgress(b)"
@@ -269,14 +168,10 @@ onMounted(() => {
                   />
                   <div class="flex items-center justify-between gap-2">
                     <span
-                      v-if="b.next_funding && (b.budget_type === 'G' || b.budget_type === 'C')"
+                      v-if="b.nextFunding && (b.budgetType === 'G' || b.budgetType === 'C')"
                       class="truncate text-[12px] text-secondary"
                     >
-                      <MoneyAmount
-                        :amount="b.next_funding.amount"
-                        :currency="b.next_funding.amount_currency"
-                        size="sm"
-                      />/event
+                      <MoneyAmount :amount="b.nextFunding.amount" size="sm" />/event
                     </span>
                     <span v-else class="flex-1" />
                     <StatusChip
@@ -301,7 +196,7 @@ onMounted(() => {
             <button
               type="button"
               class="flex items-center gap-0.5 text-[11px] font-medium text-ocean-600 hover:text-ocean-700"
-              @click="router.push('/transactions/')"
+              @click="router.push({ name: 'transactions' })"
             >
               See all
               <IconChevronRight class="h-3.5 w-3.5" />
@@ -315,6 +210,7 @@ onMounted(() => {
               :allocations="allocsByTx.get(tx.id)"
               :budget-names="budgetNames"
               :unallocated-budget-id="ctx.unallocatedBudgetId"
+              @select="openTransaction"
             />
           </div>
         </section>
@@ -328,7 +224,7 @@ onMounted(() => {
           <button
             type="button"
             class="mt-2 block w-full text-ocean-600 hover:text-ocean-700"
-            @click="router.push('/budgets/create/')"
+            @click="router.push({ name: 'budget-create' })"
           >
             Create your first budget
           </button>

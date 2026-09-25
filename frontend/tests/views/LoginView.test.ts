@@ -1,5 +1,5 @@
 //
-// LoginView tests: the form, the auth store, the account-context store,
+// LoginView tests: the form, the session store, the account-context store,
 // the API modules and the transport working together against the mock
 // REST API.
 //
@@ -12,8 +12,9 @@ import { describe, expect, it, vi } from "vitest";
 
 // app imports
 //
+import { userFromDto } from "@/models/user";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { useAuthStore } from "@/stores/auth";
+import { useSessionStore } from "@/stores/session";
 import LoginView from "@/views/LoginView.vue";
 import { mountWithApp, respondOnce401 } from "../helpers";
 import { makeBankAccount, makePage, makeUser } from "../mocks/factories";
@@ -34,7 +35,7 @@ async function submit(wrapper: Awaited<ReturnType<typeof mountWithApp>>["wrapper
 describe("LoginView", () => {
   // GIVEN: the login page reached via a redirect from `/budgets/`
   // WHEN:  the user submits valid credentials
-  // THEN:  the auth store holds the access token and the user profile
+  // THEN:  the session store holds the access token and the user profile
   //  AND:  the account context is loaded
   //  AND:  the user is sent to the route named in `next`
   //
@@ -57,9 +58,9 @@ describe("LoginView", () => {
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe("/budgets/"), {
       timeout: 5000,
     });
-    const auth = useAuthStore();
-    expect(auth.accessToken).toBe(LOGIN_TOKEN);
-    expect(auth.user).toEqual(me);
+    const session = useSessionStore();
+    expect(session.accessToken).toBe(LOGIN_TOKEN);
+    expect(session.user).toEqual(userFromDto(me));
     expect(useAccountContextStore().activeBankAccountId).toBe(account.id);
     const [tokenReq] = await requestsTo("POST", "/api/token/");
     expect(tokenReq.body).toEqual({ email: "alice@example.com", password: "hunter2" });
@@ -90,7 +91,7 @@ describe("LoginView", () => {
     await submit(wrapper);
 
     expect(wrapper.get('[role="alert"]').text()).toBe("Incorrect email or password.");
-    expect(useAuthStore().isAuthenticated).toBe(false);
+    expect(useSessionStore().isAuthenticated).toBe(false);
     expect(router.currentRoute.value.path).toBe("/login/");
   });
 

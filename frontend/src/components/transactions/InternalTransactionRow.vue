@@ -19,8 +19,9 @@ import { computed } from "vue";
 // app imports
 //
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { formatMoney, Money } from "@/domain/money";
-import type { InternalTransaction } from "@/types/api";
+import { formatMoney } from "@/domain/money";
+import type { InternalTransaction } from "@/models/internalTransaction";
+import { amountRelativeTo } from "@/models/internalTransaction";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -32,21 +33,15 @@ const props = defineProps<{
 
 const itx = computed(() => props.internalTransaction);
 
-const srcName = computed(() => props.budgetNames?.get(itx.value.src_budget) ?? "Budget");
-const dstName = computed(() => props.budgetNames?.get(itx.value.dst_budget) ?? "Budget");
+const srcName = computed(() => props.budgetNames?.get(itx.value.srcBudgetId) ?? "Budget");
+const dstName = computed(() => props.budgetNames?.get(itx.value.dstBudgetId) ?? "Budget");
 
 // In budget-relative mode, sign the amount: positive if this budget
 // received the transfer (dst), negative if it sent (src).
 const displayAmount = computed(() => {
-  const amount = Money.of(itx.value.amount, itx.value.amount_currency);
   const rel = props.relativeToBudgetId;
-  if (!rel || itx.value.dst_budget === rel) return amount;
-  return amount.negated();
+  return rel ? amountRelativeTo(itx.value, rel) : itx.value.amount;
 });
-
-function fmt(amount: string): string {
-  return formatMoney(Money.of(amount, itx.value.amount_currency));
-}
 </script>
 
 <template>
@@ -63,10 +58,10 @@ function fmt(amount: string): string {
     <!-- Row 2: "Src (now $X) → Dst (now $Y)" -->
     <div class="mt-0.5 text-[12px] text-secondary">
       {{ srcName }}
-      <span class="text-secondary">(now {{ fmt(itx.src_budget_balance) }})</span>
+      <span class="text-secondary">(now {{ formatMoney(itx.srcBudgetBalance) }})</span>
       →
       {{ dstName }}
-      <span class="text-secondary">(now {{ fmt(itx.dst_budget_balance) }})</span>
+      <span class="text-secondary">(now {{ formatMoney(itx.dstBudgetBalance) }})</span>
     </div>
   </article>
 </template>

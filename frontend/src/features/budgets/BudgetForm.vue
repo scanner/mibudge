@@ -1,10 +1,12 @@
 <script setup lang="ts">
 //
 // BudgetForm — create and edit form for budgets.  (UI_SPEC §4.3, §4.4)
+// Feature component (budgets); state and saving live in
+// `useBudgetForm`.
 //
-// Create mode: type selector shown, bank_account taken from
-//   accountContext, all fields editable.
-// Edit mode: type selector hidden, bank_account and budget_type shown
+// Create mode: type selector shown, bank account taken from the
+//   account context, all fields editable.
+// Edit mode: type selector hidden, bank account and budget type shown
 //   as read-only, other fields editable.
 //
 // Emits `saved(budget)` on success, `cancel` on dismiss.
@@ -13,16 +15,12 @@
 // 3rd party imports
 //
 import { IconBucket, IconRepeat, IconTarget } from "@tabler/icons-vue";
-import { computed, ref } from "vue";
 
 // app imports
 //
-import SchedulePicker from "./SchedulePicker.vue";
-import { createBudget, updateBudget } from "@/api/budgets";
-import { toDecimal } from "@/domain/money";
-import { useAccountContextStore } from "@/stores/accountContext";
-import { combineDtstart, DEFAULT_RRULE, extractDtstart, stripToIntervalOnly } from "@/domain/rrule";
-import type { Budget, BudgetType } from "@/types/api";
+import SchedulePicker from "@/components/budgets/SchedulePicker.vue";
+import type { Budget } from "@/models/budget";
+import { useBudgetForm } from "./useBudgetForm";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -37,108 +35,32 @@ const emit = defineEmits<{
   (e: "cancel"): void;
 }>();
 
-const ctx = useAccountContextStore();
-
-////////////////////////////////////////////////////////////////////////
-//
-// Form state initialised from props.budget when editing.
-//
-const budgetType = ref<BudgetType>(props.budget?.budget_type ?? "R");
-const name = ref(props.budget?.name ?? "");
-// `v-model` on an `<input type="number">` yields a JS number once the
-// user types; `decimalField` turns either form into an API decimal
-// string.
-//
-const targetBalance = ref<string | number>(props.budget?.target_balance ?? "");
-const targetDate = ref(props.budget?.target_date ?? "");
-const fundingType = ref<"D" | "F">(props.budget?.funding_type ?? "D");
-const fundingAmount = ref<string | number>(props.budget?.funding_amount ?? "");
-const fundingSchedule = ref(props.budget?.funding_schedule ?? DEFAULT_RRULE);
-
-const existingRecurrence = extractDtstart(props.budget?.recurrence_schedule ?? DEFAULT_RRULE);
-const recurrenceSchedule = ref(existingRecurrence.rrule);
-// Prefer the server-computed next refresh date; the schedule's DTSTART
-// is only the rule anchor and goes stale once a cycle has elapsed.
-// Saving the next occurrence back as DTSTART is safe: it is on-phase
-// with the rule, so the schedule itself is unchanged.
-const nextRefreshDate = ref(props.budget?.next_recurrence ?? existingRecurrence.dtstart ?? "");
-
-const paused = ref(props.budget?.paused ?? false);
-
-const saving = ref(false);
-const error = ref<string | null>(null);
-
-////////////////////////////////////////////////////////////////////////
-//
-const isGoal = computed(() => budgetType.value === "G");
-const isRecurring = computed(() => budgetType.value === "R");
-const isCapped = computed(() => budgetType.value === "C");
-const canSubmit = computed(() => name.value.trim().length > 0 && !saving.value);
-
-////////////////////////////////////////////////////////////////////////
-//
-function decimalField(value: string | number): string | null {
-  return toDecimal(value)?.toFixed(2) ?? null;
-}
+const {
+  budgetType,
+  name,
+  targetBalance,
+  targetDate,
+  fundingType,
+  fundingAmount,
+  fundingSchedule,
+  recurrenceSchedule,
+  nextRefreshDate,
+  paused,
+  saving,
+  isGoal,
+  isRecurring,
+  isCapped,
+  canSubmit,
+  accountName,
+  error,
+  submit: save,
+} = useBudgetForm(props.mode, props.budget);
 
 ////////////////////////////////////////////////////////////////////////
 //
 async function submit() {
-  if (!canSubmit.value) return;
-  saving.value = true;
-  error.value = null;
-
-  const payload: Partial<Budget> = {
-    name: name.value.trim(),
-    funding_type: fundingType.value,
-    funding_schedule: fundingSchedule.value,
-    paused: paused.value,
-  };
-
-  const target = decimalField(targetBalance.value);
-  if (target) payload.target_balance = target;
-
-  if (isGoal.value) {
-    if (fundingType.value === "D") {
-      if (targetDate.value) payload.target_date = targetDate.value;
-    } else {
-      payload.target_date = null;
-      payload.funding_amount = decimalField(fundingAmount.value);
-    }
-  } else if (isRecurring.value) {
-    // The refresh-cycle picker is interval-only; the chosen date is the
-    // DTSTART anchor that supplies the day-of-month/-year.  Strip any
-    // BY* parts carried over from an older rule (e.g. BYMONTHDAY=1 from
-    // the create default) -- the API rejects them, and they would
-    // override DTSTART and refresh the budget on the wrong day.
-    const cycle = stripToIntervalOnly(recurrenceSchedule.value);
-    payload.recurrence_schedule = nextRefreshDate.value
-      ? combineDtstart(cycle, nextRefreshDate.value)
-      : cycle;
-  } else if (isCapped.value) {
-    // Capped always uses Fixed Amount funding.
-    payload.funding_type = "F";
-    payload.funding_amount = decimalField(fundingAmount.value);
-  }
-
-  if (props.mode === "create") {
-    payload.budget_type = budgetType.value;
-    payload.bank_account = ctx.activeBankAccountId ?? undefined;
-  }
-
-  try {
-    let saved: Budget;
-    if (props.mode === "edit" && props.budget) {
-      saved = await updateBudget(props.budget.id, payload);
-    } else {
-      saved = await createBudget(payload);
-    }
-    emit("saved", saved);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to save budget.";
-  } finally {
-    saving.value = false;
-  }
+  const saved = await save();
+  if (saved) emit("saved", saved);
 }
 </script>
 
@@ -204,13 +126,13 @@ async function submit() {
       <div class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3">
         <span class="text-sm text-neutral-500">Type</span>
         <span class="text-sm font-medium text-neutral-900">
-          {{ budget?.budget_type === "G" ? "Goal" : "Recurring" }}
+          {{ budget?.budgetType === "G" ? "Goal" : "Recurring" }}
         </span>
       </div>
       <div class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3">
         <span class="text-sm text-neutral-500">Account</span>
         <span class="text-sm font-medium text-neutral-900">
-          {{ ctx.activeBankAccount?.name ?? "—" }}
+          {{ accountName }}
         </span>
       </div>
     </div>

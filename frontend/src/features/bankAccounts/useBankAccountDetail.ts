@@ -1,0 +1,193 @@
+//
+// `useBankAccountDetail`: one bank account with its bank name, budget
+// count and Unallocated balance, plus the inline edit, the automatic
+// funding toggle and delete.  Feature composable (bankAccounts).
+//
+// The account is read from the bank-accounts store, so a rename shows
+// in the account switcher and the top bar at once.  Loads follow the
+// `id` getter; a response for a previous id is ignored.
+//
+
+// 3rd party imports
+//
+import { computed, ref } from "vue";
+
+// app imports
+//
+import { api } from "@/api";
+import { useFormErrors } from "@/composables/useFormErrors";
+import { useResource } from "@/composables/useResource";
+import { formatInstantDate } from "@/domain/dates";
+import { bankFromDto } from "@/models/bank";
+import { budgetFromDto } from "@/models/budget";
+import { useAccountContextStore } from "@/stores/accountContext";
+import { useBankAccountsStore } from "@/stores/bankAccounts";
+import { useBudgetsStore } from "@/stores/budgets";
+
+////////////////////////////////////////////////////////////////////////
+//
+interface Loaded {
+  id: string;
+  bankName: string | null;
+  budgetCount: number;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export function useBankAccountDetail(id: () => string) {
+  const accounts = useBankAccountsStore();
+  const budgets = useBudgetsStore();
+  const ctx = useAccountContextStore();
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  const resource = useResource(
+    id,
+    async (accountId: string): Promise<Loaded> => {
+      const [account, budgetPage] = await Promise.all([
+        accounts.fetchOne(accountId),
+        api.budgets.list({ bank_account: accountId }),
+      ]);
+      const list = budgetPage.results.map(budgetFromDto);
+      for (const b of list) budgets.upsert(b);
+      const bankName = await api.banks
+        .get(account.bankId)
+        .then((dto) => bankFromDto(dto).name)
+        .catch(() => null);
+      return {
+        id: accountId,
+        bankName,
+        // User-facing budgets: not Unallocated, not fill-up goals.
+        budgetCount: list.filter(
+          (b) => b.id !== account.unallocatedBudgetId && b.budgetType !== "A",
+        ).length,
+      };
+    },
+    { errorMessage: "Failed to load account." },
+  );
+
+  const account = computed(() => accounts.byId(resource.data.value?.id));
+  const unallocated = computed(() => budgets.byId(account.value?.unallocatedBudgetId));
+  const createdDate = computed(() =>
+    account.value
+      ? formatInstantDate(account.value.createdAt, {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "",
+  );
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Inline edit of name and account number.
+  //
+  const editing = ref(false);
+  const editName = ref("");
+  const editAccountNumber = ref("");
+  const saving = ref(false);
+  const editErrors = useFormErrors();
+
+  function startEdit(): void {
+    if (!account.value) return;
+    editName.value = account.value.name;
+    editAccountNumber.value = account.value.accountNumber ?? "";
+    editErrors.clear();
+    editing.value = true;
+  }
+
+  function cancelEdit(): void {
+    editing.value = false;
+    editErrors.clear();
+  }
+
+  async function saveEdit(): Promise<void> {
+    const current = account.value;
+    if (!current || !editName.value.trim()) {
+      editErrors.setFormError("Name is required.");
+      return;
+    }
+    saving.value = true;
+    editErrors.clear();
+    try {
+      const number = editAccountNumber.value.trim();
+      await accounts.update(current.id, {
+        name: editName.value.trim(),
+        ...(number !== (current.accountNumber ?? "") ? { accountNumber: number || null } : {}),
+      });
+      editing.value = false;
+    } catch (err) {
+      editErrors.setError(err, { fallback: "Failed to save.", inlineFields: false });
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Optimistic toggle: the switch flips at once and flips back if the
+  // update fails.
+  //
+  const autoFundingOverride = ref<boolean | null>(null);
+  const autoFundingEnabled = computed(
+    () => autoFundingOverride.value ?? account.value?.autoFundingEnabled ?? false,
+  );
+
+  async function toggleAutoFunding(): Promise<void> {
+    const current = account.value;
+    if (!current) return;
+    autoFundingOverride.value = !autoFundingEnabled.value;
+    try {
+      await accounts.update(current.id, { autoFundingEnabled: autoFundingOverride.value });
+    } catch {
+      // The store still holds the server's value.
+    } finally {
+      autoFundingOverride.value = null;
+    }
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Delete the account; when it was the active one, the account
+  // context moves to the first remaining account.  Resolves `true`
+  // once deleted.
+  //
+  const deleting = ref(false);
+
+  async function deleteAccount(): Promise<boolean> {
+    const current = account.value;
+    if (!current) return false;
+    deleting.value = true;
+    try {
+      await accounts.remove(current.id);
+      await ctx.refresh();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      deleting.value = false;
+    }
+  }
+
+  return {
+    account,
+    bankName: computed(() => resource.data.value?.bankName ?? null),
+    budgetCount: computed(() => resource.data.value?.budgetCount ?? null),
+    unallocated,
+    createdDate,
+    loading: resource.loading,
+    error: resource.error,
+    editing,
+    editName,
+    editAccountNumber,
+    saving,
+    nameError: editErrors.formError,
+    startEdit,
+    cancelEdit,
+    saveEdit,
+    autoFundingEnabled,
+    toggleAutoFunding,
+    deleting,
+    deleteAccount,
+  };
+}
