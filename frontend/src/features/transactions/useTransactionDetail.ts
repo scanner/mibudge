@@ -38,8 +38,8 @@ import {
 } from "@/models/allocation";
 import type { Transaction } from "@/models/transaction";
 import { transactionFromDto, transactionToUpdateDto } from "@/models/transaction";
-import { useAccountContextStore } from "@/stores/accountContext";
 import { useAllocationsStore } from "@/stores/allocations";
+import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 
@@ -58,7 +58,7 @@ async function allocationsOf(transactionId: string): Promise<Allocation[]> {
 ////////////////////////////////////////////////////////////////////////
 //
 export function useTransactionDetail(id: () => string) {
-  const ctx = useAccountContextStore();
+  const bankAccounts = useBankAccountsStore();
   const budgets = useBudgetsStore();
   const allocationsStore = useAllocationsStore();
   const nav = useTransactionNavStore();
@@ -151,7 +151,11 @@ export function useTransactionDetail(id: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
-  const unallocatedBudgetId = computed(() => ctx.unallocatedBudgetId);
+  // The transaction's own account, which need not be the active one
+  // (e.g. a link to another account's transaction).
+  const account = computed(() => bankAccounts.byId(transaction.value?.bankAccountId));
+  const accountName = computed(() => account.value?.name ?? "");
+  const unallocatedBudgetId = computed(() => account.value?.unallocatedBudgetId ?? null);
   const visibleAllocations = computed(() =>
     assignedAllocations(allocations.value, unallocatedBudgetId.value),
   );
@@ -246,6 +250,7 @@ export function useTransactionDetail(id: () => string) {
     onMemoBlur: () => memoSave.flush(),
     descriptionError,
     memoError,
+    accountName,
     unallocatedBudgetId,
     visibleAllocations,
     coverage,

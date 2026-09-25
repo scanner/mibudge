@@ -53,10 +53,11 @@ export function useOverview() {
         api.transactions.list({
           bank_account: accountId,
           ordering: "-transaction_date,-created_at",
+          page_size: RECENT_COUNT,
         }),
         api.bankAccounts.fundingSummary(accountId),
       ]);
-      const recent = txPage.results.slice(0, RECENT_COUNT).map(transactionFromDto);
+      const recent = txPage.results.map(transactionFromDto);
       // One allocation request per recent transaction, in parallel, so
       // each row can show its budgets.
       const pages = await Promise.all(

@@ -113,8 +113,7 @@ describe("budgetToUpdateDto / budgetToCreateDto", () => {
 
   // GIVEN: a new budget with no target
   // WHEN:  it becomes a POST body
-  // THEN:  the name, account and type are sent, and the required
-  //        target is sent as zero
+  // THEN:  the name, account, type and target are sent
   //
   it("fills the create-only fields", () => {
     expect(
@@ -122,6 +121,7 @@ describe("budgetToUpdateDto / budgetToCreateDto", () => {
         name: "Trip",
         bankAccountId: "acct",
         budgetType: "G",
+        targetBalance: Money.of("2000"),
         targetDate: "2027-01-01" as LocalDate,
         fundingType: "D",
         fundingSchedule: "RRULE:FREQ=MONTHLY",
@@ -130,7 +130,7 @@ describe("budgetToUpdateDto / budgetToCreateDto", () => {
       name: "Trip",
       bank_account: "acct",
       budget_type: "G",
-      target_balance: "0.00",
+      target_balance: "2000.00",
       target_date: "2027-01-01",
       funding_type: "D",
       funding_schedule: "RRULE:FREQ=MONTHLY",

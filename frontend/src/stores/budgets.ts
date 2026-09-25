@@ -23,7 +23,7 @@ import { computed, ref } from "vue";
 import { api } from "@/api";
 import type { BudgetListQuery } from "@/api/dto";
 import { describeError } from "@/api/errors";
-import type { Budget, BudgetInput } from "@/models/budget";
+import type { Budget, BudgetCreateInput, BudgetInput } from "@/models/budget";
 import {
   budgetFromDto,
   budgetNameIndex,
@@ -107,7 +107,7 @@ export const useBudgetsStore = defineStore("budgets", () => {
 
   ////////////////////////////////////////////////////////////////////
   //
-  async function create(input: BudgetInput & { name: string; bankAccountId: string }) {
+  async function create(input: BudgetCreateInput): Promise<Budget> {
     const put = whileCurrent(upsert);
     const budget = budgetFromDto(await api.budgets.create(budgetToCreateDto(input)));
     put(budget);

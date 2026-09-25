@@ -146,17 +146,20 @@ export function budgetToUpdateDto(input: BudgetInput): BudgetUpdateDto {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// A create needs a name, an account and a target; the schema requires
-// `target_balance`, so a missing target is sent as zero.
+// A create needs a name, an account and a target amount.
 //
-export function budgetToCreateDto(
-  input: BudgetInput & { name: string; bankAccountId: string },
-): BudgetCreateDto {
+export type BudgetCreateInput = BudgetInput & {
+  name: string;
+  bankAccountId: string;
+  targetBalance: Money;
+};
+
+export function budgetToCreateDto(input: BudgetCreateInput): BudgetCreateDto {
   return {
     ...budgetToUpdateDto(input),
     name: input.name,
     bank_account: input.bankAccountId,
-    target_balance: (input.targetBalance ?? Money.zero()).toDecimalString(),
+    target_balance: input.targetBalance.toDecimalString(),
   };
 }
 

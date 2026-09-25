@@ -166,6 +166,7 @@ describe("BudgetCreateView", () => {
   it("anchors a recurring budget's refresh cycle", async () => {
     const { wrapper } = await open("/budgets/create/");
     await wrapper.get("#budget-name").setValue("Rent");
+    await wrapper.get("#target-balance").setValue("1500");
     await wrapper.get("#next-refresh-date").setValue("2026-10-01");
     await wrapper.get("form").trigger("submit");
     await flushPromises();
@@ -189,9 +190,25 @@ describe("BudgetCreateView", () => {
     );
     const { wrapper } = await open("/budgets/create/");
     await wrapper.get("#budget-name").setValue("Rent");
+    await wrapper.get("#target-balance").setValue("1500");
     await wrapper.get("form").trigger("submit");
     await flushPromises();
     expect(wrapper.text()).toContain("A budget with this name exists.");
+  });
+
+  // GIVEN: the new-budget form with a name but no target amount
+  // WHEN:  it is submitted
+  // THEN:  nothing is sent and the form asks for a target, rather than
+  //        creating a budget with a $0.00 target
+  //
+  it("requires a target amount", async () => {
+    const { wrapper } = await open("/budgets/create/");
+    await wrapper.get("#budget-name").setValue("Rent");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+
+    expect(await requestsTo("POST", "/api/v1/budgets/")).toHaveLength(0);
+    expect(wrapper.text()).toContain("Enter a target amount.");
   });
 });
 
@@ -230,5 +247,21 @@ describe("OverviewView", () => {
       .find((a) => a.text().includes("Corner Market"))!
       .trigger("click");
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("transaction-detail"));
+  });
+
+  // GIVEN: the overview, which lists the five most recent transactions
+  // WHEN:  it loads
+  // THEN:  it asks the server for a page of five, not a full page
+  //
+  it("requests only the recent transactions it shows", async () => {
+    server.use(
+      http.get(`/api/v1/bank-accounts/${account.id}/funding-summary/`, () =>
+        HttpResponse.json(makeFundingSummary()),
+      ),
+    );
+    await open("/");
+
+    const [list] = await requestsTo("GET", "/api/v1/transactions/");
+    expect(new URL(list.url).searchParams.get("page_size")).toBe("5");
   });
 });

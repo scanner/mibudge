@@ -110,6 +110,33 @@ describe("TransactionDetailView", () => {
     expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe("Rent");
   });
 
+  // GIVEN: a transaction on "Household", whose only allocation is
+  //        Household's Unallocated budget, while "Savings" is the
+  //        active account
+  // WHEN:  its detail page opens (e.g. from a link)
+  // THEN:  the balance label names Household, and the Unallocated
+  //        allocation is not listed as a budget assignment
+  //
+  it("uses the transaction's own account, not the active one", async () => {
+    const household = makeBankAccount({ name: "Household" });
+    const savings = makeBankAccount({ name: "Savings" });
+    withAccounts([household, savings], savings.id);
+    const tx = makeTransaction({ bank_account: household.id });
+    serveTransactions([tx]);
+    server.use(
+      http.get("/api/v1/allocations/", () =>
+        HttpResponse.json(
+          makePage([makeAllocation({ transaction: tx.id, budget: household.unallocated_budget })]),
+        ),
+      ),
+    );
+
+    const { wrapper } = await openApp(`/transactions/${tx.id}/`);
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Household balance after"));
+    expect(wrapper.find('button[aria-label="Remove allocation"]').exists()).toBe(false);
+  });
+
   // GIVEN: a transaction with a memo
   // WHEN:  the user clears the memo and the autosave delay passes
   // THEN:  the PATCH sends `memo: null`, clearing it on the server

@@ -28,14 +28,12 @@ import { displayName, occurredAt } from "@/models/transaction";
 import type { AttachmentField } from "@/features/transactions/useTransactionDetail";
 import { useTransactionDetail } from "@/features/transactions/useTransactionDetail";
 import AppShell from "@/features/shell/AppShell.vue";
-import { useAccountContextStore } from "@/stores/accountContext";
 import { useSessionStore } from "@/stores/session";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const props = defineProps<{ id: string }>();
 const router = useRouter();
-const ctx = useAccountContextStore();
 const session = useSessionStore();
 
 const {
@@ -48,6 +46,7 @@ const {
   onDescriptionBlur,
   onMemoInput,
   onMemoBlur,
+  accountName,
   descriptionError,
   memoError,
   unallocatedBudgetId,
@@ -75,7 +74,6 @@ const typeLabel = computed(() => transactionTypeLabel(transaction.value?.transac
 const formattedDate = computed(() =>
   transaction.value ? formatTxDateLong(occurredAt(transaction.value), session.timezone) : "",
 );
-const accountName = computed(() => ctx.activeBankAccount?.name ?? "");
 
 ////////////////////////////////////////////////////////////////////////
 //

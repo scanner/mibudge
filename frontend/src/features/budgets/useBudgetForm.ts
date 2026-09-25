@@ -127,11 +127,16 @@ export function useBudgetForm(mode: "create" | "edit", budget?: Budget) {
         errors.setFormError("Select a bank account first.");
         return null;
       }
+      if (!input.targetBalance) {
+        errors.setFormError("Enter a target amount.");
+        return null;
+      }
       return await store.create({
         ...input,
         name: input.name ?? "",
         budgetType: budgetType.value,
         bankAccountId: accountId,
+        targetBalance: input.targetBalance,
       });
     } catch (err) {
       errors.setError(err, { fallback: "Failed to save budget." });

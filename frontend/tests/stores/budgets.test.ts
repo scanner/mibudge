@@ -178,7 +178,12 @@ describe("mutations", () => {
     withAuth();
     const store = useBudgetsStore();
 
-    const created = await store.create({ name: "Trip", bankAccountId: "acct", budgetType: "G" });
+    const created = await store.create({
+      name: "Trip",
+      bankAccountId: "acct",
+      budgetType: "G",
+      targetBalance: Money.of("2000"),
+    });
 
     expect(store.byId(created.id)?.name).toBe("Trip");
     expect(store.forAccount("acct").map((b) => b.id)).toContain(created.id);

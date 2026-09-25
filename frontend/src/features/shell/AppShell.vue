@@ -22,6 +22,7 @@ import BottomNav from "@/components/layout/BottomNav.vue";
 import SideNav from "@/components/layout/SideNav.vue";
 import TopBar from "@/components/layout/TopBar.vue";
 import AccountSwitcher from "@/components/shared/AccountSwitcher.vue";
+import type { AppRouteName } from "@/router/types";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 
@@ -64,9 +65,20 @@ watch(
 
 ////////////////////////////////////////////////////////////////////////
 //
+// A detail page shows one record of the active account.  Switching
+// accounts there moves to that section's list for the new account.
+//
+const LIST_FOR_DETAIL: Partial<Record<AppRouteName, AppRouteName>> = {
+  "budget-detail": "budgets",
+  "transaction-detail": "transactions",
+};
+
 function selectAccount(id: string) {
+  const changed = id !== ctx.activeBankAccountId;
   ctx.setActive(id);
   switcherOpen.value = false;
+  const list = LIST_FOR_DETAIL[route.name as AppRouteName];
+  if (changed && list) void router.push({ name: list });
 }
 
 function manageAccounts() {

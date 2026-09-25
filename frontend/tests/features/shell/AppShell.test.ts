@@ -103,6 +103,32 @@ describe("account switcher", () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  // GIVEN: a budget's or a transaction's detail page, which belongs to
+  //        the active account
+  // WHEN:  the user switches to another account
+  // THEN:  the page moves to that section's list for the new account,
+  //        instead of showing the old account's record under the new
+  //        account's name
+  //
+  it.each([
+    ["/budgets/00000000-0000-4000-8000-000000000001/", "budgets"],
+    ["/transactions/00000000-0000-4000-8000-000000000001/", "transactions"],
+  ])("leaves %s for its list on an account switch", async (route, listName) => {
+    withAuth();
+    const [a, b] = [makeBankAccount({ name: "One" }), makeBankAccount({ name: "Two" })];
+    withAccounts([a, b]);
+
+    const { wrapper, router } = await mountWithApp(AppShell, { route });
+    await wrapper.get('button[aria-label="Switch bank account"]').trigger("click");
+    const dialog = document.body.querySelector('[role="dialog"]');
+    const choice = Array.from(dialog!.querySelectorAll("button")).find((el) =>
+      el.textContent?.includes("Two"),
+    );
+    choice!.click();
+
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe(listName));
+  });
+
   // GIVEN: the switcher open
   // WHEN:  the user picks "Manage accounts"
   // THEN:  the Account tab opens
