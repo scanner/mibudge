@@ -166,8 +166,9 @@ export function formatDateHeader(dateStr: string, todayStr: string, locale?: str
 ////////////////////////////////////////////////////////////////////////
 //
 // Long form of a transaction instant in `timezone`, e.g.
-// `"Tuesday, October 15, 2024"`, with `" at 2:34 PM"` appended when
-// the local time is not midnight.
+// `"Tuesday, October 15, 2024"`, or with the time when the local time
+// is not midnight: `"Tuesday, October 15, 2024 at 2:34 PM"`.  The
+// locale supplies the words and the joiner.
 //
 export function formatTxDateLong(isoString: string, timezone: string, locale?: string): string {
   const d = new Date(isoString);
@@ -182,22 +183,12 @@ export function formatTxDateLong(isoString: string, timezone: string, locale?: s
   const hour = parseInt(timeParts.find((p) => p.type === "hour")?.value ?? "0");
   const minute = parseInt(timeParts.find((p) => p.type === "minute")?.value ?? "0");
 
-  const datePart = new Intl.DateTimeFormat(locale, {
-    timeZone: timezone,
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(d);
-
   // `hour12: false` renders midnight as "24" in some engines.
-  if ((hour === 0 || hour === 24) && minute === 0) return datePart;
+  const atMidnight = (hour === 0 || hour === 24) && minute === 0;
 
-  const timePart = new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: timezone,
-    hour: "numeric",
-    minute: "2-digit",
+    dateStyle: "full",
+    ...(atMidnight ? {} : { timeStyle: "short" }),
   }).format(d);
-
-  return `${datePart} at ${timePart}`;
 }

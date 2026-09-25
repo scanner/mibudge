@@ -15,6 +15,8 @@
 //   when the refresh fails it calls `onAuthFailure` and throws
 //   `AuthError`;
 // - throws `ApiError` (DRF error body parsed) on any other non-2xx;
+// - throws `NetworkError` when `fetch` itself rejects, except for an
+//   abort, which is rethrown as is;
 // - resolves to `null` for an empty or non-JSON 2xx response.
 //
 // `main.ts` creates the client once and wires the callbacks to the
@@ -23,7 +25,7 @@
 
 // app imports
 //
-import { ApiError, AuthError } from "@/api/errors";
+import { ApiError, AuthError, NetworkError } from "@/api/errors";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -163,13 +165,19 @@ export function createHttpClient(config: HttpClientConfig): HttpClient {
     const token = options.auth === false ? null : config.getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    return doFetch(`${baseUrl}${path}${toQueryString(options.query)}`, {
-      method: options.method ?? "GET",
-      headers,
-      body,
-      signal: options.signal,
-      credentials: "same-origin",
-    });
+    try {
+      return await doFetch(`${baseUrl}${path}${toQueryString(options.query)}`, {
+        method: options.method ?? "GET",
+        headers,
+        body,
+        signal: options.signal,
+        credentials: "same-origin",
+      });
+    } catch (err) {
+      // An abort is the caller's own doing; rethrow it as is.
+      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      throw new NetworkError(err);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////
