@@ -156,13 +156,12 @@ describe("allocations", () => {
   // THEN:  none, or only Unallocated / no-budget legs, count as unallocated
   //
   it.each([
-    [undefined, true],
     [[], true],
     [[{ budget: UNALLOC }], true],
     [[{ budget: null }], true],
     [[{ budget: UNALLOC }, { budget: "rent" }], false],
   ])("isUnallocated(%j) = %s", (legs, expected) => {
-    const allocs = legs?.map((l) => allocationFromDto(makeAllocation(l)));
+    const allocs = legs.map((l) => allocationFromDto(makeAllocation(l)));
     expect(isUnallocated(allocs, UNALLOC)).toBe(expected);
   });
 

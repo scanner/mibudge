@@ -59,13 +59,14 @@ export function indexByTransaction(allocations: Iterable<Allocation>): Map<strin
 ////////////////////////////////////////////////////////////////////////
 //
 // True when nothing is assigned to a real budget: no allocations, or
-// all of them on Unallocated / no budget.
+// all of them on Unallocated / no budget.  Callers that have not loaded
+// a transaction's allocations must not ask.
 //
 export function isUnallocated(
-  allocations: Allocation[] | undefined,
+  allocations: Allocation[],
   unallocatedBudgetId: string | null,
 ): boolean {
-  if (!allocations || allocations.length === 0) return true;
+  if (allocations.length === 0) return true;
   return allocations.every((a) => a.budgetId === null || a.budgetId === unallocatedBudgetId);
 }
 

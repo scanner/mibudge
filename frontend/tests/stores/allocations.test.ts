@@ -64,4 +64,37 @@ describe("allocations store", () => {
     store.invalidate("acct");
     expect(store.indexFor("acct")).toBeNull();
   });
+
+  // GIVEN: a loaded index being refetched
+  // WHEN:  a transaction is re-split before the refetch answers, and the
+  //        refetch answers with what the server had before the split
+  // THEN:  the old index stays readable while the refetch runs
+  //  AND:  the split survives the refetch's result
+  //
+  it("keeps a split made while a refetch is in flight", async () => {
+    withAuth();
+    const store = useAllocationsStore();
+    const before = makeAllocation({ transaction: "t1" });
+    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([before]))));
+    await store.loadForAccount("acct");
+
+    // Hold the refetch until the split has been applied.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.get("/api/v1/allocations/", async () => {
+        await gate;
+        return HttpResponse.json(makePage([before]));
+      }),
+    );
+    const refetch = store.loadForAccount("acct", true);
+    expect(store.indexFor("acct")?.get("t1")).toEqual([allocationFromDto(before)]);
+
+    const split = [allocationFromDto(makeAllocation({ transaction: "t1", budget: "rent" }))];
+    store.setForTransaction("acct", "t1", split);
+    release();
+    await refetch;
+
+    expect(store.indexFor("acct")?.get("t1")).toEqual(split);
+  });
 });

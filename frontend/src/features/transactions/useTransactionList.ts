@@ -5,8 +5,11 @@
 //
 // - Pages come from `useInfiniteList`; switching accounts reloads, and
 //   a page that arrives for the previous account is dropped.
-// - Each row's allocations come from the allocations store, which
-//   fetches an account's allocations once and keeps them across visits.
+// - Each row's allocations come from the allocations store.  Every
+//   visit (and account switch) refetches the account's index, since a
+//   sync or a co-owner may have changed it; the cached index stays on
+//   screen until the new one lands.  With no index cached yet the list
+//   shows as loading, so the Unallocated filter never guesses.
 // - Search matches the loaded (filtered) rows at once and asks the
 //   server for older matches after a pause; server matches are merged
 //   in when the query and account are unchanged.
@@ -27,6 +30,7 @@ import type { TransactionDto } from "@/api/dto";
 import { useDateGroupedRows } from "@/composables/useDateGroupedRows";
 import { useFuzzySearch } from "@/composables/useFuzzySearch";
 import { useInfiniteList } from "@/composables/useInfiniteList";
+import { useAsync } from "@/composables/useAsync";
 import { useResource } from "@/composables/useResource";
 import { addDays, todayDateStr, txDateStr } from "@/domain/dates";
 import { isUnallocated } from "@/models/allocation";
@@ -88,6 +92,14 @@ export function useTransactionList() {
     accountId.value ? allocations.indexFor(accountId.value) : null,
   );
 
+  // The index refetch; its `error` is the server's message.
+  const indexLoad = useAsync((id: string) => allocations.loadForAccount(id, true), {
+    errorMessage: "Failed to load budget assignments.",
+  });
+  const awaitingIndex = computed(
+    () => !!accountId.value && !allocationsByTx.value && !indexLoad.error.value,
+  );
+
   ////////////////////////////////////////////////////////////////////
   //
   const activeFilter = ref<TransactionFilter>((nav.savedFilter as TransactionFilter) || "all");
@@ -95,8 +107,13 @@ export function useTransactionList() {
   function applyFilter(txs: readonly Transaction[]): Transaction[] {
     const unallocId = ctx.unallocatedBudgetId;
     switch (activeFilter.value) {
-      case "unallocated":
-        return txs.filter((tx) => isUnallocated(allocationsByTx.value?.get(tx.id), unallocId));
+      case "unallocated": {
+        const index = allocationsByTx.value;
+        if (!index) return [];
+        // A transaction the index has not seen is newer than the index
+        // (a sync since it loaded); new transactions start unassigned.
+        return txs.filter((tx) => isUnallocated(index.get(tx.id) ?? [], unallocId));
+      }
       case "pending":
         return txs.filter((tx) => tx.pending);
       case "income":
@@ -210,7 +227,8 @@ export function useTransactionList() {
       return;
     }
     void list.reload();
-    void allocations.loadForAccount(id).catch(() => undefined);
+    void indexLoad.run(id);
+    // Budget names for the rows; a failure leaves the cached names.
     void budgets.refreshAccount(id).catch(() => undefined);
   }
 
@@ -227,9 +245,9 @@ export function useTransactionList() {
   return {
     groups,
     allocationsByTx,
-    loading: list.loading,
+    loading: computed(() => list.loading.value || awaitingIndex.value),
     loadingMore: list.loadingMore,
-    error: list.error,
+    error: computed(() => list.error.value ?? indexLoad.error.value),
     sentinel: list.sentinel,
     activeFilter,
     query: local.query,

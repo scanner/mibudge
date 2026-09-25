@@ -18,7 +18,7 @@ holds models from `models/`, never DTOs, and defines `reset()`.
 | `bankAccounts`      | `stores/bankAccounts.ts`   | The user's bank accounts, in list order. `loadAll`, `refresh`, `invalidate`, `fetchOne`, `create`, `update`, `remove`; read with `all` and `byId`. |
 | `accountContext`    | `stores/accountContext.ts` | Which account the user is looking at: `activeBankAccountId`, `activeBankAccount`, `unallocatedBudgetId`. `init()` picks the account: the one stored for this tab, else the user's default, else the first. `refresh()` moves off a deleted account. The choice persists per tab in `sessionStorage`. |
 | `budgets`           | `stores/budgets.ts`        | Budgets keyed by id. `fetchOne`, `fetchList` (every page), `refreshAccount`, `create`, `update`, `archive`, `transfer`; read with `byId`, `forAccount`, `names`. |
-| `allocations`       | `stores/allocations.ts`    | Every allocation of an account, indexed by transaction id. `loadForAccount` (once per account, concurrent callers share one fetch), `setForTransaction`, `invalidate`. |
+| `allocations`       | `stores/allocations.ts`    | Every allocation of an account, indexed by transaction id. `loadForAccount(id, force?)` (cached unless forced; concurrent unforced callers share one fetch), `setForTransaction`, `invalidate`. The transaction list forces a refetch on every visit. |
 | `transactionNav`    | `stores/transactionNav.ts` | The ids of the rows the transaction list last showed, so the detail page can step to the previous or next row. It also keeps the list's search and filter across a visit to the detail page. |
 
 `stores/reset.ts` is not a store. It holds the reset plugin (below).
@@ -49,8 +49,15 @@ same rules:
   After one of these, the caller refetches what changed:
   `budgets.refreshAccount(accountId)` for an account's budgets, or
   `fetchOne` for the two ends of a transfer. A split also calls
-  `allocations.setForTransaction(...)`, so the transaction list needs no
-  full refetch.
+  `allocations.setForTransaction(...)`, so the row updates at once.
+- **Data other writers change is refetched on every visit.** A bank sync
+  gives pending transactions new ids, and a co-owner can re-split a
+  transaction from another browser, so the transaction list calls
+  `allocations.loadForAccount(accountId, true)` each time it opens. The
+  cached index stays on screen until the new one lands, and a split
+  saved meanwhile is re-applied to the refetched index. Until an
+  account's first index arrives, the list shows as loading instead of
+  guessing which rows are unallocated.
 - **`invalidate` marks data stale without fetching.** The next read
   refetches:
   - `bankAccounts.invalidate()`: the next `loadAll()` refetches.

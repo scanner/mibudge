@@ -4,9 +4,15 @@
 //
 // The transaction list needs each row's allocations; the API has no
 // endpoint that embeds them in the transaction list, so the account's
-// allocations are fetched once and reused across visits.  A split
-// replaces the affected transaction's entries in place
-// (`setForTransaction`), so returning to the list needs no refetch.
+// allocations are fetched as one index.  The list refetches it on every
+// visit (`loadForAccount(id, true)`) because other writers change it: a
+// sync gives pending transactions new ids, and a co-owner can re-split.
+// The previous index stays readable until the refetch lands, so rows
+// keep their budgets on screen meanwhile.
+//
+// A split in this tab replaces the transaction's entries in place
+// (`setForTransaction`).  A refetch already in flight may have read the
+// server before that split, so the split is re-applied to its result.
 //
 
 // 3rd party imports
@@ -34,6 +40,8 @@ export const useAllocationsStore = defineStore("allocations", () => {
   // account id → (transaction id → allocations)
   const byAccount = ref(new Map<string, Map<string, Allocation[]>>());
   const inFlight = new Map<string, Promise<Map<string, Allocation[]>>>();
+  // account id → splits saved while that account's load is in flight.
+  const splitsDuringLoad = new Map<string, Map<string, Allocation[]>>();
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -43,8 +51,9 @@ export const useAllocationsStore = defineStore("allocations", () => {
 
   ////////////////////////////////////////////////////////////////////
   //
-  // The account's allocation index, fetched on first use.  Concurrent
-  // callers share one fetch.
+  // The account's allocation index: the cached one unless `force` is
+  // set or none is cached.  Concurrent unforced callers share one
+  // fetch; a forced call starts a new one.
   //
   function loadForAccount(accountId: string, force = false): Promise<Map<string, Allocation[]>> {
     const cached = byAccount.value.get(accountId);
@@ -52,33 +61,41 @@ export const useAllocationsStore = defineStore("allocations", () => {
     const pending = inFlight.get(accountId);
     if (pending && !force) return pending;
 
-    // A load superseded by `invalidate()` or a forced reload does not
-    // write its (older) result.
+    // A load superseded by `invalidate()` or a newer forced load does
+    // not write its (older) result.
     //
+    const splits = new Map<string, Allocation[]>();
     const load: Promise<Map<string, Allocation[]>> = fetchIndex(accountId)
       .then((index) => {
-        if (inFlight.get(accountId) === load) byAccount.value.set(accountId, index);
+        if (inFlight.get(accountId) !== load) return index;
+        for (const [txId, allocations] of splits) index.set(txId, allocations);
+        byAccount.value.set(accountId, index);
         return index;
       })
       .finally(() => {
-        if (inFlight.get(accountId) === load) inFlight.delete(accountId);
+        if (inFlight.get(accountId) === load) {
+          inFlight.delete(accountId);
+          splitsDuringLoad.delete(accountId);
+        }
       });
     inFlight.set(accountId, load);
+    splitsDuringLoad.set(accountId, splits);
     return load;
   }
 
   ////////////////////////////////////////////////////////////////////
   //
-  // Replace one transaction's allocations in its account's index (a
-  // no-op when that index is not loaded).
+  // Replace one transaction's allocations in its account's index, and
+  // in the result of a load now in flight.  A no-op for an account
+  // with neither.
   //
   function setForTransaction(
     accountId: string,
     transactionId: string,
     allocations: Allocation[],
   ): void {
-    const index = byAccount.value.get(accountId);
-    if (index) index.set(transactionId, allocations);
+    byAccount.value.get(accountId)?.set(transactionId, allocations);
+    splitsDuringLoad.get(accountId)?.set(transactionId, allocations);
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -87,9 +104,11 @@ export const useAllocationsStore = defineStore("allocations", () => {
     if (accountId) {
       byAccount.value.delete(accountId);
       inFlight.delete(accountId);
+      splitsDuringLoad.delete(accountId);
     } else {
       byAccount.value.clear();
       inFlight.clear();
+      splitsDuringLoad.clear();
     }
   }
 

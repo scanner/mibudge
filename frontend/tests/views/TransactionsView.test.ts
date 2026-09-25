@@ -11,11 +11,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // app imports
 //
+import type { BankAccountDto, BudgetDto, TransactionDto } from "@/api/dto";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import TransactionsView from "@/views/TransactionsView.vue";
 import { mountWithApp, withAccounts, withAuth } from "../helpers";
-import { makeBankAccount, makePage, makeTransaction } from "../mocks/factories";
+import {
+  makeAllocation,
+  makeBankAccount,
+  makeBudget,
+  makePage,
+  makeTransaction,
+} from "../mocks/factories";
 import { server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
@@ -128,5 +135,91 @@ describe("TransactionsView", () => {
     const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
 
     await vi.waitFor(() => expect(wrapper.text()).toContain("HTTP 500"));
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("TransactionsView budget assignments", () => {
+  let account: BankAccountDto;
+  let tx: TransactionDto;
+  let groceries: BudgetDto;
+  let rent: BudgetDto;
+
+  beforeEach(() => {
+    withAuth();
+    account = makeBankAccount();
+    withAccounts([account]);
+    tx = makeTransaction({ bank_account: account.id, party: "Corner Market" });
+    groceries = makeBudget({ name: "Groceries", bank_account: account.id });
+    rent = makeBudget({ name: "Rent", bank_account: account.id });
+    server.use(
+      http.get("/api/v1/transactions/", () => HttpResponse.json(makePage([tx]))),
+      http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([groceries, rent]))),
+    );
+  });
+
+  function allocatedTo(budget: BudgetDto) {
+    return makePage([makeAllocation({ transaction: tx.id, budget: budget.id })]);
+  }
+
+  // GIVEN: the list was visited with a transaction assigned to Groceries
+  // WHEN:  the transaction is re-assigned to Rent elsewhere (a co-owner,
+  //        or a sync) and the list is visited again
+  // THEN:  the list shows Rent
+  //
+  it("refetches budget assignments on every visit", async () => {
+    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(allocatedTo(groceries))));
+    const first = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    await vi.waitFor(() => expect(first.wrapper.text()).toContain("Groceries"));
+    first.wrapper.unmount();
+
+    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(allocatedTo(rent))));
+    const second = await mountWithApp(TransactionsView, { route: "/transactions/" });
+
+    await vi.waitFor(() => expect(second.wrapper.text()).toContain("Rent"));
+    expect(second.wrapper.text()).not.toContain("Groceries");
+  });
+
+  // GIVEN: the "Unallocated" filter is active and a transaction is
+  //        assigned to a budget
+  // WHEN:  the list opens and the budget assignments are still loading
+  // THEN:  the transaction is never shown as unallocated
+  //
+  it("does not match every row while assignments load", async () => {
+    useTransactionNavStore().savedFilter = "unallocated";
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.get("/api/v1/allocations/", async () => {
+        await gate;
+        return HttpResponse.json(allocatedTo(groceries));
+      }),
+    );
+
+    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(wrapper.text()).not.toContain("Corner Market");
+
+    release();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(wrapper.text()).not.toContain("Corner Market");
+  });
+
+  // GIVEN: the budget assignments fail to load
+  // WHEN:  the list opens
+  // THEN:  the server's error message is shown
+  //
+  it("reports a failed assignment load", async () => {
+    server.use(
+      http.get("/api/v1/allocations/", () =>
+        HttpResponse.json({ detail: "Allocations are unavailable." }, { status: 503 }),
+      ),
+    );
+
+    const { wrapper } = await mountWithApp(TransactionsView, { route: "/transactions/" });
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Allocations are unavailable."));
   });
 });
