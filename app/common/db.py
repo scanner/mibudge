@@ -28,9 +28,10 @@ def apply_sqlite_locking(db: dict[str, Any]) -> None:
     default deferred mode the second writer instead fails with
     `database is locked` when it tries to write.
 
-    With `ATOMIC_REQUESTS` every request holds the write lock for its
-    whole duration, so requests to one SQLite database run one at a
-    time.
+    Under `ATOMIC_REQUESTS` a request holds the write lock for its whole
+    duration.  The API's read-only requests therefore run outside a
+    transaction (`common.views.AtomicWritesMixin`), so only writing
+    requests to one SQLite database wait for each other.
 
     Does nothing for other engines.
 
