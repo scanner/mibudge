@@ -67,7 +67,10 @@ steps:
     # Runs the `concurrency` tests (which the `python tests` step also
     # runs on SQLite) and the Postgres-only `postgres` tests against the
     # `postgres` service below.  Keep the image tag in sync with
-    # docker-compose.yml.
+    # docker-compose.yml.  wait-for-it holds the tests until the service
+    # accepts TCP connections, as app/scripts/start_uvicorn.sh does; the
+    # postgres image's init server listens on a Unix socket only, so the
+    # port opens when the real server is up.
     image: "python:3.13.12"
     depends_on:
       - python lint
@@ -83,6 +86,7 @@ steps:
       MIBUDGE_TEST_DATABASE_URL: "postgres://mibudge:mibudge@postgres:5432/mibudge"
     commands:
       - pip install uv
+      - uv run wait-for-it --service postgres:5432 --timeout 60 -- echo "Postgres available"
       - uv run pytest -m "postgres or concurrency" -v
 
   - name: frontend build

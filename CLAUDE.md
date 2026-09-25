@@ -237,11 +237,13 @@ When `MIBUDGE_TEST_DATABASE_URL` is set, the same fixture points the
 test database at that Postgres server instead (pytest-django creates
 and drops a `test_<name>` database, so the role needs `CREATEDB`).
 Tests marked `@pytest.mark.postgres` need Postgres and are skipped
-unless the mode is active. Drone's `python postgres tests` step runs
-`-m "postgres or concurrency"`.
+unless the mode is active. Drone's `python postgres tests` step waits
+for its Postgres service with `wait-for-it`, then runs
+`-m "postgres or concurrency"`. Locally, `--wait` makes
+`docker compose up` return once the Postgres healthcheck passes.
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --wait postgres
 MIBUDGE_TEST_DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge \
     uv run pytest -m "postgres or concurrency" -v
 ```
