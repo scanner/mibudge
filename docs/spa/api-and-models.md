@@ -80,6 +80,8 @@ class ApiError extends Error {
 }
 
 class AuthError extends Error {}            // refresh failed; the session is over
+
+class NetworkError extends Error {}         // fetch rejected, no response; `cause` is the rejection
 ```
 
 Helpers:
@@ -89,7 +91,7 @@ Helpers:
     HTML 502 page, an empty 500), `fallback` plus the status, e.g.
     `"Failed to load budgets. (HTTP 500)"`;
   - an `AuthError`: a session-expired notice;
-  - a `TypeError` (the network failed): a connection notice;
+  - a `NetworkError` (no response arrived): a connection notice;
   - anything else: `fallback`.
 - `isApiError(err, status?)` narrows the type, optionally to one status:
   `if (isApiError(err, 409)) ...`.

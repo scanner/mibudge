@@ -74,5 +74,5 @@ export function getHttp(): HttpClient {
   return current;
 }
 
-export { ApiError, AuthError, describeError, isApiError } from "@/api/errors";
+export { ApiError, AuthError, describeError, isApiError, NetworkError } from "@/api/errors";
 export type { HttpClient } from "@/api/http";

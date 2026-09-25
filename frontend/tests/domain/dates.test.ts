@@ -230,4 +230,16 @@ describe("formatTxDateLong", () => {
       "Tuesday, October 15, 2024 at 2:34 PM",
     );
   });
+
+  // GIVEN: a transaction timestamp that is not midnight, and a locale
+  // WHEN:  the long date is rendered in that locale
+  // THEN:  the date, the time and the word joining them are all in
+  //        that locale
+  //
+  it.each([
+    ["de-DE", "Dienstag, 15. Oktober 2024 um 14:34"],
+    ["fr-FR", "mardi 15 octobre 2024 à 14:34"],
+  ])("joins date and time in the %s locale", (locale, expected) => {
+    expect(formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles", locale)).toBe(expected);
+  });
 });

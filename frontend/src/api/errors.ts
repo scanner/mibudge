@@ -8,6 +8,8 @@
 //   (falling back to `HTTP <status>`).
 // - `AuthError`: a request got 401 and the token refresh failed too;
 //   the session is over.
+// - `NetworkError`: `fetch` itself rejected, so no response arrived.
+//   The original rejection is its `cause`.
 //
 // `describeError` turns any thrown value into a message for the UI.
 // Every place the SPA reports a failed load or action goes through it,
@@ -53,6 +55,16 @@ export class AuthError extends Error {
   constructor(message = "Session expired") {
     super(message);
     this.name = "AuthError";
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+//
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super("Could not reach the server", { cause });
+    this.name = "NetworkError";
   }
 }
 
@@ -129,13 +141,13 @@ function firstFieldError(fieldErrors: Record<string, string[]>): string | undefi
 // - an `ApiError`: the server's DRF message, or `fallback` plus the
 //   status (`"Failed to load budgets. (HTTP 500)"`) when it sent none;
 // - `AuthError`: a session notice;
-// - a `TypeError` (`fetch` itself failed): a connection notice;
+// - a `NetworkError`: a connection notice;
 // - anything else: `fallback`.
 //
 export function describeError(err: unknown, fallback = "Something went wrong."): string {
   if (err instanceof ApiError) return err.serverMessage ?? `${fallback} (HTTP ${err.status})`;
   if (err instanceof AuthError) return "Your session has expired. Please sign in again.";
-  if (err instanceof TypeError) return "Could not reach the server. Check your connection.";
+  if (err instanceof NetworkError) return "Could not reach the server. Check your connection.";
   return fallback;
 }
 

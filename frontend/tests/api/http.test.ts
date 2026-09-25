@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 // app imports
 //
 import { api } from "@/api";
-import { ApiError, AuthError, describeError, parseDrfError } from "@/api/errors";
+import { ApiError, AuthError, describeError, NetworkError, parseDrfError } from "@/api/errors";
 import { createHttpClient, pathOf, toQueryString } from "@/api/http";
 import type { HttpClientConfig } from "@/api/http";
 import { useSessionStore } from "@/stores/session";
@@ -230,6 +230,35 @@ describe("error responses", () => {
     expect((err as ApiError).body).toBe(body);
   });
 
+  // GIVEN: a request that never gets a response (fetch itself rejects)
+  // WHEN:  the request is made
+  // THEN:  the call rejects with `NetworkError`, the original rejection
+  //        as its `cause`
+  //
+  it("rejects with NetworkError when fetch fails", async () => {
+    server.use(http.get("/api/v1/budgets/", () => HttpResponse.error()));
+
+    const err = await client()
+      .get("/api/v1/budgets/")
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
+    expect((err as NetworkError).cause).toBeInstanceOf(TypeError);
+  });
+
+  // GIVEN: a request whose signal is aborted
+  // WHEN:  fetch rejects with the abort
+  // THEN:  the abort is rethrown as is, not reported as a network failure
+  //
+  it("passes an abort through unchanged", async () => {
+    const abort = new DOMException("The operation was aborted.", "AbortError");
+    const err = await client({ fetchImpl: () => Promise.reject(abort) })
+      .get("/api/v1/budgets/")
+      .catch((e: unknown) => e);
+
+    expect(err).toBe(abort);
+  });
+
   // GIVEN: a DRF error body
   // WHEN:  it is parsed into an `ApiError`
   // THEN:  `detail`, field errors (nested keys flattened) and non-field
@@ -274,7 +303,11 @@ describe("error responses", () => {
     [new ApiError(502, "<html>Bad gateway</html>"), "fallback (HTTP 502)"],
     [new ApiError(500, ""), "fallback (HTTP 500)"],
     [new AuthError(), "Your session has expired. Please sign in again."],
-    [new TypeError("Failed to fetch"), "Could not reach the server. Check your connection."],
+    [
+      new NetworkError(new TypeError("Failed to fetch")),
+      "Could not reach the server. Check your connection.",
+    ],
+    [new TypeError("Cannot read properties of undefined"), "fallback"],
     [new Error("boom"), "fallback"],
     ["weird", "fallback"],
   ])("describeError(%s)", (err, message) => {

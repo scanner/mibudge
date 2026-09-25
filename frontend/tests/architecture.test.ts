@@ -62,6 +62,18 @@ function importsOf(path: string, text: string): string[] {
   );
 }
 
+// Files that call the global `fetch`: bare, or through `window`,
+// `globalThis` or `self`.  A method named `fetch` on anything else
+// (`api.fetch(`) is not a call to it.
+//
+const FETCH_CALL_RE = /(^|[^.\w]|\b(?:window|globalThis|self)\.)fetch\s*\(/m;
+
+function fetchCallers(sources: Map<string, string>): string[] {
+  return [...sources]
+    .filter(([, text]) => FETCH_CALL_RE.test(stripComments(text)))
+    .map(([path]) => path);
+}
+
 function matches(spec: string, prefix: string): boolean {
   return spec === prefix || spec.startsWith(prefix + "/");
 }
@@ -211,10 +223,24 @@ describe("architecture", () => {
   // THEN:  the only one is in `api/http.ts`
   //
   it("calls fetch only in api/http.ts", () => {
-    const callers = [...files]
-      .filter(([, text]) => /(^|[^.\w])fetch\s*\(/m.test(stripComments(text)))
-      .map(([path]) => path);
-    expect(callers).toEqual(["api/http.ts"]);
+    expect(fetchCallers(files)).toEqual(["api/http.ts"]);
+  });
+
+  // GIVEN: sources that call the global `fetch` in each spelling, and
+  //        ones that only call a method named `fetch`
+  // WHEN:  they are scanned for `fetch(` calls
+  // THEN:  the global calls are reported and the method calls are not
+  //
+  it("finds every spelling of a global fetch call", () => {
+    const sources = new Map([
+      ["bare.ts", "await fetch(url);"],
+      ["window.ts", "await window.fetch(url);"],
+      ["globalThis.ts", "await globalThis.fetch(url);"],
+      ["self.ts", "await self.fetch(url);"],
+      ["method.ts", "await api.fetch(url);\nawait store.fetchList();"],
+      ["commented.ts", "// await window.fetch(url);"],
+    ]);
+    expect(fetchCallers(sources)).toEqual(["bare.ts", "window.ts", "globalThis.ts", "self.ts"]);
   });
 
   // GIVEN: sources that break a rule, in each import style
