@@ -2,9 +2,9 @@
 // DTO factories for the mock REST API -- the SPA-side analogue of the
 // factory-boy factories in `app/tests/`.
 //
-// Each `make*` returns a schema-valid object shaped like the DRF
-// serializer output in `docs/openapi.yaml`, with any field overridable
-// through a `Partial<...>`.  Money values are decimal strings
+// Each `make*` returns a schema-valid object typed by the generated DTO
+// types (`src/api/dto.ts`, from `docs/openapi.yaml`), with any field
+// overridable through a `Partial<...>`.  Money values are decimal strings
 // (`"12.34"`), as the API sends them.  UUIDs come from a per-process
 // sequence, so every object is distinct and ids are stable to read in
 // failure output.
@@ -13,20 +13,22 @@
 // app imports
 //
 import type {
-  APIKey,
-  Bank,
-  BankAccount,
-  BankAccountInvitation,
-  Budget,
-  ChannelPreference,
-  FundingSummary,
-  InternalTransaction,
-  NotificationPreference,
-  Paginated,
-  Transaction,
-  TransactionAllocation,
-  User,
-} from "@/types/api";
+  AllocationDto as TransactionAllocation,
+  ApiKeyDto as APIKey,
+  BankAccountDto as BankAccount,
+  BankDto as Bank,
+  BudgetDto as Budget,
+  ChannelPreferenceDto as ChannelPreference,
+  FundingRunResultDto,
+  FundingSummaryDto as FundingSummary,
+  InternalTransactionDto as InternalTransaction,
+  InvitationDto as BankAccountInvitation,
+  NotificationPreferenceDto as NotificationPreference,
+  Page as Paginated,
+  TransactionCategoryDto,
+  TransactionDto as Transaction,
+  UserDto as User,
+} from "@/api/dto";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -67,6 +69,8 @@ export function makeBank(overrides: Partial<Bank> = {}): Bank {
     name: "Test Bank",
     routing_number: "021000021",
     default_currency: "USD",
+    created_at: TIMESTAMP,
+    modified_at: TIMESTAMP,
     ...overrides,
   };
 }
@@ -118,6 +122,7 @@ export function makeBudget(overrides: Partial<Budget> = {}): Budget {
     complete: false,
     paused: false,
     archived: false,
+    archived_at: null,
     funding_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=1",
     recurrence_schedule: null,
     memo: null,
@@ -147,8 +152,25 @@ export function makeTransaction(overrides: Partial<Transaction> = {}): Transacti
     memo: null,
     raw_description: "COFFEE SHOP 123",
     description: "Coffee Shop",
+    description_user_edited: false,
     category: null,
     category_full_name: null,
+    merchant_name: null,
+    merchant_intermediary: null,
+    merchant_address: null,
+    merchant_city: null,
+    merchant_region: null,
+    merchant_country: null,
+    merchant_latitude: null,
+    merchant_longitude: null,
+    merchant_category: null,
+    merchant_category_code: null,
+    virtual_card_number: null,
+    has_details: false,
+    bank_transaction_id: null,
+    // The schema types this as a string; the server sends `null` for an
+    // unlinked transaction.
+    linked_transaction: null as unknown as string,
     bank_account_posted_balance: "987.66",
     bank_account_posted_balance_currency: "USD",
     bank_account_available_balance: "987.66",
@@ -195,7 +217,7 @@ export function makeInternalTransaction(
     amount_currency: "USD",
     src_budget: uuid(),
     dst_budget: uuid(),
-    actor: "user1",
+    actor: 1,
     effective_date: TIMESTAMP,
     src_budget_balance: "75.00",
     src_budget_balance_currency: "USD",
@@ -211,6 +233,40 @@ export function makeInternalTransaction(
 //
 export function makeFundingSummary(overrides: Partial<FundingSummary> = {}): FundingSummary {
   return { schedules: [], total_amount: "0.00", currency: "USD", ...overrides };
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export function makeFundingRunResult(
+  overrides: Partial<FundingRunResultDto> = {},
+): FundingRunResultDto {
+  return {
+    transfers: 0,
+    occurrences_completed: 0,
+    occurrences_partial: 0,
+    warnings: [],
+    skipped_budgets: [],
+    ...overrides,
+  };
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+export function makeCategory(
+  overrides: Partial<TransactionCategoryDto> = {},
+): TransactionCategoryDto {
+  return {
+    id: uuid(),
+    group: "Food",
+    name: "Groceries",
+    full_name: "Food : Groceries",
+    // Global rows have no owner; the schema types this as a string.
+    owner: null as unknown as string,
+    archived: false,
+    created_at: TIMESTAMP,
+    modified_at: TIMESTAMP,
+    ...overrides,
+  };
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -270,7 +326,12 @@ export function makeNotificationPreference(
 export function makeChannelPreference(
   overrides: Partial<ChannelPreference> = {},
 ): ChannelPreference {
-  return { channel: "email", display_name: "Email", digest_frequency: "daily", ...overrides };
+  return {
+    channel: "email",
+    display_name: "Email",
+    digest_frequency: "daily_evening",
+    ...overrides,
+  };
 }
 
 ////////////////////////////////////////////////////////////////////////

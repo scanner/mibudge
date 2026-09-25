@@ -42,6 +42,8 @@ steps:
       - npm install -g pnpm@9
       - cd frontend
       - pnpm install --frozen-lockfile
+      # The generated API types must match docs/openapi.yaml.
+      - pnpm gen:api-types && git diff --exit-code src/api/schema.d.ts
       - pnpm fmt:check
       - pnpm type-check
 

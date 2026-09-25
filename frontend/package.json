@@ -10,6 +10,7 @@
     "type-check": "vue-tsc -b",
     "fmt": "oxfmt src/ tests/",
     "fmt:check": "oxfmt --check src/ tests/",
+    "gen:api-types": "openapi-typescript ../docs/openapi.yaml -o src/api/schema.d.ts && node scripts/stamp-api-types-header.mjs src/api/schema.d.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -39,6 +40,7 @@
     "@vue/tsconfig": "^0.9.0",
     "happy-dom": "^20",
     "msw": "^2",
+    "openapi-typescript": "^7",
     "oxfmt": "^0.43.0",
     "typescript": "~5.9.3",
     "vite": "^8.0.1",
