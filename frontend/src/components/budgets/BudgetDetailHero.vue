@@ -24,9 +24,11 @@ import FillUpBand from "./FillUpBand.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
 import ProgressBar from "@/components/shared/ProgressBar.vue";
 import StatusChip from "@/components/shared/StatusChip.vue";
-import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/utils/budget";
-import { rruleHuman } from "@/utils/rrule";
-import type { Budget } from "@/types/api";
+import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
+import { formatInstantDate, formatLocalDate } from "@/domain/dates";
+import { BUDGET_TYPE_LABELS } from "@/domain/labels";
+import { rruleHuman } from "@/domain/rrule";
+import type { Budget } from "@/models/budget";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -41,34 +43,23 @@ const pct = computed(() => budgetProgress(props.budget));
 const tone = computed(() => progressTone(status.value));
 const meta = computed(() => budgetMeta(props.budget));
 
-const typeLabel = computed(() => {
-  switch (props.budget.budget_type) {
-    case "G":
-      return "Goal";
-    case "R":
-      return "Recurring";
-    case "A":
-      return "Fill-up";
-    case "C":
-      return "Capped";
-  }
-});
+const typeLabel = computed(() => BUDGET_TYPE_LABELS[props.budget.budgetType]);
 
 const nextFunding = computed(() => {
-  if (!props.budget.funding_schedule) return null;
-  return rruleHuman(props.budget.funding_schedule);
+  if (!props.budget.fundingSchedule) return null;
+  return rruleHuman(props.budget.fundingSchedule);
 });
 
-const startDate = computed(() => {
-  const d = new Date(props.budget.created_at);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-});
+const SHORT_DATE: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
 
-const endDate = computed(() => {
-  if (!props.budget.target_date) return null;
-  const d = new Date(props.budget.target_date);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-});
+const startDate = computed(() => formatInstantDate(props.budget.createdAt, SHORT_DATE));
+
+// `targetDate` is a calendar date; `formatLocalDate` renders that day
+// in every browser zone.
+//
+const endDate = computed(() =>
+  props.budget.targetDate ? formatLocalDate(props.budget.targetDate, SHORT_DATE) : null,
+);
 </script>
 
 <template>
@@ -90,18 +81,9 @@ const endDate = computed(() => {
 
       <!-- Row 3: balance / target -->
       <div class="mt-3 flex items-baseline gap-2">
-        <MoneyAmount
-          :amount="budget.balance"
-          :currency="budget.balance_currency"
-          size="hero"
-          :coloured="true"
-        />
-        <span v-if="budget.target_balance" class="text-[15px] text-neutral-400">
-          /&nbsp;<MoneyAmount
-            :amount="budget.target_balance"
-            :currency="budget.target_balance_currency"
-            size="md"
-          />
+        <MoneyAmount :amount="budget.balance" size="hero" :coloured="true" />
+        <span v-if="budget.targetBalance" class="text-[15px] text-neutral-400">
+          /&nbsp;<MoneyAmount :amount="budget.targetBalance" size="md" />
         </span>
       </div>
 

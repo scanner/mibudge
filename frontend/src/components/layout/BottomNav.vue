@@ -9,20 +9,23 @@
 import { IconLayoutGrid, IconList, IconUser, IconWallet } from "@tabler/icons-vue";
 import type { Component } from "vue";
 
+// app imports
+//
+import type { AppRouteName } from "@/router/types";
+
 ////////////////////////////////////////////////////////////////////////
 //
 interface TabDef {
   label: string;
   icon: Component;
-  to: string;
+  to: { name: AppRouteName };
 }
 
-// The router base is "/app/", so all `to` values here are relative.
 const tabs: TabDef[] = [
-  { label: "Overview", icon: IconLayoutGrid, to: "/" },
-  { label: "Budgets", icon: IconWallet, to: "/budgets/" },
-  { label: "Transactions", icon: IconList, to: "/transactions/" },
-  { label: "Account", icon: IconUser, to: "/account/" },
+  { label: "Overview", icon: IconLayoutGrid, to: { name: "overview" } },
+  { label: "Budgets", icon: IconWallet, to: { name: "budgets" } },
+  { label: "Transactions", icon: IconList, to: { name: "transactions" } },
+  { label: "Account", icon: IconUser, to: { name: "account" } },
 ];
 </script>
 
@@ -33,7 +36,7 @@ const tabs: TabDef[] = [
   >
     <router-link
       v-for="tab in tabs"
-      :key="tab.to"
+      :key="tab.label"
       :to="tab.to"
       class="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-secondary"
       active-class="text-ocean-400"

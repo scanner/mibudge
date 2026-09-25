@@ -8,9 +8,12 @@
 //
 import { computed } from "vue";
 
+// app imports
+//
+import type { BudgetStatus } from "@/domain/budgetStatus";
+
 ////////////////////////////////////////////////////////////////////////
 //
-export type BudgetStatus = "funded" | "progress" | "warn" | "over" | "paused";
 
 interface Props {
   status: BudgetStatus;

@@ -31,8 +31,10 @@ export default mergeConfig(
         reporter: ['text-summary', 'text', 'html'],
         thresholds: {
           'src/api/**': { lines: 80 },
+          'src/composables/**': { lines: 80 },
+          'src/domain/**': { lines: 80 },
+          'src/models/**': { lines: 80 },
           'src/stores/**': { lines: 80 },
-          'src/utils/**': { lines: 80 },
         },
       },
     },

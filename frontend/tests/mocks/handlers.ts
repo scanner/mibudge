@@ -25,7 +25,9 @@ import {
   makeBank,
   makeBankAccount,
   makeBudget,
+  makeCategory,
   makeChannelPreference,
+  makeFundingRunResult,
   makeFundingSummary,
   makeInternalTransaction,
   makeInvitation,
@@ -108,15 +110,7 @@ export const handlers = [
   ),
   http.delete(`${API}/bank-accounts/:id/`, () => noContent()),
   http.get(`${API}/bank-accounts/:id/funding-summary/`, () => json(makeFundingSummary())),
-  http.post(`${API}/bank-accounts/:id/run-funding/`, () =>
-    json({
-      transfers: 0,
-      occurrences_completed: 0,
-      occurrences_partial: 0,
-      warnings: [],
-      skipped_budgets: [],
-    }),
-  ),
+  http.post(`${API}/bank-accounts/:id/run-funding/`, () => json(makeFundingRunResult())),
   http.get(`${API}/bank-accounts/:id/invitations/`, ({ params }) =>
     json([makeInvitation({ bank_account_id: String(params.id) })]),
   ),
@@ -158,13 +152,16 @@ export const handlers = [
   http.post(`${API}/internal-transactions/`, async ({ request }) =>
     json(makeInternalTransaction(await jsonBody(request)), 201),
   ),
-  http.get(`${API}/internal-transactions/:id/`, ({ params }) =>
-    json(makeInternalTransaction({ id: String(params.id) })),
+
+  // Transaction categories.
+  //
+  http.get(`${API}/transaction-categories/`, () => json(makePage([makeCategory()]))),
+  http.get(`${API}/transaction-categories/:id/`, ({ params }) =>
+    json(makeCategory({ id: String(params.id) })),
   ),
 
-  // Currencies and notification preferences.
+  // Notification preferences.
   //
-  http.get(`${API}/currencies/`, () => json(makePage([{ code: "USD", name: "US Dollar" }]))),
   http.get(`${API}/notification-preferences/`, () => json([makeNotificationPreference()])),
   http.patch(`${API}/notification-preferences/:kind/`, async ({ params, request }) =>
     json(makeNotificationPreference({ ...(await jsonBody(request)), kind: String(params.kind) })),

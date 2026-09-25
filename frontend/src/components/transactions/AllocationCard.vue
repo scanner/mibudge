@@ -13,14 +13,14 @@ import { computed, ref, watch } from "vue";
 // app imports
 //
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import type { TransactionAllocation } from "@/types/api";
+import { toDecimal } from "@/domain/money";
+import type { Allocation } from "@/models/allocation";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const props = defineProps<{
-  allocation: TransactionAllocation;
+  allocation: Allocation;
   budgetName: string;
-  currency: string;
 }>();
 
 const emit = defineEmits<{
@@ -33,12 +33,12 @@ const emit = defineEmits<{
 ////////////////////////////////////////////////////////////////////////
 //
 const editingAmount = ref(false);
-const amountInput = ref(props.allocation.amount);
+const amountInput = ref(props.allocation.amount.toDecimalString());
 
 watch(
   () => props.allocation.amount,
   (v) => {
-    amountInput.value = v;
+    amountInput.value = v.toDecimalString();
   },
 );
 
@@ -49,16 +49,17 @@ function startEdit() {
 function commitEdit() {
   editingAmount.value = false;
   const cleaned = amountInput.value.replace(/[^0-9.\-]/g, "");
-  if (cleaned && cleaned !== props.allocation.amount) {
-    emit("update", props.allocation.id, cleaned);
+  const parsed = toDecimal(cleaned);
+  if (parsed && !props.allocation.amount.equals(parsed)) {
+    emit("update", props.allocation.id, parsed.toFixed(2));
   } else {
-    amountInput.value = props.allocation.amount;
+    amountInput.value = props.allocation.amount.toDecimalString();
   }
 }
 
 ////////////////////////////////////////////////////////////////////////
 //
-const budgetId = computed(() => props.allocation.budget);
+const budgetId = computed(() => props.allocation.budgetId);
 </script>
 
 <template>
@@ -107,7 +108,7 @@ const budgetId = computed(() => props.allocation.budget);
       </template>
       <template v-else>
         <button type="button" class="hover:underline" @click="startEdit">
-          <MoneyAmount :amount="allocation.amount" :currency="currency" size="md" />
+          <MoneyAmount :amount="allocation.amount" size="md" />
         </button>
       </template>
     </div>
@@ -116,17 +117,12 @@ const budgetId = computed(() => props.allocation.budget);
     <div class="mt-1 flex items-center gap-2 text-xs text-secondary">
       <span class="flex-none">Budget balance after</span>
       <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
-      <MoneyAmount
-        class="flex-none"
-        :amount="allocation.budget_balance"
-        :currency="allocation.budget_balance_currency"
-        size="sm"
-      />
+      <MoneyAmount class="flex-none" :amount="allocation.budgetBalance" size="sm" />
     </div>
 
     <!-- Category -->
-    <div v-if="allocation.category_full_name" class="mt-1 text-xs text-secondary">
-      {{ allocation.category_full_name }}
+    <div v-if="allocation.categoryFullName" class="mt-1 text-xs text-secondary">
+      {{ allocation.categoryFullName }}
     </div>
   </div>
 </template>

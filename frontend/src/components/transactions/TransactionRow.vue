@@ -16,50 +16,49 @@
 // left border is shown.  Pending transactions show "Unallocated (X left)";
 // posted transactions show the "Unallocated — tap to assign" prompt.
 //
+// Presentational: clicking the row emits `select`, the remove button
+// (when `removable`) emits `remove`; the parent acts on them.
+//
 
 // 3rd party imports
 //
 import { IconX } from "@tabler/icons-vue";
 import { computed } from "vue";
-import { useRouter } from "vue-router";
 
 // app imports
 //
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { TRANSACTION_TYPE_LABELS } from "@/types/api";
-import type { Transaction, TransactionAllocation } from "@/types/api";
+import { transactionTypeLabel } from "@/domain/labels";
+import { formatMoney } from "@/domain/money";
+import type { Money } from "@/domain/money";
+import type { Allocation } from "@/models/allocation";
+import { isUnallocated } from "@/models/allocation";
+import type { Transaction } from "@/models/transaction";
+import { displayName } from "@/models/transaction";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const props = withDefaults(
   defineProps<{
     transaction: Transaction;
-    allocations?: TransactionAllocation[];
+    allocations?: Allocation[];
     budgetNames?: Map<string, string>;
     unallocatedBudgetId?: string | null;
     removable?: boolean;
   }>(),
-  { removable: false },
+  { allocations: undefined, budgetNames: undefined, unallocatedBudgetId: null, removable: false },
 );
 
 const emit = defineEmits<{
+  (e: "select", transactionId: string): void;
   (e: "remove", transactionId: string): void;
 }>();
 
-const router = useRouter();
-
 ////////////////////////////////////////////////////////////////////////
 //
-const partyName = computed(() => {
-  const tx = props.transaction;
-  return tx.party || tx.description || tx.raw_description;
-});
+const partyName = computed(() => displayName(props.transaction));
 
-const typeLabel = computed(() => {
-  const t = props.transaction.transaction_type;
-  if (!t) return "";
-  return TRANSACTION_TYPE_LABELS[t] ?? t;
-});
+const typeLabel = computed(() => transactionTypeLabel(props.transaction.transactionType));
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -67,8 +66,8 @@ const typeLabel = computed(() => {
 //
 interface AllocDisplay {
   name: string;
-  amount: string;
-  balance: string;
+  amount: Money;
+  balance: Money;
 }
 
 const allocInfo = computed<{
@@ -83,18 +82,15 @@ const allocInfo = computed<{
   const empty = { isUnallocated: false, isSplit: false, single: null, allLegs: [] };
   if (!allocs || allocs.length === 0) return empty;
 
-  const unallocId = props.unallocatedBudgetId;
-  const names = props.budgetNames;
-
-  const allUnallocated = allocs.every((a) => a.budget === unallocId || a.budget === null);
-  if (allUnallocated) {
+  if (isUnallocated(allocs, props.unallocatedBudgetId)) {
     return { isUnallocated: true, isSplit: false, single: null, allLegs: [] };
   }
 
-  const toDisplay = (a: TransactionAllocation): AllocDisplay => ({
-    name: (a.budget && names?.get(a.budget)) ?? "Unallocated",
+  const names = props.budgetNames;
+  const toDisplay = (a: Allocation): AllocDisplay => ({
+    name: (a.budgetId && names?.get(a.budgetId)) || "Unallocated",
     amount: a.amount,
-    balance: a.budget_balance,
+    balance: a.budgetBalance,
   });
 
   if (allocs.length === 1) {
@@ -108,25 +104,6 @@ const allocInfo = computed<{
     allLegs: allocs.map(toDisplay),
   };
 });
-
-function fmtMoney(raw: string): string {
-  const n = Number.parseFloat(raw);
-  const currency = props.transaction.amount_currency ?? "USD";
-  const formatted = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Math.abs(n));
-  return n < 0 ? `-${formatted}` : formatted;
-}
-
-function fmtAccountBalance(raw: string, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Number.parseFloat(raw));
-}
 </script>
 
 <template>
@@ -139,7 +116,7 @@ function fmtAccountBalance(raw: string, currency: string): string {
           ? 'border-l-[3px] border-l-ocean-400'
           : ''
     "
-    @click="router.push(`/transactions/${transaction.id}/`)"
+    @click="emit('select', transaction.id)"
   >
     <div class="px-4 py-3">
       <!-- Row 1: party name + amount (+ account balance below) + optional remove -->
@@ -149,12 +126,7 @@ function fmtAccountBalance(raw: string, currency: string): string {
         </span>
         <div class="flex flex-none flex-col items-end">
           <div class="flex items-center gap-1.5">
-            <MoneyAmount
-              :amount="transaction.amount"
-              :currency="transaction.amount_currency"
-              size="md"
-              coloured
-            />
+            <MoneyAmount :amount="transaction.amount" size="md" coloured />
             <button
               v-if="removable"
               type="button"
@@ -165,16 +137,8 @@ function fmtAccountBalance(raw: string, currency: string): string {
               <IconX class="h-3.5 w-3.5" />
             </button>
           </div>
-          <span
-            v-if="transaction.bank_account_available_balance"
-            class="tabular-nums text-[11px] text-secondary"
-          >
-            {{
-              fmtAccountBalance(
-                transaction.bank_account_available_balance,
-                transaction.bank_account_available_balance_currency,
-              )
-            }}
+          <span class="tabular-nums text-[11px] text-secondary">
+            {{ formatMoney(transaction.accountAvailableBalance) }}
           </span>
         </div>
       </div>
@@ -183,8 +147,8 @@ function fmtAccountBalance(raw: string, currency: string): string {
       <div v-if="allocInfo.isUnallocated" class="mt-0.5 flex items-center justify-between gap-2">
         <span v-if="transaction.pending" class="min-w-0 truncate text-[12px] text-ocean-600">
           Unallocated
-          <span v-if="allocations?.[0]?.budget_balance" class="text-secondary">
-            (now {{ fmtMoney(allocations[0].budget_balance) }})
+          <span v-if="allocations?.[0]" class="text-secondary">
+            (now {{ formatMoney(allocations[0].budgetBalance) }})
           </span>
         </span>
         <span v-else class="min-w-0 truncate text-[12px] italic text-secondary">
@@ -205,7 +169,7 @@ function fmtAccountBalance(raw: string, currency: string): string {
       <div v-else-if="allocInfo.single" class="mt-0.5 flex items-center justify-between gap-2">
         <span class="min-w-0 truncate text-[12px] text-ocean-600">
           {{ allocInfo.single.name }}
-          <span class="text-secondary">(now {{ fmtMoney(allocInfo.single.balance) }})</span>
+          <span class="text-secondary">(now {{ formatMoney(allocInfo.single.balance) }})</span>
         </span>
         <div class="flex flex-none items-center gap-1.5">
           <span
@@ -243,10 +207,10 @@ function fmtAccountBalance(raw: string, currency: string): string {
         >
           <span class="min-w-0 flex-1 truncate text-[12px] text-ocean-600">
             {{ leg.name }}
-            <span class="text-secondary">(now {{ fmtMoney(leg.balance) }})</span>
+            <span class="text-secondary">(now {{ formatMoney(leg.balance) }})</span>
           </span>
           <span class="flex-none text-[12px] font-medium text-neutral-700">
-            {{ fmtMoney(leg.amount) }}
+            {{ formatMoney(leg.amount) }}
           </span>
         </div>
       </div>

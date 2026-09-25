@@ -1,51 +1,53 @@
 //
-// SPA entry point.
+// SPA entry point: the composition root that wires the layers together.
 //
 // Order matters:
-//   1. Create the app
-//   2. Install Pinia (stores must be available before any component setup runs)
-//   3. Attempt a silent refresh via the httpOnly refresh cookie so returning
-//      users skip the login screen on cold boot
-//   4. Install Vue Router (its `beforeEach` guard reads the auth store)
-//   5. Mount
+//   1. Create the app and a Pinia with the store-reset plugin (stores
+//      must exist before any component setup runs).
+//   2. Create the router, and the HTTP client wired to the session
+//      store; a session that ends mid-use (refresh failed) redirects to
+//      the login page with a return path.
+//   3. Attempt a silent refresh via the httpOnly refresh cookie, so a
+//      returning user skips the login screen, and load the user and the
+//      account context (one shared `/users/me/` request).
+//   4. Install the router (its guard reads the session) and mount.
 //
 
 // 3rd party imports
 //
-import { createApp } from "vue";
 import { createPinia } from "pinia";
+import { createApp } from "vue";
 
 // app imports
 //
 import App from "./App.vue";
-import router from "./router";
+import { initApi } from "./api";
+import { createAppRouter, redirectToLogin } from "./router";
 import { useAccountContextStore } from "./stores/accountContext";
-import { useAuthStore } from "./stores/auth";
+import { resetPlugin } from "./stores/reset";
+import { createSessionHttpClient, useSessionStore } from "./stores/session";
 import "./style.css";
 
-////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 //
 async function bootstrap() {
   const app = createApp(App);
-  app.use(createPinia());
+  const pinia = createPinia();
+  pinia.use(resetPlugin);
+  app.use(pinia);
 
-  // Silent refresh: if the browser still holds a valid refresh cookie,
-  // the SPA becomes authenticated before the first router guard runs
-  // and the user lands directly on their intended route.  A failure
-  // here is expected (cold boot with no session) and leaves the store
-  // unauthenticated; the router guard will bounce the user to /login/.
-  const auth = useAuthStore();
-  const authenticated = await auth.refresh();
-  if (authenticated) {
-    // Load user profile and account context in parallel on cold boot.
-    // On a fresh login these are also called by LoginView, but that's
-    // safe -- both are idempotent.
-    await Promise.all([auth.loadUser(), useAccountContextStore().init()]);
+  const router = createAppRouter();
+  initApi(createSessionHttpClient({ onAuthFailure: () => void redirectToLogin(router) }));
+
+  // A failed refresh is expected on a cold boot with no session; the
+  // guard then sends the visitor to the login page.
+  const session = useSessionStore();
+  if (await session.refresh()) {
+    await Promise.all([session.loadUser(), useAccountContextStore().init()]);
   }
 
   app.use(router);
   app.mount("#app");
 }
 
-bootstrap();
+void bootstrap();

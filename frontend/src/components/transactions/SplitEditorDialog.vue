@@ -8,6 +8,10 @@
 // Save is disabled when over-allocated or any row is incomplete.
 // Any remainder is assigned by the backend to the unallocated budget.
 //
+// Presentational: emits `save` with the splits body (budget id →
+// positive amount) or `cancel`.  `useModal` provides the scroll lock,
+// Escape-to-cancel and focus return.
+//
 
 // 3rd party imports
 //
@@ -17,18 +21,23 @@ import { computed, nextTick, ref, watch } from "vue";
 
 // app imports
 //
-import type { Budget } from "@/types/api";
+import { useModal } from "@/composables/useModal";
+import { formatMoney, Money } from "@/domain/money";
+import type { Budget } from "@/models/budget";
+import { isAssignableBudget } from "@/models/budget";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const props = defineProps<{
-  open: boolean;
-  budgets: Budget[];
-  transactionAmount: string;
-  transactionCurrency: string;
-  initialSplits: { budgetId: string; amount: string }[];
-  unallocatedBudgetId?: string | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    budgets: Budget[];
+    transactionAmount: Money;
+    initialSplits: { budgetId: string; amount: string }[];
+    unallocatedBudgetId?: string | null;
+  }>(),
+  { unallocatedBudgetId: null },
+);
 
 const emit = defineEmits<{
   (e: "save", splits: Record<string, string>): void;
@@ -94,10 +103,9 @@ function removeRow(i: number) {
 
 ////////////////////////////////////////////////////////////////////////
 //
-const selectableBudgets = computed(() => {
-  const unallocId = props.unallocatedBudgetId;
-  return props.budgets.filter((b) => b.id !== unallocId && b.budget_type !== "A" && !b.archived);
-});
+const selectableBudgets = computed(() =>
+  props.budgets.filter((b) => isAssignableBudget(b, props.unallocatedBudgetId)),
+);
 
 // Budgets available for a given row = all selectable budgets minus those
 // chosen by other rows (duplicates are not allowed).
@@ -108,18 +116,11 @@ function availableForRow(rowIndex: number): Budget[] {
   return selectableBudgets.value.filter((b) => !taken.has(b.id));
 }
 
-// Format the budget's current balance for the option label.  Each
-// budget can carry its own currency, so we honour `balance_currency`
-// rather than assuming USD.  Falls back to a plain placeholder if the
-// value is unparseable (shouldn't happen with API-supplied data, but
-// keeps the dropdown rendering robust).
+// Format the budget's current balance for the option label, in the
+// budget's own currency.
+//
 function formatBalance(b: Budget): string {
-  const n = Number(b.balance);
-  if (Number.isNaN(n)) return "";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: b.balance_currency || "USD",
-  }).format(n);
+  return formatMoney(b.balance);
 }
 
 // Label rendered in the <option>: budget name + its current balance,
@@ -139,22 +140,23 @@ function fallbackBudgetLabel(id: string): string {
 
 ////////////////////////////////////////////////////////////////////////
 //
-const txTotal = computed(() => {
+const txTotal = computed(() => props.transactionAmount.amount.abs());
+
+// A row's amount as it is sent: positive and rounded to cents.  The
+// remainder and the over-allocation check use the same value, so a
+// split that passes the check never exceeds the transaction once sent.
+// `null` when the text is not a number.
+//
+function rowAmount(row: SplitRow): Decimal | null {
   try {
-    return new Decimal(props.transactionAmount).abs();
+    return new Decimal(row.amount || "0").abs().toDecimalPlaces(2);
   } catch {
-    return new Decimal(0);
+    return null;
   }
-});
+}
 
 const splitTotal = computed(() =>
-  rows.value.reduce((sum, r) => {
-    try {
-      return sum.plus(new Decimal(r.amount || "0").abs());
-    } catch {
-      return sum;
-    }
-  }, new Decimal(0)),
+  rows.value.reduce((sum, r) => sum.plus(rowAmount(r) ?? 0), new Decimal(0)),
 );
 
 const remainder = computed(() => txTotal.value.minus(splitTotal.value));
@@ -165,14 +167,7 @@ const isOver = computed(() => remainder.value.lessThan(0));
 const canSave = computed(() => {
   if (isOver.value) return false;
   if (rows.value.length === 0) return true;
-  return rows.value.every((r) => {
-    if (!r.budgetId) return false;
-    try {
-      return new Decimal(r.amount || "0").abs().greaterThan(0);
-    } catch {
-      return false;
-    }
-  });
+  return rows.value.every((r) => !!r.budgetId && !!rowAmount(r)?.greaterThan(0));
 });
 
 function save() {
@@ -180,26 +175,22 @@ function save() {
   const splits: Record<string, string> = {};
   for (const row of rows.value) {
     if (row.budgetId) {
-      splits[row.budgetId] = new Decimal(row.amount || "0").abs().toFixed(2);
+      splits[row.budgetId] = rowAmount(row)!.toFixed(2);
     }
   }
   emit("save", splits);
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (!props.open) return;
-  if (e.key === "Escape") emit("cancel");
-}
+useModal(
+  () => props.open,
+  () => emit("cancel"),
+);
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div
-        v-if="open"
-        class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
-        @keydown="onKeydown"
-      >
+      <div v-if="open" class="fixed inset-0 z-50 flex items-end justify-center md:items-center">
         <div class="absolute inset-0 bg-neutral-900/40" @click="emit('cancel')" />
 
         <div
@@ -284,7 +275,7 @@ function onKeydown(e: KeyboardEvent) {
               <span
                 :class="['font-mono font-medium', isOver ? 'text-coral-600' : 'text-ocean-600']"
               >
-                ${{ remainder.abs().toFixed(2) }}
+                {{ formatMoney(Money.of(remainder.abs(), transactionAmount.currency)) }}
               </span>
             </div>
 

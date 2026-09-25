@@ -9,9 +9,12 @@
 //
 import { computed } from "vue";
 
+// app imports
+//
+import type { ProgressTone } from "@/domain/budgetStatus";
+
 ////////////////////////////////////////////////////////////////////////
 //
-export type ProgressTone = "mint" | "ocean" | "amber" | "coral" | "neutral";
 
 interface Props {
   value: number; // 0..100

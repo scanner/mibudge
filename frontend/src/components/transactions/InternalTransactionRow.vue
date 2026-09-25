@@ -19,7 +19,9 @@ import { computed } from "vue";
 // app imports
 //
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import type { InternalTransaction } from "@/types/api";
+import { formatMoney } from "@/domain/money";
+import type { InternalTransaction } from "@/models/internalTransaction";
+import { amountRelativeTo } from "@/models/internalTransaction";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -31,28 +33,15 @@ const props = defineProps<{
 
 const itx = computed(() => props.internalTransaction);
 
-const srcName = computed(() => props.budgetNames?.get(itx.value.src_budget) ?? "Budget");
-const dstName = computed(() => props.budgetNames?.get(itx.value.dst_budget) ?? "Budget");
+const srcName = computed(() => props.budgetNames?.get(itx.value.srcBudgetId) ?? "Budget");
+const dstName = computed(() => props.budgetNames?.get(itx.value.dstBudgetId) ?? "Budget");
 
 // In budget-relative mode, sign the amount: positive if this budget
 // received the transfer (dst), negative if it sent (src).
 const displayAmount = computed(() => {
   const rel = props.relativeToBudgetId;
-  if (!rel) return itx.value.amount;
-  if (itx.value.dst_budget === rel) return itx.value.amount;
-  return `-${itx.value.amount}`;
+  return rel ? amountRelativeTo(itx.value, rel) : itx.value.amount;
 });
-
-function fmt(amount: string): string {
-  const n = Number.parseFloat(amount);
-  const currency = itx.value.amount_currency ?? "USD";
-  const formatted = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Math.abs(n));
-  return n < 0 ? `-${formatted}` : formatted;
-}
 </script>
 
 <template>
@@ -63,21 +52,16 @@ function fmt(amount: string): string {
         <IconArrowsRightLeft class="h-3.5 w-3.5 flex-none text-neutral-400" />
         <span class="text-[15px] font-medium text-secondary">Transfer</span>
       </div>
-      <MoneyAmount
-        :amount="displayAmount"
-        :currency="itx.amount_currency"
-        size="md"
-        :coloured="!!relativeToBudgetId"
-      />
+      <MoneyAmount :amount="displayAmount" size="md" :coloured="!!relativeToBudgetId" />
     </div>
 
     <!-- Row 2: "Src (now $X) → Dst (now $Y)" -->
     <div class="mt-0.5 text-[12px] text-secondary">
       {{ srcName }}
-      <span class="text-secondary">(now {{ fmt(itx.src_budget_balance) }})</span>
+      <span class="text-secondary">(now {{ formatMoney(itx.srcBudgetBalance) }})</span>
       →
       {{ dstName }}
-      <span class="text-secondary">(now {{ fmt(itx.dst_budget_balance) }})</span>
+      <span class="text-secondary">(now {{ formatMoney(itx.dstBudgetBalance) }})</span>
     </div>
   </article>
 </template>

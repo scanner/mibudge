@@ -10,19 +10,23 @@
 import { IconLayoutGrid, IconList, IconUser, IconWallet } from "@tabler/icons-vue";
 import type { Component } from "vue";
 
+// app imports
+//
+import type { AppRouteName } from "@/router/types";
+
 ////////////////////////////////////////////////////////////////////////
 //
 interface TabDef {
   label: string;
   icon: Component;
-  to: string;
+  to: { name: AppRouteName };
 }
 
 const tabs: TabDef[] = [
-  { label: "Overview", icon: IconLayoutGrid, to: "/" },
-  { label: "Budgets", icon: IconWallet, to: "/budgets/" },
-  { label: "Transactions", icon: IconList, to: "/transactions/" },
-  { label: "Account", icon: IconUser, to: "/account/" },
+  { label: "Overview", icon: IconLayoutGrid, to: { name: "overview" } },
+  { label: "Budgets", icon: IconWallet, to: { name: "budgets" } },
+  { label: "Transactions", icon: IconList, to: { name: "transactions" } },
+  { label: "Account", icon: IconUser, to: { name: "account" } },
 ];
 </script>
 
@@ -38,7 +42,7 @@ const tabs: TabDef[] = [
     <nav class="flex flex-col gap-1 px-2">
       <router-link
         v-for="tab in tabs"
-        :key="tab.to"
+        :key="tab.label"
         :to="tab.to"
         class="flex items-center gap-3 rounded-subcard px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
         active-class="bg-ocean-50 text-ocean-600"

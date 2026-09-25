@@ -689,101 +689,13 @@ actions: fetchTransactions(params), fetchTransaction(id)
 
 ## 7. API Mapping & Known Gaps
 
-### 7.1 Existing Endpoints Used
-
-| Operation                   | Method + Path                                                                                                       |
-|-----------------------------|---------------------------------------------------------------------------------------------------------------------|
-| Login                       | `POST /api/token/`                                                                                                  |
-| Refresh token               | `POST /api/token/refresh/`                                                                                          |
-| Get current user            | `GET /api/v1/users/me/`                                                                                             |
-| Update user                 | `PATCH /api/v1/users/me/`                                                                                           |
-| List bank accounts          | `GET /api/v1/bank-accounts/`                                                                                        |
-| Get bank account            | `GET /api/v1/bank-accounts/:id/`                                                                                    |
-| Create bank account         | `POST /api/v1/bank-accounts/`                                                                                       |
-| Update bank account name    | `PATCH /api/v1/bank-accounts/:id/`                                                                                  |
-| Delete bank account         | `DELETE /api/v1/bank-accounts/:id/`                                                                                 |
-| List banks                  | `GET /api/v1/banks/`                                                                                                |
-| List budgets                | `GET /api/v1/budgets/?bank_account=&budget_type=&paused=&archived=`                                                 |
-| Get budget                  | `GET /api/v1/budgets/:id/`                                                                                          |
-| Create budget               | `POST /api/v1/budgets/`                                                                                             |
-| Update budget               | `PATCH /api/v1/budgets/:id/`                                                                                        |
-| Delete budget               | `DELETE /api/v1/budgets/:id/`                                                                                       |
-| List transactions           | `GET /api/v1/transactions/?bank_account=&pending=&date_from=&date_to=&search=&ordering=`                            |
-| Get transaction             | `GET /api/v1/transactions/:id/`                                                                                     |
-| Update transaction          | `PATCH /api/v1/transactions/:id/` (description, memo, image, document only)                                         |
-| List allocations            | `GET /api/v1/allocations/?transaction=&budget=`                                                                     |
-| Create allocation           | `POST /api/v1/allocations/`                                                                                         |
-| Update allocation           | `PATCH /api/v1/allocations/:id/` (budget, category, memo — amount immutable after create per spec, *see gap below*) |
-| Delete allocation           | `DELETE /api/v1/allocations/:id/`                                                                                   |
-| List internal transactions  | `GET /api/v1/internal-transactions/?bank_account=&src_budget=&dst_budget=`                                          |
-| Create internal transaction | `POST /api/v1/internal-transactions/`                                                                               |
-| List currencies             | `GET /api/v1/currencies/`                                                                                           |
-
-### 7.2 API Gaps — Backend Extension Required
-
-These items must be implemented before the corresponding UI features can function. Claude Code should flag these and implement stubs or mock data in the interim.
-
-#### GAP-1: `default_bank_account` on User model
-**Needed for:** App boot account selection, Account settings "Default account" row.
-**Change:** Add `default_bank_account` (nullable FK to `BankAccount`) to the `User` model. Expose it on `GET /api/v1/users/me/` and accept it on `PATCH /api/v1/users/me/`.
-
-#### GAP-2: `unallocated_budget` on BankAccount response
-**Needed for:** `TopBar` unallocated amount, identifying unallocated allocations in transaction rows.
-**Change:** The `BankAccount` serializer should include `unallocated_budget` (UUID of the auto-created unallocated budget). Verify this is already returned — if not, add it as a read-only field.
-
-#### GAP-3: `allocation_status` filter on transactions
-**Needed for:** "Unallocated" filter chip in transactions view.
-**Change:** Add `unallocated=true` query param to `GET /api/v1/transactions/` that returns only transactions whose sole allocation points to the account's unallocated budget.
-
-#### GAP-4: Allocation `amount` mutability
-**Current:** The OpenAPI spec marks `amount` as required on create and `budget`/`category`/`memo` as updatable after creation, implying `amount` is immutable after create.
-**Needed for:** Editing split amounts on the transaction detail screen.
-**Change:** Decide whether `amount` should be mutable via `PATCH`. If yes, update the serializer to allow it, with validation that the sum of all allocations for the transaction does not exceed `transaction.amount`. The validation must query sibling allocations, not just the patched one. If amount remains immutable, the UI must delete and re-create allocations to change amounts.
-
-#### GAP-5: `funding_type` enum values
-**Needed for:** Budget create/edit funding type toggle (Auto vs Fixed).
-**Change:** Confirm the valid values for the `funding_type` field on `Budget`. The UI assumes `'auto'` and `'fixed'` — verify these match the backend enum and update if different.
-
-#### GAP-6: `recurrence_schedule` and `funding_schedule` format
-**Needed for:** `SchedulePicker` round-trip (parse RRULE from API, display in picker, save back).
-**Change:** Confirm both fields store and accept RFC 2445 RRULE strings (as produced by `django-recurrence`). The frontend `SchedulePicker` produces strings in the form `RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15` — verify the backend accepts and stores this format verbatim.
-
-#### GAP-7: Bank free-text entry
-**Needed for:** Bank account create form when desired bank is not in the `GET /api/v1/banks/` list.
-**Change:** Banks are admin-managed reference data. Either (a) add a mechanism for users to request a new bank, or (b) allow a free-text `bank_name` override on account creation. Discuss with product owner. In the interim the UI shows "Your bank isn't listed — contact support."
+Superseded: the SPA's endpoints are the resource modules in `frontend/src/api/resources/` — see [spa/api-and-models.md](spa/api-and-models.md); the REST API itself is [openapi.yaml](openapi.yaml) / [api.md](api.md).
 
 ---
 
 ## 8. API Client (`src/api/client.ts`)
 
-```ts
-// Responsibilities:
-// 1. Attach Authorization: Bearer {accessToken} to every request
-// 2. On 401 response: call POST /api/token/refresh/, retry original request once
-// 3. On second 401: clear auth store, redirect to /app/login/
-// 4. Paginated list responses: auto-follow `next` cursor or expose pagination state
-// 5. Money fields: always treat as strings (decimal), never parse to float
-
-const BASE = '/api/v1'
-
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  options?: RequestInit
-): Promise<T>
-
-// Convenience wrappers
-export const api = {
-  get:    <T>(path: string) => request<T>('GET', path),
-  post:   <T>(path: string, body: unknown) => request<T>('POST', path, body),
-  patch:  <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
-  put:    <T>(path: string, body: unknown) => request<T>('PUT', path, body),
-  delete: <T>(path: string) => request<T>('DELETE', path),
-}
-```
-
-**Important:** All monetary values from the API are decimal strings (e.g. `"142.80"`). Never parse to `Number` for arithmetic — use a decimal library or string-based arithmetic to avoid float precision issues. Display using `Intl.NumberFormat`.
+Superseded by `frontend/src/api/http.ts` — see [spa/api-and-models.md](spa/api-and-models.md) and the request lifecycle in [spa/architecture.md](spa/architecture.md#request-lifecycle).
 
 ---
 
@@ -921,29 +833,13 @@ export const TRANSACTION_TYPE_LABELS: Record<string, string> = {
 
 ## 10. Routing
 
-```ts
-// router/index.ts
-const routes = [
-  { path: '/app/login/',                    component: LoginView,               meta: { public: true } },
-  { path: '/app/',                          component: OverviewView              },
-  { path: '/app/budgets/',                  component: BudgetsView               },
-  { path: '/app/budgets/create/',           component: BudgetCreateView          },
-  { path: '/app/budgets/:id/',              component: BudgetDetailView          },
-  { path: '/app/transactions/',             component: TransactionsView          },
-  { path: '/app/transactions/:id/',         component: TransactionDetailView     },
-  { path: '/app/account/',                  component: AccountView               },
-  { path: '/app/account/profile/',          component: UserProfileView           },
-  { path: '/app/account/bank-accounts/create/', component: BankAccountCreateView },
-  { path: '/app/account/bank-accounts/:id/',    component: BankAccountDetailView },
-]
-
-// Navigation guard: redirect to /app/login/ if no accessToken
-// On /app/login/ with valid token: redirect to /app/
-```
+Superseded by `frontend/src/router/` (typed route names in `router/types.ts`) — see [spa/adding-a-page.md](spa/adding-a-page.md).
 
 ---
 
 ## 11. Responsive Behaviour Notes
+
+> **Not implemented.** The tablet/desktop layouts below (master/detail panels, two-column lists and forms) are design intent. Today every list and detail is its own route with a single-column layout at every breakpoint; wider screens only swap the bottom navigation for the side navigation and centre sheets as dialogs.
 
 ### Budget list
 - **Mobile:** Single column cards
@@ -981,12 +877,4 @@ const routes = [
 
 ## 13. Development Notes for Claude Code
 
-1. **Start with `AppShell`, `TopBar`, and routing** — these unblock all other views.
-2. **`accountContext` store is foundational** — every data fetch depends on it. Implement and test this before any views.
-3. **`SchedulePicker` is self-contained** — build and test it in isolation before embedding in budget forms.
-4. **Money arithmetic:** Use string comparison or a library like `decimal.js` for any arithmetic on monetary values. Never `parseFloat`.
-5. **API gaps (section 7):** Where a gap affects a feature, implement the feature with a clearly marked `// TODO: GAP-N` comment and a sensible fallback (e.g. hardcode `default_bank_account` to the first account returned).
-6. **`budget_type = 'A'`** (ASSOCIATED_FILLUP_GOAL) budgets must never appear in the budget list as standalone rows. Filter them out in the store after fetch. They appear only as the `fillupBudget` prop on their parent's `BudgetCard`.
-7. **Immutability:** `bank_account`, `budget_type`, `currency`, `account_number`, `posted_balance`, and `available_balance` are all immutable after creation. Render them as read-only in all edit forms.
-8. **Transactions are read-only** — no create, no delete. The only mutations are `PATCH` for `description`, `memo`, `image`, `document` on the transaction itself, plus create/update/delete on its allocations.
-9. **Internal transactions** (`/api/v1/internal-transactions/`) are write-once — no update or delete endpoint exists. To reverse a transfer, create a new internal transaction with `src_budget` and `dst_budget` swapped.
+Superseded by the SPA documentation: [spa/README.md](spa/README.md), starting with [spa/architecture.md](spa/architecture.md).

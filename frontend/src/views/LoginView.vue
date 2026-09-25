@@ -1,57 +1,17 @@
 <script setup lang="ts">
 //
-// LoginView — email + password → POST /api/token/.  The backend
-// sets the httpOnly refresh cookie on the response, so the auth store
-// only needs to stash the access token in memory.
+// LoginView — email + password sign-in.  (Public route.)  Route shell
+// over `useLogin`: on success the user lands on the route named in
+// `?next=`, or the overview.
 //
-// Not behind the router auth guard (meta.public = true).  On success
-// we redirect to the intended route (?next=) or to /app/.
-//
-
-// 3rd party imports
-//
-import { ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 
 // app imports
 //
-import { ApiError } from "@/api/client";
-import { useAccountContextStore } from "@/stores/accountContext";
-import { useAuthStore } from "@/stores/auth";
+import { useLogin } from "@/features/auth/useLogin";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const email = ref("");
-const password = ref("");
-const submitting = ref(false);
-const errorMessage = ref<string | null>(null);
-
-const auth = useAuthStore();
-const ctx = useAccountContextStore();
-const router = useRouter();
-const route = useRoute();
-
-////////////////////////////////////////////////////////////////////////
-//
-async function onSubmit() {
-  errorMessage.value = null;
-  submitting.value = true;
-  try {
-    await auth.login(email.value, password.value);
-    // Warm the downstream stores so the shell's first render has data.
-    await Promise.all([auth.loadUser(), ctx.init(true)]);
-    const next = typeof route.query.next === "string" ? route.query.next : "/";
-    router.replace(next);
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 401) {
-      errorMessage.value = "Incorrect email or password.";
-    } else {
-      errorMessage.value = "Unable to sign in. Please try again.";
-    }
-  } finally {
-    submitting.value = false;
-  }
-}
+const { email, password, submitting, errorMessage, submit: onSubmit } = useLogin();
 </script>
 
 <template>

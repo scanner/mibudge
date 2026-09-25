@@ -18,13 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/v1/bank-accounts/{id}/transaction-details/` applies scraped detail records; `sync-scrape` responses report `details_needed` so importers know exactly which rows still need enrichment
 - Saved scrape files (format v3) include fetched details and `import_bofa_saved` replays them; `--save-only --details-all` captures every detail dialog for offline import
 - Editing a transaction's description now marks it user-edited, so detail enrichment never overwrites your text
-- SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/stores`, `src/utils`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
+- SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/composables`, `src/domain`, `src/models`, `src/stores`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
+- SPA TypeScript types for the REST API are generated from `docs/openapi.yaml` (`pnpm gen:api-types`, openapi-typescript); the Drone `frontend lint` step fails when `frontend/src/api/schema.d.ts` is out of date
+- SPA "page not found" screen for unknown `/app/...` paths, instead of a blank page
+- SPA architecture documentation in `docs/spa/`: the layers and their import rules (`architecture.md`), the HTTP transport, errors, types and models (`api-and-models.md`), stores and caching (`state.md`), components (`components.md`), and a recipe for adding a page (`adding-a-page.md`); an architecture test enforces the layering on every test run
 
 ### Changed
 
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
 - Internal: split moneypools API views and serializers into per-domain modules
+- Internal: the SPA is restructured into layers -- pure domain rules (money, dates, schedules, budget status), an HTTP transport and per-resource API modules, domain models mapped from the API's wire format, Pinia entity caches, shared composables, and per-section feature modules -- and the five largest views are split into route shells of under 300 lines. No visual changes except the date fix below
+- Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
+- When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on
 - A SQLite database now opens every transaction with `BEGIN IMMEDIATE`, so two concurrent writers wait for each other instead of the second failing with "database is locked"; the test suite uses a SQLite file with the same setting and runs the concurrency tests on both SQLite and Postgres
 - API read requests (GET/HEAD) no longer run inside a database transaction; writes still run each request in one, rolled back on any error. On SQLite, reads therefore no longer wait for, or block, a request that is writing
 
@@ -32,6 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)
 - Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
+- Budget target dates, next-refresh dates and funding dates showed one day early in browsers west of UTC (a goal due Dec 14 read "Dec 13"); calendar dates now show the same day in every timezone. Transaction list date headers had the same problem when the browser's timezone differed from your profile timezone
+- Editing a transaction's description or memo and then quickly stepping to the next transaction could save the text onto the next transaction
+- Clearing a transaction's memo did not save
+- A failed receipt/document upload on a transaction was silently ignored; it now shows an error
+- Following a link from one budget's page to another budget kept showing the first budget
+- Previous / next on a transaction stepped through transactions hidden by the list's filter and search
+- Switching bank accounts quickly could show the previous account's transactions
+- The transaction list could show stale or missing budget assignments after a bank sync or a co-owner's re-split until you signed out; it now refreshes them on every visit, and the "Unallocated" filter no longer lists every transaction while they load
+- Failed actions and page loads in the SPA now say why, using the server's message: failed memo/description saves (which reverted silently), failed splits, removing a transaction from a budget, loading more transactions (with a "Try again"), cancelling invitations, the default-account and automatic-funding settings, deleting a bank account, and the bank list; transfers, pause/archive and notification/API-key errors show the server's reason instead of fixed text
+- Creating a budget without a target amount failed with a bare "HTTP 400"; the form now asks for a target
+- The split editor accepted amounts with fractions of a cent, checked them unrounded but saved them rounded up, so a split it showed as fully allocated could exceed the transaction by a cent and be rejected; it now checks the amounts it will save
+- A transaction opened from another bank account (for example by a link) showed the active account's name and listed its Unallocated split as a budget assignment
+- Switching bank accounts on a budget or transaction page kept showing the previous account's budget or transaction; it now goes to that section's list for the new account
 - Returning to a tab after the access token expired could log you out ("Session expired") even though your session was valid: several requests refreshed the token at once, and every refresh after the first was rejected because the backend had already rotated the refresh cookie. Concurrent refreshes now share a single request
 - Two concurrent changes to the same budget or bank account (for example two imports or two transfers at once) could lose one of the updates: the service layer released its lock before the request's database transaction committed, so the second writer read the stale balance and overwrote the first. Balance updates now re-read the row under a database lock held until commit (a row lock on Postgres, the database write lock on SQLite)
 - Work that ran longer than 30 seconds while holding a Redis lock (a large bank sync, deleting a budget with a long history) could lose the lock partway through, letting a second worker start the same account's funding run or sync, and then failed with a 500 when it tried to release the lock. Held locks are now renewed in the background until the work finishes, and a lock that is lost anyway is logged instead of failing the request

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 //
 // AccountView — user profile hub + bank accounts list + settings.
-// (UI_SPEC §4.7)
+// (UI_SPEC §4.7)  Route shell over `useAccountHub`.
 //
 // Three sections:
-//   1. Profile card — avatar initials, name, username → /account/profile/
-//   2. Bank accounts — one row per account with balance + unallocated
-//   3. Settings — default account picker + sign out
+//   1. Profile card — avatar initials, name, username → profile page
+//   2. Bank accounts — one row per account with balances + unallocated
+//   3. Settings — default account picker, security link, sign out
 //
 
 // 3rd party imports
@@ -18,116 +18,33 @@ import {
   IconPlus,
   IconUser,
 } from "@tabler/icons-vue";
-import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
 //
 import EmptyState from "@/components/shared/EmptyState.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import AppShell from "@/components/layout/AppShell.vue";
-import { fundingSummary as apiFundingSummary } from "@/api/bankAccounts";
-import { updateCurrentUser } from "@/api/users";
+import { accountTypeMeta } from "@/domain/labels";
+import { useSignOut } from "@/features/auth/useSignOut";
+import { useAccountHub } from "@/features/settings/useAccountHub";
+import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { useAuthStore } from "@/stores/auth";
-import { useBudgetsStore } from "@/stores/budgets";
-import type { FundingSummary } from "@/types/api";
+import { useSessionStore } from "@/stores/session";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const router = useRouter();
-const auth = useAuthStore();
+const auth = useSessionStore();
 const ctx = useAccountContextStore();
-const budgets = useBudgetsStore();
-
-////////////////////////////////////////////////////////////////////////
-//
-// Avatar initials from the user's name or username.
-//
-const initials = computed(() => {
-  const name = auth.user?.name || auth.user?.username || "";
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-});
-
-////////////////////////////////////////////////////////////////////////
-//
-// Account-type display labels.
-//
-const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-  C: "Checking",
-  S: "Savings",
-  X: "Credit card",
-};
-
-function accountTypeMeta(account: (typeof ctx.accounts)[0]): string {
-  const type = ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type;
-  if (account.account_number) {
-    return `${type} ····${account.account_number.slice(-4)}`;
-  }
-  return type;
-}
-
-////////////////////////////////////////////////////////////////////////
-//
-// Unallocated budget for a given account (loaded lazily from budgets store).
-//
-function unallocatedFor(account: (typeof ctx.accounts)[0]) {
-  return account.unallocated_budget ? budgets.byId(account.unallocated_budget) : null;
-}
-
-////////////////////////////////////////////////////////////////////////
-//
-// Funding summaries keyed by account ID, fetched in parallel on mount.
-//
-const fundingSummaries = ref(new Map<string, FundingSummary>());
-
-onMounted(async () => {
-  // Ensure accounts list is fresh.
-  await ctx.refresh();
-
-  // Load unallocated budget and funding summary for each account in parallel.
-  const tasks: Promise<unknown>[] = [];
-  for (const account of ctx.accounts) {
-    if (account.unallocated_budget && !budgets.byId(account.unallocated_budget)) {
-      tasks.push(budgets.fetchOne(account.unallocated_budget));
-    }
-    tasks.push(
-      apiFundingSummary(account.id).then((sum) => {
-        fundingSummaries.value.set(account.id, sum);
-      }),
-    );
-  }
-  await Promise.allSettled(tasks);
-});
-
-////////////////////////////////////////////////////////////////////////
-//
-// Default account selector.
-//
-const settingDefault = ref(false);
-
-async function setDefaultAccount(accountId: string) {
-  settingDefault.value = true;
-  try {
-    const updated = await updateCurrentUser({ default_bank_account: accountId || null });
-    auth.user = updated;
-  } finally {
-    settingDefault.value = false;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////
-//
-async function signOut() {
-  auth.clear();
-  ctx.clear();
-  router.push("/login/");
-}
+const {
+  initials,
+  unallocatedFor,
+  nextFundingFor,
+  settingDefault,
+  defaultAccountError,
+  setDefaultAccount,
+} = useAccountHub();
+const { signOut } = useSignOut();
 </script>
 
 <template>
@@ -140,7 +57,7 @@ async function signOut() {
         <button
           type="button"
           class="flex w-full items-center gap-4 rounded-card border border-neutral-200 bg-white px-4 py-4 text-left hover:bg-neutral-50"
-          @click="router.push('/account/profile/')"
+          @click="router.push({ name: 'user-profile' })"
         >
           <div
             class="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-ocean-50 text-[18px] font-medium text-ocean-600"
@@ -176,56 +93,35 @@ async function signOut() {
               <button
                 type="button"
                 class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-neutral-50"
-                @click="router.push(`/account/bank-accounts/${account.id}/`)"
+                @click="router.push({ name: 'bank-account-detail', params: { id: account.id } })"
               >
                 <span class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-ocean-400" />
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-[15px] font-medium text-neutral-900">
                     {{ account.name }}
                   </div>
-                  <div class="text-xs text-secondary">{{ accountTypeMeta(account) }}</div>
+                  <div class="text-xs text-secondary">
+                    {{ accountTypeMeta(account.accountType, account.accountNumber) }}
+                  </div>
                 </div>
                 <div class="flex flex-none flex-col items-end gap-0.5">
                   <span class="text-[11px] text-secondary">
                     Available:
-                    <MoneyAmount
-                      :amount="account.available_balance"
-                      :currency="account.available_balance_currency"
-                      size="sm"
-                    />
+                    <MoneyAmount :amount="account.availableBalance" size="sm" />
                   </span>
                   <span class="text-[11px] text-secondary">
                     Posted:
-                    <MoneyAmount
-                      :amount="account.posted_balance"
-                      :currency="account.posted_balance_currency"
-                      size="sm"
-                    />
+                    <MoneyAmount :amount="account.postedBalance" size="sm" />
                   </span>
                   <span
                     v-if="unallocatedFor(account)"
                     class="text-[11px] font-medium text-mint-600"
                   >
-                    <MoneyAmount
-                      :amount="unallocatedFor(account)!.balance"
-                      :currency="unallocatedFor(account)!.balance_currency"
-                      size="sm"
-                    />
+                    <MoneyAmount :amount="unallocatedFor(account)!.balance" size="sm" />
                     unallocated
                   </span>
-                  <span
-                    v-if="
-                      fundingSummaries.get(account.id)?.total_amount &&
-                      fundingSummaries.get(account.id)!.total_amount !== '0' &&
-                      fundingSummaries.get(account.id)!.total_amount !== '0.00'
-                    "
-                    class="text-[11px] text-ocean-500"
-                  >
-                    <MoneyAmount
-                      :amount="fundingSummaries.get(account.id)!.total_amount"
-                      :currency="fundingSummaries.get(account.id)!.currency"
-                      size="sm"
-                    />
+                  <span v-if="nextFundingFor(account)" class="text-[11px] text-ocean-500">
+                    <MoneyAmount :amount="nextFundingFor(account)!" size="sm" />
                     next event
                   </span>
                 </div>
@@ -239,7 +135,7 @@ async function signOut() {
             <button
               type="button"
               class="flex w-full items-center gap-3 rounded-b-card px-4 py-3.5 text-left text-sm font-medium text-ocean-600 hover:bg-ocean-50"
-              @click="router.push('/account/bank-accounts/create/')"
+              @click="router.push({ name: 'bank-account-create' })"
             >
               <span
                 class="flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-ocean-400"
@@ -255,7 +151,7 @@ async function signOut() {
           v-if="ctx.accounts.length === 0 && !ctx.loading"
           title="No bank accounts yet"
           action-label="Add your first account"
-          @action="router.push('/account/bank-accounts/create/')"
+          @action="router.push({ name: 'bank-account-create' })"
         />
       </section>
 
@@ -274,7 +170,7 @@ async function signOut() {
               <span class="text-sm">Default account</span>
             </div>
             <select
-              :value="auth.user?.default_bank_account ?? ''"
+              :value="auth.user?.defaultBankAccountId ?? ''"
               :disabled="settingDefault || ctx.accounts.length === 0"
               class="rounded-md border border-neutral-200 bg-white py-1 pl-2 pr-6 text-xs text-neutral-700 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400 disabled:opacity-50"
               @change="setDefaultAccount(($event.target as HTMLSelectElement).value)"
@@ -285,13 +181,16 @@ async function signOut() {
               </option>
             </select>
           </div>
+          <p v-if="defaultAccountError" class="px-4 pb-3 text-xs text-coral-600" role="alert">
+            {{ defaultAccountError }}
+          </p>
 
           <!-- Security & notifications -->
           <div class="border-t border-neutral-100">
             <button
               type="button"
               class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-neutral-50"
-              @click="router.push('/account/settings/')"
+              @click="router.push({ name: 'account-settings' })"
             >
               <IconLock class="h-4 w-4 text-neutral-700" />
               <span class="flex-1 text-sm text-neutral-700">Security &amp; Notifications</span>

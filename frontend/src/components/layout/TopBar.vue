@@ -1,76 +1,40 @@
 <script setup lang="ts">
 //
-// TopBar — three-zone persistent header (UI_SPEC §3.2).
+// TopBar — three-zone persistent header (UI_SPEC §3.2).  Presentational:
+// the shell passes the active account and its Unallocated budget in,
+// and handles the `back` and `switch-account` events.
 //
-// Left: back button when history has depth, otherwise empty.
-// Center: account context block — active account name + posted
+// Left: back button when `showBack` is set, otherwise empty.
+// Center: account context block — active account name + available
 //         balance (subdued) on top, unallocated amount (dominant) on
-//         the next line.  Tappable → opens AccountSwitcher.
-// Right: `action` slot — parent supplies route-appropriate button.
+//         the next line.  Tapping it emits `switch-account`.
+// Right: `action` slot — the view supplies a route-appropriate button.
 //
 
 // 3rd party imports
 //
 import { IconChevronDown, IconChevronLeft } from "@tabler/icons-vue";
-import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
 
 // app imports
 //
-import AccountSwitcher from "@/components/shared/AccountSwitcher.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { useAccountContextStore } from "@/stores/accountContext";
-import { useBudgetsStore } from "@/stores/budgets";
+import type { Money } from "@/domain/money";
+import type { BankAccount } from "@/models/bankAccount";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const ctx = useAccountContextStore();
-const budgets = useBudgetsStore();
-const route = useRoute();
-const router = useRouter();
+defineProps<{
+  account: BankAccount | null;
+  // `null` until the Unallocated budget is loaded; shown as "—" rather
+  // than a zero that might mislead.
+  unallocated: Money | null;
+  showBack: boolean;
+}>();
 
-const switcherOpen = ref(false);
-
-////////////////////////////////////////////////////////////////////////
-//
-// Back arrow: visible on any non-root route.  The root is /app/ which
-// the router presents as "/" under base.
-//
-const showBack = computed(() => route.path !== "/");
-
-function onBack() {
-  // history.length === 1 when user opened the app directly on a deep
-  // route — fall back to "/".
-  if (window.history.length > 1) router.back();
-  else router.push("/");
-}
-
-////////////////////////////////////////////////////////////////////////
-//
-const activeAccount = computed(() => ctx.activeBankAccount);
-
-// Unallocated amount comes from the unallocated Budget object.  Until
-// it's loaded (or if the active account has no unallocated budget
-// yet), render "—" instead of a zero that might mislead.
-//
-const unallocated = computed(() => {
-  const id = ctx.unallocatedBudgetId;
-  if (!id) return null;
-  return budgets.byId(id);
-});
-
-// Fetch the unallocated budget whenever the active account changes so
-// TopBar always has a balance to display without waiting for a view to
-// load it.
-watch(
-  () => ctx.unallocatedBudgetId,
-  (id) => {
-    if (id && !budgets.byId(id)) {
-      budgets.fetchOne(id);
-    }
-  },
-  { immediate: true },
-);
+const emit = defineEmits<{
+  (event: "back"): void;
+  (event: "switch-account"): void;
+}>();
 </script>
 
 <template>
@@ -83,37 +47,27 @@ watch(
         type="button"
         class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
         aria-label="Back"
-        @click="onBack"
+        @click="emit('back')"
       >
         <IconChevronLeft class="h-5 w-5" />
       </button>
     </div>
 
     <button
-      v-if="activeAccount"
+      v-if="account"
       type="button"
       class="mx-2 flex min-w-0 flex-1 flex-col items-center text-center"
       aria-label="Switch bank account"
-      @click="switcherOpen = true"
+      @click="emit('switch-account')"
     >
       <span class="flex items-center gap-1 text-[11px] text-secondary">
-        <span class="truncate">{{ activeAccount.name }}, Available:</span>
-        <MoneyAmount
-          :amount="activeAccount.available_balance"
-          :currency="activeAccount.available_balance_currency"
-          size="sm"
-          class="whitespace-nowrap"
-        />
+        <span class="truncate">{{ account.name }}, Available:</span>
+        <MoneyAmount :amount="account.availableBalance" size="sm" class="whitespace-nowrap" />
         <IconChevronDown class="h-3 w-3 flex-none" />
       </span>
       <span class="text-[14px] font-medium text-mint-600">
         Unallocated
-        <MoneyAmount
-          v-if="unallocated"
-          :amount="unallocated.balance"
-          :currency="unallocated.balance_currency"
-          size="sm"
-        />
+        <MoneyAmount v-if="unallocated" :amount="unallocated" size="sm" />
         <span v-else class="font-mono text-neutral-400">—</span>
       </span>
     </button>
@@ -123,6 +77,4 @@ watch(
       <slot name="action" />
     </div>
   </header>
-
-  <AccountSwitcher :open="switcherOpen" @close="switcherOpen = false" />
 </template>

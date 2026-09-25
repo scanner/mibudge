@@ -1,58 +1,42 @@
 <script setup lang="ts">
 //
-// AccountSwitcher — bottom sheet listing the user's bank accounts.
-// Selecting one updates the accountContext store; a "Manage accounts"
-// link at the bottom navigates to the Account tab (UI_SPEC §5.4).
+// AccountSwitcher — bottom sheet listing the user's bank accounts
+// (UI_SPEC §5.4).  Presentational: emits `select` with the chosen
+// account id, `manage` for the "Manage accounts" link, and `close`.
+// `useModal` provides the scroll lock, Escape-to-close and focus
+// return.
 //
 
 // 3rd party imports
 //
 import { IconCheck, IconChevronRight } from "@tabler/icons-vue";
-import { onBeforeUnmount, onMounted, watch } from "vue";
-import { useRouter } from "vue-router";
 
 // app imports
 //
 import MoneyAmount from "./MoneyAmount.vue";
-import { useAccountContextStore } from "@/stores/accountContext";
+import { useModal } from "@/composables/useModal";
+import type { BankAccount } from "@/models/bankAccount";
 
 ////////////////////////////////////////////////////////////////////////
 //
 interface Props {
   open: boolean;
+  accounts: BankAccount[];
+  activeId: string | null;
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits<{ (event: "close"): void }>();
-
-const ctx = useAccountContextStore();
-const router = useRouter();
-
-////////////////////////////////////////////////////////////////////////
-//
-function select(id: string) {
-  ctx.setActive(id);
-  emit("close");
-}
-
-function manage() {
-  emit("close");
-  router.push("/account/");
-}
+const emit = defineEmits<{
+  (event: "close"): void;
+  (event: "select", id: string): void;
+  (event: "manage"): void;
+}>();
 
 ////////////////////////////////////////////////////////////////////////
 //
-function onKey(e: KeyboardEvent) {
-  if (e.key === "Escape" && props.open) emit("close");
-}
-onMounted(() => window.addEventListener("keydown", onKey));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
-
-watch(
+useModal(
   () => props.open,
-  (isOpen) => {
-    document.body.style.overflow = isOpen ? "hidden" : "";
-  },
+  () => emit("close"),
 );
 </script>
 
@@ -74,11 +58,11 @@ watch(
             Your accounts
           </h2>
           <ul class="space-y-1">
-            <li v-for="account in ctx.accounts" :key="account.id">
+            <li v-for="account in accounts" :key="account.id">
               <button
                 type="button"
                 class="flex w-full items-center gap-3 rounded-subcard px-3 py-3 text-left hover:bg-neutral-50"
-                @click="select(account.id)"
+                @click="emit('select', account.id)"
               >
                 <span class="h-2.5 w-2.5 flex-none rounded-full bg-ocean-400" />
                 <div class="min-w-0 flex-1">
@@ -86,15 +70,11 @@ watch(
                     {{ account.name }}
                   </div>
                   <div class="text-xs text-neutral-500">
-                    <MoneyAmount
-                      :amount="account.posted_balance"
-                      :currency="account.posted_balance_currency"
-                      size="sm"
-                    />
+                    <MoneyAmount :amount="account.postedBalance" size="sm" />
                   </div>
                 </div>
                 <IconCheck
-                  v-if="account.id === ctx.activeBankAccountId"
+                  v-if="account.id === activeId"
                   class="h-5 w-5 flex-none text-ocean-400"
                 />
               </button>
@@ -103,7 +83,7 @@ watch(
           <button
             type="button"
             class="mt-3 flex w-full items-center justify-between rounded-subcard px-3 py-3 text-left text-sm font-medium text-ocean-600 hover:bg-ocean-50"
-            @click="manage"
+            @click="emit('manage')"
           >
             Manage accounts
             <IconChevronRight class="h-4 w-4" />

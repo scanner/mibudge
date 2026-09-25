@@ -1,118 +1,70 @@
 <script setup lang="ts">
 //
 // BudgetsView — budget list with filter tabs and section grouping.
-// (UI_SPEC §4.2)
+// (UI_SPEC §4.2)  Route shell over `useBudgetList`.
 //
-// Filter tabs: All | Recurring | Goals | Paused
-// "All" tab shows two sections: Recurring then Goals.
-// Type 'A' (ASSOCIATED_FILLUP_GOAL) budgets are not shown as standalone
+// Filter tabs: All | Recurring | Capped | Goals | Paused
+// "All" tab shows three sections: Recurring, Capped, then Goals.
+// Type 'A' (associated fill-up goal) budgets are not shown as standalone
 // rows -- they appear only as the FillUpBand on their parent card.
 // The unallocated budget is also excluded from the list.
 //
 
 // 3rd party imports
 //
-import { Fzf } from "fzf";
 import { IconPlus, IconSearch, IconX } from "@tabler/icons-vue";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 
 // app imports
 //
 import BudgetCard from "@/components/budgets/BudgetCard.vue";
-import AppShell from "@/components/layout/AppShell.vue";
 import EmptyState from "@/components/shared/EmptyState.vue";
 import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import { listBudgets } from "@/api/budgets";
-import { fundingSummary } from "@/api/bankAccounts";
-import { parseLocalDate } from "@/utils/budget";
+import { useFindShortcut } from "@/composables/useFindShortcut";
+import { useFuzzySearch } from "@/composables/useFuzzySearch";
+import { formatLocalDate } from "@/domain/dates";
+import { useBudgetList } from "@/features/budgets/useBudgetList";
+import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { useBudgetsStore } from "@/stores/budgets";
-import type { Budget, FundingSummary } from "@/types/api";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const ctx = useAccountContextStore();
-const budgets = useBudgetsStore();
 const router = useRouter();
 
 type Tab = "all" | "recurring" | "goals" | "capped" | "paused";
 const activeTab = ref<Tab>("all");
 
-const allBudgets = ref<Budget[]>([]);
-const summary = ref<FundingSummary | null>(null);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const {
+  budgets: allBudgets,
+  fillupFor,
+  summary,
+  loading,
+  error,
+} = useBudgetList(() => ctx.activeBankAccountId);
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Search state.
+// Search by name.
 //
-const searchOpen = ref(false);
-const searchQuery = ref("");
-let searchDebounce: ReturnType<typeof setTimeout> | null = null;
-const searchMatchIds = ref<Set<string> | null>(null);
-
-function onSearchInput() {
-  const q = searchQuery.value.trim();
-  if (!q) {
-    searchMatchIds.value = null;
-    return;
-  }
-  if (searchDebounce) clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
-    const fzf = new Fzf(allBudgets.value, {
-      selector: (b: Budget) => b.name,
-      casing: "case-insensitive",
-      fuzzy: false,
-    });
-    searchMatchIds.value = new Set(fzf.find(q).map((r) => r.item.id));
-  }, 150);
-}
+const {
+  query: searchQuery,
+  results: searchResults,
+  clear: clearSearch,
+} = useFuzzySearch(
+  () => allBudgets.value,
+  (b) => b.name,
+);
+const searchMatchIds = computed(() =>
+  searchResults.value ? new Set(searchResults.value.map((b) => b.id)) : null,
+);
 
 const searchInput = ref<HTMLInputElement | null>(null);
-
-function toggleSearch() {
-  searchOpen.value = !searchOpen.value;
-  if (!searchOpen.value) {
-    searchQuery.value = "";
-    searchMatchIds.value = null;
-  } else {
-    nextTick(() => searchInput.value?.focus());
-  }
-}
-
-function onSearchKeydown(e: KeyboardEvent) {
-  if (e.key === "f" && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault();
-    if (!searchOpen.value) {
-      searchOpen.value = true;
-    }
-    nextTick(() => searchInput.value?.focus());
-  } else if (e.key === "Escape" && searchOpen.value) {
-    toggleSearch();
-  }
-}
-
-onMounted(() => window.addEventListener("keydown", onSearchKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onSearchKeydown));
-
-////////////////////////////////////////////////////////////////////////
-//
-// Map from fill-up budget UUID → Budget (type 'A' budgets).
-//
-const fillupMap = computed(() => {
-  const map = new Map<string, Budget>();
-  for (const b of allBudgets.value) {
-    if (b.budget_type === "A") map.set(b.id, b);
-  }
-  return map;
+const { open: searchOpen, toggle: toggleSearch } = useFindShortcut({
+  input: searchInput,
+  onClose: clearSearch,
 });
-
-function fillupFor(b: Budget): Budget | undefined {
-  if (!b.fillup_goal) return undefined;
-  return fillupMap.value.get(b.fillup_goal);
-}
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -121,16 +73,16 @@ function fillupFor(b: Budget): Budget | undefined {
 const standaloneByTab = computed(() => {
   const unallocId = ctx.unallocatedBudgetId;
   const ids = searchMatchIds.value;
-  let list = allBudgets.value.filter(
-    (b) => b.budget_type !== "A" && b.id !== unallocId && (!ids || ids.has(b.id)),
+  const list = allBudgets.value.filter(
+    (b) => b.budgetType !== "A" && b.id !== unallocId && (!ids || ids.has(b.id)),
   );
   switch (activeTab.value) {
     case "recurring":
-      return list.filter((b) => b.budget_type === "R");
+      return list.filter((b) => b.budgetType === "R");
     case "goals":
-      return list.filter((b) => b.budget_type === "G");
+      return list.filter((b) => b.budgetType === "G");
     case "capped":
-      return list.filter((b) => b.budget_type === "C");
+      return list.filter((b) => b.budgetType === "C");
     case "paused":
       return list.filter((b) => b.paused);
     default:
@@ -138,38 +90,17 @@ const standaloneByTab = computed(() => {
   }
 });
 
-const recurringBudgets = computed(() => standaloneByTab.value.filter((b) => b.budget_type === "R"));
+const recurringBudgets = computed(() => standaloneByTab.value.filter((b) => b.budgetType === "R"));
 
-const goalBudgets = computed(() => standaloneByTab.value.filter((b) => b.budget_type === "G"));
+const goalBudgets = computed(() => standaloneByTab.value.filter((b) => b.budgetType === "G"));
 
-const cappedBudgets = computed(() => standaloneByTab.value.filter((b) => b.budget_type === "C"));
+const cappedBudgets = computed(() => standaloneByTab.value.filter((b) => b.budgetType === "C"));
 
 ////////////////////////////////////////////////////////////////////////
 //
-async function load() {
-  const accountId = ctx.activeBankAccountId;
-  if (!accountId) return;
-  loading.value = true;
-  error.value = null;
-  try {
-    // Fetch all non-archived budgets so fill-up budgets are available
-    // for the FillUpBand even when a filter tab is active.
-    const [page, sum] = await Promise.all([
-      listBudgets({ bank_account: accountId, archived: false, ordering: "name" }),
-      fundingSummary(accountId),
-    ]);
-    allBudgets.value = page.results;
-    summary.value = sum;
-    // Push into shared cache so TopBar unallocated amount stays fresh.
-    for (const b of page.results) budgets.upsert(b);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to load budgets.";
-  } finally {
-    loading.value = false;
-  }
+function openBudget(id: string) {
+  router.push({ name: "budget-detail", params: { id } });
 }
-
-watch(() => ctx.activeBankAccountId, load, { immediate: true });
 </script>
 
 <template>
@@ -189,7 +120,7 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
           type="button"
           class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
           aria-label="Create budget"
-          @click="router.push('/budgets/create/')"
+          @click="router.push({ name: 'budget-create' })"
         >
           <IconPlus class="h-5 w-5" />
         </button>
@@ -212,7 +143,6 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
           type="text"
           placeholder="Search budgets…"
           class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
-          @input="onSearchInput"
         />
       </div>
     </Transition>
@@ -247,20 +177,15 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
 
     <!-- Funding summary banner -->
     <div
-      v-if="summary && summary.total_amount !== '0' && summary.total_amount !== '0.00'"
+      v-if="summary && !summary.total.isZero()"
       class="mb-4 rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
     >
       Funded automatically:
-      <MoneyAmount
-        :amount="summary.total_amount"
-        :currency="summary.currency"
-        size="sm"
-        class="font-medium"
-      />
-      <template v-if="summary.schedules.length > 0 && summary.schedules[0].next_date">
+      <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
+      <template v-if="summary.schedules[0]?.nextDate">
         on
         {{
-          parseLocalDate(summary.schedules[0].next_date).toLocaleDateString(undefined, {
+          formatLocalDate(summary.schedules[0].nextDate, {
             month: "short",
             day: "numeric",
           })
@@ -294,6 +219,7 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
             :key="b.id"
             :budget="b"
             :fillup-budget="fillupFor(b)"
+            @select="openBudget"
           />
         </div>
       </section>
@@ -304,7 +230,7 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
           Capped
         </h2>
         <div class="space-y-3">
-          <BudgetCard v-for="b in cappedBudgets" :key="b.id" :budget="b" />
+          <BudgetCard v-for="b in cappedBudgets" :key="b.id" :budget="b" @select="openBudget" />
         </div>
       </section>
 
@@ -317,7 +243,7 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
           Goals
         </h2>
         <div class="space-y-3">
-          <BudgetCard v-for="b in goalBudgets" :key="b.id" :budget="b" />
+          <BudgetCard v-for="b in goalBudgets" :key="b.id" :budget="b" @select="openBudget" />
         </div>
       </section>
 
@@ -339,6 +265,7 @@ watch(() => ctx.activeBankAccountId, load, { immediate: true });
           :key="b.id"
           :budget="b"
           :fillup-budget="fillupFor(b)"
+          @select="openBudget"
         />
       </div>
       <EmptyState
