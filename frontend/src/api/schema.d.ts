@@ -426,7 +426,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a budget
-         * @description Delete a budget. The unallocated budget cannot be deleted (403). A budget with existing transaction allocations cannot be deleted (400) -- archive it instead.
+         * @description Delete a budget and its fill-up goal. The unallocated budget cannot be deleted (403). A budget whose own or fill-up goal's transaction allocations exist cannot be deleted (400) -- archive it instead. Transfers between the deleted budgets and other budgets are reversed on those budgets, and any remaining balance moves to the unallocated budget.
          */
         delete: operations["budgets_destroy"];
         options?: never;

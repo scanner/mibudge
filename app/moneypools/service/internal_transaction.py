@@ -31,6 +31,7 @@ from djmoney.money import Money
 from common.locks import acquire_lock
 from moneypools.models import BankAccount, Budget, InternalTransaction
 from moneypools.service import transaction_allocation as alloc_svc
+from moneypools.service._locking import locked, locked_many
 from users.models import User
 
 
@@ -55,7 +56,7 @@ def create(
     For Goal budgets, maintains the funded_amount running total and
     applies the sticky completion latch when funded_amount first reaches
     target_balance.
-    After the row is committed, recalculates running budget_balance
+    Still under the locks, recalculates running budget_balance
     snapshots for both affected budgets starting from effective_date.
 
     Args:
@@ -89,8 +90,7 @@ def create(
             stack.enter_context(acquire_lock(b.lock_key))
 
         with db_transaction.atomic():
-            src_budget.refresh_from_db()
-            dst_budget.refresh_from_db()
+            locked_many([src_budget, dst_budget])
 
             src_budget.balance -= amount
             dst_budget.balance += amount
@@ -136,13 +136,12 @@ def create(
                 system_event_date=system_event_date,
             )
 
-    # Recalculate outside the lock so we don't hold it during the full
-    # forward scan.
-    from_dt = itx.effective_date
-    alloc_svc.recalculate_from_dt(src_budget, from_dt)
-    alloc_svc.recalculate_from_dt(dst_budget, from_dt)
-    alloc_svc.recalculate_itx_snapshots_from_dt(src_budget, from_dt)
-    alloc_svc.recalculate_itx_snapshots_from_dt(dst_budget, from_dt)
+            # recalculate_from_dt refreshes both the allocation and the
+            # InternalTransaction snapshots; it runs under the locks so
+            # no concurrent writer changes the budgets mid-scan.
+            #
+            alloc_svc.recalculate_from_dt(src_budget, itx.effective_date)
+            alloc_svc.recalculate_from_dt(dst_budget, itx.effective_date)
 
     return itx
 
@@ -156,9 +155,9 @@ def delete(internal_transaction: InternalTransaction) -> None:
     Acquires sorted budget locks, refreshes both budgets, reverses the
     debit/credit applied on creation (including funded_amount for Goal
     budgets), and removes the row.  The complete flag is never cleared
-    here; it is a high-water mark.  After the row is deleted,
-    recalculates running budget_balance snapshots for both affected
-    budgets.
+    here; it is a high-water mark.  After the row is deleted, and still
+    under the locks, recalculates running budget_balance snapshots for
+    both affected budgets.
 
     Args:
         internal_transaction: The InternalTransaction to reverse and delete.
@@ -174,8 +173,12 @@ def delete(internal_transaction: InternalTransaction) -> None:
             stack.enter_context(acquire_lock(b.lock_key))
 
         with db_transaction.atomic():
-            src_budget.refresh_from_db()
-            dst_budget.refresh_from_db()
+            locked_many([src_budget, dst_budget])
+            # Re-reading the row under lock makes a second concurrent
+            # delete of the same transfer raise `DoesNotExist` instead
+            # of reversing the balances twice.
+            #
+            locked(internal_transaction)
 
             src_budget.balance += amount
             dst_budget.balance -= amount
@@ -193,7 +196,5 @@ def delete(internal_transaction: InternalTransaction) -> None:
 
             internal_transaction.delete()
 
-    alloc_svc.recalculate_from_dt(src_budget, from_dt)
-    alloc_svc.recalculate_from_dt(dst_budget, from_dt)
-    alloc_svc.recalculate_itx_snapshots_from_dt(src_budget, from_dt)
-    alloc_svc.recalculate_itx_snapshots_from_dt(dst_budget, from_dt)
+            alloc_svc.recalculate_from_dt(src_budget, from_dt)
+            alloc_svc.recalculate_from_dt(dst_budget, from_dt)

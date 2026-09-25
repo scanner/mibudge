@@ -99,6 +99,7 @@ from moneypools.service import transaction as transaction_svc
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
 )
+from moneypools.service._locking import locked
 from notifications.service import notify_for
 
 logger = logging.getLogger(__name__)
@@ -428,8 +429,8 @@ def _sync_scrape_locked(
     Returns:
         A populated `ScrapeSyncReport`.
     """
-    bank_account.refresh_from_db()
-    unalloc.refresh_from_db()
+    locked(bank_account)
+    locked(unalloc)
 
     # --- 1. Wipe pending -----------------------------------------------
     pending_qs = Transaction.objects.filter(

@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal: the SPA is restructured into layers -- pure domain rules (money, dates, schedules, budget status), an HTTP transport and per-resource API modules, domain models mapped from the API's wire format, Pinia entity caches, shared composables, and per-section feature modules -- and the five largest views are split into route shells of under 300 lines. No visual changes except the date fix below
 - Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
 - When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on
+- A SQLite database now opens every transaction with `BEGIN IMMEDIATE`, so two concurrent writers wait for each other instead of the second failing with "database is locked"; the test suite uses a SQLite file with the same setting and runs the concurrency tests on both SQLite and Postgres
 
 ### Fixed
 
@@ -44,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Previous / next on a transaction stepped through transactions hidden by the list's filter and search
 - Switching bank accounts quickly could show the previous account's transactions
 - Returning to a tab after the access token expired could log you out ("Session expired") even though your session was valid: several requests refreshed the token at once, and every refresh after the first was rejected because the backend had already rotated the refresh cookie. Concurrent refreshes now share a single request
+- Two concurrent changes to the same budget or bank account (for example two imports or two transfers at once) could lose one of the updates: the service layer released its lock before the request's database transaction committed, so the second writer read the stale balance and overwrote the first. Balance updates now re-read the row under a database lock held until commit (a row lock on Postgres, the database write lock on SQLite)
+- Work that ran longer than 30 seconds while holding a Redis lock (a large bank sync, deleting a budget with a long history) could lose the lock partway through, letting a second worker start the same account's funding run or sync, and then failed with a 500 when it tried to release the lock. Held locks are now renewed in the background until the work finishes, and a lock that is lost anyway is logged instead of failing the request
+- Resolving the same pending transaction twice at once (or updating it to posted twice) could credit the account's posted balance twice; the second attempt now sees the transaction is already posted
+- Resolving a pending transaction to a different date with an unchanged amount left the Unallocated budget's running balances out of order; they are now recalculated from the earlier of the two dates
+- Deleting a Recurring budget discarded its fill-up goal's balance instead of returning it to Unallocated, so the account's budgets no longer added up to its available balance. Deleting a budget now also reverses its transfers with other budgets and recalculates their running balances, and is refused when the fill-up goal has transaction allocations
 
 ### Security
 

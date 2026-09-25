@@ -221,6 +221,48 @@ def test_something(factory_cls) -> None: ...
   can reach). A module may override a shared fixture (e.g.
   `auth_client` for a different user) when its tests need that.
 
+#### Test databases and concurrency tests
+
+The suite runs against SQLite by default: `django_db_modify_db_settings`
+in `app/tests/conftest.py` points the test database at a temporary
+SQLite *file*, opened with `transaction_mode="IMMEDIATE"` like any
+SQLite deployment (`common.db.apply_sqlite_locking`). The file is used
+instead of `:memory:` so threads get real SQLite file locking (Django's
+in-memory test database uses a shared cache, whose table locks fail at
+once instead of waiting). Keep service code database-neutral: take
+balance locks through `moneypools.service._locking.locked`, never with
+backend-specific SQL, so the moneypools data can later move to other
+databases (for example one SQLite database per set of shared bank
+accounts).
+
+When `MIBUDGE_TEST_DATABASE_URL` is set, the same fixture points the
+test database at that Postgres server instead (pytest-django creates
+and drops a `test_<name>` database, so the role needs `CREATEDB`).
+Tests marked `@pytest.mark.postgres` need Postgres and are skipped
+unless the mode is active. Drone's `python postgres tests` step waits
+for its Postgres service with `wait-for-it`, then runs
+`-m "postgres or concurrency"`. Locally, `--wait` makes
+`docker compose up` return once the Postgres healthcheck passes.
+
+```bash
+docker compose up -d --wait postgres
+MIBUDGE_TEST_DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge \
+    uv run pytest -m "postgres or concurrency" -v
+```
+
+The `concurrency` tests in `app/tests/moneypools/test_concurrency.py`
+run on both databases. They race two writers the way `ATOMIC_REQUESTS`
+does: each thread opens its own outer `atomic()` before calling the
+service, the first holds its transaction open after the service
+returns, and the second is released only once it is waiting for a lock
+(on Postgres, seen in `pg_stat_activity`; on SQLite, still unfinished
+after a bounded wait). Calling the service directly from each thread
+makes the service's `atomic()` the outermost one, which hides the
+window these tests exist to cover. Use
+`@pytest.mark.django_db(transaction=True, serialized_rollback=True)`,
+close each thread's connection at thread exit, and give every wait a
+timeout.
+
 #### Frontend tests
 
 SPA tests live in `frontend/tests/` (mirroring `frontend/src/`) and run under Vitest with happy-dom, against an MSW mock REST API that fails any unmocked request. `tests/setup.ts` is the `conftest.py` analogue, `tests/mocks/factories.ts` holds the `make*` DTO factories, and `tests/helpers/` the fixtures (`withAuth`, `withAccounts`, `expire`, `respondOnce401`, `mountWithApp`, `withSetup`). Every test carries a Gherkin comment block describing what the production code guarantees; known bugs are recorded as `it.fails(...)`. See [docs/spa/testing.md](docs/spa/testing.md) for running, writing, and the "which tests do I add" checklist.
