@@ -15,7 +15,7 @@ the REST API (`/api/v1/`) and the JWT endpoints (`/api/token/...`).
 - Native `fetch`, wrapped once in `src/api/http.ts`
 - Types generated from `docs/openapi.yaml` by openapi-typescript
 - `decimal.js` for money arithmetic, Tailwind CSS for styling
-- Vitest + happy-dom + MSW for tests, oxfmt for formatting, vue-tsc for type checking
+- Vitest + happy-dom + MSW for tests, oxfmt for formatting (80 columns, `.oxfmtrc.json`), vue-tsc for type checking
 
 ## Source layout
 

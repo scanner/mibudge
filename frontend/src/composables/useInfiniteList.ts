@@ -18,7 +18,14 @@
 
 // 3rd party imports
 //
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  watch,
+} from "vue";
 import type { ComputedRef, Ref } from "vue";
 
 // app imports
@@ -103,7 +110,9 @@ export function useInfiniteList<T>(
   function sentinelNearViewport(): boolean {
     const el = sentinel.value;
     if (!el) return false;
-    return el.getBoundingClientRect().top < window.innerHeight + NEAR_VIEWPORT_PX;
+    return (
+      el.getBoundingClientRect().top < window.innerHeight + NEAR_VIEWPORT_PX
+    );
   }
 
   async function loadMore(): Promise<void> {
@@ -118,9 +127,14 @@ export function useInfiniteList<T>(
         items.value = [...items.value, ...page.results];
         nextUrl.value = page.next;
         await nextTick();
-      } while (nextUrl.value && current === generation && sentinelNearViewport());
+      } while (
+        nextUrl.value &&
+        current === generation &&
+        sentinelNearViewport()
+      );
     } catch (err) {
-      if (current === generation) loadMoreError.value = describeError(err, options.errorMessage);
+      if (current === generation)
+        loadMoreError.value = describeError(err, options.errorMessage);
     } finally {
       if (current === generation) loadingMore.value = false;
     }

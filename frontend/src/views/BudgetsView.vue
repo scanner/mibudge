@@ -74,7 +74,8 @@ const standaloneByTab = computed(() => {
   const unallocId = ctx.unallocatedBudgetId;
   const ids = searchMatchIds.value;
   const list = allBudgets.value.filter(
-    (b) => b.budgetType !== "A" && b.id !== unallocId && (!ids || ids.has(b.id)),
+    (b) =>
+      b.budgetType !== "A" && b.id !== unallocId && (!ids || ids.has(b.id)),
   );
   switch (activeTab.value) {
     case "recurring":
@@ -90,11 +91,17 @@ const standaloneByTab = computed(() => {
   }
 });
 
-const recurringBudgets = computed(() => standaloneByTab.value.filter((b) => b.budgetType === "R"));
+const recurringBudgets = computed(() =>
+  standaloneByTab.value.filter((b) => b.budgetType === "R"),
+);
 
-const goalBudgets = computed(() => standaloneByTab.value.filter((b) => b.budgetType === "G"));
+const goalBudgets = computed(() =>
+  standaloneByTab.value.filter((b) => b.budgetType === "G"),
+);
 
-const cappedBudgets = computed(() => standaloneByTab.value.filter((b) => b.budgetType === "C"));
+const cappedBudgets = computed(() =>
+  standaloneByTab.value.filter((b) => b.budgetType === "C"),
+);
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -150,7 +157,13 @@ function openBudget(id: string) {
     <!-- Filter tabs -->
     <div class="-mx-4 mb-4 flex border-b border-neutral-200 px-4 pt-3">
       <button
-        v-for="tab in ['all', 'recurring', 'capped', 'goals', 'paused'] as Tab[]"
+        v-for="tab in [
+          'all',
+          'recurring',
+          'capped',
+          'goals',
+          'paused',
+        ] as Tab[]"
         :key="tab"
         type="button"
         class="mr-4 pb-2 text-sm font-medium capitalize transition-colors"
@@ -198,11 +211,18 @@ function openBudget(id: string) {
 
     <!-- Loading skeletons -->
     <div v-if="loading" class="space-y-3">
-      <div v-for="i in 4" :key="i" class="h-24 animate-pulse rounded-card bg-neutral-100" />
+      <div
+        v-for="i in 4"
+        :key="i"
+        class="h-24 animate-pulse rounded-card bg-neutral-100"
+      />
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600">
+    <div
+      v-else-if="error"
+      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+    >
       {{ error }}
     </div>
 
@@ -210,7 +230,9 @@ function openBudget(id: string) {
     <template v-else-if="activeTab === 'all'">
       <!-- Recurring section -->
       <section v-if="recurringBudgets.length > 0">
-        <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <h2
+          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+        >
           Recurring
         </h2>
         <div class="space-y-3">
@@ -225,32 +247,53 @@ function openBudget(id: string) {
       </section>
 
       <!-- Capped section -->
-      <section v-if="cappedBudgets.length > 0" :class="recurringBudgets.length > 0 ? 'mt-6' : ''">
-        <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+      <section
+        v-if="cappedBudgets.length > 0"
+        :class="recurringBudgets.length > 0 ? 'mt-6' : ''"
+      >
+        <h2
+          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+        >
           Capped
         </h2>
         <div class="space-y-3">
-          <BudgetCard v-for="b in cappedBudgets" :key="b.id" :budget="b" @select="openBudget" />
+          <BudgetCard
+            v-for="b in cappedBudgets"
+            :key="b.id"
+            :budget="b"
+            @select="openBudget"
+          />
         </div>
       </section>
 
       <!-- Goals section -->
       <section
         v-if="goalBudgets.length > 0"
-        :class="recurringBudgets.length > 0 || cappedBudgets.length > 0 ? 'mt-6' : ''"
+        :class="
+          recurringBudgets.length > 0 || cappedBudgets.length > 0 ? 'mt-6' : ''
+        "
       >
-        <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+        <h2
+          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+        >
           Goals
         </h2>
         <div class="space-y-3">
-          <BudgetCard v-for="b in goalBudgets" :key="b.id" :budget="b" @select="openBudget" />
+          <BudgetCard
+            v-for="b in goalBudgets"
+            :key="b.id"
+            :budget="b"
+            @select="openBudget"
+          />
         </div>
       </section>
 
       <!-- Empty state -->
       <EmptyState
         v-if="
-          recurringBudgets.length === 0 && cappedBudgets.length === 0 && goalBudgets.length === 0
+          recurringBudgets.length === 0 &&
+          cappedBudgets.length === 0 &&
+          goalBudgets.length === 0
         "
         title="No budgets yet"
         message="Tap + to create your first budget."

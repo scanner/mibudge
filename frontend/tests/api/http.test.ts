@@ -16,7 +16,13 @@ import { describe, expect, it, vi } from "vitest";
 // app imports
 //
 import { api } from "@/api";
-import { ApiError, AuthError, describeError, NetworkError, parseDrfError } from "@/api/errors";
+import {
+  ApiError,
+  AuthError,
+  describeError,
+  NetworkError,
+  parseDrfError,
+} from "@/api/errors";
 import { createHttpClient, pathOf, toQueryString } from "@/api/http";
 import type { HttpClientConfig } from "@/api/http";
 import { useSessionStore } from "@/stores/session";
@@ -109,9 +115,14 @@ describe("request bodies and query strings", () => {
   it("passes FormData through without setting Content-Type", async () => {
     const form = new FormData();
     form.append("memo", "lunch");
-    await client().request("/api/v1/transactions/x/", { method: "PATCH", form });
+    await client().request("/api/v1/transactions/x/", {
+      method: "PATCH",
+      form,
+    });
     const req = await lastRequest();
-    expect(req?.headers["content-type"]).toMatch(/^multipart\/form-data; boundary=/);
+    expect(req?.headers["content-type"]).toMatch(
+      /^multipart\/form-data; boundary=/,
+    );
     expect(req?.body).toEqual({ memo: "lunch" });
   });
 
@@ -125,7 +136,10 @@ describe("request bodies and query strings", () => {
     [{}, ""],
     [{ a: undefined, b: null, c: "" }, ""],
     [{ archived: false }, "?archived=false"],
-    [{ bank_account: "x", page: 2, pending: true }, "?bank_account=x&page=2&pending=true"],
+    [
+      { bank_account: "x", page: 2, pending: true },
+      "?bank_account=x&page=2&pending=true",
+    ],
     [{ search: "a&b c" }, "?search=a%26b+c"],
   ])("toQueryString(%j) = %j", (params, expected) => {
     expect(toQueryString(params)).toBe(expected);
@@ -136,8 +150,13 @@ describe("request bodies and query strings", () => {
   // THEN:  the query string is appended to the path
   //
   it("appends the query", async () => {
-    await client().get("/api/v1/budgets/", { archived: false, ordering: "name" });
-    expect((await lastRequest())?.path).toBe("/api/v1/budgets/?archived=false&ordering=name");
+    await client().get("/api/v1/budgets/", {
+      archived: false,
+      ordering: "name",
+    });
+    expect((await lastRequest())?.path).toBe(
+      "/api/v1/budgets/?archived=false&ordering=name",
+    );
   });
 
   // GIVEN: an absolute pagination link or a path
@@ -145,7 +164,10 @@ describe("request bodies and query strings", () => {
   // THEN:  only the path and query string remain
   //
   it.each([
-    ["https://mibudge.example/api/v1/budgets/?page=2", "/api/v1/budgets/?page=2"],
+    [
+      "https://mibudge.example/api/v1/budgets/?page=2",
+      "/api/v1/budgets/?page=2",
+    ],
     ["/api/v1/budgets/?page=3", "/api/v1/budgets/?page=3"],
   ])("pathOf(%s) = %s", (url, expected) => {
     expect(pathOf(url)).toBe(expected);
@@ -166,17 +188,28 @@ describe("pagination", () => {
       http.get("/api/v1/budgets/", ({ request }) => {
         const page = new URL(request.url).searchParams.get("page");
         return page === "2"
-          ? HttpResponse.json(makePage([2], { next: "http://localhost/api/v1/budgets/?page=3" }))
+          ? HttpResponse.json(
+              makePage([2], {
+                next: "http://localhost/api/v1/budgets/?page=3",
+              }),
+            )
           : HttpResponse.json(makePage([3]));
       }),
     );
-    const first = makePage([1], { next: "https://mibudge.example/api/v1/budgets/?page=2" });
+    const first = makePage([1], {
+      next: "https://mibudge.example/api/v1/budgets/?page=2",
+    });
 
     const all = await api.pages.all(first);
 
     expect(all).toEqual([1, 2, 3]);
-    const paths = (await requestsTo("GET", "/api/v1/budgets/")).map((r) => r.path);
-    expect(paths).toEqual(["/api/v1/budgets/?page=2", "/api/v1/budgets/?page=3"]);
+    const paths = (await requestsTo("GET", "/api/v1/budgets/")).map(
+      (r) => r.path,
+    );
+    expect(paths).toEqual([
+      "/api/v1/budgets/?page=2",
+      "/api/v1/budgets/?page=3",
+    ]);
   });
 
   // GIVEN: a single page with no `next`
@@ -200,7 +233,11 @@ describe("empty responses", () => {
     ["204 No Content", () => new HttpResponse(null, { status: 204 })],
     [
       "201 with Content-Length 0",
-      () => new HttpResponse("", { status: 201, headers: { "Content-Length": "0" } }),
+      () =>
+        new HttpResponse("", {
+          status: 201,
+          headers: { "Content-Length": "0" },
+        }),
     ],
     ["200 non-JSON", () => new HttpResponse("ok", { status: 200 })],
   ])("resolves to null for %s", async (_label, respond) => {
@@ -217,18 +254,23 @@ describe("error responses", () => {
   // THEN:  the call rejects with `ApiError` carrying the status and the
   //        raw response body
   //
-  it.each([400, 403, 404, 409, 500])("rejects with ApiError on %i", async (status) => {
-    const body = JSON.stringify({ detail: `status ${status}` });
-    server.use(http.get("/api/v1/budgets/", () => new HttpResponse(body, { status })));
+  it.each([400, 403, 404, 409, 500])(
+    "rejects with ApiError on %i",
+    async (status) => {
+      const body = JSON.stringify({ detail: `status ${status}` });
+      server.use(
+        http.get("/api/v1/budgets/", () => new HttpResponse(body, { status })),
+      );
 
-    const err = await client()
-      .get("/api/v1/budgets/")
-      .catch((e: unknown) => e);
+      const err = await client()
+        .get("/api/v1/budgets/")
+        .catch((e: unknown) => e);
 
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).status).toBe(status);
-    expect((err as ApiError).body).toBe(body);
-  });
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(status);
+      expect((err as ApiError).body).toBe(body);
+    },
+  );
 
   // GIVEN: a request that never gets a response (fetch itself rejects)
   // WHEN:  the request is made
@@ -267,12 +309,20 @@ describe("error responses", () => {
   it.each([
     [{ detail: "Not found." }, "Not found.", {}, []],
     [
-      { name: ["This field is required."], non_field_errors: ["Bad combination."] },
+      {
+        name: ["This field is required."],
+        non_field_errors: ["Bad combination."],
+      },
       "Bad combination.",
       { name: ["This field is required."] },
       ["Bad combination."],
     ],
-    [{ splits: { abc: ["Too large."] } }, "Too large.", { "splits.abc": ["Too large."] }, []],
+    [
+      { splits: { abc: ["Too large."] } },
+      "Too large.",
+      { "splits.abc": ["Too large."] },
+      [],
+    ],
     [["Plain list error."], "Plain list error.", {}, ["Plain list error."]],
   ])("parses %j", (body, message, fieldErrors, nonFieldErrors) => {
     const err = new ApiError(400, JSON.stringify(body));
@@ -285,10 +335,17 @@ describe("error responses", () => {
   // WHEN:  it is parsed
   // THEN:  there are no messages and `message` is `HTTP <status>`
   //
-  it.each(["<html>oops</html>", ""])("falls back to HTTP <status> for %j", (body) => {
-    expect(parseDrfError(body)).toEqual({ detail: null, fieldErrors: {}, nonFieldErrors: [] });
-    expect(new ApiError(502, body).message).toBe("HTTP 502");
-  });
+  it.each(["<html>oops</html>", ""])(
+    "falls back to HTTP <status> for %j",
+    (body) => {
+      expect(parseDrfError(body)).toEqual({
+        detail: null,
+        fieldErrors: {},
+        nonFieldErrors: [],
+      });
+      expect(new ApiError(502, body).message).toBe("HTTP 502");
+    },
+  );
 
   // GIVEN: anything a request can throw
   // WHEN:  it is described for the UI
@@ -299,7 +356,10 @@ describe("error responses", () => {
   //
   it.each([
     [new ApiError(400, JSON.stringify({ detail: "Nope." })), "Nope."],
-    [new ApiError(400, JSON.stringify({ amount: ["Too large."] })), "Too large."],
+    [
+      new ApiError(400, JSON.stringify({ amount: ["Too large."] })),
+      "Too large.",
+    ],
     [new ApiError(502, "<html>Bad gateway</html>"), "fallback (HTTP 502)"],
     [new ApiError(500, ""), "fallback (HTTP 500)"],
     [new AuthError(), "Your session has expired. Please sign in again."],
@@ -336,7 +396,10 @@ describe("401 handling", () => {
     await c.get("/api/v1/budgets/");
 
     const reqs = await requestsTo("GET", "/api/v1/budgets/");
-    expect(reqs.map((r) => r.headers.authorization)).toEqual(["Bearer old", "Bearer new"]);
+    expect(reqs.map((r) => r.headers.authorization)).toEqual([
+      "Bearer old",
+      "Bearer new",
+    ]);
   });
 
   // GIVEN: a request that gets 401 and a refresh that fails or throws
@@ -372,7 +435,10 @@ describe("401 handling", () => {
     const refresh = vi.fn(async () => true);
 
     await expect(
-      client({ refresh }).request("/api/token/", { method: "POST", auth: false }),
+      client({ refresh }).request("/api/token/", {
+        method: "POST",
+        auth: false,
+      }),
     ).rejects.toMatchObject({ status: 401 });
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -426,7 +492,12 @@ describe("session-wired client", () => {
   //
   it("propagates non-401 errors without refreshing", async () => {
     const session = withAuth();
-    server.use(http.get("/api/v1/budgets/", () => new HttpResponse("boom", { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/budgets/",
+        () => new HttpResponse("boom", { status: 500 }),
+      ),
+    );
 
     await expect(api.budgets.list()).rejects.toMatchObject({ status: 500 });
     expect(await requestsTo("POST", "/api/token/refresh/")).toHaveLength(0);
@@ -452,7 +523,10 @@ describe("session-wired client", () => {
         refreshes += 1;
         return refreshes === 1
           ? HttpResponse.json({ access: REFRESHED_TOKEN })
-          : HttpResponse.json({ detail: "Token is blacklisted" }, { status: 401 });
+          : HttpResponse.json(
+              { detail: "Token is blacklisted" },
+              { status: 401 },
+            );
       }),
     );
 
@@ -464,9 +538,15 @@ describe("session-wired client", () => {
 
     expect(await requestsTo("POST", "/api/token/refresh/")).toHaveLength(1);
     expect(results.map((r) => r.count)).toEqual([1, 1, 1]);
-    for (const path of ["/api/v1/budgets/", "/api/v1/transactions/", "/api/v1/allocations/"]) {
+    for (const path of [
+      "/api/v1/budgets/",
+      "/api/v1/transactions/",
+      "/api/v1/allocations/",
+    ]) {
       const reqs = await requestsTo("GET", path);
-      expect(reqs.at(-1)?.headers.authorization).toBe(`Bearer ${REFRESHED_TOKEN}`);
+      expect(reqs.at(-1)?.headers.authorization).toBe(
+        `Bearer ${REFRESHED_TOKEN}`,
+      );
     }
     expect(session.accessToken).toBe(REFRESHED_TOKEN);
     expect(session.user?.username).toBe(user.username);

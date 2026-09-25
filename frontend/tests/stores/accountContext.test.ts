@@ -26,9 +26,14 @@ const STORAGE_KEY = "mibudge.activeBankAccountId";
 // Serve `accounts` from the bank-account list and `defaultId` as the
 // user's `default_bank_account`.
 //
-function serveAccounts(accounts: BankAccount[], defaultId: string | null = null) {
+function serveAccounts(
+  accounts: BankAccount[],
+  defaultId: string | null = null,
+) {
   server.use(
-    http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage(accounts))),
+    http.get("/api/v1/bank-accounts/", () =>
+      HttpResponse.json(makePage(accounts)),
+    ),
     http.get("/api/v1/users/me/", () =>
       HttpResponse.json(makeUser({ default_bank_account: defaultId })),
     ),
@@ -97,7 +102,12 @@ describe("init", () => {
     withAuth().user = null;
     const a = makeBankAccount();
     serveAccounts([a]);
-    server.use(http.get("/api/v1/users/me/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/users/me/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
     const ctx = useAccountContextStore();
 
     await ctx.init();
@@ -131,7 +141,12 @@ describe("init", () => {
   //
   it("records an error when the account list fails", async () => {
     withAuth();
-    server.use(http.get("/api/v1/bank-accounts/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/bank-accounts/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
     const ctx = useAccountContextStore();
 
     await ctx.init();

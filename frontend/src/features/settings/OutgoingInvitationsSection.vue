@@ -16,7 +16,11 @@ import { useOutgoingInvitations } from "./useOutgoingInvitations";
 const { invitations, cancellingId, error, cancel } = useOutgoingInvitations();
 
 function shortDate(iso: string): string {
-  return formatInstantDate(iso, { month: "short", day: "numeric", year: "numeric" });
+  return formatInstantDate(iso, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 </script>
 
@@ -26,11 +30,18 @@ function shortDate(iso: string): string {
        the section does not appear at all for users who have never
        invited anyone or whose invitations have all been resolved. -->
   <template v-if="invitations.length > 0 || error">
-    <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">Pending invitations</h1>
+    <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">
+      Pending invitations
+    </h1>
 
     <section>
-      <p v-if="error" class="mb-2 text-sm text-coral-600" role="alert">{{ error }}</p>
-      <div v-if="invitations.length > 0" class="rounded-card border border-neutral-200 bg-white">
+      <p v-if="error" class="mb-2 text-sm text-coral-600" role="alert">
+        {{ error }}
+      </p>
+      <div
+        v-if="invitations.length > 0"
+        class="rounded-card border border-neutral-200 bg-white"
+      >
         <ul class="divide-y divide-neutral-100">
           <li
             v-for="inv in invitations"
@@ -40,10 +51,14 @@ function shortDate(iso: string): string {
             <div>
               <!-- Account name links the invitation back to its
                    context; the invitee email is the primary identifier. -->
-              <p class="text-xs font-medium uppercase tracking-wider text-secondary">
+              <p
+                class="text-xs font-medium uppercase tracking-wider text-secondary"
+              >
                 {{ inv.bankAccountName }}
               </p>
-              <p class="mt-0.5 text-sm text-neutral-900">{{ inv.inviteeEmail }}</p>
+              <p class="mt-0.5 text-sm text-neutral-900">
+                {{ inv.inviteeEmail }}
+              </p>
               <p class="mt-0.5 text-xs text-secondary">
                 Expires
                 {{ shortDate(inv.expiresAt) }}

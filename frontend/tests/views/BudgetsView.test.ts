@@ -38,20 +38,33 @@ describe("BudgetsView", () => {
   it("renders the budgets returned by the API", async () => {
     const budgets = [
       makeBudget({ name: "Rent", budget_type: "R", bank_account: account.id }),
-      makeBudget({ name: "Vacation", budget_type: "G", bank_account: account.id }),
-      makeBudget({ name: "Rent fill-up", budget_type: "A", bank_account: account.id }),
+      makeBudget({
+        name: "Vacation",
+        budget_type: "G",
+        bank_account: account.id,
+      }),
+      makeBudget({
+        name: "Rent fill-up",
+        budget_type: "A",
+        bank_account: account.id,
+      }),
       makeBudget({
         id: account.unallocated_budget!,
         name: "Unallocated",
         bank_account: account.id,
       }),
     ];
-    server.use(http.get("/api/v1/budgets/", () => HttpResponse.json(makePage(budgets))));
+    server.use(
+      http.get("/api/v1/budgets/", () => HttpResponse.json(makePage(budgets))),
+    );
 
     const { wrapper } = await mountWithApp(BudgetsView, { route: "/budgets/" });
 
     const cards = wrapper.findAllComponents(BudgetCard);
-    expect(cards.map((c) => c.props("budget").name)).toEqual(["Rent", "Vacation"]);
+    expect(cards.map((c) => c.props("budget").name)).toEqual([
+      "Rent",
+      "Vacation",
+    ]);
     expect(cards.map((c) => c.text())).toEqual([
       expect.stringContaining("Rent"),
       expect.stringContaining("Vacation"),
@@ -69,7 +82,9 @@ describe("BudgetsView", () => {
   // THEN:  the empty state is shown
   //
   it("shows the empty state when there are no budgets", async () => {
-    server.use(http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([]))));
+    server.use(
+      http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([]))),
+    );
 
     const { wrapper } = await mountWithApp(BudgetsView, { route: "/budgets/" });
 
@@ -81,7 +96,12 @@ describe("BudgetsView", () => {
   // THEN:  the view shows the error message instead of the list
   //
   it("shows the error state when the endpoint fails", async () => {
-    server.use(http.get("/api/v1/budgets/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/budgets/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
 
     const { wrapper } = await mountWithApp(BudgetsView, { route: "/budgets/" });
 

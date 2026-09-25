@@ -61,7 +61,8 @@ export function useAsync<T, A extends unknown[] = []>(
       data.value = result;
       return result;
     } catch (err) {
-      if (current === generation) error.value = describeError(err, options.errorMessage);
+      if (current === generation)
+        error.value = describeError(err, options.errorMessage);
       return undefined;
     } finally {
       if (current === generation) loading.value = false;

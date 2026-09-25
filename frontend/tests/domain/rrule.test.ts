@@ -47,7 +47,9 @@ describe("parseRrule / buildRrule", () => {
   // THEN:  the RRULE line is parsed and DTSTART is ignored
   //
   it("parses the RRULE line of a DTSTART + RRULE pair", () => {
-    expect(parseRrule("DTSTART:20260101T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=5")).toEqual({
+    expect(
+      parseRrule("DTSTART:20260101T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=5"),
+    ).toEqual({
       freq: "MONTHLY",
       interval: 1,
       bymonthday: [5],
@@ -95,9 +97,12 @@ describe("parseRrule / buildRrule", () => {
   // WHEN:  it is parsed
   // THEN:  the result is null
   //
-  it.each(["", "RRULE:FREQ=DAILY", "garbage"])("returns null for %j", (rule) => {
-    expect(parseRrule(rule)).toBeNull();
-  });
+  it.each(["", "RRULE:FREQ=DAILY", "garbage"])(
+    "returns null for %j",
+    (rule) => {
+      expect(parseRrule(rule)).toBeNull();
+    },
+  );
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -113,21 +118,39 @@ describe("rruleHuman", () => {
     ["RRULE:FREQ=WEEKLY;BYDAY=MO,FR", "Every week on Mo, Fr"],
     ["RRULE:FREQ=WEEKLY;INTERVAL=2", "Every 2 weeks"],
     // 2026-09-14 is a Monday.
-    ["DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;INTERVAL=2", "Every 2 weeks on Mo"],
-    ["DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;BYDAY=TH", "Every week on Th"],
+    [
+      "DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;INTERVAL=2",
+      "Every 2 weeks on Mo",
+    ],
+    [
+      "DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;BYDAY=TH",
+      "Every week on Th",
+    ],
     ["RRULE:FREQ=MONTHLY", "Every month"],
-    ["RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15", "Every month on the 1st and the 15th"],
-    ["RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1", "Every 3 months on the last day"],
+    [
+      "RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15",
+      "Every month on the 1st and the 15th",
+    ],
+    [
+      "RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1",
+      "Every 3 months on the last day",
+    ],
     [
       "RRULE:FREQ=MONTHLY;BYMONTHDAY=2,3,11,12,13,21,22,23",
       "Every month on the 2nd and the 3rd and the 11th and the 12th and the 13th" +
         " and the 21st and the 22nd and the 23rd",
     ],
     ["DTSTART:20260122T000000Z\nRRULE:FREQ=MONTHLY", "Every month on the 22nd"],
-    ["DTSTART:20260122T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1", "Every month on the 1st"],
+    [
+      "DTSTART:20260122T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1",
+      "Every month on the 1st",
+    ],
     ["RRULE:FREQ=YEARLY", "Every year"],
     ["RRULE:FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=15", "Every year on May the 15th"],
-    ["DTSTART:20261103T000000Z\nRRULE:FREQ=YEARLY;INTERVAL=2", "Every 2 years on November the 3rd"],
+    [
+      "DTSTART:20261103T000000Z\nRRULE:FREQ=YEARLY;INTERVAL=2",
+      "Every 2 years on November the 3rd",
+    ],
     ["RRULE:FREQ=DAILY", "RRULE:FREQ=DAILY"],
   ])("%j → %j", (rule, text) => {
     expect(rruleHuman(rule)).toBe(text);
@@ -170,7 +193,10 @@ describe("stripToIntervalOnly", () => {
   // THEN:  only FREQ and a non-default INTERVAL remain
   //
   it.each([
-    ["RRULE:FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=1,15", "RRULE:FREQ=MONTHLY;INTERVAL=2"],
+    [
+      "RRULE:FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=1,15",
+      "RRULE:FREQ=MONTHLY;INTERVAL=2",
+    ],
     ["RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=WEEKLY"],
     ["RRULE:FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=15", "RRULE:FREQ=YEARLY"],
     ["RRULE:FREQ=MONTHLY", "RRULE:FREQ=MONTHLY"],
@@ -188,9 +214,15 @@ describe("rruleHuman across browser zones", () => {
   // THEN:  the anchor's weekday / day of month is the DTSTART calendar day
   //
   it.each([
-    ["DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;INTERVAL=2", "Every 2 weeks on Mo"],
+    [
+      "DTSTART:20260914T000000Z\nRRULE:FREQ=WEEKLY;INTERVAL=2",
+      "Every 2 weeks on Mo",
+    ],
     ["DTSTART:20260122T000000Z\nRRULE:FREQ=MONTHLY", "Every month on the 22nd"],
-    ["DTSTART:20261103T000000Z\nRRULE:FREQ=YEARLY", "Every year on November the 3rd"],
+    [
+      "DTSTART:20261103T000000Z\nRRULE:FREQ=YEARLY",
+      "Every year on November the 3rd",
+    ],
   ])("%j → %j in Pacific/Honolulu", (rule, text) => {
     vi.stubEnv("TZ", "Pacific/Honolulu");
     expect(rruleHuman(rule)).toBe(text);

@@ -30,7 +30,9 @@ export const useTransactionNavStore = defineStore("transactionNav", () => {
 
   function nextId(currentId: string): string | null {
     const idx = orderedIds.value.indexOf(currentId);
-    return idx >= 0 && idx < orderedIds.value.length - 1 ? orderedIds.value[idx + 1] : null;
+    return idx >= 0 && idx < orderedIds.value.length - 1
+      ? orderedIds.value[idx + 1]
+      : null;
   }
 
   function reset() {
@@ -39,5 +41,13 @@ export const useTransactionNavStore = defineStore("transactionNav", () => {
     savedFilter.value = "";
   }
 
-  return { orderedIds, savedSearch, savedFilter, setIds, prevId, nextId, reset };
+  return {
+    orderedIds,
+    savedSearch,
+    savedFilter,
+    setIds,
+    prevId,
+    nextId,
+    reset,
+  };
 });

@@ -51,7 +51,8 @@ export type TransactionUpdateDto = Schemas["PatchedTransactionRequest"];
 export type AllocationDto = Schemas["TransactionAllocation"];
 
 export type InternalTransactionDto = Schemas["InternalTransaction"];
-export type InternalTransactionCreateDto = Schemas["InternalTransactionRequest"];
+export type InternalTransactionCreateDto =
+  Schemas["InternalTransactionRequest"];
 
 export type TransactionCategoryDto = Schemas["TransactionCategory"];
 
@@ -92,7 +93,9 @@ export interface AccessTokenDto {
 //
 // Query parameters of the list endpoints.
 //
-export type BudgetListQuery = NonNullable<operations["budgets_list"]["parameters"]["query"]>;
+export type BudgetListQuery = NonNullable<
+  operations["budgets_list"]["parameters"]["query"]
+>;
 export type TransactionListQuery = NonNullable<
   operations["transactions_list"]["parameters"]["query"]
 >;

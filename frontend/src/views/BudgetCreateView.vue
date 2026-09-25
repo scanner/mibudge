@@ -29,7 +29,11 @@ function onSaved(budget: Budget) {
   <AppShell>
     <div class="mx-auto max-w-lg pt-4">
       <h1 class="mb-5 text-[22px] font-medium text-neutral-900">New budget</h1>
-      <BudgetForm mode="create" @saved="onSaved" @cancel="router.push({ name: 'budgets' })" />
+      <BudgetForm
+        mode="create"
+        @saved="onSaved"
+        @cancel="router.push({ name: 'budgets' })"
+      />
     </div>
   </AppShell>
 </template>

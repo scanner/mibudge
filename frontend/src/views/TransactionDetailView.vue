@@ -11,7 +11,11 @@
 
 // 3rd party imports
 //
-import { IconArrowLeft, IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
+import {
+  IconArrowLeft,
+  IconChevronDown,
+  IconChevronUp,
+} from "@tabler/icons-vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -69,21 +73,33 @@ const pickerOpen = ref(false);
 
 ////////////////////////////////////////////////////////////////////////
 //
-const partyName = computed(() => (transaction.value ? displayName(transaction.value) : ""));
-const typeLabel = computed(() => transactionTypeLabel(transaction.value?.transactionType));
+const partyName = computed(() =>
+  transaction.value ? displayName(transaction.value) : "",
+);
+const typeLabel = computed(() =>
+  transactionTypeLabel(transaction.value?.transactionType),
+);
 const formattedDate = computed(() =>
-  transaction.value ? formatTxDateLong(occurredAt(transaction.value), session.timezone) : "",
+  transaction.value
+    ? formatTxDateLong(occurredAt(transaction.value), session.timezone)
+    : "",
 );
 
 ////////////////////////////////////////////////////////////////////////
 //
 function goToPrev() {
   if (prevTxId.value)
-    router.replace({ name: "transaction-detail", params: { id: prevTxId.value } });
+    router.replace({
+      name: "transaction-detail",
+      params: { id: prevTxId.value },
+    });
 }
 function goToNext() {
   if (nextTxId.value)
-    router.replace({ name: "transaction-detail", params: { id: nextTxId.value } });
+    router.replace({
+      name: "transaction-detail",
+      params: { id: nextTxId.value },
+    });
 }
 
 function onKeyNav(e: KeyboardEvent) {
@@ -168,7 +184,10 @@ function onAttach(field: AttachmentField) {
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600">
+    <div
+      v-else-if="error"
+      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+    >
       {{ error }}
     </div>
 
@@ -185,7 +204,9 @@ function onAttach(field: AttachmentField) {
       <!-- Metadata section -->
       <section class="space-y-3 border-t border-neutral-200 pt-4">
         <div>
-          <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <label
+            class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Description
           </label>
           <input
@@ -195,16 +216,24 @@ function onAttach(field: AttachmentField) {
             @input="onDescriptionInput"
             @blur="onDescriptionBlur"
           />
-          <p v-if="descriptionError" class="mt-1 text-xs text-coral-600" role="alert">
+          <p
+            v-if="descriptionError"
+            class="mt-1 text-xs text-coral-600"
+            role="alert"
+          >
             {{ descriptionError }}
           </p>
         </div>
 
         <div v-if="transaction.rawDescription !== transaction.description">
-          <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <label
+            class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Raw description
           </label>
-          <p class="mt-0.5 text-sm text-neutral-600">{{ transaction.rawDescription }}</p>
+          <p class="mt-0.5 text-sm text-neutral-600">
+            {{ transaction.rawDescription }}
+          </p>
         </div>
 
         <div v-if="typeLabel" class="flex items-center gap-2">
@@ -213,8 +242,12 @@ function onAttach(field: AttachmentField) {
           >
             Type
           </label>
-          <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
-          <span class="flex-none text-sm text-neutral-700">{{ typeLabel }}</span>
+          <span
+            class="min-w-0 flex-1 border-b border-dotted border-neutral-200"
+          />
+          <span class="flex-none text-sm text-neutral-700">{{
+            typeLabel
+          }}</span>
         </div>
 
         <div class="flex items-center gap-2">
@@ -223,8 +256,14 @@ function onAttach(field: AttachmentField) {
           >
             {{ accountName }} balance after
           </label>
-          <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
-          <MoneyAmount class="flex-none" :amount="transaction.accountPostedBalance" size="sm" />
+          <span
+            class="min-w-0 flex-1 border-b border-dotted border-neutral-200"
+          />
+          <MoneyAmount
+            class="flex-none"
+            :amount="transaction.accountPostedBalance"
+            size="sm"
+          />
         </div>
       </section>
 
@@ -250,7 +289,9 @@ function onAttach(field: AttachmentField) {
       <template v-if="!transaction.pending">
         <!-- Memo -->
         <section class="mt-6">
-          <label class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+          <label
+            class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          >
             Memo
           </label>
           <textarea
@@ -283,14 +324,19 @@ function onAttach(field: AttachmentField) {
             {{ transaction.document ? "Replace document" : "Attach document" }}
           </button>
         </section>
-        <p v-if="attachmentError" class="mt-2 text-sm text-coral-600" role="alert">
+        <p
+          v-if="attachmentError"
+          class="mt-2 text-sm text-coral-600"
+          role="alert"
+        >
           {{ attachmentError }}
         </p>
       </template>
 
       <!-- Footer -->
       <p class="mt-8 pb-4 text-center text-xs text-neutral-400">
-        Transactions are imported from bank statements and cannot be created or deleted.
+        Transactions are imported from bank statements and cannot be created or
+        deleted.
       </p>
     </template>
 

@@ -27,7 +27,11 @@ import { useBankAccountsStore } from "@/stores/bankAccounts";
 
 ////////////////////////////////////////////////////////////////////////
 //
-export const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string; sub: string }[] = [
+export const ACCOUNT_TYPE_OPTIONS: {
+  value: AccountType;
+  label: string;
+  sub: string;
+}[] = [
   { value: "C", label: "Checking", sub: "Day-to-day spending" },
   { value: "S", label: "Savings", sub: "Set aside funds" },
   { value: "X", label: "Credit card", sub: "Track card charges" },
@@ -64,7 +68,9 @@ export function useBankAccountCreate() {
       banks.value = (await api.pages.all(first)).map(bankFromDto);
     } catch (err) {
       banks.value = [];
-      errors.setFormError(describeError(err, "Failed to load the list of banks."));
+      errors.setFormError(
+        describeError(err, "Failed to load the list of banks."),
+      );
     } finally {
       banksLoading.value = false;
     }

@@ -109,14 +109,18 @@ export const useBudgetsStore = defineStore("budgets", () => {
   //
   async function create(input: BudgetCreateInput): Promise<Budget> {
     const put = whileCurrent(upsert);
-    const budget = budgetFromDto(await api.budgets.create(budgetToCreateDto(input)));
+    const budget = budgetFromDto(
+      await api.budgets.create(budgetToCreateDto(input)),
+    );
     put(budget);
     return budget;
   }
 
   async function update(id: string, input: BudgetInput): Promise<Budget> {
     const put = whileCurrent(upsert);
-    const budget = budgetFromDto(await api.budgets.update(id, budgetToUpdateDto(input)));
+    const budget = budgetFromDto(
+      await api.budgets.update(id, budgetToUpdateDto(input)),
+    );
     put(budget);
     return budget;
   }
@@ -140,7 +144,10 @@ export const useBudgetsStore = defineStore("budgets", () => {
     const started = guard.current();
     await api.internalTransactions.create(transferToCreateDto(input));
     if (!guard.isCurrent(started)) return;
-    await Promise.all([fetchOne(input.srcBudgetId), fetchOne(input.dstBudgetId)]);
+    await Promise.all([
+      fetchOne(input.srcBudgetId),
+      fetchOne(input.dstBudgetId),
+    ]);
   }
 
   ////////////////////////////////////////////////////////////////////

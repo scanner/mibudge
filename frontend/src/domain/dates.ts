@@ -34,7 +34,9 @@ const LOCAL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 // Validate a `"YYYY-MM-DD"` string as a `LocalDate`; anything else
 // (including `null`, `""` and datetimes) is `null`.
 //
-export function toLocalDate(value: string | null | undefined): LocalDate | null {
+export function toLocalDate(
+  value: string | null | undefined,
+): LocalDate | null {
   if (!value) return null;
   const m = LOCAL_DATE_RE.exec(value);
   if (!m) return null;
@@ -76,8 +78,13 @@ export function parseLocalDate(s: string): Date {
 // Today's date in `timezone`, e.g. `todayDateStr("Asia/Tokyo")`.
 // `now` defaults to the current instant.
 //
-export function todayDateStr(timezone: string, now: Date = new Date()): LocalDate {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: timezone }).format(now) as LocalDate;
+export function todayDateStr(
+  timezone: string,
+  now: Date = new Date(),
+): LocalDate {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: timezone }).format(
+    now,
+  ) as LocalDate;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -121,7 +128,10 @@ export function formatLocalDate(
   options: Intl.DateTimeFormatOptions,
   locale?: string,
 ): string {
-  return utcMidnight(date).toLocaleDateString(locale, { ...options, timeZone: "UTC" });
+  return utcMidnight(date).toLocaleDateString(locale, {
+    ...options,
+    timeZone: "UTC",
+  });
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -148,7 +158,11 @@ export function formatInstantDate(
 // differs from today's (`"Dec 25, 2025"`).  `todayStr` comes from
 // `todayDateStr(profileZone)`, so "today" follows the profile zone.
 //
-export function formatDateHeader(dateStr: string, todayStr: string, locale?: string): string {
+export function formatDateHeader(
+  dateStr: string,
+  todayStr: string,
+  locale?: string,
+): string {
   const date = toLocalDate(dateStr);
   const today = toLocalDate(todayStr);
   if (!date || !today) return dateStr;
@@ -158,7 +172,11 @@ export function formatDateHeader(dateStr: string, todayStr: string, locale?: str
   const differentYear = date.slice(0, 4) !== today.slice(0, 4);
   return formatLocalDate(
     date,
-    { month: "short", day: "numeric", ...(differentYear ? { year: "numeric" } : {}) },
+    {
+      month: "short",
+      day: "numeric",
+      ...(differentYear ? { year: "numeric" } : {}),
+    },
     locale,
   );
 }
@@ -170,7 +188,11 @@ export function formatDateHeader(dateStr: string, todayStr: string, locale?: str
 // is not midnight: `"Tuesday, October 15, 2024 at 2:34 PM"`.  The
 // locale supplies the words and the joiner.
 //
-export function formatTxDateLong(isoString: string, timezone: string, locale?: string): string {
+export function formatTxDateLong(
+  isoString: string,
+  timezone: string,
+  locale?: string,
+): string {
   const d = new Date(isoString);
 
   const timeParts = new Intl.DateTimeFormat("en-US", {
@@ -181,7 +203,9 @@ export function formatTxDateLong(isoString: string, timezone: string, locale?: s
   }).formatToParts(d);
 
   const hour = parseInt(timeParts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = parseInt(timeParts.find((p) => p.type === "minute")?.value ?? "0");
+  const minute = parseInt(
+    timeParts.find((p) => p.type === "minute")?.value ?? "0",
+  );
 
   // `hour12: false` renders midnight as "24" in some engines.
   const atMidnight = (hour === 0 || hour === 24) && minute === 0;

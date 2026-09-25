@@ -35,7 +35,10 @@ export interface MountWithAppOptions {
 // component, and wait for pending promises (e.g. the component's first
 // API calls) to settle.  Returns the wrapper and the router.
 //
-export async function mountWithApp(component: Component, options: MountWithAppOptions = {}) {
+export async function mountWithApp(
+  component: Component,
+  options: MountWithAppOptions = {},
+) {
   const pinia = options.pinia ?? getActivePinia();
   if (!pinia) throw new Error("mountWithApp: no active Pinia");
   const router = createAppRouter(createMemoryHistory("/app/"));

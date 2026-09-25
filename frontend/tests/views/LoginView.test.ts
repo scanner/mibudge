@@ -23,7 +23,9 @@ import { requestsTo, server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
 //
-async function submit(wrapper: Awaited<ReturnType<typeof mountWithApp>>["wrapper"]) {
+async function submit(
+  wrapper: Awaited<ReturnType<typeof mountWithApp>>["wrapper"],
+) {
   await wrapper.find('input[type="email"]').setValue("alice@example.com");
   await wrapper.find('input[type="password"]').setValue("hunter2");
   await wrapper.find("form").trigger("submit");
@@ -44,7 +46,9 @@ describe("LoginView", () => {
     const account = makeBankAccount();
     server.use(
       http.get("/api/v1/users/me/", () => HttpResponse.json(me)),
-      http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage([account]))),
+      http.get("/api/v1/bank-accounts/", () =>
+        HttpResponse.json(makePage([account])),
+      ),
     );
     const { wrapper, router } = await mountWithApp(LoginView, {
       route: "/login/?next=/budgets/",
@@ -55,15 +59,21 @@ describe("LoginView", () => {
     // LoginView does not await `router.replace()`, and the target route's
     // component is lazy-loaded, so poll until the navigation lands.
     //
-    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe("/budgets/"), {
-      timeout: 5000,
-    });
+    await vi.waitFor(
+      () => expect(router.currentRoute.value.fullPath).toBe("/budgets/"),
+      {
+        timeout: 5000,
+      },
+    );
     const session = useSessionStore();
     expect(session.accessToken).toBe(LOGIN_TOKEN);
     expect(session.user).toEqual(userFromDto(me));
     expect(useAccountContextStore().activeBankAccountId).toBe(account.id);
     const [tokenReq] = await requestsTo("POST", "/api/token/");
-    expect(tokenReq.body).toEqual({ email: "alice@example.com", password: "hunter2" });
+    expect(tokenReq.body).toEqual({
+      email: "alice@example.com",
+      password: "hunter2",
+    });
   });
 
   // GIVEN: the login page with no `next`
@@ -71,12 +81,16 @@ describe("LoginView", () => {
   // THEN:  they land on the overview
   //
   it("navigates to the overview by default", async () => {
-    const { wrapper, router } = await mountWithApp(LoginView, { route: "/login/" });
+    const { wrapper, router } = await mountWithApp(LoginView, {
+      route: "/login/",
+    });
 
     await submit(wrapper);
 
     // See above: the navigation completes after the lazy route loads.
-    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe("/"), { timeout: 5000 });
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe("/"), {
+      timeout: 5000,
+    });
   });
 
   // GIVEN: the login page
@@ -86,11 +100,15 @@ describe("LoginView", () => {
   //
   it("shows an error on 401", async () => {
     respondOnce401("/api/token/", "post");
-    const { wrapper, router } = await mountWithApp(LoginView, { route: "/login/" });
+    const { wrapper, router } = await mountWithApp(LoginView, {
+      route: "/login/",
+    });
 
     await submit(wrapper);
 
-    expect(wrapper.get('[role="alert"]').text()).toBe("Incorrect email or password.");
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      "Incorrect email or password.",
+    );
     expect(useSessionStore().isAuthenticated).toBe(false);
     expect(router.currentRoute.value.path).toBe("/login/");
   });
@@ -100,11 +118,15 @@ describe("LoginView", () => {
   // THEN:  a generic retry message is shown
   //
   it("shows a generic error on other failures", async () => {
-    server.use(http.post("/api/token/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.post("/api/token/", () => new HttpResponse(null, { status: 500 })),
+    );
     const { wrapper } = await mountWithApp(LoginView, { route: "/login/" });
 
     await submit(wrapper);
 
-    expect(wrapper.get('[role="alert"]').text()).toBe("Unable to sign in. Please try again.");
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      "Unable to sign in. Please try again.",
+    );
   });
 });

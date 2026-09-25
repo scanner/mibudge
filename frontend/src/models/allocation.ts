@@ -34,7 +34,10 @@ export function allocationFromDto(dto: AllocationDto): Allocation {
     transactionId: dto.transaction,
     budgetId: dto.budget ?? null,
     amount: Money.of(dto.amount, currency),
-    budgetBalance: Money.of(dto.budget_balance, dto.budget_balance_currency || currency),
+    budgetBalance: Money.of(
+      dto.budget_balance,
+      dto.budget_balance_currency || currency,
+    ),
     categoryId: dto.category ?? null,
     categoryFullName: dto.category_full_name ?? null,
     memo: dto.memo ?? null,
@@ -46,7 +49,9 @@ export function allocationFromDto(dto: AllocationDto): Allocation {
 //
 // Allocations grouped by transaction id, in list order.
 //
-export function indexByTransaction(allocations: Iterable<Allocation>): Map<string, Allocation[]> {
+export function indexByTransaction(
+  allocations: Iterable<Allocation>,
+): Map<string, Allocation[]> {
   const map = new Map<string, Allocation[]>();
   for (const a of allocations) {
     const list = map.get(a.transactionId);
@@ -67,7 +72,9 @@ export function isUnallocated(
   unallocatedBudgetId: string | null,
 ): boolean {
   if (allocations.length === 0) return true;
-  return allocations.every((a) => a.budgetId === null || a.budgetId === unallocatedBudgetId);
+  return allocations.every(
+    (a) => a.budgetId === null || a.budgetId === unallocatedBudgetId,
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -78,7 +85,9 @@ export function assignedAllocations(
   allocations: Allocation[],
   unallocatedBudgetId: string | null,
 ): Allocation[] {
-  return allocations.filter((a) => a.budgetId !== null && a.budgetId !== unallocatedBudgetId);
+  return allocations.filter(
+    (a) => a.budgetId !== null && a.budgetId !== unallocatedBudgetId,
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -105,14 +114,19 @@ export type AllocationCoverage =
   | { kind: "remaining"; amount: Money }
   | { kind: "over"; amount: Money };
 
-export function allocationCoverage(total: Money, allocations: Allocation[]): AllocationCoverage {
+export function allocationCoverage(
+  total: Money,
+  allocations: Allocation[],
+): AllocationCoverage {
   const txAmount = total.abs();
   const allocated = sumMoney(
     allocations.map((a) => a.amount.abs()),
     total.currency,
   );
   const diff = txAmount.minus(allocated);
-  if (allocations.length > 0 && diff.isZero()) return { kind: "full", amount: txAmount };
-  if (diff.isPositive() || diff.isZero()) return { kind: "remaining", amount: diff };
+  if (allocations.length > 0 && diff.isZero())
+    return { kind: "full", amount: txAmount };
+  if (diff.isPositive() || diff.isZero())
+    return { kind: "remaining", amount: diff };
   return { kind: "over", amount: diff.abs() };
 }

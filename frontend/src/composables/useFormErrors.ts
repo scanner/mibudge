@@ -61,9 +61,12 @@ export function useFormErrors(): UseFormErrors {
       }
       if (err.status === 400) {
         const shown = new Set(options.inlineFields ?? []);
-        const unshown = Object.entries(err.fieldErrors).find(([field]) => !shown.has(field));
+        const unshown = Object.entries(err.fieldErrors).find(
+          ([field]) => !shown.has(field),
+        );
         fieldErrors.value = err.fieldErrors;
-        formError.value = err.nonFieldErrors[0] ?? err.detail ?? unshown?.[1][0] ?? null;
+        formError.value =
+          err.nonFieldErrors[0] ?? err.detail ?? unshown?.[1][0] ?? null;
         if (!formError.value && Object.keys(err.fieldErrors).length === 0) {
           formError.value = options.fallback ?? err.message;
         }

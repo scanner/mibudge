@@ -20,13 +20,17 @@
           ✓
         </span>
       </div>
-      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">Email address updated</h1>
+      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">
+        Email address updated
+      </h1>
       <p class="mb-6 text-sm text-neutral-500">
-        Your login email has been changed. Use your new address the next time you sign in.
+        Your login email has been changed. Use your new address the next time
+        you sign in.
       </p>
       <p class="mb-6 text-xs text-neutral-400">
-        If you didn't request this change, check your old inbox — a security notice with a
-        cancellation link was sent there and remains valid for 7 days.
+        If you didn't request this change, check your old inbox — a security
+        notice with a cancellation link was sent there and remains valid for 7
+        days.
       </p>
       <a
         href="/app/login/"

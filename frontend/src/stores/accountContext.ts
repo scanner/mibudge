@@ -90,12 +90,18 @@ export const useAccountContextStore = defineStore("accountContext", () => {
     loading.value = true;
     error.value = null;
     try {
-      const [list, user] = await Promise.all([bankAccounts.loadAll(force), session.loadUser()]);
+      const [list, user] = await Promise.all([
+        bankAccounts.loadAll(force),
+        session.loadUser(),
+      ]);
       const valid = new Set(list.map((a) => a.id));
       const stored = readStored();
       let chosen: string | null = null;
       if (stored && valid.has(stored)) chosen = stored;
-      else if (user?.defaultBankAccountId && valid.has(user.defaultBankAccountId)) {
+      else if (
+        user?.defaultBankAccountId &&
+        valid.has(user.defaultBankAccountId)
+      ) {
         chosen = user.defaultBankAccountId;
       } else chosen = list[0]?.id ?? null;
       setActive(chosen);
@@ -114,7 +120,10 @@ export const useAccountContextStore = defineStore("accountContext", () => {
   //
   async function refresh(): Promise<void> {
     const list = await bankAccounts.refresh();
-    if (activeBankAccountId.value && !list.some((a) => a.id === activeBankAccountId.value)) {
+    if (
+      activeBankAccountId.value &&
+      !list.some((a) => a.id === activeBankAccountId.value)
+    ) {
       setActive(list[0]?.id ?? null);
     }
   }

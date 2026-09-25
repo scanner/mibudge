@@ -38,7 +38,8 @@ export function useInviteFlow(accountId: () => string) {
 
   const pending = useResource(
     accountId,
-    async (id: string) => (await api.invitations.listForAccount(id)).map(invitationFromDto),
+    async (id: string) =>
+      (await api.invitations.listForAccount(id)).map(invitationFromDto),
     { errorMessage: "Failed to load pending invitations." },
   );
   const cancelError = ref<string | null>(null);
@@ -117,7 +118,10 @@ export function useInviteFlow(accountId: () => string) {
       removed.value = new Set([...removed.value, inv.id]);
     } catch (err) {
       // The row stays; the user can retry.
-      cancelError.value = describeError(err, "Failed to cancel the invitation.");
+      cancelError.value = describeError(
+        err,
+        "Failed to cancel the invitation.",
+      );
     } finally {
       cancellingId.value = null;
     }

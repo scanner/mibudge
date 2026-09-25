@@ -29,7 +29,10 @@ const sources = import.meta.glob<string>("../src/**/*.{ts,vue}", {
 
 // `src`-relative path (`views/BudgetsView.vue`) → source text.
 const files = new Map(
-  Object.entries(sources).map(([path, text]) => [path.replace(/^\.\.\/src\//, ""), text]),
+  Object.entries(sources).map(([path, text]) => [
+    path.replace(/^\.\.\/src\//, ""),
+    text,
+  ]),
 );
 
 ////////////////////////////////////////////////////////////////////////
@@ -42,23 +45,30 @@ const IMPORT_RE =
 //
 function scriptOf(path: string, text: string): string {
   if (!path.endsWith(".vue")) return text;
-  return Array.from(text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g), (m) => m[1]).join("\n");
+  return Array.from(
+    text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g),
+    (m) => m[1],
+  ).join("\n");
 }
 
 // Comments are dropped so an import mentioned in prose is not counted.
 //
 function stripComments(code: string): string {
-  return code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
 }
 
 // Import specifiers of a file, relative ones resolved to `@/...`.
 //
 function importsOf(path: string, text: string): string[] {
   const code = stripComments(scriptOf(path, text));
-  return Array.from(code.matchAll(IMPORT_RE), (m) => m[1] ?? m[2] ?? m[3]).map((spec) =>
-    spec.startsWith(".")
-      ? "@/" + relative(SRC, join(SRC, dirname(path), spec)).replace(/\\/g, "/")
-      : spec,
+  return Array.from(code.matchAll(IMPORT_RE), (m) => m[1] ?? m[2] ?? m[3]).map(
+    (spec) =>
+      spec.startsWith(".")
+        ? "@/" +
+          relative(SRC, join(SRC, dirname(path), spec)).replace(/\\/g, "/")
+        : spec,
   );
 }
 
@@ -147,13 +157,26 @@ const RULES: Rule[] = [
   {
     name: "composables/ are cross-feature behaviour, not data access",
     appliesTo: under("composables"),
-    forbidden: ["@/api", "@/stores", "@/components", "@/features", "@/router", "@/views"],
+    forbidden: [
+      "@/api",
+      "@/stores",
+      "@/components",
+      "@/features",
+      "@/router",
+      "@/views",
+    ],
     allowed: ["@/api/errors"],
   },
   {
     name: "stores/ do not reach into the UI",
     appliesTo: under("stores"),
-    forbidden: ["vue-router", "@/components", "@/features", "@/router", "@/views"],
+    forbidden: [
+      "vue-router",
+      "@/components",
+      "@/features",
+      "@/router",
+      "@/views",
+    ],
   },
   {
     name: "components/ are presentational",
@@ -182,7 +205,8 @@ function violations(rule: Rule, sourceFiles: Map<string, string>): string[] {
     if (!rule.appliesTo(path)) continue;
     for (const spec of importsOf(path, text)) {
       if (rule.allowed?.some((a) => matches(spec, a))) continue;
-      if (rule.forbidden.some((f) => matches(spec, f))) out.push(`${path} imports ${spec}`);
+      if (rule.forbidden.some((f) => matches(spec, f)))
+        out.push(`${path} imports ${spec}`);
     }
   }
   return out;
@@ -240,7 +264,12 @@ describe("architecture", () => {
       ["method.ts", "await api.fetch(url);\nawait store.fetchList();"],
       ["commented.ts", "// await window.fetch(url);"],
     ]);
-    expect(fetchCallers(sources)).toEqual(["bare.ts", "window.ts", "globalThis.ts", "self.ts"]);
+    expect(fetchCallers(sources)).toEqual([
+      "bare.ts",
+      "window.ts",
+      "globalThis.ts",
+      "self.ts",
+    ]);
   });
 
   // GIVEN: sources that break a rule, in each import style
@@ -249,9 +278,18 @@ describe("architecture", () => {
   //
   it("reports violations", () => {
     const bad = new Map([
-      ["components/Bad.vue", '<script setup lang="ts">\nimport { api } from "@/api";\n</script>'],
-      ["views/Bad.vue", '<script setup lang="ts">\nconst m = import("../api/http");\n</script>'],
-      ["domain/bad.ts", 'import { ref } from "vue";\nexport * from "../stores/session";'],
+      [
+        "components/Bad.vue",
+        '<script setup lang="ts">\nimport { api } from "@/api";\n</script>',
+      ],
+      [
+        "views/Bad.vue",
+        '<script setup lang="ts">\nconst m = import("../api/http");\n</script>',
+      ],
+      [
+        "domain/bad.ts",
+        'import { ref } from "vue";\nexport * from "../stores/session";',
+      ],
       ["models/ok.ts", 'import type { BudgetDto } from "@/api/dto";'],
       [
         "components/Commented.vue",

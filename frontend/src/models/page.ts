@@ -18,6 +18,13 @@ export interface ModelPage<T> {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function pageFromDto<D, T>(page: Page<D>, fromDto: (dto: D) => T): ModelPage<T> {
-  return { count: page.count, next: page.next ?? null, results: page.results.map(fromDto) };
+export function pageFromDto<D, T>(
+  page: Page<D>,
+  fromDto: (dto: D) => T,
+): ModelPage<T> {
+  return {
+    count: page.count,
+    next: page.next ?? null,
+    results: page.results.map(fromDto),
+  };
 }

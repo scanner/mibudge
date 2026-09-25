@@ -23,7 +23,11 @@ defineProps<{
 const emit = defineEmits<{ (e: "cancel", inv: Invitation): void }>();
 
 function fmtDate(iso: string): string {
-  return formatInstantDate(iso, { month: "short", day: "numeric", year: "numeric" });
+  return formatInstantDate(iso, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 </script>
 
@@ -52,7 +56,9 @@ function fmtDate(iso: string): string {
       >
         <div>
           <p class="text-sm text-neutral-900">{{ inv.inviteeEmail }}</p>
-          <p class="mt-0.5 text-xs text-secondary">Expires {{ fmtDate(inv.expiresAt) }}</p>
+          <p class="mt-0.5 text-xs text-secondary">
+            Expires {{ fmtDate(inv.expiresAt) }}
+          </p>
         </div>
         <!-- Only show Cancel for invitations sent by the current user.
              The backend enforces the same rule (403 if not the sender),
@@ -68,6 +74,8 @@ function fmtDate(iso: string): string {
         </button>
       </li>
     </ul>
-    <p v-if="error" class="px-4 pb-3 text-xs text-coral-600" role="alert">{{ error }}</p>
+    <p v-if="error" class="px-4 pb-3 text-xs text-coral-600" role="alert">
+      {{ error }}
+    </p>
   </section>
 </template>

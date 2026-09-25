@@ -43,13 +43,17 @@ const STATUS = {
 } as const;
 
 const allocationStatus = computed(() =>
-  props.coverage ? { ...STATUS[props.coverage.kind], amount: props.coverage.amount } : null,
+  props.coverage
+    ? { ...STATUS[props.coverage.kind], amount: props.coverage.amount }
+    : null,
 );
 </script>
 
 <template>
   <section class="mt-6">
-    <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+    <h2
+      class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+    >
       Allocations
     </h2>
 
@@ -92,8 +96,8 @@ const allocationStatus = computed(() =>
       {{ allocations.length > 0 ? "Add split" : "Assign to budget" }}
     </button>
     <p v-else class="mt-3 px-3 py-2 text-center text-sm text-neutral-500">
-      Pending transactions can't be assigned to a budget. The allocation becomes editable once the
-      bank posts this transaction.
+      Pending transactions can't be assigned to a budget. The allocation becomes
+      editable once the bank posts this transaction.
     </p>
   </section>
 </template>

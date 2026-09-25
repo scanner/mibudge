@@ -30,9 +30,24 @@ export interface AppRouteNamedMap {
   login: RouteRecordInfo<"login", "/login/", NoParams, NoParams>;
   overview: RouteRecordInfo<"overview", "/", NoParams, NoParams>;
   budgets: RouteRecordInfo<"budgets", "/budgets/", NoParams, NoParams>;
-  "budget-create": RouteRecordInfo<"budget-create", "/budgets/create/", NoParams, NoParams>;
-  "budget-detail": RouteRecordInfo<"budget-detail", "/budgets/:id/", IdParam, IdParamNormalized>;
-  transactions: RouteRecordInfo<"transactions", "/transactions/", NoParams, NoParams>;
+  "budget-create": RouteRecordInfo<
+    "budget-create",
+    "/budgets/create/",
+    NoParams,
+    NoParams
+  >;
+  "budget-detail": RouteRecordInfo<
+    "budget-detail",
+    "/budgets/:id/",
+    IdParam,
+    IdParamNormalized
+  >;
+  transactions: RouteRecordInfo<
+    "transactions",
+    "/transactions/",
+    NoParams,
+    NoParams
+  >;
   "transaction-detail": RouteRecordInfo<
     "transaction-detail",
     "/transactions/:id/",
@@ -40,8 +55,18 @@ export interface AppRouteNamedMap {
     IdParamNormalized
   >;
   account: RouteRecordInfo<"account", "/account/", NoParams, NoParams>;
-  "user-profile": RouteRecordInfo<"user-profile", "/account/profile/", NoParams, NoParams>;
-  "account-settings": RouteRecordInfo<"account-settings", "/account/settings/", NoParams, NoParams>;
+  "user-profile": RouteRecordInfo<
+    "user-profile",
+    "/account/profile/",
+    NoParams,
+    NoParams
+  >;
+  "account-settings": RouteRecordInfo<
+    "account-settings",
+    "/account/settings/",
+    NoParams,
+    NoParams
+  >;
   "bank-account-create": RouteRecordInfo<
     "bank-account-create",
     "/account/bank-accounts/create/",

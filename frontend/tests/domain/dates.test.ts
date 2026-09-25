@@ -54,7 +54,9 @@ describe("todayDateStr", () => {
   // THEN:  the date follows the given instant, not the system clock
   //
   it("uses the instant it is given", () => {
-    expect(todayDateStr("UTC", new Date("2020-02-29T12:00:00Z"))).toBe("2020-02-29");
+    expect(todayDateStr("UTC", new Date("2020-02-29T12:00:00Z"))).toBe(
+      "2020-02-29",
+    );
   });
 });
 
@@ -65,15 +67,23 @@ describe("parseLocalDate", () => {
   // WHEN:  it is parsed in a browser east or west of UTC
   // THEN:  the result is local midnight on that same calendar day
   //
-  it.each(["Pacific/Honolulu", "America/New_York", "UTC", "Asia/Tokyo"])("in %s", (tz) => {
-    // `vi.stubEnv` changes the process zone for this test only;
-    // `unstubEnvs` in vitest.config.ts restores America/New_York.
-    //
-    vi.stubEnv("TZ", tz);
-    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(tz);
-    const d = parseLocalDate("2026-08-01");
-    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 7, 1, 0]);
-  });
+  it.each(["Pacific/Honolulu", "America/New_York", "UTC", "Asia/Tokyo"])(
+    "in %s",
+    (tz) => {
+      // `vi.stubEnv` changes the process zone for this test only;
+      // `unstubEnvs` in vitest.config.ts restores America/New_York.
+      //
+      vi.stubEnv("TZ", tz);
+      expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(tz);
+      const d = parseLocalDate("2026-08-01");
+      expect([
+        d.getFullYear(),
+        d.getMonth(),
+        d.getDate(),
+        d.getHours(),
+      ]).toEqual([2026, 7, 1, 0]);
+    },
+  );
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -124,11 +134,16 @@ describe("formatLocalDate", () => {
   // WHEN:  it is formatted in a browser east or west of UTC
   // THEN:  the same calendar day is shown in every zone
   //
-  it.each(["Pacific/Honolulu", "America/Los_Angeles", "UTC", "Asia/Tokyo"])("in %s", (tz) => {
-    vi.stubEnv("TZ", tz);
-    const opts = { month: "short", day: "numeric", year: "numeric" } as const;
-    expect(formatLocalDate("2026-08-01" as LocalDate, opts)).toBe("Aug 1, 2026");
-  });
+  it.each(["Pacific/Honolulu", "America/Los_Angeles", "UTC", "Asia/Tokyo"])(
+    "in %s",
+    (tz) => {
+      vi.stubEnv("TZ", tz);
+      const opts = { month: "short", day: "numeric", year: "numeric" } as const;
+      expect(formatLocalDate("2026-08-01" as LocalDate, opts)).toBe(
+        "Aug 1, 2026",
+      );
+    },
+  );
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -215,9 +230,9 @@ describe("formatTxDateLong", () => {
   // THEN:  only the date is shown
   //
   it("omits the time at local midnight", () => {
-    expect(formatTxDateLong("2024-10-15T07:00:00Z", "America/Los_Angeles")).toBe(
-      "Tuesday, October 15, 2024",
-    );
+    expect(
+      formatTxDateLong("2024-10-15T07:00:00Z", "America/Los_Angeles"),
+    ).toBe("Tuesday, October 15, 2024");
   });
 
   // GIVEN: a transaction timestamp that is not midnight in the profile
@@ -226,9 +241,9 @@ describe("formatTxDateLong", () => {
   // THEN:  the local time is appended
   //
   it("appends the time otherwise", () => {
-    expect(formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles")).toBe(
-      "Tuesday, October 15, 2024 at 2:34 PM",
-    );
+    expect(
+      formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles"),
+    ).toBe("Tuesday, October 15, 2024 at 2:34 PM");
   });
 
   // GIVEN: a transaction timestamp that is not midnight, and a locale
@@ -240,6 +255,8 @@ describe("formatTxDateLong", () => {
     ["de-DE", "Dienstag, 15. Oktober 2024 um 14:34"],
     ["fr-FR", "mardi 15 octobre 2024 à 14:34"],
   ])("joins date and time in the %s locale", (locale, expected) => {
-    expect(formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles", locale)).toBe(expected);
+    expect(
+      formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles", locale),
+    ).toBe(expected);
   });
 });

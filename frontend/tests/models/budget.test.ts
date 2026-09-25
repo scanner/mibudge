@@ -42,7 +42,11 @@ describe("budgetFromDto", () => {
       next_recurrence: "2026-10-01",
       fillup_goal: "fill-1",
       funding_pace: "behind",
-      next_funding: { date: "2026-09-30", amount: "40.00", amount_currency: "EUR" },
+      next_funding: {
+        date: "2026-09-30",
+        amount: "40.00",
+        amount_currency: "EUR",
+      },
     });
 
     const b = budgetFromDto(dto);
@@ -66,19 +70,22 @@ describe("budgetFromDto", () => {
   // WHEN:  the budget is mapped
   // THEN:  `nextFunding` is null rather than a half-filled value
   //
-  it.each([[null], [{ date: "not-a-date", amount: "1.00" }], [{ date: "2026-09-30" }]])(
-    "drops next_funding %j",
-    (next_funding) => {
-      expect(budgetFromDto(makeBudget({ next_funding })).nextFunding).toBeNull();
-    },
-  );
+  it.each([
+    [null],
+    [{ date: "not-a-date", amount: "1.00" }],
+    [{ date: "2026-09-30" }],
+  ])("drops next_funding %j", (next_funding) => {
+    expect(budgetFromDto(makeBudget({ next_funding })).nextFunding).toBeNull();
+  });
 
   // GIVEN: a budget with blank schedules
   // WHEN:  it is mapped
   // THEN:  the schedules are null
   //
   it("treats blank schedules as absent", () => {
-    const b = budgetFromDto(makeBudget({ funding_schedule: "", recurrence_schedule: "" }));
+    const b = budgetFromDto(
+      makeBudget({ funding_schedule: "", recurrence_schedule: "" }),
+    );
     expect(b.fundingSchedule).toBeNull();
     expect(b.recurrenceSchedule).toBeNull();
   });
@@ -157,6 +164,8 @@ describe("list helpers", () => {
 
     expect([...fillupIndex(all).keys()]).toEqual([fill.id]);
     expect(budgetNameIndex(all).get(goal.id)).toBe("Goal");
-    expect(all.filter((b) => isAssignableBudget(b, unalloc.id))).toEqual([goal]);
+    expect(all.filter((b) => isAssignableBudget(b, unalloc.id))).toEqual([
+      goal,
+    ]);
   });
 });

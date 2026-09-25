@@ -38,7 +38,9 @@ function button(wrapper: Wrapper, text: string) {
 
 async function open(path: string) {
   const mounted = await mountWithApp(App, { route: path });
-  await vi.waitFor(() => expect(mounted.wrapper.find("main").exists()).toBe(true));
+  await vi.waitFor(() =>
+    expect(mounted.wrapper.find("main").exists()).toBe(true),
+  );
   await flushPromises();
   return mounted;
 }
@@ -49,7 +51,11 @@ beforeEach(() => {
   withAuth(undefined, makeUser({ name: "Ada Lovelace", username: "ada" }));
   account = makeBankAccount({ name: "Household" });
   withAccounts([account]);
-  server.use(http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage([account]))));
+  server.use(
+    http.get("/api/v1/bank-accounts/", () =>
+      HttpResponse.json(makePage([account])),
+    ),
+  );
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -66,7 +72,9 @@ describe("AccountView", () => {
     useTransactionNavStore().setIds(["a"]);
 
     await button(wrapper, "Sign out").trigger("click");
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("login"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("login"),
+    );
 
     expect(useSessionStore().isAuthenticated).toBe(false);
     expect(useBudgetsStore().all).toEqual([]);
@@ -110,7 +118,9 @@ describe("UserProfileView", () => {
     await flushPromises();
 
     expect(useSessionStore().timezone).toBe("Asia/Tokyo");
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("account"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("account"),
+    );
   });
 
   // GIVEN: the email-change form
@@ -119,7 +129,9 @@ describe("UserProfileView", () => {
   //
   it("explains a conflicting email change", async () => {
     server.use(
-      http.post("/api/v1/users/me/change-email/", () => HttpResponse.json({}, { status: 409 })),
+      http.post("/api/v1/users/me/change-email/", () =>
+        HttpResponse.json({}, { status: 409 }),
+      ),
     );
     const { wrapper } = await open("/account/profile/");
     await wrapper.get('input[type="email"]').setValue("new@example.com");
@@ -156,7 +168,9 @@ describe("BudgetCreateView", () => {
       funding_amount: "50.50",
       funding_type: "F",
     });
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("budget-detail"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("budget-detail"),
+    );
   });
 
   // GIVEN: a recurring budget with a next refresh date
@@ -185,7 +199,10 @@ describe("BudgetCreateView", () => {
   it("shows the server's error", async () => {
     server.use(
       http.post("/api/v1/budgets/", () =>
-        HttpResponse.json({ name: ["A budget with this name exists."] }, { status: 400 }),
+        HttpResponse.json(
+          { name: ["A budget with this name exists."] },
+          { status: 400 },
+        ),
       ),
     );
     const { wrapper } = await open("/budgets/create/");
@@ -221,17 +238,33 @@ describe("OverviewView", () => {
   //        a transaction opens its detail page
   //
   it("shows budgets and recent transactions", async () => {
-    const rent = makeBudget({ name: "Rent", budget_type: "R", bank_account: account.id });
-    const fill = makeBudget({ name: "Rent fill", budget_type: "A", bank_account: account.id });
-    const tx = makeTransaction({ bank_account: account.id, party: "Corner Market" });
+    const rent = makeBudget({
+      name: "Rent",
+      budget_type: "R",
+      bank_account: account.id,
+    });
+    const fill = makeBudget({
+      name: "Rent fill",
+      budget_type: "A",
+      bank_account: account.id,
+    });
+    const tx = makeTransaction({
+      bank_account: account.id,
+      party: "Corner Market",
+    });
     server.use(
       http.get("/api/v1/budgets/", () =>
         HttpResponse.json(makePage([{ ...rent, fillup_goal: fill.id }, fill])),
       ),
-      http.get("/api/v1/transactions/", () => HttpResponse.json(makePage([tx]))),
+      http.get("/api/v1/transactions/", () =>
+        HttpResponse.json(makePage([tx])),
+      ),
       http.get(`/api/v1/bank-accounts/${account.id}/funding-summary/`, () =>
         HttpResponse.json(
-          makeFundingSummary({ total_amount: "40.00", schedules: [{ next_date: "2026-10-01" }] }),
+          makeFundingSummary({
+            total_amount: "40.00",
+            schedules: [{ next_date: "2026-10-01" }],
+          }),
         ),
       ),
     );
@@ -246,7 +279,9 @@ describe("OverviewView", () => {
       .findAll("article")
       .find((a) => a.text().includes("Corner Market"))!
       .trigger("click");
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("transaction-detail"));
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("transaction-detail"),
+    );
   });
 
   // GIVEN: the overview, which lists the five most recent transactions

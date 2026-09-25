@@ -18,7 +18,11 @@ import { api } from "@/api";
 import { describeError, isApiError } from "@/api/errors";
 import { useFormErrors } from "@/composables/useFormErrors";
 import type { ApiKey, CreatedApiKey } from "@/models/apiKey";
-import { apiKeyFromDto, apiKeyToCreateDto, createdApiKeyFromDto } from "@/models/apiKey";
+import {
+  apiKeyFromDto,
+  apiKeyToCreateDto,
+  createdApiKeyFromDto,
+} from "@/models/apiKey";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -37,7 +41,10 @@ export const EXPIRY_PRESETS: { value: string; label: string }[] = [
 // key that never expires, or `undefined` when a custom value is not a
 // positive number.
 //
-export function expiryDays(preset: string, customDays: string): number | null | undefined {
+export function expiryDays(
+  preset: string,
+  customDays: string,
+): number | null | undefined {
   if (preset === "never") return null;
   if (preset === "custom") {
     const days = Number(customDays);
@@ -92,7 +99,9 @@ export function useApiKeys() {
     }
     creating.value = true;
     try {
-      const dto = await api.apiKeys.create(apiKeyToCreateDto(newKeyName.value.trim(), days));
+      const dto = await api.apiKeys.create(
+        apiKeyToCreateDto(newKeyName.value.trim(), days),
+      );
       justCreated.value = createdApiKeyFromDto(dto);
       copied.value = false;
       newKeyName.value = "";
@@ -101,8 +110,12 @@ export function useApiKeys() {
       await load();
     } catch (err) {
       // The name is the only field a user can fix; show its message.
-      const nameError = isApiError(err, 400) ? err.fieldErrors.name?.[0] : undefined;
-      createErrors.setFormError(nameError ?? describeError(err, "Failed to create key."));
+      const nameError = isApiError(err, 400)
+        ? err.fieldErrors.name?.[0]
+        : undefined;
+      createErrors.setFormError(
+        nameError ?? describeError(err, "Failed to create key."),
+      );
     } finally {
       creating.value = false;
     }

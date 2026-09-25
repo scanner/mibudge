@@ -44,14 +44,17 @@ const {
 
 async function submit() {
   const created = await create();
-  if (created) router.push({ name: "bank-account-detail", params: { id: created.id } });
+  if (created)
+    router.push({ name: "bank-account-detail", params: { id: created.id } });
 }
 </script>
 
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
-      <h1 class="mb-5 text-[22px] font-medium text-neutral-900">New bank account</h1>
+      <h1 class="mb-5 text-[22px] font-medium text-neutral-900">
+        New bank account
+      </h1>
 
       <div
         v-if="error"
@@ -64,7 +67,9 @@ async function submit() {
       <form class="space-y-5" @submit.prevent="submit">
         <!-- Account type grid -->
         <div>
-          <label class="mb-2 block text-sm font-medium text-neutral-700">Account type</label>
+          <label class="mb-2 block text-sm font-medium text-neutral-700"
+            >Account type</label
+          >
           <div class="grid grid-cols-3 gap-2">
             <button
               v-for="opt in ACCOUNT_TYPES"
@@ -79,14 +84,19 @@ async function submit() {
               @click="accountType = opt.value"
             >
               <div class="text-sm font-medium">{{ opt.label }}</div>
-              <div class="mt-0.5 text-[11px] text-neutral-500">{{ opt.sub }}</div>
+              <div class="mt-0.5 text-[11px] text-neutral-500">
+                {{ opt.sub }}
+              </div>
             </button>
           </div>
         </div>
 
         <!-- Name -->
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="acct-name">
+          <label
+            class="mb-1.5 block text-sm font-medium text-neutral-700"
+            for="acct-name"
+          >
             Account name <span class="text-coral-400">*</span>
           </label>
           <input
@@ -101,7 +111,10 @@ async function submit() {
 
         <!-- Bank picker -->
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="acct-bank">
+          <label
+            class="mb-1.5 block text-sm font-medium text-neutral-700"
+            for="acct-bank"
+          >
             Bank <span class="text-coral-400">*</span>
           </label>
           <template v-if="banksLoading">
@@ -116,7 +129,10 @@ async function submit() {
               class="rounded-subcard border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-500"
             >
               Your bank isn't listed —
-              <a v-if="adminEmail" :href="`mailto:${adminEmail}`" class="text-ocean-600 underline"
+              <a
+                v-if="adminEmail"
+                :href="`mailto:${adminEmail}`"
+                class="text-ocean-600 underline"
                 >contact support</a
               >
               <span v-else>contact support</span>
@@ -140,7 +156,10 @@ async function submit() {
 
         <!-- Account number (optional) -->
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="acct-number">
+          <label
+            class="mb-1.5 block text-sm font-medium text-neutral-700"
+            for="acct-number"
+          >
             Account number <span class="text-coral-400">*</span>
           </label>
           <input
@@ -155,7 +174,9 @@ async function submit() {
 
         <!-- Currency — GAP: hardcoded to USD until /api/v1/currencies/ is live -->
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-neutral-700">Currency</label>
+          <label class="mb-1.5 block text-sm font-medium text-neutral-700"
+            >Currency</label
+          >
           <div
             class="rounded-subcard border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-700"
           >
@@ -167,7 +188,10 @@ async function submit() {
         <!-- Balances -->
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="acct-posted">
+            <label
+              class="mb-1.5 block text-sm font-medium text-neutral-700"
+              for="acct-posted"
+            >
               Posted balance
               <span class="font-normal text-neutral-400">(optional)</span>
             </label>
@@ -181,7 +205,10 @@ async function submit() {
             />
           </div>
           <div>
-            <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="acct-available">
+            <label
+              class="mb-1.5 block text-sm font-medium text-neutral-700"
+              for="acct-available"
+            >
               Available balance
               <span class="font-normal text-neutral-400">(optional)</span>
             </label>
@@ -221,7 +248,8 @@ async function submit() {
 
         <!-- Footer note -->
         <p class="text-center text-xs text-neutral-400">
-          Balances are immutable after creation. An Unallocated budget is created automatically.
+          Balances are immutable after creation. An Unallocated budget is
+          created automatically.
         </p>
       </form>
     </div>

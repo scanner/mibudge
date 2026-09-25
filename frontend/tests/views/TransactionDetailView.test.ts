@@ -40,12 +40,17 @@ function serveTransactions(txs: ReturnType<typeof makeTransaction>[]) {
   const byId = new Map(txs.map((t) => [t.id, t]));
   server.use(
     http.get("/api/v1/transactions/:id/", ({ params }) =>
-      HttpResponse.json(byId.get(String(params.id)) ?? makeTransaction({ id: String(params.id) })),
+      HttpResponse.json(
+        byId.get(String(params.id)) ??
+          makeTransaction({ id: String(params.id) }),
+      ),
     ),
     http.patch("/api/v1/transactions/:id/", async ({ params, request }) => {
       const base = byId.get(String(params.id))!;
       const type = request.headers.get("Content-Type") ?? "";
-      const body = type.includes("json") ? ((await request.json()) as object) : {};
+      const body = type.includes("json")
+        ? ((await request.json()) as object)
+        : {};
       return HttpResponse.json({ ...base, ...body });
     }),
     http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
@@ -54,7 +59,9 @@ function serveTransactions(txs: ReturnType<typeof makeTransaction>[]) {
 
 async function openApp(path: string) {
   const mounted = await mountWithApp(App, { route: path });
-  await vi.waitFor(() => expect(mounted.wrapper.find("h1").exists()).toBe(true));
+  await vi.waitFor(() =>
+    expect(mounted.wrapper.find("h1").exists()).toBe(true),
+  );
   await flushPromises();
   return mounted;
 }
@@ -81,8 +88,14 @@ describe("TransactionDetailView", () => {
   // THEN:  A's text is saved to A at once, and never written to B
   //
   it("does not save one transaction's text onto the next", async () => {
-    const a = makeTransaction({ bank_account: account.id, description: "Coffee" });
-    const b = makeTransaction({ bank_account: account.id, description: "Rent" });
+    const a = makeTransaction({
+      bank_account: account.id,
+      description: "Coffee",
+    });
+    const b = makeTransaction({
+      bank_account: account.id,
+      description: "Rent",
+    });
     serveTransactions([a, b]);
     // B's detail answers only after the autosave delay, so the pending
     // save for A would fire while B is loading.
@@ -104,10 +117,19 @@ describe("TransactionDetailView", () => {
     releaseB();
     await flushPromises();
 
-    expect(await requestsTo("PATCH", `/api/v1/transactions/${b.id}/`)).toHaveLength(0);
-    const patchesToA = await requestsTo("PATCH", `/api/v1/transactions/${a.id}/`);
-    expect(patchesToA.map((r) => r.body)).toEqual([{ description: "Coffee with Sam" }]);
-    expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe("Rent");
+    expect(
+      await requestsTo("PATCH", `/api/v1/transactions/${b.id}/`),
+    ).toHaveLength(0);
+    const patchesToA = await requestsTo(
+      "PATCH",
+      `/api/v1/transactions/${a.id}/`,
+    );
+    expect(patchesToA.map((r) => r.body)).toEqual([
+      { description: "Coffee with Sam" },
+    ]);
+    expect(
+      (wrapper.get('input[type="text"]').element as HTMLInputElement).value,
+    ).toBe("Rent");
   });
 
   // GIVEN: a transaction on "Household", whose only allocation is
@@ -126,15 +148,24 @@ describe("TransactionDetailView", () => {
     server.use(
       http.get("/api/v1/allocations/", () =>
         HttpResponse.json(
-          makePage([makeAllocation({ transaction: tx.id, budget: household.unallocated_budget })]),
+          makePage([
+            makeAllocation({
+              transaction: tx.id,
+              budget: household.unallocated_budget,
+            }),
+          ]),
         ),
       ),
     );
 
     const { wrapper } = await openApp(`/transactions/${tx.id}/`);
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Household balance after"));
-    expect(wrapper.find('button[aria-label="Remove allocation"]').exists()).toBe(false);
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Household balance after"),
+    );
+    expect(
+      wrapper.find('button[aria-label="Remove allocation"]').exists(),
+    ).toBe(false);
   });
 
   // GIVEN: a transaction with a memo
@@ -142,7 +173,10 @@ describe("TransactionDetailView", () => {
   // THEN:  the PATCH sends `memo: null`, clearing it on the server
   //
   it("saves a cleared memo", async () => {
-    const tx = makeTransaction({ bank_account: account.id, memo: "Team lunch" });
+    const tx = makeTransaction({
+      bank_account: account.id,
+      memo: "Team lunch",
+    });
     serveTransactions([tx]);
     const { wrapper } = await openApp(`/transactions/${tx.id}/`);
 
@@ -158,7 +192,10 @@ describe("TransactionDetailView", () => {
   // THEN:  it is saved at once
   //
   it("saves the description on blur", async () => {
-    const tx = makeTransaction({ bank_account: account.id, description: "Coffee" });
+    const tx = makeTransaction({
+      bank_account: account.id,
+      description: "Coffee",
+    });
     serveTransactions([tx]);
     const { wrapper } = await openApp(`/transactions/${tx.id}/`);
 
@@ -188,13 +225,17 @@ describe("TransactionDetailView", () => {
     //
     vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(
       function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", { value: [new File(["x"], "receipt.png")] });
+        Object.defineProperty(this, "files", {
+          value: [new File(["x"], "receipt.png")],
+        });
         this.onchange?.(new Event("change"));
       },
     );
     const { wrapper } = await openApp(`/transactions/${tx.id}/`);
 
-    const attach = wrapper.findAll("button").find((b) => b.text() === "Attach photo")!;
+    const attach = wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Attach photo")!;
     await attach.trigger("click");
     await flushPromises();
 
@@ -209,13 +250,21 @@ describe("TransactionDetailView", () => {
   //
   it("assigns the transaction to a budget", async () => {
     const tx = makeTransaction({ bank_account: account.id, amount: "-20.00" });
-    const rent = makeBudget({ name: "Rent", bank_account: account.id, budget_type: "R" });
+    const rent = makeBudget({
+      name: "Rent",
+      bank_account: account.id,
+      budget_type: "R",
+    });
     serveTransactions([tx]);
     server.use(
       http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([rent]))),
       http.post(`/api/v1/transactions/${tx.id}/splits/`, () =>
         HttpResponse.json([
-          makeAllocation({ transaction: tx.id, budget: rent.id, amount: "-20.00" }),
+          makeAllocation({
+            transaction: tx.id,
+            budget: rent.id,
+            amount: "-20.00",
+          }),
         ]),
       ),
     );
@@ -225,7 +274,8 @@ describe("TransactionDetailView", () => {
       .findAll("button")
       .find((b) => b.text().includes("Assign to budget"))!
       .trigger("click");
-    const select = document.body.querySelector<HTMLSelectElement>(".split-row-select")!;
+    const select =
+      document.body.querySelector<HTMLSelectElement>(".split-row-select")!;
     select.value = rent.id;
     select.dispatchEvent(new Event("change"));
     await flushPromises();
@@ -235,11 +285,16 @@ describe("TransactionDetailView", () => {
     save.click();
     await flushPromises();
 
-    const [post] = await requestsTo("POST", `/api/v1/transactions/${tx.id}/splits/`);
+    const [post] = await requestsTo(
+      "POST",
+      `/api/v1/transactions/${tx.id}/splits/`,
+    );
     expect(post.body).toEqual({ splits: { [rent.id]: "20.00" } });
     expect(wrapper.text()).toContain("Rent");
     expect(wrapper.text()).toContain("Fully allocated");
-    expect((await requestsTo("GET", "/api/v1/budgets/")).length).toBeGreaterThanOrEqual(2);
+    expect(
+      (await requestsTo("GET", "/api/v1/budgets/")).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   // GIVEN: the transaction list's order saved in the nav store
@@ -247,7 +302,9 @@ describe("TransactionDetailView", () => {
   // THEN:  the next transaction opens
   //
   it("steps to the next transaction", async () => {
-    const txs = [0, 1, 2].map(() => makeTransaction({ bank_account: account.id }));
+    const txs = [0, 1, 2].map(() =>
+      makeTransaction({ bank_account: account.id }),
+    );
     serveTransactions(txs);
     useTransactionNavStore().setIds(txs.map((t) => t.id));
     const { wrapper, router } = await openApp(`/transactions/${txs[1].id}/`);
@@ -255,8 +312,12 @@ describe("TransactionDetailView", () => {
     await wrapper.get('button[aria-label="Next transaction"]').trigger("click");
 
     await vi.waitFor(() =>
-      expect(router.currentRoute.value.path).toBe(`/transactions/${txs[2].id}/`),
+      expect(router.currentRoute.value.path).toBe(
+        `/transactions/${txs[2].id}/`,
+      ),
     );
-    expect(wrapper.find('button[aria-label="Previous transaction"]').exists()).toBe(true);
+    expect(
+      wrapper.find('button[aria-label="Previous transaction"]').exists(),
+    ).toBe(true);
   });
 });

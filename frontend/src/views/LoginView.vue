@@ -11,7 +11,13 @@ import { useLogin } from "@/features/auth/useLogin";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const { email, password, submitting, errorMessage, submit: onSubmit } = useLogin();
+const {
+  email,
+  password,
+  submitting,
+  errorMessage,
+  submit: onSubmit,
+} = useLogin();
 </script>
 
 <template>
@@ -46,7 +52,9 @@ const { email, password, submitting, errorMessage, submit: onSubmit } = useLogin
       </label>
 
       <div class="mt-1 flex justify-end">
-        <a href="/accounts/password/reset/" class="text-xs text-neutral-500 hover:text-ocean-500"
+        <a
+          href="/accounts/password/reset/"
+          class="text-xs text-neutral-500 hover:text-ocean-500"
           >Forgot password?</a
         >
       </div>

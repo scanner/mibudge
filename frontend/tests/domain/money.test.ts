@@ -82,7 +82,11 @@ describe("arithmetic and comparison", () => {
     expect(neg.abs().toDecimalString()).toBe("12.34");
     expect(neg.negated().toDecimalString()).toBe("12.34");
     const zero = Money.of("-0");
-    expect([zero.isZero(), zero.isNegative(), zero.isPositive()]).toEqual([true, false, false]);
+    expect([zero.isZero(), zero.isNegative(), zero.isPositive()]).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 
   // GIVEN: two amounts
@@ -100,7 +104,9 @@ describe("arithmetic and comparison", () => {
   // THEN:  the total is exact and keeps the currency
   //
   it("sums", () => {
-    expect(sumMoney([Money.of("0.1", "EUR"), Money.of("0.2", "EUR")]).toString()).toBe("0.30 EUR");
+    expect(
+      sumMoney([Money.of("0.1", "EUR"), Money.of("0.2", "EUR")]).toString(),
+    ).toBe("0.30 EUR");
     expect(sumMoney([]).toString()).toBe("0.00 USD");
   });
 });
@@ -140,7 +146,9 @@ describe("formatMoney", () => {
     ["12", "USD", "always", "+$12.00"],
     ["0", "EUR", "auto", "€0.00"],
   ] as const)("%s %s (%s) → %s", (amount, currency, signDisplay, expected) => {
-    expect(formatMoney(Money.of(amount, currency), { signDisplay })).toBe(expected);
+    expect(formatMoney(Money.of(amount, currency), { signDisplay })).toBe(
+      expected,
+    );
   });
 
   // GIVEN: an explicit locale
@@ -148,6 +156,8 @@ describe("formatMoney", () => {
   // THEN:  the locale's separators are used
   //
   it("honours the locale", () => {
-    expect(formatMoney(Money.of("1234.5", "EUR"), { locale: "de-DE" })).toBe("1.234,50\u00a0€");
+    expect(formatMoney(Money.of("1234.5", "EUR"), { locale: "de-DE" })).toBe(
+      "1.234,50\u00a0€",
+    );
   });
 });

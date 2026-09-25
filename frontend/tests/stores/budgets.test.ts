@@ -73,7 +73,11 @@ describe("fetchOne", () => {
   it("fetches and caches a budget", async () => {
     withAuth();
     const budget = makeBudget({ name: "Travel" });
-    server.use(http.get(`/api/v1/budgets/${budget.id}/`, () => HttpResponse.json(budget)));
+    server.use(
+      http.get(`/api/v1/budgets/${budget.id}/`, () =>
+        HttpResponse.json(budget),
+      ),
+    );
     const store = useBudgetsStore();
 
     const result = await store.fetchOne(budget.id);
@@ -95,16 +99,23 @@ describe("fetchList", () => {
   it("fetches with filters and caches the results", async () => {
     withAuth();
     const budgets = [makeBudget({ name: "A" }), makeBudget({ name: "B" })];
-    server.use(http.get("/api/v1/budgets/", () => HttpResponse.json(makePage(budgets))));
+    server.use(
+      http.get("/api/v1/budgets/", () => HttpResponse.json(makePage(budgets))),
+    );
     const store = useBudgetsStore();
 
-    const result = await store.fetchList({ bank_account: "acct-1", archived: false });
+    const result = await store.fetchList({
+      bank_account: "acct-1",
+      archived: false,
+    });
 
     expect(result).toEqual(budgets.map(budgetFromDto));
     expect(store.all).toEqual(budgets.map(budgetFromDto));
     expect(store.loading).toBe(false);
     expect(store.error).toBeNull();
-    expect((await lastRequest())?.path).toBe("/api/v1/budgets/?bank_account=acct-1&archived=false");
+    expect((await lastRequest())?.path).toBe(
+      "/api/v1/budgets/?bank_account=acct-1&archived=false",
+    );
   });
 
   // GIVEN: a budget list request that fails
@@ -113,7 +124,12 @@ describe("fetchList", () => {
   //
   it("records the error and rethrows", async () => {
     withAuth();
-    server.use(http.get("/api/v1/budgets/", () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        "/api/v1/budgets/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
     const store = useBudgetsStore();
 
     await expect(store.fetchList()).rejects.toMatchObject({ status: 500 });

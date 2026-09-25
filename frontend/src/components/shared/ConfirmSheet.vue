@@ -46,15 +46,23 @@ useModal(
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="open" class="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-        <div class="absolute inset-0 bg-neutral-900/40" @click="emit('cancel')" />
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+      >
+        <div
+          class="absolute inset-0 bg-neutral-900/40"
+          @click="emit('cancel')"
+        />
         <div
           class="relative w-full rounded-t-2xl bg-white p-5 shadow-xl md:w-[420px] md:rounded-card"
           role="dialog"
           aria-modal="true"
         >
           <h2 class="text-base font-medium text-neutral-900">{{ title }}</h2>
-          <p v-if="message" class="mt-2 text-sm text-neutral-600">{{ message }}</p>
+          <p v-if="message" class="mt-2 text-sm text-neutral-600">
+            {{ message }}
+          </p>
           <div class="mt-5 flex justify-end gap-2">
             <button
               type="button"

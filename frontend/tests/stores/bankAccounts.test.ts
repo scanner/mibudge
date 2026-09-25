@@ -26,7 +26,11 @@ describe("bank accounts store", () => {
   it("loads once until invalidated", async () => {
     withAuth();
     const account = makeBankAccount({ name: "Household" });
-    server.use(http.get("/api/v1/bank-accounts/", () => HttpResponse.json(makePage([account]))));
+    server.use(
+      http.get("/api/v1/bank-accounts/", () =>
+        HttpResponse.json(makePage([account])),
+      ),
+    );
     const store = useBankAccountsStore();
 
     await store.loadAll();
@@ -65,7 +69,9 @@ describe("bank accounts store", () => {
 
     await store.remove("a1");
     expect(store.byId("a1")).toBeNull();
-    expect(await requestsTo("DELETE", "/api/v1/bank-accounts/a1/")).toHaveLength(1);
+    expect(
+      await requestsTo("DELETE", "/api/v1/bank-accounts/a1/"),
+    ).toHaveLength(1);
 
     store.reset();
     expect(store.all).toEqual([]);

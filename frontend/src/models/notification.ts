@@ -47,7 +47,9 @@ export interface ChannelPreference {
   digestFrequency: DigestFrequency;
 }
 
-export function channelPreferenceFromDto(dto: ChannelPreferenceDto): ChannelPreference {
+export function channelPreferenceFromDto(
+  dto: ChannelPreferenceDto,
+): ChannelPreference {
   return {
     channel: dto.channel,
     displayName: dto.display_name,

@@ -42,10 +42,15 @@ export interface BudgetFigures {
 // Progress as a percentage of the target, never below 0 (it may exceed
 // 100).  A budget with no positive target counts as 100%.
 //
-export function budgetProgress(budget: Pick<BudgetFigures, "balance" | "targetBalance">): number {
+export function budgetProgress(
+  budget: Pick<BudgetFigures, "balance" | "targetBalance">,
+): number {
   const target = budget.targetBalance;
   if (!target || !target.isPositive()) return 100;
-  const pct = budget.balance.amount.dividedBy(target.amount).times(100).toNumber();
+  const pct = budget.balance.amount
+    .dividedBy(target.amount)
+    .times(100)
+    .toNumber();
   return Math.max(0, pct);
 }
 
@@ -56,13 +61,17 @@ export function budgetProgress(budget: Pick<BudgetFigures, "balance" | "targetBa
 // funding events elapsed on the schedule); the SPA only presents it.
 //
 export function budgetStatus(
-  budget: Pick<BudgetFigures, "paused" | "balance" | "targetBalance" | "complete" | "fundingPace">,
+  budget: Pick<
+    BudgetFigures,
+    "paused" | "balance" | "targetBalance" | "complete" | "fundingPace"
+  >,
 ): BudgetStatus {
   if (budget.paused) return "paused";
   if (budget.balance.isNegative()) return "over";
   if (budget.complete) return "funded";
   const target = budget.targetBalance;
-  if (target && target.isPositive() && budget.balance.cmp(target) >= 0) return "funded";
+  if (target && target.isPositive() && budget.balance.cmp(target) >= 0)
+    return "funded";
   if (budget.fundingPace === "behind") return "warn";
   return "progress";
 }
@@ -93,7 +102,11 @@ export function progressTone(status: BudgetStatus): ProgressTone {
 export function budgetMeta(budget: BudgetFigures, locale?: string): string {
   if (budget.budgetType === "G") {
     if (budget.targetDate) {
-      const label = formatLocalDate(budget.targetDate, { month: "short", year: "numeric" }, locale);
+      const label = formatLocalDate(
+        budget.targetDate,
+        { month: "short", year: "numeric" },
+        locale,
+      );
       return `Goal · by ${label}`;
     }
     return "Goal";

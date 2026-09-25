@@ -45,7 +45,9 @@ export function useFundingRun(accountId: () => string) {
     result.value = null;
     error.value = null;
     try {
-      result.value = fundingRunResultFromDto(await api.bankAccounts.runFunding(id));
+      result.value = fundingRunResultFromDto(
+        await api.bankAccounts.runFunding(id),
+      );
       // The run succeeded; a failed refresh leaves the cached balances.
       await Promise.all([
         accounts.fetchOne(id).catch(() => undefined),
@@ -61,10 +63,14 @@ export function useFundingRun(accountId: () => string) {
 
   return {
     summary: computed(() => summary.data.value ?? null),
-    nextDate: computed(() => summary.data.value?.schedules[0]?.nextDate ?? null),
+    nextDate: computed(
+      () => summary.data.value?.schedules[0]?.nextDate ?? null,
+    ),
     running,
     result,
-    nothingDue: computed(() => !!result.value && fundingRunIsNoop(result.value)),
+    nothingDue: computed(
+      () => !!result.value && fundingRunIsNoop(result.value),
+    ),
     error,
     run,
   };

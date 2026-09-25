@@ -8,7 +8,13 @@
 
 // app imports
 //
-import type { BudgetCreateDto, BudgetDto, BudgetListQuery, BudgetUpdateDto, Page } from "@/api/dto";
+import type {
+  BudgetCreateDto,
+  BudgetDto,
+  BudgetListQuery,
+  BudgetUpdateDto,
+  Page,
+} from "@/api/dto";
 import type { HttpClient } from "@/api/http";
 import { V1 } from "./paths";
 

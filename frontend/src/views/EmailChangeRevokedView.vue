@@ -20,14 +20,17 @@
           ✕
         </span>
       </div>
-      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">Email change cancelled</h1>
+      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">
+        Email change cancelled
+      </h1>
       <p class="mb-6 text-sm text-neutral-500">
-        The email address change on your account has been cancelled. Your original address is still
-        active.
+        The email address change on your account has been cancelled. Your
+        original address is still active.
       </p>
       <p class="mb-6 text-xs text-neutral-400">
-        If the change had already been confirmed, your email address has been restored and all
-        active sessions have been signed out. A security notice was sent to both addresses.
+        If the change had already been confirmed, your email address has been
+        restored and all active sessions have been signed out. A security notice
+        was sent to both addresses.
       </p>
       <a
         href="/app/login/"

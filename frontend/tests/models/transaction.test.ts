@@ -32,7 +32,11 @@ import {
   transactionFromDto,
   transactionToUpdateDto,
 } from "@/models/transaction";
-import { makeAllocation, makeInternalTransaction, makeTransaction } from "../mocks/factories";
+import {
+  makeAllocation,
+  makeInternalTransaction,
+  makeTransaction,
+} from "../mocks/factories";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -71,12 +75,12 @@ describe("transactionFromDto", () => {
   // THEN:  the transaction date wins and the posted date fills in
   //
   it("falls back to the posted date", () => {
-    expect(occurredAt({ transactionDate: "2026-01-02T00:00:00Z", postedDate: "p" })).toBe(
-      "2026-01-02T00:00:00Z",
-    );
-    expect(occurredAt({ transactionDate: null, postedDate: "2026-01-03T00:00:00Z" })).toBe(
-      "2026-01-03T00:00:00Z",
-    );
+    expect(
+      occurredAt({ transactionDate: "2026-01-02T00:00:00Z", postedDate: "p" }),
+    ).toBe("2026-01-02T00:00:00Z");
+    expect(
+      occurredAt({ transactionDate: null, postedDate: "2026-01-03T00:00:00Z" }),
+    ).toBe("2026-01-03T00:00:00Z");
   });
 
   // GIVEN: a transaction's party, description and raw description
@@ -114,7 +118,11 @@ describe("transactionFromDto", () => {
         created_at: "2026-01-06T00:00:00Z",
       }),
     );
-    expect([a, b, c].sort(compareNewestFirst).map((t) => t.id)).toEqual([b.id, c.id, a.id]);
+    expect([a, b, c].sort(compareNewestFirst).map((t) => t.id)).toEqual([
+      b.id,
+      c.id,
+      a.id,
+    ]);
   });
 
   // GIVEN: a text edit, including clearing the memo
@@ -191,11 +199,18 @@ describe("allocations", () => {
   // THEN:  it is "full" with the total, or "over" with the excess
   //
   it("reports full and over coverage", () => {
-    const leg = (amount: string) => allocationFromDto(makeAllocation({ budget: "x", amount }));
+    const leg = (amount: string) =>
+      allocationFromDto(makeAllocation({ budget: "x", amount }));
     const full = allocationCoverage(Money.of("-10"), [leg("-4"), leg("-6")]);
-    expect([full.kind, full.amount.toDecimalString()]).toEqual(["full", "10.00"]);
+    expect([full.kind, full.amount.toDecimalString()]).toEqual([
+      "full",
+      "10.00",
+    ]);
     const over = allocationCoverage(Money.of("-10"), [leg("-8"), leg("-4")]);
-    expect([over.kind, over.amount.toDecimalString()]).toEqual(["over", "2.00"]);
+    expect([over.kind, over.amount.toDecimalString()]).toEqual([
+      "over",
+      "2.00",
+    ]);
     expect(allocationCoverage(Money.of("-10"), []).kind).toBe("remaining");
   });
 });
@@ -209,7 +224,11 @@ describe("internal transactions and list rows", () => {
   //
   it("signs the amount relative to a budget", () => {
     const itx = internalTransactionFromDto(
-      makeInternalTransaction({ src_budget: "A", dst_budget: "B", amount: "25.00" }),
+      makeInternalTransaction({
+        src_budget: "A",
+        dst_budget: "B",
+        amount: "25.00",
+      }),
     );
     expect(amountRelativeTo(itx, "B").toDecimalString()).toBe("25.00");
     expect(amountRelativeTo(itx, "A").toDecimalString()).toBe("-25.00");
@@ -220,7 +239,12 @@ describe("internal transactions and list rows", () => {
         dstBudgetId: "B",
         amount: Money.of("-3"),
       }),
-    ).toEqual({ bank_account: "acct", src_budget: "A", dst_budget: "B", amount: "3.00" });
+    ).toEqual({
+      bank_account: "acct",
+      src_budget: "A",
+      dst_budget: "B",
+      amount: "3.00",
+    });
   });
 
   // GIVEN: transactions and, optionally, transfers
@@ -229,13 +253,18 @@ describe("internal transactions and list rows", () => {
   //        kind-unique key and an instant
   //
   it("merges transactions and transfers", () => {
-    const tx = transactionFromDto(makeTransaction({ transaction_date: "2026-01-02T00:00:00Z" }));
+    const tx = transactionFromDto(
+      makeTransaction({ transaction_date: "2026-01-02T00:00:00Z" }),
+    );
     const itx = internalTransactionFromDto(
       makeInternalTransaction({ effective_date: "2026-01-03T00:00:00Z" }),
     );
     expect(listRows([tx], null)).toHaveLength(1);
     const rows = listRows([tx], [itx]);
     expect(rows.map(rowKey)).toEqual([`tx${tx.id}`, `itx${itx.id}`]);
-    expect(rows.map(rowInstant)).toEqual(["2026-01-02T00:00:00Z", "2026-01-03T00:00:00Z"]);
+    expect(rows.map(rowInstant)).toEqual([
+      "2026-01-02T00:00:00Z",
+      "2026-01-03T00:00:00Z",
+    ]);
   });
 });

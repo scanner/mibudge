@@ -30,10 +30,15 @@ useModal(
 <template>
   <Teleport to="body">
     <Transition name="slide-up">
-      <div v-if="open && budget" class="fixed inset-0 z-40 overflow-y-auto bg-neutral-50">
+      <div
+        v-if="open && budget"
+        class="fixed inset-0 z-40 overflow-y-auto bg-neutral-50"
+      >
         <div class="mx-auto max-w-lg px-4 pb-8 pt-4">
           <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-[18px] font-medium text-neutral-900">Edit budget</h2>
+            <h2 class="text-[18px] font-medium text-neutral-900">
+              Edit budget
+            </h2>
           </div>
           <BudgetForm
             mode="edit"

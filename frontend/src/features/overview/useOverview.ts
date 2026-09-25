@@ -49,7 +49,11 @@ export function useOverview() {
     () => ctx.activeBankAccountId,
     async (accountId: string): Promise<Loaded> => {
       const [budgets, txPage, summary] = await Promise.all([
-        store.fetchList({ bank_account: accountId, archived: false, ordering: "name" }),
+        store.fetchList({
+          bank_account: accountId,
+          archived: false,
+          ordering: "name",
+        }),
         api.transactions.list({
           bank_account: accountId,
           ordering: "-transaction_date,-created_at",
@@ -93,7 +97,9 @@ export function useOverview() {
   const fillups = computed(() => fillupIndex(allBudgets.value));
 
   function fillupFor(budget: Budget): Budget | undefined {
-    return budget.fillupGoalId ? fillups.value.get(budget.fillupGoalId) : undefined;
+    return budget.fillupGoalId
+      ? fillups.value.get(budget.fillupGoalId)
+      : undefined;
   }
 
   const unallocated = computed(() => store.byId(ctx.unallocatedBudgetId));
@@ -104,7 +110,9 @@ export function useOverview() {
     unallocated,
     budgetNames: computed(() => store.names),
     recentTransactions: computed(() => resource.data.value?.recent ?? []),
-    allocationsByTx: computed(() => resource.data.value?.allocationsByTx ?? new Map()),
+    allocationsByTx: computed(
+      () => resource.data.value?.allocationsByTx ?? new Map(),
+    ),
     summary: computed(() => resource.data.value?.summary ?? null),
     loading: resource.loading,
     error: resource.error,

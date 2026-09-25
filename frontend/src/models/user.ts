@@ -38,7 +38,9 @@ export function userFromDto(dto: UserDto): User {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export type UserUpdate = Partial<Pick<User, "name" | "timezone" | "defaultBankAccountId">>;
+export type UserUpdate = Partial<
+  Pick<User, "name" | "timezone" | "defaultBankAccountId">
+>;
 
 export function userToUpdateDto(update: UserUpdate): UserUpdateDto {
   const dto: UserUpdateDto = {};

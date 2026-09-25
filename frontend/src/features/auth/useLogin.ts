@@ -37,7 +37,8 @@ export function useLogin() {
     try {
       await session.login(email.value, password.value);
       await Promise.all([session.loadUser(), ctx.init(true)]);
-      const next = typeof route.query.next === "string" ? route.query.next : null;
+      const next =
+        typeof route.query.next === "string" ? route.query.next : null;
       void router.replace(next ?? { name: "overview" });
     } catch (err) {
       errorMessage.value = isApiError(err, 401)

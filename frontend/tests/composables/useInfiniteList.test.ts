@@ -16,7 +16,10 @@ import { withSetup } from "../helpers";
 
 ////////////////////////////////////////////////////////////////////////
 //
-function page(results: number[], next: string | null = null): ModelPage<number> {
+function page(
+  results: number[],
+  next: string | null = null,
+): ModelPage<number> {
   return { count: results.length, next, results };
 }
 

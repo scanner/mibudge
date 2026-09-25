@@ -7,7 +7,12 @@
 
 // 3rd party imports
 //
-import { IconLayoutGrid, IconList, IconUser, IconWallet } from "@tabler/icons-vue";
+import {
+  IconLayoutGrid,
+  IconList,
+  IconUser,
+  IconWallet,
+} from "@tabler/icons-vue";
 import type { Component } from "vue";
 
 // app imports

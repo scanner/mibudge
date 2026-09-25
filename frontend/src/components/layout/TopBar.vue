@@ -62,7 +62,11 @@ const emit = defineEmits<{
     >
       <span class="flex items-center gap-1 text-[11px] text-secondary">
         <span class="truncate">{{ account.name }}, Available:</span>
-        <MoneyAmount :amount="account.availableBalance" size="sm" class="whitespace-nowrap" />
+        <MoneyAmount
+          :amount="account.availableBalance"
+          size="sm"
+          class="whitespace-nowrap"
+        />
         <IconChevronDown class="h-3 w-3 flex-none" />
       </span>
       <span class="text-[14px] font-medium text-mint-600">

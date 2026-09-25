@@ -19,7 +19,12 @@ import { useBudgetsStore } from "@/stores/budgets";
 import { useSessionStore } from "@/stores/session";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import { withAccounts, withAuth } from "../helpers";
-import { makeAllocation, makeBankAccount, makeBudget, makePage } from "../mocks/factories";
+import {
+  makeAllocation,
+  makeBankAccount,
+  makeBudget,
+  makePage,
+} from "../mocks/factories";
 import { server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
@@ -27,13 +32,22 @@ import { server } from "../mocks/server";
 // Every `use*Store` exported from `src/stores/`, loaded by file so a new
 // store is covered without editing this test.
 //
-const storeModules = import.meta.glob<Record<string, unknown>>("../../src/stores/*.ts", {
-  eager: true,
-});
+const storeModules = import.meta.glob<Record<string, unknown>>(
+  "../../src/stores/*.ts",
+  {
+    eager: true,
+  },
+);
 const storeFactories = Object.entries(storeModules).flatMap(([file, mod]) =>
   Object.entries(mod)
-    .filter(([name, value]) => /^use\w+Store$/.test(name) && typeof value === "function")
-    .map(([name, value]) => [`${file}: ${name}`, value as () => { reset?: unknown }] as const),
+    .filter(
+      ([name, value]) =>
+        /^use\w+Store$/.test(name) && typeof value === "function",
+    )
+    .map(
+      ([name, value]) =>
+        [`${file}: ${name}`, value as () => { reset?: unknown }] as const,
+    ),
 );
 
 ////////////////////////////////////////////////////////////////////////
@@ -64,7 +78,9 @@ describe("store reset", () => {
     nav.setIds(["a", "b"]);
     nav.savedSearch = "coffee";
     // Seed an allocation index by hand (normally fetched).
-    allocations.setForTransaction(account.id, "t", [allocationFromDto(makeAllocation())]);
+    allocations.setForTransaction(account.id, "t", [
+      allocationFromDto(makeAllocation()),
+    ]);
 
     useSessionStore().logout();
 
@@ -75,7 +91,9 @@ describe("store reset", () => {
     expect(allocations.indexFor(account.id)).toBeNull();
     expect(nav.orderedIds).toEqual([]);
     expect(nav.savedSearch).toBe("");
-    expect(window.sessionStorage.getItem("mibudge.activeBankAccountId")).toBeNull();
+    expect(
+      window.sessionStorage.getItem("mibudge.activeBankAccountId"),
+    ).toBeNull();
   });
 
   // GIVEN: a list load in flight for the signed-in user
@@ -98,23 +116,26 @@ describe("store reset", () => {
       () => useBankAccountsStore().loadAll(true),
       () => useBankAccountsStore().all,
     ],
-  ])("sign-out drops a late %s response", async (_name, path, body, load, cached) => {
-    withAuth();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    server.use(
-      http.get(path, async () => {
-        await gate;
-        return HttpResponse.json(body());
-      }),
-    );
+  ])(
+    "sign-out drops a late %s response",
+    async (_name, path, body, load, cached) => {
+      withAuth();
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      server.use(
+        http.get(path, async () => {
+          await gate;
+          return HttpResponse.json(body());
+        }),
+      );
 
-    const pending = load().catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    useSessionStore().logout();
-    release();
-    await pending;
+      const pending = load().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      useSessionStore().logout();
+      release();
+      await pending;
 
-    expect(cached()).toEqual([]);
-  });
+      expect(cached()).toEqual([]);
+    },
+  );
 });

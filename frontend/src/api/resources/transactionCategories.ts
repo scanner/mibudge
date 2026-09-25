@@ -6,7 +6,11 @@
 
 // app imports
 //
-import type { Page, TransactionCategoryDto, TransactionCategoryListQuery } from "@/api/dto";
+import type {
+  Page,
+  TransactionCategoryDto,
+  TransactionCategoryListQuery,
+} from "@/api/dto";
 import type { HttpClient } from "@/api/http";
 import { V1 } from "./paths";
 
@@ -14,7 +18,9 @@ import { V1 } from "./paths";
 //
 export function transactionCategoriesResource(http: HttpClient) {
   return {
-    list(query?: TransactionCategoryListQuery): Promise<Page<TransactionCategoryDto>> {
+    list(
+      query?: TransactionCategoryListQuery,
+    ): Promise<Page<TransactionCategoryDto>> {
       return http.get(`${V1}/transaction-categories/`, query);
     },
 

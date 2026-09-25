@@ -68,7 +68,10 @@ export function useFuzzySearch<T>(
     const q = applied.value;
     if (!q) return null;
     const list = items();
-    const entries = list.map((item, index) => ({ text: selector(item), index }));
+    const entries = list.map((item, index) => ({
+      text: selector(item),
+      index,
+    }));
     const fzf = new Fzf(entries, {
       selector: (e) => e.text,
       casing: "case-insensitive",

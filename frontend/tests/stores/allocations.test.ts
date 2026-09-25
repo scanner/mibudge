@@ -25,19 +25,27 @@ describe("allocations store", () => {
   //
   it("loads the account index once", async () => {
     withAuth();
-    const [a, b] = [makeAllocation({ transaction: "t1" }), makeAllocation({ transaction: "t2" })];
+    const [a, b] = [
+      makeAllocation({ transaction: "t1" }),
+      makeAllocation({ transaction: "t2" }),
+    ];
     server.use(
       http.get("/api/v1/allocations/", ({ request }) =>
         new URL(request.url).searchParams.get("page") === "2"
           ? HttpResponse.json(makePage([b]))
           : HttpResponse.json(
-              makePage([a], { next: "http://localhost/api/v1/allocations/?page=2" }),
+              makePage([a], {
+                next: "http://localhost/api/v1/allocations/?page=2",
+              }),
             ),
       ),
     );
     const store = useAllocationsStore();
 
-    const [index] = await Promise.all([store.loadForAccount("acct"), store.loadForAccount("acct")]);
+    const [index] = await Promise.all([
+      store.loadForAccount("acct"),
+      store.loadForAccount("acct"),
+    ]);
     await store.loadForAccount("acct");
 
     expect([...index.keys()]).toEqual(["t1", "t2"]);
@@ -54,7 +62,9 @@ describe("allocations store", () => {
     withAuth();
     const store = useAllocationsStore();
     await store.loadForAccount("acct");
-    const replacement = [allocationFromDto(makeAllocation({ transaction: "t9" }))];
+    const replacement = [
+      allocationFromDto(makeAllocation({ transaction: "t9" })),
+    ];
 
     store.setForTransaction("acct", "t9", replacement);
     store.setForTransaction("other", "t9", replacement);
@@ -75,7 +85,11 @@ describe("allocations store", () => {
     withAuth();
     const store = useAllocationsStore();
     const before = makeAllocation({ transaction: "t1" });
-    server.use(http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([before]))));
+    server.use(
+      http.get("/api/v1/allocations/", () =>
+        HttpResponse.json(makePage([before])),
+      ),
+    );
     await store.loadForAccount("acct");
 
     // Hold the refetch until the split has been applied.
@@ -88,9 +102,13 @@ describe("allocations store", () => {
       }),
     );
     const refetch = store.loadForAccount("acct", true);
-    expect(store.indexFor("acct")?.get("t1")).toEqual([allocationFromDto(before)]);
+    expect(store.indexFor("acct")?.get("t1")).toEqual([
+      allocationFromDto(before),
+    ]);
 
-    const split = [allocationFromDto(makeAllocation({ transaction: "t1", budget: "rent" }))];
+    const split = [
+      allocationFromDto(makeAllocation({ transaction: "t1", budget: "rent" })),
+    ];
     store.setForTransaction("acct", "t1", split);
     release();
     await refetch;

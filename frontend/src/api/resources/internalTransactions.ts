@@ -19,11 +19,15 @@ import { V1 } from "./paths";
 //
 export function internalTransactionsResource(http: HttpClient) {
   return {
-    list(query?: InternalTransactionListQuery): Promise<Page<InternalTransactionDto>> {
+    list(
+      query?: InternalTransactionListQuery,
+    ): Promise<Page<InternalTransactionDto>> {
       return http.get(`${V1}/internal-transactions/`, query);
     },
 
-    create(body: InternalTransactionCreateDto): Promise<InternalTransactionDto> {
+    create(
+      body: InternalTransactionCreateDto,
+    ): Promise<InternalTransactionDto> {
       return http.post(`${V1}/internal-transactions/`, body);
     },
   };

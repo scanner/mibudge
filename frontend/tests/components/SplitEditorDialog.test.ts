@@ -43,7 +43,9 @@ describe("SplitEditorDialog", () => {
     });
     await wrapper.setProps({ open: true });
 
-    const save = wrapper.findAll("button").find((btn) => btn.text() === "Save")!;
+    const save = wrapper
+      .findAll("button")
+      .find((btn) => btn.text() === "Save")!;
     expect(wrapper.text()).toContain("Over by");
     expect(wrapper.text()).toContain("$0.01");
     expect(save.attributes("disabled")).toBeDefined();

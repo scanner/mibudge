@@ -43,7 +43,11 @@ const CONCURRENCY = 6;
 
 // `fn` over `items`, at most `limit` calls in flight, results in order.
 //
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>) {
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+) {
   const out: R[] = new Array(items.length);
   let next = 0;
   async function worker() {
@@ -52,11 +56,16 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
       out[i] = await fn(items[i]);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
   return out;
 }
 
-async function allocationsFor(query: { budget?: string; transaction?: string }) {
+async function allocationsFor(query: {
+  budget?: string;
+  transaction?: string;
+}) {
   const first = await api.allocations.list(query);
   return (await api.pages.all(first)).map(allocationFromDto);
 }
@@ -68,21 +77,32 @@ interface BudgetTransactions {
   allocationsByTx: Map<string, Allocation[]>;
 }
 
-async function loadBudgetTransactions(budgetId: string): Promise<BudgetTransactions> {
-  const allocationsByTx = indexByTransaction(await allocationsFor({ budget: budgetId }));
-  const transactions = await mapLimit([...allocationsByTx.keys()], CONCURRENCY, async (id) =>
-    transactionFromDto(await api.transactions.get(id)),
+async function loadBudgetTransactions(
+  budgetId: string,
+): Promise<BudgetTransactions> {
+  const allocationsByTx = indexByTransaction(
+    await allocationsFor({ budget: budgetId }),
+  );
+  const transactions = await mapLimit(
+    [...allocationsByTx.keys()],
+    CONCURRENCY,
+    async (id) => transactionFromDto(await api.transactions.get(id)),
   );
 
   const splits = transactions.filter((tx) => {
     const allocs = allocationsByTx.get(tx.id);
-    return allocs?.length === 1 && !allocs[0].amount.abs().equals(tx.amount.abs());
+    return (
+      allocs?.length === 1 && !allocs[0].amount.abs().equals(tx.amount.abs())
+    );
   });
   await mapLimit(splits, CONCURRENCY, async (tx) => {
     allocationsByTx.set(tx.id, await allocationsFor({ transaction: tx.id }));
   });
 
-  return { transactions: transactions.sort(compareNewestFirst), allocationsByTx };
+  return {
+    transactions: transactions.sort(compareNewestFirst),
+    allocationsByTx,
+  };
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -159,19 +179,27 @@ export function useBudgetTransactions(budgetId: () => string) {
       const current = await allocationsFor({ transaction: transactionId });
       const splits: Record<string, string> = {};
       for (const a of current) {
-        if (a.budgetId && a.budgetId !== id) splits[a.budgetId] = a.amount.abs().toDecimalString();
+        if (a.budgetId && a.budgetId !== id)
+          splits[a.budgetId] = a.amount.abs().toDecimalString();
       }
-      updated = (await api.transactions.split(transactionId, splits)).map(allocationFromDto);
+      updated = (await api.transactions.split(transactionId, splits)).map(
+        allocationFromDto,
+      );
     } catch (err) {
       if (budgetId() === id) {
-        actionError.value = describeError(err, "Couldn't remove the transaction from this budget.");
+        actionError.value = describeError(
+          err,
+          "Couldn't remove the transaction from this budget.",
+        );
         await resource.reload();
       }
       return;
     }
 
     if (budgetId() === id) {
-      transactions.value = transactions.value.filter((tx) => tx.id !== transactionId);
+      transactions.value = transactions.value.filter(
+        (tx) => tx.id !== transactionId,
+      );
       const next = new Map(allocationsByTx.value);
       next.delete(transactionId);
       allocationsByTx.value = next;

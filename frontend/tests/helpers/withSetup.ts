@@ -14,7 +14,10 @@ import { defineComponent, h } from "vue";
 // result and the wrapper; `wrapper.unmount()` runs the cleanup.
 // `render` optionally renders template refs the composable needs.
 //
-export function withSetup<T>(composable: () => T, render?: () => ReturnType<typeof h>) {
+export function withSetup<T>(
+  composable: () => T,
+  render?: () => ReturnType<typeof h>,
+) {
   let result!: T;
   const Host = defineComponent({
     setup() {

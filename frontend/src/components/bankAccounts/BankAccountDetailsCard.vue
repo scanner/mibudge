@@ -25,7 +25,9 @@ const emit = defineEmits<{ (e: "edit"): void }>();
 
 <template>
   <!-- Details -->
-  <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
+  <section
+    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+  >
     <h2
       class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
     >
@@ -36,7 +38,11 @@ const emit = defineEmits<{ (e: "edit"): void }>();
         <dt class="text-sm text-secondary">Account number</dt>
         <dd class="flex items-center gap-2">
           <span class="font-mono text-sm text-neutral-900">
-            {{ account.accountNumber ? `····${account.accountNumber.slice(-4)}` : "—" }}
+            {{
+              account.accountNumber
+                ? `····${account.accountNumber.slice(-4)}`
+                : "—"
+            }}
           </span>
           <button
             type="button"

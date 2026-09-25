@@ -47,6 +47,9 @@ export function createdApiKeyFromDto(dto: ApiKeyCreatedDto): CreatedApiKey {
 //
 // `expiryDays: null` creates a key that never expires.
 //
-export function apiKeyToCreateDto(name: string, expiryDays: number | null): ApiKeyCreateDto {
+export function apiKeyToCreateDto(
+  name: string,
+  expiryDays: number | null,
+): ApiKeyCreateDto {
   return { name, expiry_days: expiryDays };
 }

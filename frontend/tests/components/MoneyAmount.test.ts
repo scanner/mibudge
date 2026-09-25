@@ -22,7 +22,9 @@ describe("MoneyAmount", () => {
   //        aria-label
   //
   it("formats the amount", () => {
-    const wrapper = mount(MoneyAmount, { props: { amount: Money.of("-12.3", "USD") } });
+    const wrapper = mount(MoneyAmount, {
+      props: { amount: Money.of("-12.3", "USD") },
+    });
     expect(wrapper.text()).toBe("-$12.30");
     expect(wrapper.attributes("aria-label")).toBe("-12.30 USD");
   });
@@ -36,7 +38,9 @@ describe("MoneyAmount", () => {
     ["1", "text-mint-600"],
     ["0", null],
   ])("colours %s", (amount, cls) => {
-    const wrapper = mount(MoneyAmount, { props: { amount: Money.of(amount), coloured: true } });
+    const wrapper = mount(MoneyAmount, {
+      props: { amount: Money.of(amount), coloured: true },
+    });
     const classes = wrapper.classes();
     expect(classes.includes("text-coral-600")).toBe(cls === "text-coral-600");
     expect(classes.includes("text-mint-600")).toBe(cls === "text-mint-600");
@@ -47,7 +51,9 @@ describe("MoneyAmount", () => {
   // THEN:  it carries a leading plus
   //
   it("shows the sign when asked", () => {
-    const wrapper = mount(MoneyAmount, { props: { amount: Money.of("5"), showSign: true } });
+    const wrapper = mount(MoneyAmount, {
+      props: { amount: Money.of("5"), showSign: true },
+    });
     expect(wrapper.text()).toBe("+$5.00");
   });
 });

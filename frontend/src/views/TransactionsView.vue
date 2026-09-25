@@ -130,11 +130,18 @@ function openTransaction(id: string) {
 
     <!-- Loading skeletons -->
     <div v-if="loading" class="space-y-3">
-      <div v-for="i in 6" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
+      <div
+        v-for="i in 6"
+        :key="i"
+        class="h-16 animate-pulse rounded-card bg-neutral-100"
+      />
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600">
+    <div
+      v-else-if="error"
+      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+    >
       {{ error }}
     </div>
 
@@ -176,9 +183,17 @@ function openTransaction(id: string) {
           class="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-ocean-400"
         />
       </div>
-      <p v-else-if="loadMoreError" class="py-4 text-center text-sm text-coral-600" role="alert">
+      <p
+        v-else-if="loadMoreError"
+        class="py-4 text-center text-sm text-coral-600"
+        role="alert"
+      >
         Couldn't load more transactions: {{ loadMoreError }}
-        <button type="button" class="ml-1 font-medium underline" @click="loadMore">
+        <button
+          type="button"
+          class="ml-1 font-medium underline"
+          @click="loadMore"
+        >
           Try again
         </button>
       </p>

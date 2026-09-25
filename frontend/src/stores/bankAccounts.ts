@@ -17,7 +17,11 @@ import { computed, ref } from "vue";
 // app imports
 //
 import { api } from "@/api";
-import type { BankAccount, BankAccountInput, BankAccountUpdate } from "@/models/bankAccount";
+import type {
+  BankAccount,
+  BankAccountInput,
+  BankAccountUpdate,
+} from "@/models/bankAccount";
 import {
   bankAccountFromDto,
   bankAccountToCreateDto,
@@ -44,7 +48,8 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   function upsert(account: BankAccount): void {
     const idx = accounts.value.findIndex((a) => a.id === account.id);
     if (idx === -1) accounts.value = [...accounts.value, account];
-    else accounts.value = accounts.value.map((a, i) => (i === idx ? account : a));
+    else
+      accounts.value = accounts.value.map((a, i) => (i === idx ? account : a));
   }
 
   function setAll(list: BankAccount[]): void {
@@ -98,7 +103,10 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
     return account;
   }
 
-  async function update(id: string, patch: BankAccountUpdate): Promise<BankAccount> {
+  async function update(
+    id: string,
+    patch: BankAccountUpdate,
+  ): Promise<BankAccount> {
     const put = whileCurrent(upsert);
     const account = bankAccountFromDto(
       await api.bankAccounts.update(id, bankAccountToUpdateDto(patch)),

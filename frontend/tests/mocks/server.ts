@@ -102,10 +102,14 @@ export async function settled(): Promise<void> {
 // pathname exactly (query string ignored), e.g.
 // `requestsTo("POST", "/api/token/refresh/")`.
 //
-export async function requestsTo(method: string, path: string): Promise<LoggedRequest[]> {
+export async function requestsTo(
+  method: string,
+  path: string,
+): Promise<LoggedRequest[]> {
   await settled();
   return requestLog.filter(
-    (r) => r.method === method.toUpperCase() && new URL(r.url).pathname === path,
+    (r) =>
+      r.method === method.toUpperCase() && new URL(r.url).pathname === path,
   );
 }
 

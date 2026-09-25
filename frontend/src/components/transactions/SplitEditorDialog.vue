@@ -92,7 +92,8 @@ function addRow() {
   }
 
   nextTick(() => {
-    const selects = document.querySelectorAll<HTMLSelectElement>(".split-row-select");
+    const selects =
+      document.querySelectorAll<HTMLSelectElement>(".split-row-select");
     selects[selects.length - 1]?.focus();
   });
 }
@@ -111,7 +112,9 @@ const selectableBudgets = computed(() =>
 // chosen by other rows (duplicates are not allowed).
 function availableForRow(rowIndex: number): Budget[] {
   const taken = new Set(
-    rows.value.filter((r, i) => i !== rowIndex && r.budgetId).map((r) => r.budgetId),
+    rows.value
+      .filter((r, i) => i !== rowIndex && r.budgetId)
+      .map((r) => r.budgetId),
   );
   return selectableBudgets.value.filter((b) => !taken.has(b.id));
 }
@@ -167,7 +170,9 @@ const isOver = computed(() => remainder.value.lessThan(0));
 const canSave = computed(() => {
   if (isOver.value) return false;
   if (rows.value.length === 0) return true;
-  return rows.value.every((r) => !!r.budgetId && !!rowAmount(r)?.greaterThan(0));
+  return rows.value.every(
+    (r) => !!r.budgetId && !!rowAmount(r)?.greaterThan(0),
+  );
 });
 
 function save() {
@@ -190,8 +195,14 @@ useModal(
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="open" class="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-        <div class="absolute inset-0 bg-neutral-900/40" @click="emit('cancel')" />
+      <div
+        v-if="open"
+        class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+      >
+        <div
+          class="absolute inset-0 bg-neutral-900/40"
+          @click="emit('cancel')"
+        />
 
         <div
           class="relative flex max-h-[80vh] w-full flex-col rounded-t-2xl bg-white shadow-xl md:w-[480px] md:rounded-card"
@@ -200,7 +211,9 @@ useModal(
           aria-label="Edit allocations"
         >
           <!-- Header -->
-          <div class="flex items-center justify-between border-b border-neutral-200 px-5 pb-3 pt-5">
+          <div
+            class="flex items-center justify-between border-b border-neutral-200 px-5 pb-3 pt-5"
+          >
             <h2 class="text-base font-medium text-neutral-900">Allocations</h2>
             <button
               type="button"
@@ -214,20 +227,31 @@ useModal(
           <!-- Split rows -->
           <div class="flex-1 overflow-y-auto px-4 py-3">
             <div class="space-y-2">
-              <div v-for="(row, i) in rows" :key="i" class="flex items-center gap-2">
+              <div
+                v-for="(row, i) in rows"
+                :key="i"
+                class="flex items-center gap-2"
+              >
                 <!-- Budget selector -->
                 <select
                   v-model="row.budgetId"
                   class="split-row-select min-w-0 flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:border-ocean-400"
                 >
                   <option value="">Select budget…</option>
-                  <option v-for="b in availableForRow(i)" :key="b.id" :value="b.id">
+                  <option
+                    v-for="b in availableForRow(i)"
+                    :key="b.id"
+                    :value="b.id"
+                  >
                     {{ budgetLabel(b) }}
                   </option>
                   <!-- Keep the current selection visible even when temporarily
                        displaced by another row's selection. -->
                   <option
-                    v-if="row.budgetId && !availableForRow(i).find((b) => b.id === row.budgetId)"
+                    v-if="
+                      row.budgetId &&
+                      !availableForRow(i).find((b) => b.id === row.budgetId)
+                    "
                     :value="row.budgetId"
                   >
                     {{ fallbackBudgetLabel(row.budgetId) }}
@@ -269,13 +293,24 @@ useModal(
           <!-- Footer: remainder indicator + Save -->
           <div class="border-t border-neutral-200 px-4 py-3">
             <div class="mb-3 flex items-center justify-between text-sm">
-              <span :class="isOver ? 'font-medium text-coral-600' : 'text-neutral-500'">
+              <span
+                :class="
+                  isOver ? 'font-medium text-coral-600' : 'text-neutral-500'
+                "
+              >
                 {{ isOver ? "Over by" : "Unallocated" }}
               </span>
               <span
-                :class="['font-mono font-medium', isOver ? 'text-coral-600' : 'text-ocean-600']"
+                :class="[
+                  'font-mono font-medium',
+                  isOver ? 'text-coral-600' : 'text-ocean-600',
+                ]"
               >
-                {{ formatMoney(Money.of(remainder.abs(), transactionAmount.currency)) }}
+                {{
+                  formatMoney(
+                    Money.of(remainder.abs(), transactionAmount.currency),
+                  )
+                }}
               </span>
             </div>
 

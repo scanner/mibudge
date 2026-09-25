@@ -88,7 +88,8 @@ const rows: Row[] = [
   },
   {
     name: "bankAccounts.create",
-    call: () => api.bankAccounts.create({ name: "Joint", bank: ID, account_type: "C" }),
+    call: () =>
+      api.bankAccounts.create({ name: "Joint", bank: ID, account_type: "C" }),
     method: "POST",
     path: "/bank-accounts/",
     body: { name: "Joint", bank: ID, account_type: "C" },
@@ -119,12 +120,23 @@ const rows: Row[] = [
     path: `/bank-accounts/${ID}/run-funding/`,
   },
   // banks.ts
-  { name: "banks.list", call: () => api.banks.list(), method: "GET", path: "/banks/" },
-  { name: "banks.get", call: () => api.banks.get(ID), method: "GET", path: `/banks/${ID}/` },
+  {
+    name: "banks.list",
+    call: () => api.banks.list(),
+    method: "GET",
+    path: "/banks/",
+  },
+  {
+    name: "banks.get",
+    call: () => api.banks.get(ID),
+    method: "GET",
+    path: `/banks/${ID}/`,
+  },
   // budgets.ts
   {
     name: "budgets.list",
-    call: () => api.budgets.list({ bank_account: ID, archived: false, ordering: "name" }),
+    call: () =>
+      api.budgets.list({ bank_account: ID, archived: false, ordering: "name" }),
     method: "GET",
     path: `/budgets/?bank_account=${ID}&archived=false&ordering=name`,
   },
@@ -134,7 +146,12 @@ const rows: Row[] = [
     method: "GET",
     path: "/budgets/",
   },
-  { name: "budgets.get", call: () => api.budgets.get(ID), method: "GET", path: `/budgets/${ID}/` },
+  {
+    name: "budgets.get",
+    call: () => api.budgets.get(ID),
+    method: "GET",
+    path: `/budgets/${ID}/`,
+  },
   {
     name: "budgets.create",
     call: () =>
@@ -146,7 +163,12 @@ const rows: Row[] = [
       }),
     method: "POST",
     path: "/budgets/",
-    body: { name: "Rent", bank_account: ID, budget_type: "R", target_balance: "1500.00" },
+    body: {
+      name: "Rent",
+      bank_account: ID,
+      budget_type: "R",
+      target_balance: "1500.00",
+    },
   },
   {
     name: "budgets.update",
@@ -164,7 +186,8 @@ const rows: Row[] = [
   // internalTransactions.ts
   {
     name: "internalTransactions.list",
-    call: () => api.internalTransactions.list({ budget: ID, date_from: "2026-01-01" }),
+    call: () =>
+      api.internalTransactions.list({ budget: ID, date_from: "2026-01-01" }),
     method: "GET",
     path: `/internal-transactions/?budget=${ID}&date_from=2026-01-01`,
   },
@@ -179,7 +202,12 @@ const rows: Row[] = [
       }),
     method: "POST",
     path: "/internal-transactions/",
-    body: { bank_account: ID, amount: "25.00", src_budget: "s", dst_budget: "d" },
+    body: {
+      bank_account: ID,
+      amount: "25.00",
+      src_budget: "s",
+      dst_budget: "d",
+    },
   },
   // invitations.ts
   {
@@ -216,7 +244,8 @@ const rows: Row[] = [
   },
   {
     name: "notifications.updatePreference",
-    call: () => api.notifications.updatePreference("budget overdrawn", "digest"),
+    call: () =>
+      api.notifications.updatePreference("budget overdrawn", "digest"),
     method: "PATCH",
     path: "/notification-preferences/budget%20overdrawn/",
     body: { delivery_mode: "digest" },
@@ -237,7 +266,8 @@ const rows: Row[] = [
   // transactionCategories.ts
   {
     name: "transactionCategories.list",
-    call: () => api.transactionCategories.list({ group: "Food", archived: false }),
+    call: () =>
+      api.transactionCategories.list({ group: "Food", archived: false }),
     method: "GET",
     path: "/transaction-categories/?group=Food&archived=false",
   },
@@ -250,13 +280,21 @@ const rows: Row[] = [
   // transactions.ts
   {
     name: "transactions.list",
-    call: () => api.transactions.list({ bank_account: ID, pending: false, search: "coffee shop" }),
+    call: () =>
+      api.transactions.list({
+        bank_account: ID,
+        pending: false,
+        search: "coffee shop",
+      }),
     method: "GET",
     path: `/transactions/?bank_account=${ID}&pending=false&search=coffee+shop`,
   },
   {
     name: "pages.fetchPage",
-    call: () => api.pages.fetchPage(`https://mibudge.example/api/v1/transactions/?page=2`),
+    call: () =>
+      api.pages.fetchPage(
+        `https://mibudge.example/api/v1/transactions/?page=2`,
+      ),
     method: "GET",
     path: "/transactions/?page=2",
   },
@@ -268,14 +306,20 @@ const rows: Row[] = [
   },
   {
     name: "transactions.update",
-    call: () => api.transactions.update(ID, { description: "Lunch", memo: "with Sam" }),
+    call: () =>
+      api.transactions.update(ID, { description: "Lunch", memo: "with Sam" }),
     method: "PATCH",
     path: `/transactions/${ID}/`,
     body: { description: "Lunch", memo: "with Sam" },
   },
   {
     name: "transactions.uploadAttachment",
-    call: () => api.transactions.uploadAttachment(ID, "image", new File(["png"], "receipt.png")),
+    call: () =>
+      api.transactions.uploadAttachment(
+        ID,
+        "image",
+        new File(["png"], "receipt.png"),
+      ),
     method: "PATCH",
     path: `/transactions/${ID}/`,
     body: { image: "receipt.png" },
@@ -288,7 +332,12 @@ const rows: Row[] = [
     body: { splits: { [ID]: "5.00", other: "7.34" } },
   },
   // users.ts
-  { name: "users.me", call: () => api.users.me(), method: "GET", path: "/users/me/" },
+  {
+    name: "users.me",
+    call: () => api.users.me(),
+    method: "GET",
+    path: "/users/me/",
+  },
   {
     name: "users.updateMe",
     call: () => api.users.updateMe({ timezone: "Europe/Paris" }),
@@ -299,7 +348,11 @@ const rows: Row[] = [
   {
     name: "users.changePassword",
     call: () =>
-      api.users.changePassword({ current_password: "a", new_password: "b", confirm_password: "b" }),
+      api.users.changePassword({
+        current_password: "a",
+        new_password: "b",
+        confirm_password: "b",
+      }),
     method: "POST",
     path: "/users/me/change-password/",
     body: { current_password: "a", new_password: "b", confirm_password: "b" },

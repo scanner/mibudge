@@ -54,7 +54,9 @@ function openTransaction(id: string) {
 <template>
   <section class="mt-2">
     <div class="mb-2 flex items-center justify-between">
-      <h2 class="text-[11px] font-semibold uppercase tracking-wider text-secondary">
+      <h2
+        class="text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      >
         Transactions
       </h2>
       <div class="flex items-center gap-1">
@@ -103,10 +105,16 @@ function openTransaction(id: string) {
       </div>
     </Transition>
 
-    <p v-if="txError" class="mb-2 text-sm text-coral-600" role="alert">{{ txError }}</p>
+    <p v-if="txError" class="mb-2 text-sm text-coral-600" role="alert">
+      {{ txError }}
+    </p>
 
     <div v-if="txLoading" class="space-y-2">
-      <div v-for="i in 3" :key="i" class="h-16 animate-pulse rounded-card bg-neutral-100" />
+      <div
+        v-for="i in 3"
+        :key="i"
+        class="h-16 animate-pulse rounded-card bg-neutral-100"
+      />
     </div>
 
     <TransactionGroupList
@@ -124,7 +132,9 @@ function openTransaction(id: string) {
 
     <p v-else-if="!txError" class="py-4 text-center text-sm text-secondary">
       {{
-        searchQuery ? "No matching transactions." : "No transactions assigned to this budget yet."
+        searchQuery
+          ? "No matching transactions."
+          : "No transactions assigned to this budget yet."
       }}
     </p>
   </section>

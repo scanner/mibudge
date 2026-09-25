@@ -74,7 +74,8 @@ export function useDebouncedAutosave<K, V>(
     try {
       await save(job.key, job.value);
     } catch (err) {
-      if (job.key === key()) error.value = describeError(err, options.errorMessage);
+      if (job.key === key())
+        error.value = describeError(err, options.errorMessage);
     } finally {
       saving.value = false;
     }

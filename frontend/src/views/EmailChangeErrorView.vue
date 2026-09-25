@@ -15,13 +15,15 @@ const MESSAGES: Record<string, string> = {
     "The verification link has expired. Verification links are valid for 24 hours — please request a new email change from your account profile.",
   already_confirmed:
     "This verification link has already been used. If you expected to see a success page, your email address was already updated.",
-  revoked: "This link is no longer valid — the email change request was cancelled.",
+  revoked:
+    "This link is no longer valid — the email change request was cancelled.",
   email_taken:
     "The requested email address has been registered by another account. Please request a new email change and choose a different address.",
   already_revoked: "This cancellation link has already been used.",
   window_closed:
     "The 7-day cancellation window has closed. The email address change is now permanent. Contact support if you need assistance.",
-  invalid: "This link is not valid. It may have already been used or the URL may be incomplete.",
+  invalid:
+    "This link is not valid. It may have already been used or the URL may be incomplete.",
 };
 
 const FALLBACK =
@@ -45,7 +47,9 @@ const message = computed(() => {
           !
         </span>
       </div>
-      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">Unable to process link</h1>
+      <h1 class="mb-2 text-[18px] font-semibold text-neutral-900">
+        Unable to process link
+      </h1>
       <p class="mb-6 text-sm text-neutral-500">{{ message }}</p>
       <a
         href="/app/login/"

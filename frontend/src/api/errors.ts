@@ -36,7 +36,10 @@ export class ApiError extends Error {
   constructor(status: number, body: string) {
     const parsed = parseDrfError(body);
     const serverMessage =
-      parsed.detail ?? parsed.nonFieldErrors[0] ?? firstFieldError(parsed.fieldErrors) ?? null;
+      parsed.detail ??
+      parsed.nonFieldErrors[0] ??
+      firstFieldError(parsed.fieldErrors) ??
+      null;
     super(serverMessage ?? `HTTP ${status}`);
     this.name = "ApiError";
     this.serverMessage = serverMessage;
@@ -85,7 +88,11 @@ interface ParsedDrfError {
 // A body that is not JSON yields no messages.
 //
 export function parseDrfError(body: string): ParsedDrfError {
-  const out: ParsedDrfError = { detail: null, fieldErrors: {}, nonFieldErrors: [] };
+  const out: ParsedDrfError = {
+    detail: null,
+    fieldErrors: {},
+    nonFieldErrors: [],
+  };
   let data: unknown;
   try {
     data = body ? JSON.parse(body) : null;
@@ -117,9 +124,15 @@ function messages(value: unknown): string[] {
   return typeof value === "string" ? [value] : [];
 }
 
-function collectFieldErrors(out: Record<string, string[]>, key: string, value: unknown): void {
+function collectFieldErrors(
+  out: Record<string, string[]>,
+  key: string,
+  value: unknown,
+): void {
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    for (const [sub, subValue] of Object.entries(value as Record<string, unknown>)) {
+    for (const [sub, subValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
       collectFieldErrors(out, `${key}.${sub}`, subValue);
     }
     return;
@@ -128,7 +141,9 @@ function collectFieldErrors(out: Record<string, string[]>, key: string, value: u
   if (msgs.length) out[key] = msgs;
 }
 
-function firstFieldError(fieldErrors: Record<string, string[]>): string | undefined {
+function firstFieldError(
+  fieldErrors: Record<string, string[]>,
+): string | undefined {
   for (const msgs of Object.values(fieldErrors)) {
     if (msgs[0]) return msgs[0];
   }
@@ -144,15 +159,23 @@ function firstFieldError(fieldErrors: Record<string, string[]>): string | undefi
 // - a `NetworkError`: a connection notice;
 // - anything else: `fallback`.
 //
-export function describeError(err: unknown, fallback = "Something went wrong."): string {
-  if (err instanceof ApiError) return err.serverMessage ?? `${fallback} (HTTP ${err.status})`;
-  if (err instanceof AuthError) return "Your session has expired. Please sign in again.";
-  if (err instanceof NetworkError) return "Could not reach the server. Check your connection.";
+export function describeError(
+  err: unknown,
+  fallback = "Something went wrong.",
+): string {
+  if (err instanceof ApiError)
+    return err.serverMessage ?? `${fallback} (HTTP ${err.status})`;
+  if (err instanceof AuthError)
+    return "Your session has expired. Please sign in again.";
+  if (err instanceof NetworkError)
+    return "Could not reach the server. Check your connection.";
   return fallback;
 }
 
 ////////////////////////////////////////////////////////////////////////
 //
 export function isApiError(err: unknown, status?: number): err is ApiError {
-  return err instanceof ApiError && (status === undefined || err.status === status);
+  return (
+    err instanceof ApiError && (status === undefined || err.status === status)
+  );
 }

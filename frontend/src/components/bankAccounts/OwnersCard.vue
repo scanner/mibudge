@@ -30,9 +30,17 @@ const emit = defineEmits<{
        with the owners list.  The two-step flow (enter email → confirm
        in ConfirmSheet) keeps the destructive-action confirmation
        pattern consistent with the delete flow below. -->
-  <section class="overflow-hidden rounded-card border border-neutral-200 bg-white">
-    <div class="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
-      <h2 class="text-[11px] font-semibold uppercase tracking-wider text-secondary">Owners</h2>
+  <section
+    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+  >
+    <div
+      class="flex items-center justify-between border-b border-neutral-100 px-4 py-3"
+    >
+      <h2
+        class="text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      >
+        Owners
+      </h2>
       <button
         v-if="!formOpen"
         type="button"
@@ -45,10 +53,16 @@ const emit = defineEmits<{
 
     <!-- Current owners list -->
     <ul class="divide-y divide-neutral-100">
-      <li v-for="owner in owners" :key="owner" class="px-4 py-3 text-sm text-neutral-900">
+      <li
+        v-for="owner in owners"
+        :key="owner"
+        class="px-4 py-3 text-sm text-neutral-900"
+      >
         {{ owner }}
       </li>
-      <li v-if="!owners.length" class="px-4 py-3 text-sm text-neutral-400">—</li>
+      <li v-if="!owners.length" class="px-4 py-3 text-sm text-neutral-400">
+        —
+      </li>
     </ul>
 
     <!-- Inline invite form — step 1: enter the email address.
@@ -57,7 +71,10 @@ const emit = defineEmits<{
          opens the ConfirmSheet for step 2 rather than sending directly,
          giving the user a chance to double-check the address. -->
     <div v-if="formOpen" class="border-t border-neutral-100 px-4 py-4">
-      <label class="mb-1.5 block text-sm font-medium text-neutral-700" for="invite-email">
+      <label
+        class="mb-1.5 block text-sm font-medium text-neutral-700"
+        for="invite-email"
+      >
         Email address to invite
       </label>
       <input

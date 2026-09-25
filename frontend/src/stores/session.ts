@@ -110,7 +110,9 @@ export const useSessionStore = defineStore("session", () => {
   ////////////////////////////////////////////////////////////////////
   //
   async function updateProfile(update: UserUpdate): Promise<User> {
-    const updated = userFromDto(await api.users.updateMe(userToUpdateDto(update)));
+    const updated = userFromDto(
+      await api.users.updateMe(userToUpdateDto(update)),
+    );
     user.value = updated;
     return updated;
   }
@@ -162,7 +164,9 @@ export interface SessionHttpOptions {
 // The HTTP client for the active Pinia's session.  Call with a Pinia
 // active (after `app.use(pinia)` or `setActivePinia`).
 //
-export function createSessionHttpClient(options: SessionHttpOptions = {}): HttpClient {
+export function createSessionHttpClient(
+  options: SessionHttpOptions = {},
+): HttpClient {
   const session = useSessionStore();
   return createHttpClient({
     baseUrl: options.baseUrl,

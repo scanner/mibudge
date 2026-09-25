@@ -34,7 +34,9 @@ export interface UseFindShortcut {
 
 ////////////////////////////////////////////////////////////////////////
 //
-export function useFindShortcut(options: UseFindShortcutOptions): UseFindShortcut {
+export function useFindShortcut(
+  options: UseFindShortcutOptions,
+): UseFindShortcut {
   const open = ref(options.initiallyOpen ?? false);
 
   function focus(): void {

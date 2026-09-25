@@ -37,10 +37,17 @@ export function useBudgetList(accountId: () => string | null) {
     accountId,
     async (id: string): Promise<Loaded> => {
       const [budgets, summary] = await Promise.all([
-        store.fetchList({ bank_account: id, archived: false, ordering: "name" }),
+        store.fetchList({
+          bank_account: id,
+          archived: false,
+          ordering: "name",
+        }),
         api.bankAccounts.fundingSummary(id),
       ]);
-      return { ids: budgets.map((b) => b.id), summary: fundingSummaryFromDto(summary) };
+      return {
+        ids: budgets.map((b) => b.id),
+        summary: fundingSummaryFromDto(summary),
+      };
     },
     { errorMessage: "Failed to load budgets." },
   );
@@ -57,7 +64,9 @@ export function useBudgetList(accountId: () => string | null) {
   const fillups = computed(() => fillupIndex(budgets.value));
 
   function fillupFor(budget: Budget): Budget | undefined {
-    return budget.fillupGoalId ? fillups.value.get(budget.fillupGoalId) : undefined;
+    return budget.fillupGoalId
+      ? fillups.value.get(budget.fillupGoalId)
+      : undefined;
   }
 
   return {

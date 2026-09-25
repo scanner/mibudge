@@ -14,8 +14,15 @@ import { onMounted, ref } from "vue";
 //
 import { api } from "@/api";
 import { describeError } from "@/api/errors";
-import type { DeliveryMode, DigestFrequency, NotificationPreference } from "@/models/notification";
-import { channelPreferenceFromDto, notificationPreferenceFromDto } from "@/models/notification";
+import type {
+  DeliveryMode,
+  DigestFrequency,
+  NotificationPreference,
+} from "@/models/notification";
+import {
+  channelPreferenceFromDto,
+  notificationPreferenceFromDto,
+} from "@/models/notification";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -49,16 +56,24 @@ export function useNotificationPrefs() {
         api.notifications.listChannels(),
       ]);
       prefs.value = kinds.map(notificationPreferenceFromDto);
-      const email = channels.map(channelPreferenceFromDto).find((c) => c.channel === "email");
+      const email = channels
+        .map(channelPreferenceFromDto)
+        .find((c) => c.channel === "email");
       if (email) emailDigestFrequency.value = email.digestFrequency;
     } catch (err) {
-      error.value = describeError(err, "Failed to load notification preferences.");
+      error.value = describeError(
+        err,
+        "Failed to load notification preferences.",
+      );
     } finally {
       loading.value = false;
     }
   });
 
-  async function setDeliveryMode(pref: NotificationPreference, mode: DeliveryMode) {
+  async function setDeliveryMode(
+    pref: NotificationPreference,
+    mode: DeliveryMode,
+  ) {
     const idx = prefs.value.findIndex((p) => p.kind === pref.kind);
     if (idx === -1) return;
     prefs.value[idx] = { ...pref, deliveryMode: mode };
@@ -66,18 +81,31 @@ export function useNotificationPrefs() {
       await api.notifications.updatePreference(pref.kind, mode);
     } catch (err) {
       prefs.value[idx] = pref;
-      error.value = describeError(err, "Failed to update notification preference.");
+      error.value = describeError(
+        err,
+        "Failed to update notification preference.",
+      );
     }
   }
 
   async function saveEmailDigest(): Promise<void> {
     error.value = null;
     try {
-      await api.notifications.updateChannel("email", emailDigestFrequency.value);
+      await api.notifications.updateChannel(
+        "email",
+        emailDigestFrequency.value,
+      );
     } catch (err) {
       error.value = describeError(err, "Failed to save email preference.");
     }
   }
 
-  return { prefs, emailDigestFrequency, loading, error, setDeliveryMode, saveEmailDigest };
+  return {
+    prefs,
+    emailDigestFrequency,
+    loading,
+    error,
+    setDeliveryMode,
+    saveEmailDigest,
+  };
 }
