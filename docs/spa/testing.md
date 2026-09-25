@@ -8,7 +8,8 @@ with no handler fails the test.
 
 The harness covers four kinds of test:
 
-- **Unit tests** of pure helpers (`src/utils/`) and single stores.
+- **Unit tests** of the pure layers (`src/domain/`, `src/models/`), the
+  shared composables (`src/composables/`) and single stores.
 - **Transport and API tests** that check the exact HTTP requests the SPA
   sends: method, path, query string, headers and body.
 - **Auth and token tests** that drive the 401 → refresh → retry cycle.
@@ -19,6 +20,9 @@ The harness covers four kinds of test:
 Tests exercise behaviour through public interfaces (store actions and
 state, exported API functions, rendered output and navigation), so that
 refactoring the internals does not require rewriting them.
+
+An **architecture test** (`tests/architecture.test.ts`) checks the
+layering rules of [architecture.md](architecture.md) on every run.
 
 Browser end-to-end testing (Playwright) is out of scope for this harness.
 
@@ -33,10 +37,10 @@ pnpm test                       # run every test once
 pnpm test:watch                 # re-run affected tests on file changes
 pnpm test:coverage              # run once with v8 coverage and thresholds
 
-pnpm test tests/stores/auth.test.ts            # one file
+pnpm test tests/stores/session.test.ts         # one file
 pnpm test tests/stores/                        # one directory
 pnpm test -t "shares one refresh"              # tests whose name matches
-pnpm test tests/api/client.test.ts -t "ApiError on 404"
+pnpm test tests/api/http.test.ts -t "401 handling"
 ```
 
 From the repo root, `make test-frontend` runs `pnpm test`.
@@ -52,17 +56,24 @@ through `tsconfig.vitest.json`. `pnpm fmt` / `pnpm fmt:check` format
 ```
 frontend/
   vitest.config.ts        # merges vite.config.ts; environment, setup, coverage
-  tsconfig.vitest.json    # type-checks tests/ (types: vitest, node)
+  tsconfig.vitest.json    # type-checks tests/ (types: vitest, node, vite/client)
   tests/
     setup.ts              # global setup, the conftest.py analogue
+    architecture.test.ts  # layering rules over every src/ import
     mocks/
       server.ts           # MSW server + request log
       handlers.ts         # default happy-path handlers for every endpoint
       factories.ts        # make* DTO factories (factory-boy analogue)
-    helpers/              # fixtures: withAuth, expire, respondOnce401, mountWithApp
+    helpers/              # fixtures, re-exported from helpers/index.ts:
+                          #   withAuth, expire, respondOnce401 (auth.ts)
+                          #   withAccounts (accounts.ts)
+                          #   mountWithApp (mount.ts), withSetup (withSetup.ts)
+    domain/               # tests for src/domain/
     api/                  # tests for src/api/
+    models/               # tests for src/models/
     stores/               # tests for src/stores/
-    utils/                # tests for src/utils/
+    composables/          # tests for src/composables/
+    features/             # tests for src/features/
     components/           # tests for src/components/
     views/                # tests for src/views/
     router/               # tests for src/router/
@@ -82,7 +93,7 @@ Test APIs are imported explicitly (`import { describe, expect, it } from
 |---------------------------------|------------------------------------------------------------|
 | `conftest.py`                   | `tests/setup.ts` (runs before every test file)             |
 | factory-boy factories           | `tests/mocks/factories.ts` (`makeBudget({...})`)           |
-| fixtures                        | `tests/helpers/` (`withAuth()`, `mountWithApp()`)          |
+| fixtures                        | `tests/helpers/` (`withAuth()`, `withAccounts()`, `mountWithApp()`, `withSetup()`) |
 | `@pytest.mark.parametrize`      | `it.each([...])` / `describe.each([...])`                  |
 | freezegun                       | `vi.useFakeTimers()` + `vi.setSystemTime(...)`             |
 | `pytest.mark.xfail(strict=True)`| `it.fails(...)`                                            |
@@ -96,7 +107,7 @@ Test APIs are imported explicitly (`import { describe, expect, it } from
 plugin are the same as in the app build. It sets:
 
 - `environment: 'happy-dom'` with a page URL of `http://localhost/app/`.
-  `src/api/client.ts` fetches relative URLs (`/api/v1/...`); the page URL
+  `src/api/http.ts` fetches relative URLs (`/api/v1/...`); the page URL
   gives them an origin to resolve against, as the Django-served shell does
   in the browser.
 - `setupFiles: ['tests/setup.ts']`, `include: ['tests/**/*.test.ts']`.
@@ -116,7 +127,7 @@ The environment is happy-dom (not jsdom). Vitest's happy-dom environment
 installs happy-dom's `fetch`, `Request`, `Response`, `Headers` and
 `FormData` as globals. MSW's `setupServer().listen()` (from `msw/node`)
 then replaces `globalThis.fetch` with an interceptor that wraps whatever
-`fetch` was installed, so the single `fetch()` call in `src/api/client.ts`
+`fetch` was installed, so the single `fetch()` call in `src/api/http.ts`
 reaches the mock handlers. This was verified with a throwaway test before
 the harness was built; no delegation to Node's `fetch` is needed.
 
@@ -132,13 +143,22 @@ Two happy-dom behaviours the harness accounts for:
 ### What `tests/setup.ts` does
 
 - Sets `window.__mibudge = { adminEmail: 'admin@example.com' }` at module
-  level. `src/api/config.ts` reads it at import time, which happens while
-  test files load and before any hook runs.
+  level, as the Django shell template does in production
+  (`useShellConfig()` reads it).
 - Starts the MSW server once per file with `onUnhandledRequest: 'error'`.
-- Before each test: activates a fresh Pinia (`setActivePinia(createPinia())`)
-  and clears `sessionStorage` and `localStorage`.
-- After each test: `server.resetHandlers()` drops any `server.use(...)`
-  overrides, and the request log is cleared.
+- Before each test:
+  - Creates a fresh Pinia with `resetPlugin`, as `main.ts` does.
+  - Installs it in a bare `createApp({})`, because Pinia applies plugins
+    only once it is installed in an app.
+  - Makes it the active Pinia.
+  - Calls `initApi(createSessionHttpClient())`, so the `api` registry
+    uses that Pinia's session store for tokens and refresh.
+  - Clears `sessionStorage` and `localStorage`.
+- After each test:
+  - `enableAutoUnmount(afterEach)` unmounts every mounted component, so
+    modal scroll locks and window listeners don't leak.
+  - `server.resetHandlers()` drops any `server.use(...)` overrides.
+  - The request log is cleared.
 
 ---
 
@@ -197,8 +217,9 @@ handler that answers only the next matching request.
 
 `tests/helpers/auth.ts`:
 
-- `withAuth(token?, user?)` puts the auth store into the logged-in state:
-  an access token (default `TEST_TOKEN`) and a user.
+- `withAuth(token?, user?)` puts the session store into the logged-in
+  state: an access token (default `TEST_TOKEN`) and a user (a `UserDto`,
+  default `makeUser()`, mapped to the model).
 - `expire(token?)` makes every `/api/v1/*` request carrying
   `Bearer <token>` get 401, as the backend answers an expired access
   token. Requests with any other token fall through to the normal handler,
@@ -209,10 +230,17 @@ handler that answers only the next matching request.
   credentials.
 
 ```ts
-const auth = withAuth();
+withAuth();
 expire(TEST_TOKEN);
-await auth.request("/budgets/");   // 401 → refresh → retry with REFRESHED_TOKEN
+await api.budgets.list();   // 401 → refresh → retry with REFRESHED_TOKEN
 ```
+
+`tests/helpers/accounts.ts`:
+
+- `withAccounts(dtos, activeId?)` seeds the bank-accounts cache with the
+  given `BankAccountDto`s and makes the first (or `activeId`) the active
+  account, without going through the API. It returns the
+  account-context store.
 
 ### Asserting on the request log
 
@@ -239,9 +267,10 @@ expect(req?.body).toEqual({ name: "Rent" });
 
 ## Testing each layer
 
-### Pure utilities
+### Domain and models
 
-Import the function and call it. Prefer `it.each` tables:
+`src/domain/` and `src/models/` are pure, so import the function and
+call it. Prefer `it.each` tables:
 
 ```ts
 it.each([
@@ -252,15 +281,37 @@ it.each([
 });
 ```
 
+Model tests (`tests/models/`) build a DTO with a factory, map it, and
+assert on the model. They also run the reverse mapping for request
+bodies, including the null, empty-string and default cases:
+
+```ts
+const budget = budgetFromDto(makeBudget({ balance: "12.50", target_date: "" }));
+expect(budget.balance.equals(Money.of("12.50"))).toBe(true);
+expect(budget.targetDate).toBeNull();
+```
+
 ### API modules
 
+`tests/api/http.test.ts` covers the transport (`createHttpClient`):
+paths, headers, bodies and query strings, pagination, empty responses,
+DRF error parsing, and the 401 → refresh → retry cycle. It builds its own
+client with a stub `refresh`. Its "session-wired client" block runs the
+same cycle through `createSessionHttpClient()` and the session store.
+
 `tests/api/resources.test.ts` is one `it.each` table with a row per
-exported function in `src/api/*.ts` (except `client.ts`). Each row gives
-the call, the HTTP method, the path under `/api/v1` including trailing
-slash and query string, and the expected JSON body. The test answers that
-exact endpoint with a unique payload and checks the function sends the
-request as described and returns the payload. The per-resource modules
-call `useAuthStore().request()`, so the table runs with `withAuth()`.
+endpoint function in `src/api/resources/*.ts`, called through the `api`
+registry (`api.budgets.list(...)`). Each row gives:
+
+- the call;
+- the HTTP method;
+- the path under `/api/v1`, with trailing slash and query string;
+- the expected JSON body.
+
+The test answers that exact endpoint with a unique payload. It checks
+that the function sends the request as described and returns the
+payload. `api` is bound to the session-wired client in `tests/setup.ts`,
+and the table runs with `withAuth()`.
 
 ### Stores
 
@@ -274,16 +325,24 @@ const store = useBudgetsStore();
 
 await store.fetchList({ bank_account: account.id });
 
-expect(store.byId(rent.id)).toEqual(rent);
+expect(store.byId(rent.id)?.name).toBe("Rent");   // cached as a model
 ```
 
 ### Composables
 
-Call a composable that uses only reactivity and stores directly inside
-the test. A composable that uses lifecycle hooks, `inject`, or the router
-must run inside a component: mount a small host component with
-`mountWithApp(defineComponent({ setup() { result = useThing(); return () => null; } }))`
-and assert on `result`.
+Call a composable that uses only reactivity directly inside the test.
+A composable that registers lifecycle hooks or `onScopeDispose` (for
+example `useModal`, `useInfiniteList` or `useFindShortcut`) must run
+inside a component. Use `withSetup` from `tests/helpers`:
+
+```ts
+const { result, wrapper } = withSetup(() => useModal(() => open.value, onClose));
+// ...
+wrapper.unmount();   // runs the composable's cleanup
+```
+
+A feature composable that needs the router uses `mountWithApp` with a
+small host component instead, or is tested through its view.
 
 ### Components
 
@@ -292,31 +351,44 @@ Mount with `mountWithApp(Component, { route, props, pinia })` from
 so no browser URL changes) and a Pinia, navigates to `route`, mounts, and
 flushes pending promises.
 
-To check which store actions a component calls without running them,
-pass a testing Pinia; its actions are `vi.fn()` stubs:
+A presentational component (`src/components/`) needs no router, store
+or mock API. Mount it with `mount(Component, { props })` and assert on
+the output and `wrapper.emitted()`.
+
+To check which store actions a container calls, pass a testing Pinia
+with `stubActions: false`. In a setup store every returned function is
+an action, including lookups like `bankAccounts.byId`. With stubbed
+actions those would return `undefined`, so here actions are spied on
+and still run:
 
 ```ts
 const pinia = createTestingPinia({
   createSpy: vi.fn,
-  initialState: { accountContext: { accounts: [account], activeBankAccountId: account.id } },
+  stubActions: false,
+  initialState: {
+    session: { accessToken: "t" },
+    bankAccounts: { accounts: [bankAccountFromDto(account)], loaded: true },
+    accountContext: { activeBankAccountId: account.id },
+  },
 });
-await mountWithApp(TopBar, { route: "/budgets/", pinia });
+await mountWithApp(AppShell, { route: "/budgets/", pinia });
 expect(useBudgetsStore(pinia).fetchOne).toHaveBeenCalledWith(account.unallocated_budget);
 ```
+
+`initialState` is keyed by each store's returned state refs:
+`bankAccounts.accounts`, `budgets.cache`, `allocations.byAccount`.
 
 Use `@pinia/testing` 1.x; 2.x requires Pinia 4.
 
 ### Views
 
-Seed the stores the view reads (`withAuth()`, the account context), set up
+Seed the stores the view reads (`withAuth()`, `withAccounts()`), set up
 any `server.use(...)` overrides, then `mountWithApp` and assert on the
 rendered output, the request log and the router:
 
 ```ts
 withAuth();
-const ctx = useAccountContextStore();
-ctx.accounts = [account];
-ctx.setActive(account.id);
+withAccounts([account]);
 server.use(http.get("/api/v1/budgets/", () => new HttpResponse(null, { status: 500 })));
 
 const { wrapper } = await mountWithApp(BudgetsView, { route: "/budgets/" });
@@ -382,7 +454,7 @@ describes what the **production code** guarantees, not what the test does:
 
 ```ts
 // GIVEN: three requests in flight whose access token has expired
-// WHEN:  each receives 401 and asks the auth store to refresh
+// WHEN:  each receives 401 and the transport refreshes the token
 // THEN:  exactly one refresh is sent to the server
 //  AND:  every original request is retried with the new token and resolves
 //
@@ -410,21 +482,20 @@ while the bug exists and fails once the bug is fixed, which prompts the
 fixing change to convert it to a plain `it(...)`:
 
 ```ts
-// Known bug: `formatDateHeader` (src/utils/dates.ts) parses the date
-// as browser-local midnight and formats it in the profile zone, so a
-// profile zone west of the browser shows the previous day ("Jul 3").
+// Known bug: `formatThing` (src/domain/thing.ts) drops the last
+// character of a two-word name ("Grocerie").
 // Convert to `it(...)` when the bug is fixed.
 //
-it.fails("shows the same date when browser and profile timezones differ", () => {
-  expect(formatDateHeader("2026-07-04", "2026-09-24", "America/Los_Angeles")).toBe("Jul 4");
+it.fails("keeps the whole name", () => {
+  expect(formatThing("Weekly Groceries")).toBe("Weekly Groceries");
 });
 ```
 
 Current `it.fails` tests:
 
-| Test                                                  | Bug                                                                 |
-|-------------------------------------------------------|---------------------------------------------------------------------|
-| `tests/utils/dates.test.ts` — `formatDateHeader` with differing timezones | Shows the previous day when the profile zone is west of the browser zone |
+| Test | Bug |
+|------|-----|
+| —    | None. The last one (`formatDateHeader` showing the previous day when the browser zone differed from the profile zone) was fixed and is now a plain `it.each` over browser zones in `tests/domain/dates.test.ts`. |
 
 ---
 
@@ -437,11 +508,16 @@ text summary on the console.
 Per-directory line thresholds in `vitest.config.ts` fail the run when
 coverage drops below them:
 
-| Directory        | Lines |
-|------------------|-------|
-| `src/api/**`     | 80%   |
-| `src/stores/**`  | 80%   |
-| `src/utils/**`   | 80%   |
+| Directory             | Lines |
+|-----------------------|-------|
+| `src/api/**`          | 80%   |
+| `src/composables/**`  | 80%   |
+| `src/domain/**`       | 80%   |
+| `src/models/**`       | 80%   |
+| `src/stores/**`       | 80%   |
+
+`src/api/schema.d.ts` is a type declaration file and has no runtime
+code to cover.
 
 Views and components have no threshold yet. To raise a threshold or add
 one, edit `coverage.thresholds` in `vitest.config.ts`, for example
@@ -456,7 +532,35 @@ The Drone `mibudge Tests` pipeline has a `frontend tests` step that runs
 `pnpm test:coverage` in `node:22`. It depends on `frontend lint`, which
 runs `pnpm install --frozen-lockfile` into the shared
 `frontend-node-modules` volume, and runs in parallel with `frontend build`.
-A failing test or an unmet coverage threshold fails the pipeline.
+A failing test, an unmet coverage threshold, or a layering violation
+caught by the architecture test fails the pipeline.
+
+The `frontend lint` step also checks that the generated API types are
+current: `pnpm gen:api-types && git diff --exit-code src/api/schema.d.ts`.
+After changing the REST API, run `make api-schema` and
+`pnpm gen:api-types`, and commit both files (see
+[api-and-models.md](api-and-models.md#generated-types-apischemadts)).
+
+### The architecture test
+
+`tests/architecture.test.ts` reads the import statements of every file
+under `src/`: static, side-effect, dynamic and re-export imports,
+including SFC `<script>` blocks. It resolves relative imports to `@/...`
+and checks each layer's forbidden imports (see
+[architecture.md](architecture.md#layers)). It also checks that
+`api/http.ts` is the only file that calls `fetch(`.
+
+A violation fails with the file and the import:
+
+```
+× components/ are presentational
+  - Expected: []
+  + Received: ["components/shared/EmptyState.vue imports @/api"]
+```
+
+Fix it by moving the call up a layer, not by adding an exception. The
+rule table's `allowed` list is for type-only or error-helper modules
+(`@/api/dto` for models, `@/api/errors` for composables).
 
 Every Drone step installs `pnpm@9`, matching `Dockerfile`, the lockfile
 format (`lockfileVersion: '9.0'`), and `packageManager` in
@@ -468,7 +572,7 @@ stale lockfile. After `pnpm add`, commit the updated `pnpm-lock.yaml`.
 
 ## Checklist: which tests do I add?
 
-**A new API function in `src/api/*.ts`**
+**A new API function in `src/api/resources/*.ts`**
 
 - [ ] Add a default handler for its endpoint to `tests/mocks/handlers.ts`
       if none exists (shape from `docs/openapi.yaml`).
@@ -476,12 +580,32 @@ stale lockfile. After `pnpm add`, commit the updated `pnpm-lock.yaml`.
       with query string, JSON body.
 - [ ] Add a factory to `tests/mocks/factories.ts` if it returns a new DTO.
 
+**A new or changed model in `src/models/`**
+
+- [ ] An `it.each` table in `tests/models/<model>.test.ts` (or a block in
+      `tests/models/resources.test.ts` for small models) for `*FromDto`
+      and any `*To*Dto`: nulls, empty strings, defaults, money and dates.
+
 **A new or changed store in `src/stores/`**
 
 - [ ] `tests/stores/<store>.test.ts`: each action's effect on public state,
       the requests it sends (request log), and its error path.
 - [ ] If it persists anything (sessionStorage, localStorage), a test that
       reads and writes storage.
+- [ ] A new store defines `reset()`. Add its seeded state to the sign-out
+      test in `tests/stores/reset.test.ts`.
+
+**A new composable in `src/composables/`**
+
+- [ ] `tests/composables/<name>.test.ts`, using `withSetup` if it
+      registers lifecycle hooks: its state transitions, cleanup on
+      unmount, and the stale-response or race case if it loads data.
+
+**A new feature composable or component in `src/features/`**
+
+- [ ] Tests through its view (`tests/views/`) or directly in
+      `tests/features/<section>/`: the requests it sends, the store
+      updates it makes, and its error message.
 
 **A new view in `src/views/`**
 
@@ -494,12 +618,11 @@ stale lockfile. After `pnpm add`, commit the updated `pnpm-lock.yaml`.
 **A new component in `src/components/`**
 
 - [ ] `tests/components/<Component>.test.ts` for props → rendered output
-      and emitted events; use `createTestingPinia` to check store actions
-      it calls.
+      and emitted events.
 
-**A new pure helper in `src/utils/`**
+**A new pure helper in `src/domain/`**
 
-- [ ] An `it.each` table in `tests/utils/<module>.test.ts`, including edge
+- [ ] An `it.each` table in `tests/domain/<module>.test.ts`, including edge
       cases (empty input, month/year boundaries, timezones).
 
 **A bug you found but are not fixing**

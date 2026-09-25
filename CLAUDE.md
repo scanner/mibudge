@@ -69,6 +69,7 @@ pnpm fmt          # Format with oxfmt
 pnpm test         # Run the Vitest suite once
 pnpm test:watch   # Re-run affected tests on file changes
 pnpm test:coverage  # Run with v8 coverage and per-directory thresholds
+pnpm gen:api-types  # Regenerate src/api/schema.d.ts from docs/openapi.yaml (after make api-schema)
 ```
 
 ---
@@ -104,7 +105,7 @@ Two-token JWT pattern:
 - **Access token**: short-lived (60 min), stored in JS memory only, sent as `Authorization: Bearer` header.
 - **Refresh token**: long-lived (14 days sliding), httpOnly cookie, refreshed via `/api/token/refresh/`.
 
-The Vue `auth` Pinia store manages the access token lifecycle and provides an authenticated `request()` wrapper around `apiFetch`: when a request gets 401 it refreshes the access token once (single-flight, so concurrent 401s share one `POST /api/token/refresh/`) and retries the request with the new token.
+The SPA's `session` Pinia store holds the access token; the HTTP client in `frontend/src/api/http.ts` (wired to the store by `createSessionHttpClient()`) attaches it, and when a request gets 401 it refreshes the access token once (single-flight, so concurrent 401s share one `POST /api/token/refresh/`) and retries the request with the new token. A failed refresh resets every store and redirects to `/app/login/?next=<path>`.
 
 **API keys (machine credentials).** 3rd-party services and the importers authenticate with a long-lived API key (`Authorization: Api-Key <key>`) instead of a password/JWT. The `APIKey` model lives in `users/models.py` (SHA-256 hash stored, plaintext shown once at creation, soft-revoked for audit); `users/authentication.py` provides the DRF authentication class; management endpoints are at `/api/v1/users/me/api-keys/`. Machine credentials get blanket access to the budgeting domain but are denied on user/security endpoints (password/email change, invitations, user management, API-key management) via `users.permissions.RequiresInteractiveAuth` -- a blocklist gate that will become a scope check when fine-grained scopes land. Exception: `GET /api/v1/users/me/` is allowed for machine credentials (importers read `timezone`); the `me` action uses the read-only variant `RequiresInteractiveAuthForWrites`, which gates only mutating methods. When adding a new sensitive user/security endpoint, remember to attach `RequiresInteractiveAuth` (or the ForWrites variant if machine consumers need the reads).
 
@@ -141,7 +142,8 @@ Periodic tasks that should be defined in code (not created ad-hoc via the admin)
 ### Frontend (`frontend/`)
 
 - **Vue 3 + TypeScript (strict)**, Vite, Pinia, Vue Router
-- API calls use native `fetch` (no axios); the auth Pinia store's `apiFetch` wraps requests with JWT auth and transparent refresh.
+- **Layers** in `frontend/src/`: `domain/` → `api/` + `models/` → `stores/` + `composables/` → `features/` → `components/` + `views/`. Each layer imports only from the layers below it, and `tests/architecture.test.ts` enforces this. Views never import `@/api`, components are presentational (props in, events out), and `api/http.ts` holds the only `fetch`. Read [docs/spa/architecture.md](docs/spa/architecture.md) before changing the SPA's structure.
+- API types are generated from `docs/openapi.yaml` (`pnpm gen:api-types`); CI fails when `frontend/src/api/schema.d.ts` is stale.
 - In development, Vite runs at `:5173` and `django-vite` proxies asset requests. In production, Vite outputs `frontend/dist/` with a `manifest.json`; `collectstatic` picks it up and `django-vite` injects hashed filenames into Django templates.
 
 ### Tests (`app/tests/`)
@@ -221,7 +223,7 @@ def test_something(factory_cls) -> None: ...
 
 #### Frontend tests
 
-SPA tests live in `frontend/tests/` (mirroring `frontend/src/`) and run under Vitest with happy-dom, against an MSW mock REST API that fails any unmocked request. `tests/setup.ts` is the `conftest.py` analogue, `tests/mocks/factories.ts` holds the `make*` DTO factories, and `tests/helpers/` the fixtures (`withAuth`, `expire`, `respondOnce401`, `mountWithApp`). Every test carries a Gherkin comment block describing what the production code guarantees; known bugs are recorded as `it.fails(...)`. See [docs/spa/testing.md](docs/spa/testing.md) for running, writing, and the "which tests do I add" checklist.
+SPA tests live in `frontend/tests/` (mirroring `frontend/src/`) and run under Vitest with happy-dom, against an MSW mock REST API that fails any unmocked request. `tests/setup.ts` is the `conftest.py` analogue, `tests/mocks/factories.ts` holds the `make*` DTO factories, and `tests/helpers/` the fixtures (`withAuth`, `withAccounts`, `expire`, `respondOnce401`, `mountWithApp`, `withSetup`). Every test carries a Gherkin comment block describing what the production code guarantees; known bugs are recorded as `it.fails(...)`. See [docs/spa/testing.md](docs/spa/testing.md) for running, writing, and the "which tests do I add" checklist.
 
 ### Code Quality
 

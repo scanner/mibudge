@@ -18,18 +18,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/v1/bank-accounts/{id}/transaction-details/` applies scraped detail records; `sync-scrape` responses report `details_needed` so importers know exactly which rows still need enrichment
 - Saved scrape files (format v3) include fetched details and `import_bofa_saved` replays them; `--save-only --details-all` captures every detail dialog for offline import
 - Editing a transaction's description now marks it user-edited, so detail enrichment never overwrites your text
-- SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/stores`, `src/utils`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
+- SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/composables`, `src/domain`, `src/models`, `src/stores`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
+- SPA TypeScript types for the REST API are generated from `docs/openapi.yaml` (`pnpm gen:api-types`, openapi-typescript); the Drone `frontend lint` step fails when `frontend/src/api/schema.d.ts` is out of date
+- SPA "page not found" screen for unknown `/app/...` paths, instead of a blank page
+- SPA architecture documentation in `docs/spa/`: the layers and their import rules (`architecture.md`), the HTTP transport, errors, types and models (`api-and-models.md`), stores and caching (`state.md`), components (`components.md`), and a recipe for adding a page (`adding-a-page.md`); an architecture test enforces the layering on every test run
 
 ### Changed
 
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
 - Internal: split moneypools API views and serializers into per-domain modules
+- Internal: the SPA is restructured into layers -- pure domain rules (money, dates, schedules, budget status), an HTTP transport and per-resource API modules, domain models mapped from the API's wire format, Pinia entity caches, shared composables, and per-section feature modules -- and the five largest views are split into route shells of under 300 lines. No visual changes except the date fix below
+- Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
+- When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on
 
 ### Fixed
 
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)
 - Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
+- Budget target dates, next-refresh dates and funding dates showed one day early in browsers west of UTC (a goal due Dec 14 read "Dec 13"); calendar dates now show the same day in every timezone. Transaction list date headers had the same problem when the browser's timezone differed from your profile timezone
+- Editing a transaction's description or memo and then quickly stepping to the next transaction could save the text onto the next transaction
+- Clearing a transaction's memo did not save
+- A failed receipt/document upload on a transaction was silently ignored; it now shows an error
+- Following a link from one budget's page to another budget kept showing the first budget
+- Previous / next on a transaction stepped through transactions hidden by the list's filter and search
+- Switching bank accounts quickly could show the previous account's transactions
 - Returning to a tab after the access token expired could log you out ("Session expired") even though your session was valid: several requests refreshed the token at once, and every refresh after the first was rejected because the backend had already rotated the refresh cookie. Concurrent refreshes now share a single request
 
 ### Security
