@@ -1,5 +1,6 @@
 //
-// Budgets store tests: the id-keyed cache and its loaders.
+// Budgets store tests: the id-keyed cache, its loaders, and the
+// mutations that keep it current.
 //
 
 // 3rd party imports
@@ -9,10 +10,12 @@ import { describe, expect, it } from "vitest";
 
 // app imports
 //
+import { Money } from "@/domain/money";
+import { budgetFromDto } from "@/models/budget";
 import { useBudgetsStore } from "@/stores/budgets";
 import { withAuth } from "../helpers";
 import { makeBudget, makePage } from "../mocks/factories";
-import { lastRequest, server } from "../mocks/server";
+import { lastRequest, requestsTo, server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -23,7 +26,7 @@ describe("upsert", () => {
   //
   it("inserts and replaces by id", () => {
     const store = useBudgetsStore();
-    const budget = makeBudget({ name: "Rent" });
+    const budget = budgetFromDto(makeBudget({ name: "Rent" }));
 
     store.upsert(budget);
     store.upsert({ ...budget, name: "Mortgage" });
@@ -37,10 +40,25 @@ describe("upsert", () => {
   // WHEN:  it is cleared
   // THEN:  no budgets remain
   //
-  it("clear empties the cache", () => {
+  it("reset empties the cache", () => {
     const store = useBudgetsStore();
-    store.upsert(makeBudget());
-    store.clear();
+    store.upsert(budgetFromDto(makeBudget()));
+    store.reset();
+    expect(store.all).toEqual([]);
+  });
+
+  // GIVEN: cached budgets
+  // WHEN:  some or all are invalidated
+  // THEN:  those entries are dropped
+  //
+  it("invalidate drops entries", () => {
+    const store = useBudgetsStore();
+    const [a, b] = [budgetFromDto(makeBudget()), budgetFromDto(makeBudget())];
+    store.upsert(a);
+    store.upsert(b);
+    store.invalidate([a.id]);
+    expect(store.all).toEqual([b]);
+    store.invalidate();
     expect(store.all).toEqual([]);
   });
 });
@@ -60,8 +78,8 @@ describe("fetchOne", () => {
 
     const result = await store.fetchOne(budget.id);
 
-    expect(result).toEqual(budget);
-    expect(store.byId(budget.id)).toEqual(budget);
+    expect(result).toEqual(budgetFromDto(budget));
+    expect(store.byId(budget.id)).toEqual(budgetFromDto(budget));
     expect((await lastRequest())?.path).toBe(`/api/v1/budgets/${budget.id}/`);
   });
 });
@@ -82,8 +100,8 @@ describe("fetchList", () => {
 
     const result = await store.fetchList({ bank_account: "acct-1", archived: false });
 
-    expect(result).toEqual(budgets);
-    expect(store.all).toEqual(budgets);
+    expect(result).toEqual(budgets.map(budgetFromDto));
+    expect(store.all).toEqual(budgets.map(budgetFromDto));
     expect(store.loading).toBe(false);
     expect(store.error).toBeNull();
     expect((await lastRequest())?.path).toBe("/api/v1/budgets/?bank_account=acct-1&archived=false");
@@ -101,5 +119,69 @@ describe("fetchList", () => {
     await expect(store.fetchList()).rejects.toMatchObject({ status: 500 });
     expect(store.error).toBe("HTTP 500");
     expect(store.loading).toBe(false);
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("mutations", () => {
+  // GIVEN: two budgets on the server
+  // WHEN:  money is moved between them
+  // THEN:  the transfer is created and both budgets are refetched into
+  //        the cache
+  //
+  it("transfer creates the transfer and refetches both budgets", async () => {
+    withAuth();
+    const store = useBudgetsStore();
+
+    await store.transfer({
+      bankAccountId: "acct",
+      srcBudgetId: "src",
+      dstBudgetId: "dst",
+      amount: Money.of("25"),
+    });
+
+    const [post] = await requestsTo("POST", "/api/v1/internal-transactions/");
+    expect(post.body).toEqual({
+      bank_account: "acct",
+      src_budget: "src",
+      dst_budget: "dst",
+      amount: "25.00",
+    });
+    expect(store.byId("src")).not.toBeNull();
+    expect(store.byId("dst")).not.toBeNull();
+  });
+
+  // GIVEN: a budget
+  // WHEN:  it is updated, and then archived
+  // THEN:  the cache holds the server's answer, and archiving refetches
+  //        the account's budgets (the balance moved to Unallocated)
+  //
+  it("update and archive keep the cache current", async () => {
+    withAuth();
+    const store = useBudgetsStore();
+
+    const updated = await store.update("b1", { paused: true });
+    expect(store.byId("b1")).toEqual(updated);
+    expect(updated.paused).toBe(true);
+
+    await store.archive("b1");
+    expect(store.byId("b1")?.archived).toBe(true);
+    expect(await requestsTo("GET", "/api/v1/budgets/")).toHaveLength(1);
+  });
+
+  // GIVEN: a new budget's fields
+  // WHEN:  it is created
+  // THEN:  it is cached and returned
+  //
+  it("create caches the new budget", async () => {
+    withAuth();
+    const store = useBudgetsStore();
+
+    const created = await store.create({ name: "Trip", bankAccountId: "acct", budgetType: "G" });
+
+    expect(store.byId(created.id)?.name).toBe("Trip");
+    expect(store.forAccount("acct").map((b) => b.id)).toContain(created.id);
+    expect(store.names.get(created.id)).toBe("Trip");
   });
 });

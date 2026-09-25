@@ -1,19 +1,19 @@
 //
-// Account-context store — the "which bank account am I looking at?"
-// global.  Every list view that filters by account reads
-// `activeBankAccountId` from here and passes it as the `bank_account`
-// query param.
+// Account-context store: which bank account the user is looking at.
+// Store layer.
 //
-// Initialisation order (UI_SPEC §6):
-//   1. Read the cached UUID from localStorage (may be stale).
-//   2. Fetch the user's bank accounts + current user in parallel.
-//   3. Choose the active account: user.default_bank_account → cached
-//      UUID if still valid → first account.
-//   4. Persist the chosen UUID back to localStorage.
+// Every per-account view reads `activeBankAccountId` from here.  The
+// choice is kept per browser tab in sessionStorage, so two tabs can
+// look at different accounts.
 //
-// Downstream: the unallocated-budget UUID is derived from the active
-// account and exposed separately so TopBar and allocation-tagging code
-// can reach it without re-reading the whole BankAccount object.
+// `init()` picks the active account:
+//   1. the id stored for this tab, if it is still one of the user's
+//      accounts;
+//   2. else the user's `defaultBankAccountId`;
+//   3. else the first account.
+// It loads the account list through the bank-accounts cache and the
+// user through the session store, whose `loadUser()` is shared with
+// the cold-boot load, so `/users/me/` is requested once.
 //
 
 // 3rd party imports
@@ -23,83 +23,84 @@ import { computed, ref } from "vue";
 
 // app imports
 //
-import { listBankAccounts } from "@/api/bankAccounts";
-import { getCurrentUser } from "@/api/users";
-import type { BankAccount } from "@/types/api";
+import { describeError } from "@/api/errors";
+import type { BankAccount } from "@/models/bankAccount";
+import { useBankAccountsStore } from "@/stores/bankAccounts";
+import { useSessionStore } from "@/stores/session";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const STORAGE_KEY = "mibudge.activeBankAccountId";
 
+function readStored(): string | null {
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(id: string | null): void {
+  try {
+    if (id) window.sessionStorage.setItem(STORAGE_KEY, id);
+    else window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable (private mode); the choice then lasts
+    // for this page load only.
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 //
 export const useAccountContextStore = defineStore("accountContext", () => {
+  const bankAccounts = useBankAccountsStore();
+  const session = useSessionStore();
+
   ////////////////////////////////////////////////////////////////////
   //
-  const accounts = ref<BankAccount[]>([]);
   const activeBankAccountId = ref<string | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  ////////////////////////////////////////////////////////////////////
-  //
-  const activeBankAccount = computed<BankAccount | null>(() => {
-    const id = activeBankAccountId.value;
-    if (!id) return null;
-    return accounts.value.find((a) => a.id === id) ?? null;
-  });
+  const accounts = computed<BankAccount[]>(() => bankAccounts.all);
 
-  ////////////////////////////////////////////////////////////////////
-  //
+  const activeBankAccount = computed<BankAccount | null>(() =>
+    bankAccounts.byId(activeBankAccountId.value),
+  );
+
   const unallocatedBudgetId = computed<string | null>(
-    () => activeBankAccount.value?.unallocated_budget ?? null,
+    () => activeBankAccount.value?.unallocatedBudgetId ?? null,
   );
 
   ////////////////////////////////////////////////////////////////////
   //
-  function setActive(id: string | null) {
+  function setActive(id: string | null): void {
     activeBankAccountId.value = id;
-    if (id) {
-      window.sessionStorage.setItem(STORAGE_KEY, id);
-    } else {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-    }
+    writeStored(id);
   }
 
   ////////////////////////////////////////////////////////////////////
   //
-  // Load accounts and pick the active one.  Safe to call on every
-  // app boot — runs once per session unless `force` is true.
+  // Load accounts and pick the active one.  Runs once per session
+  // unless `force` is set.
   //
   async function init(force = false): Promise<void> {
-    if (!force && accounts.value.length > 0) return;
+    if (!force && bankAccounts.loaded && activeBankAccountId.value) return;
     loading.value = true;
     error.value = null;
     try {
-      const [accountsPage, user] = await Promise.all([
-        listBankAccounts(),
-        getCurrentUser().catch(() => null),
-      ]);
-      accounts.value = accountsPage.results;
-
-      const cached = window.sessionStorage.getItem(STORAGE_KEY);
-      const validIds = new Set(accounts.value.map((a) => a.id));
-
-      // Preference order: cached (explicit tab selection) → server-side
-      // default → first account.  The cached value takes priority so that
-      // reloading a tab preserves the account the user chose in that tab.
+      const [list, user] = await Promise.all([bankAccounts.loadAll(force), session.loadUser()]);
+      const valid = new Set(list.map((a) => a.id));
+      const stored = readStored();
       let chosen: string | null = null;
-      if (cached && validIds.has(cached)) {
-        chosen = cached;
-      } else if (user?.default_bank_account && validIds.has(user.default_bank_account)) {
-        chosen = user.default_bank_account;
-      } else if (accounts.value.length > 0) {
-        chosen = accounts.value[0].id;
-      }
+      if (stored && valid.has(stored)) chosen = stored;
+      else if (user?.defaultBankAccountId && valid.has(user.defaultBankAccountId)) {
+        chosen = user.defaultBankAccountId;
+      } else chosen = list[0]?.id ?? null;
       setActive(chosen);
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err);
+      error.value = describeError(err, "Failed to load bank accounts.");
     } finally {
       loading.value = false;
     }
@@ -107,19 +108,24 @@ export const useAccountContextStore = defineStore("accountContext", () => {
 
   ////////////////////////////////////////////////////////////////////
   //
-  // Refresh just the active-account record (e.g. after a rename or
-  // balance-changing event).  Leaves the active ID untouched.
+  // Refetch the account list (after a rename, create or delete).  When
+  // the active account is gone, the first remaining account becomes
+  // active.
   //
   async function refresh(): Promise<void> {
-    const page = await listBankAccounts();
-    accounts.value = page.results;
+    const list = await bankAccounts.refresh();
+    if (activeBankAccountId.value && !list.some((a) => a.id === activeBankAccountId.value)) {
+      setActive(list[0]?.id ?? null);
+    }
   }
 
   ////////////////////////////////////////////////////////////////////
   //
-  function clear() {
-    accounts.value = [];
-    setActive(null);
+  function reset(): void {
+    activeBankAccountId.value = null;
+    loading.value = false;
+    error.value = null;
+    writeStored(null);
   }
 
   return {
@@ -132,6 +138,6 @@ export const useAccountContextStore = defineStore("accountContext", () => {
     init,
     refresh,
     setActive,
-    clear,
+    reset,
   };
 });

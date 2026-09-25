@@ -1,6 +1,6 @@
 //
-// Auth fixtures: seed the auth store, and make the mock API reject a
-// token so the 401 → refresh → retry flow runs.
+// Session fixtures: seed the session store, and make the mock API reject
+// a token so the 401 → refresh → retry flow runs.
 //
 
 // 3rd party imports
@@ -9,8 +9,9 @@ import { http, HttpResponse } from "msw";
 
 // app imports
 //
-import { useAuthStore } from "@/stores/auth";
-import type { User } from "@/types/api";
+import type { UserDto } from "@/api/dto";
+import { userFromDto } from "@/models/user";
+import { useSessionStore } from "@/stores/session";
 import { makeUser } from "../mocks/factories";
 import { server } from "../mocks/server";
 
@@ -20,14 +21,15 @@ export const TEST_TOKEN = "test-access-token";
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Put the active Pinia's auth store into the logged-in state: an access
-// token in memory and a loaded user.  Returns the store.
+// Put the active Pinia's session store into the logged-in state: an
+// access token in memory and a loaded user (from a DTO, as the API
+// sends it).  Returns the store.
 //
-export function withAuth(token: string = TEST_TOKEN, user: User = makeUser()) {
-  const auth = useAuthStore();
-  auth.accessToken = token;
-  auth.user = user;
-  return auth;
+export function withAuth(token: string = TEST_TOKEN, user: UserDto = makeUser()) {
+  const session = useSessionStore();
+  session.accessToken = token;
+  session.user = userFromDto(user);
+  return session;
 }
 
 ////////////////////////////////////////////////////////////////////////

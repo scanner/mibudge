@@ -31,3 +31,20 @@ describe("prevId / nextId", () => {
     expect(nav.nextId(id)).toBe(next);
   });
 });
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("reset", () => {
+  // GIVEN: saved ids, search and filter
+  // WHEN:  the store is reset
+  // THEN:  all three are cleared
+  //
+  it("clears everything", () => {
+    const nav = useTransactionNavStore();
+    nav.setIds(["a"]);
+    nav.savedSearch = "x";
+    nav.savedFilter = "pending";
+    nav.reset();
+    expect([nav.orderedIds, nav.savedSearch, nav.savedFilter]).toEqual([[], "", ""]);
+  });
+});

@@ -1,6 +1,7 @@
 //
 // Account-context store tests: choosing the active bank account on
-// init, persisting a switch, and the empty / error cases.
+// init, persisting a switch, the shared `/users/me/` load, and the
+// empty / error cases.
 //
 
 // 3rd party imports
@@ -10,8 +11,10 @@ import { describe, expect, it } from "vitest";
 
 // app imports
 //
+import type { BankAccountDto as BankAccount } from "@/api/dto";
+import { bankAccountFromDto } from "@/models/bankAccount";
 import { useAccountContextStore } from "@/stores/accountContext";
-import type { BankAccount } from "@/types/api";
+import { useSessionStore } from "@/stores/session";
 import { withAuth } from "../helpers";
 import { makeBankAccount, makePage, makeUser } from "../mocks/factories";
 import { requestsTo, server } from "../mocks/server";
@@ -48,9 +51,9 @@ describe("init", () => {
 
     await ctx.init();
 
-    expect(ctx.accounts).toEqual([a, b, c]);
+    expect(ctx.accounts).toEqual([a, b, c].map(bankAccountFromDto));
     expect(ctx.activeBankAccountId).toBe(b.id);
-    expect(ctx.activeBankAccount).toEqual(b);
+    expect(ctx.activeBankAccount).toEqual(bankAccountFromDto(b));
     expect(ctx.unallocatedBudgetId).toBe(b.unallocated_budget);
   });
 
@@ -59,7 +62,7 @@ describe("init", () => {
   // THEN:  the user's default account is chosen and persisted instead
   //
   it("falls back to the default account when the stored id is stale", async () => {
-    withAuth();
+    withAuth().user = null;
     const [a, b] = [makeBankAccount(), makeBankAccount()];
     serveAccounts([a, b], b.id);
     window.sessionStorage.setItem(STORAGE_KEY, "no-longer-mine");
@@ -76,7 +79,7 @@ describe("init", () => {
   // THEN:  the first account in the list is chosen
   //
   it("falls back to the first account", async () => {
-    withAuth();
+    withAuth().user = null;
     const [a, b] = [makeBankAccount(), makeBankAccount()];
     serveAccounts([a, b], "someone-elses-account");
     const ctx = useAccountContextStore();
@@ -91,7 +94,7 @@ describe("init", () => {
   // THEN:  the account list still loads and the first account is chosen
   //
   it("tolerates a failed user lookup", async () => {
-    withAuth();
+    withAuth().user = null;
     const a = makeBankAccount();
     serveAccounts([a]);
     server.use(http.get("/api/v1/users/me/", () => new HttpResponse(null, { status: 500 })));
@@ -157,6 +160,29 @@ describe("init", () => {
 
 ////////////////////////////////////////////////////////////////////////
 //
+describe("cold boot", () => {
+  // GIVEN: a session with no user loaded yet
+  // WHEN:  the user and the account context load at the same time, as
+  //        they do on a cold boot
+  // THEN:  `/users/me/` is requested once
+  //  AND:  the user's default account is chosen
+  //
+  it("requests /users/me/ once", async () => {
+    const session = withAuth();
+    session.user = null;
+    const [a, b] = [makeBankAccount(), makeBankAccount()];
+    serveAccounts([a, b], b.id);
+    const ctx = useAccountContextStore();
+
+    await Promise.all([session.loadUser(), ctx.init()]);
+
+    expect(await requestsTo("GET", "/api/v1/users/me/")).toHaveLength(1);
+    expect(ctx.activeBankAccountId).toBe(b.id);
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
 describe("switching accounts", () => {
   // GIVEN: an initialised account context
   // WHEN:  the user switches to another account
@@ -176,16 +202,16 @@ describe("switching accounts", () => {
   });
 
   // GIVEN: an active account
-  // WHEN:  the context is cleared
+  // WHEN:  the user signs out
   // THEN:  the accounts, the active id and the stored id are removed
   //
-  it("clear removes the active account and the stored id", async () => {
+  it("sign-out removes the active account and the stored id", async () => {
     withAuth();
     serveAccounts([makeBankAccount()]);
     const ctx = useAccountContextStore();
     await ctx.init();
 
-    ctx.clear();
+    useSessionStore().logout();
 
     expect(ctx.accounts).toEqual([]);
     expect(ctx.activeBankAccountId).toBeNull();
@@ -211,6 +237,24 @@ describe("refresh", () => {
     await ctx.refresh();
 
     expect(ctx.activeBankAccount?.name).toBe("New name");
+    expect(ctx.activeBankAccountId).toBe(a.id);
+  });
+
+  // GIVEN: an active account that has since been deleted
+  // WHEN:  the account list is refreshed
+  // THEN:  the first remaining account becomes active
+  //
+  it("moves off an account that no longer exists", async () => {
+    withAuth();
+    const [a, b] = [makeBankAccount(), makeBankAccount()];
+    serveAccounts([a, b]);
+    const ctx = useAccountContextStore();
+    await ctx.init();
+    ctx.setActive(b.id);
+    serveAccounts([a]);
+
+    await ctx.refresh();
+
     expect(ctx.activeBankAccountId).toBe(a.id);
   });
 });
