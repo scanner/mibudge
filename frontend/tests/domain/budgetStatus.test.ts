@@ -11,8 +11,8 @@ import { describe, expect, it } from "vitest";
 //
 import { budgetMeta, budgetProgress, budgetStatus, progressTone } from "@/domain/budgetStatus";
 import type { BudgetFigures } from "@/domain/budgetStatus";
-import type { Budget } from "@/types/api";
-import { budgetFigures } from "@/utils/budget";
+import type { BudgetDto as Budget } from "@/api/dto";
+import { budgetFromDto } from "@/models/budget";
 import { makeBudget } from "../mocks/factories";
 
 ////////////////////////////////////////////////////////////////////////
@@ -21,7 +21,7 @@ import { makeBudget } from "../mocks/factories";
 // table rows stay in API terms.
 //
 function figures(overrides: Partial<Budget> = {}): BudgetFigures {
-  return budgetFigures(makeBudget(overrides));
+  return budgetFromDto(makeBudget(overrides));
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -39,7 +39,10 @@ describe("budgetProgress", () => {
     ["10.00", "0.00", 100],
     ["10.00", null, 100],
   ])("balance %s / target %s → %d", (balance, target, expected) => {
-    expect(budgetProgress(figures({ balance, target_balance: target }))).toBe(expected);
+    // The schema types `target_balance` non-null; the null row covers a
+    // budget with no target, which the model maps to `null`.
+    const target_balance = target as string;
+    expect(budgetProgress(figures({ balance, target_balance }))).toBe(expected);
   });
 });
 
