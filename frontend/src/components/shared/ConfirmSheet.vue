@@ -50,34 +50,31 @@ useModal(
         v-if="open"
         class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
       >
+        <div class="absolute inset-0 bg-scrim/40" @click="emit('cancel')" />
         <div
-          class="absolute inset-0 bg-neutral-900/40"
-          @click="emit('cancel')"
-        />
-        <div
-          class="relative w-full rounded-t-2xl bg-white p-5 shadow-xl md:w-[420px] md:rounded-card"
+          class="relative w-full rounded-t-2xl bg-surface p-5 shadow-xl md:w-[420px] md:rounded-card"
           role="dialog"
           aria-modal="true"
         >
-          <h2 class="text-base font-medium text-neutral-900">{{ title }}</h2>
-          <p v-if="message" class="mt-2 text-sm text-neutral-600">
+          <h2 class="text-base font-medium text-fg">{{ title }}</h2>
+          <p v-if="message" class="mt-2 text-sm text-fg-muted">
             {{ message }}
           </p>
           <div class="mt-5 flex justify-end gap-2">
             <button
               type="button"
-              class="rounded-full px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+              class="rounded-full px-4 py-2 text-sm font-medium text-fg hover:bg-surface-muted"
               @click="emit('cancel')"
             >
               {{ cancelLabel }}
             </button>
             <button
               type="button"
-              class="rounded-full px-4 py-2 text-sm font-medium text-white"
+              class="rounded-full px-4 py-2 text-sm font-medium text-fg-on-accent"
               :class="
                 tone === 'coral'
-                  ? 'bg-coral-400 hover:bg-coral-600'
-                  : 'bg-ocean-400 hover:bg-ocean-600'
+                  ? 'bg-danger-solid hover:bg-danger-solid-hover'
+                  : 'bg-accent hover:bg-accent-hover'
               "
               @click="emit('confirm')"
             >

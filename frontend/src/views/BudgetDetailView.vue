@@ -88,7 +88,7 @@ async function confirmArchive() {
       <button
         v-if="budget && !isUnallocated"
         type="button"
-        class="flex h-10 items-center rounded-full px-3 text-sm font-medium text-ocean-600 hover:bg-ocean-50"
+        class="flex h-10 items-center rounded-full px-3 text-sm font-medium text-fg-link hover:bg-accent-subtle"
         @click="showEditSheet = true"
       >
         <IconPencil class="mr-1 h-4 w-4" />
@@ -98,15 +98,15 @@ async function confirmArchive() {
 
     <!-- Loading skeleton -->
     <div v-if="loading" class="space-y-4 pt-4">
-      <div class="h-48 animate-pulse rounded-card bg-neutral-100" />
-      <div class="h-14 animate-pulse rounded-card bg-neutral-100" />
-      <div class="h-32 animate-pulse rounded-card bg-neutral-100" />
+      <div class="h-48 animate-pulse rounded-card bg-surface-muted" />
+      <div class="h-14 animate-pulse rounded-card bg-surface-muted" />
+      <div class="h-32 animate-pulse rounded-card bg-surface-muted" />
     </div>
 
     <!-- Error -->
     <div
       v-else-if="error && !budget"
-      class="mt-4 rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+      class="mt-4 rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -124,15 +124,15 @@ async function confirmArchive() {
         <button
           v-if="!isUnallocated"
           type="button"
-          class="flex w-full items-start gap-3 rounded-card border border-neutral-200 bg-ocean-50 px-4 py-3 text-left"
+          class="flex w-full items-start gap-3 rounded-card border border-border bg-accent-subtle px-4 py-3 text-left"
           @click="showMoveMoneyForm = true"
         >
           <IconArrowsRightLeft
-            class="mt-0.5 h-5 w-5 flex-none text-ocean-400"
+            class="mt-0.5 h-5 w-5 flex-none text-accent-fg"
           />
           <div>
-            <div class="text-[15px] font-medium text-ocean-600">Move money</div>
-            <div class="text-xs text-secondary">
+            <div class="text-[15px] font-medium text-fg-link">Move money</div>
+            <div class="text-xs text-fg-muted">
               Transfer to or from another budget
             </div>
           </div>
@@ -150,7 +150,7 @@ async function confirmArchive() {
         <div v-if="!isUnallocated" class="mt-2 flex gap-2">
           <button
             type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            class="flex-1 rounded-full border border-border py-3 text-sm font-medium text-fg hover:bg-surface-sunken"
             @click="togglePause"
           >
             <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
@@ -158,7 +158,7 @@ async function confirmArchive() {
           </button>
           <button
             type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            class="flex-1 rounded-full border border-border py-3 text-sm font-medium text-fg hover:bg-surface-sunken"
             @click="showArchiveConfirm = true"
           >
             <IconArchive class="mr-1 inline-block h-4 w-4" />
@@ -172,7 +172,7 @@ async function confirmArchive() {
         <!-- Inline error banner -->
         <p
           v-if="error"
-          class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600"
+          class="rounded-subcard bg-danger-bg px-4 py-2 text-sm text-danger-fg"
         >
           {{ error }}
         </p>

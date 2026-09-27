@@ -41,22 +41,22 @@ function fmtDate(iso: string): string {
        disappears automatically. -->
   <section
     v-if="invitations.length > 0 || error"
-    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+    class="overflow-hidden rounded-card border border-border bg-surface"
   >
     <h2
-      class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      class="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
     >
       Pending invitations
     </h2>
-    <ul class="divide-y divide-neutral-100">
+    <ul class="divide-y divide-border-subtle">
       <li
         v-for="inv in invitations"
         :key="inv.id"
         class="flex items-center justify-between px-4 py-3"
       >
         <div>
-          <p class="text-sm text-neutral-900">{{ inv.inviteeEmail }}</p>
-          <p class="mt-0.5 text-xs text-secondary">
+          <p class="text-sm text-fg">{{ inv.inviteeEmail }}</p>
+          <p class="mt-0.5 text-xs text-fg-muted">
             Expires {{ fmtDate(inv.expiresAt) }}
           </p>
         </div>
@@ -67,14 +67,14 @@ function fmtDate(iso: string): string {
           v-if="canCancel(inv)"
           type="button"
           :disabled="cancellingId === inv.id"
-          class="text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+          class="text-xs font-medium text-danger-fg hover:text-danger-solid-hover disabled:opacity-50"
           @click="emit('cancel', inv)"
         >
           {{ cancellingId === inv.id ? "Cancelling…" : "Cancel" }}
         </button>
       </li>
     </ul>
-    <p v-if="error" class="px-4 pb-3 text-xs text-coral-600" role="alert">
+    <p v-if="error" class="px-4 pb-3 text-xs text-danger-fg" role="alert">
       {{ error }}
     </p>
   </section>

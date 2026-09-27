@@ -22,25 +22,25 @@ defineProps<{
 <template>
   <!-- Hero balance grid (2×2) -->
   <section class="grid grid-cols-2 gap-3">
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
+    <div class="rounded-card border border-border bg-surface px-4 py-3">
       <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
       >
         Posted balance
       </div>
       <MoneyAmount :amount="account.postedBalance" size="md" />
     </div>
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
+    <div class="rounded-card border border-border bg-surface px-4 py-3">
       <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
       >
         Available balance
       </div>
       <MoneyAmount :amount="account.availableBalance" size="md" />
     </div>
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
+    <div class="rounded-card border border-border bg-surface px-4 py-3">
       <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
       >
         Unallocated
       </div>
@@ -50,17 +50,17 @@ defineProps<{
         size="md"
         :coloured="false"
       />
-      <span v-else class="font-mono text-[15px] font-medium text-secondary"
+      <span v-else class="font-mono text-[15px] font-medium text-fg-muted"
         >—</span
       >
     </div>
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
+    <div class="rounded-card border border-border bg-surface px-4 py-3">
       <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
       >
         Currency
       </div>
-      <span class="font-mono text-[15px] font-medium text-neutral-900">
+      <span class="font-mono text-[15px] font-medium text-fg">
         {{ account.currency }}
       </span>
     </div>

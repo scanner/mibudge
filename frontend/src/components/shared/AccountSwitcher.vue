@@ -47,18 +47,15 @@ useModal(
         v-if="open"
         class="fixed inset-0 z-40 flex items-end justify-center md:items-start md:pt-20"
       >
+        <div class="absolute inset-0 bg-scrim/40" @click="emit('close')" />
         <div
-          class="absolute inset-0 bg-neutral-900/40"
-          @click="emit('close')"
-        />
-        <div
-          class="relative max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl md:w-[420px] md:rounded-card"
+          class="relative max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-surface p-4 shadow-xl md:w-[420px] md:rounded-card"
           role="dialog"
           aria-modal="true"
           aria-label="Switch bank account"
         >
           <h2
-            class="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500"
+            class="mb-3 text-xs font-semibold uppercase tracking-wider text-fg-muted"
           >
             Your accounts
           </h2>
@@ -66,30 +63,28 @@ useModal(
             <li v-for="account in accounts" :key="account.id">
               <button
                 type="button"
-                class="flex w-full items-center gap-3 rounded-subcard px-3 py-3 text-left hover:bg-neutral-50"
+                class="flex w-full items-center gap-3 rounded-subcard px-3 py-3 text-left hover:bg-surface-sunken"
                 @click="emit('select', account.id)"
               >
-                <span class="h-2.5 w-2.5 flex-none rounded-full bg-ocean-400" />
+                <span class="h-2.5 w-2.5 flex-none rounded-full bg-accent" />
                 <div class="min-w-0 flex-1">
-                  <div
-                    class="truncate text-[15px] font-medium text-neutral-900"
-                  >
+                  <div class="truncate text-[15px] font-medium text-fg">
                     {{ account.name }}
                   </div>
-                  <div class="text-xs text-neutral-500">
+                  <div class="text-xs text-fg-muted">
                     <MoneyAmount :amount="account.postedBalance" size="sm" />
                   </div>
                 </div>
                 <IconCheck
                   v-if="account.id === activeId"
-                  class="h-5 w-5 flex-none text-ocean-400"
+                  class="h-5 w-5 flex-none text-accent-fg"
                 />
               </button>
             </li>
           </ul>
           <button
             type="button"
-            class="mt-3 flex w-full items-center justify-between rounded-subcard px-3 py-3 text-left text-sm font-medium text-ocean-600 hover:bg-ocean-50"
+            class="mt-3 flex w-full items-center justify-between rounded-subcard px-3 py-3 text-left text-sm font-medium text-fg-link hover:bg-accent-subtle"
             @click="emit('manage')"
           >
             Manage accounts

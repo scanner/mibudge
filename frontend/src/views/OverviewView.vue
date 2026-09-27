@@ -66,9 +66,9 @@ function openTransaction(id: string) {
     <div class="space-y-5 py-2">
       <!-- Balance strip -->
       <section v-if="ctx.activeBankAccount" class="grid grid-cols-3 gap-2">
-        <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
+        <div class="rounded-card border border-border bg-surface px-3 py-3">
           <div
-            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
+            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
           >
             Posted
           </div>
@@ -77,9 +77,9 @@ function openTransaction(id: string) {
             size="md"
           />
         </div>
-        <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
+        <div class="rounded-card border border-border bg-surface px-3 py-3">
           <div
-            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
+            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
           >
             Available
           </div>
@@ -88,9 +88,9 @@ function openTransaction(id: string) {
             size="md"
           />
         </div>
-        <div class="rounded-card border border-neutral-200 bg-white px-3 py-3">
+        <div class="rounded-card border border-border bg-surface px-3 py-3">
           <div
-            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
+            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
           >
             Free
           </div>
@@ -99,9 +99,7 @@ function openTransaction(id: string) {
             :amount="unallocated.balance"
             size="md"
           />
-          <span
-            v-else
-            class="font-mono text-[15px] font-medium text-neutral-400"
+          <span v-else class="font-mono text-[15px] font-medium text-fg-subtle"
             >—</span
           >
         </div>
@@ -110,7 +108,7 @@ function openTransaction(id: string) {
       <!-- Funding summary banner -->
       <div
         v-if="summary && !summary.total.isZero()"
-        class="rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
+        class="rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-[13px] text-info-fg"
       >
         Funded automatically:
         <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
@@ -134,7 +132,7 @@ function openTransaction(id: string) {
           <div
             v-for="i in 4"
             :key="i"
-            class="h-16 animate-pulse rounded-card bg-neutral-100"
+            class="h-16 animate-pulse rounded-card bg-surface-muted"
           />
         </div>
       </template>
@@ -142,7 +140,7 @@ function openTransaction(id: string) {
       <!-- Error -->
       <div
         v-else-if="error"
-        class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+        class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
         role="alert"
       >
         {{ error }}
@@ -153,13 +151,13 @@ function openTransaction(id: string) {
         <section v-if="budgets.length > 0">
           <div class="mb-2 flex items-center justify-between">
             <h2
-              class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+              class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
             >
               Budgets
             </h2>
             <button
               type="button"
-              class="flex items-center gap-0.5 text-[11px] font-medium text-ocean-600 hover:text-ocean-700"
+              class="flex items-center gap-0.5 text-[11px] font-medium text-fg-link hover:text-accent-hover"
               @click="router.push({ name: 'budgets' })"
             >
               See all
@@ -167,13 +165,13 @@ function openTransaction(id: string) {
             </button>
           </div>
           <div
-            class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+            class="overflow-hidden rounded-card border border-border bg-surface"
           >
-            <ul class="divide-y divide-neutral-100">
+            <ul class="divide-y divide-border-subtle">
               <li
                 v-for="b in budgets"
                 :key="b.id"
-                class="group cursor-pointer hover:bg-neutral-50"
+                class="group cursor-pointer hover:bg-surface-sunken"
                 @click="openBudget(b.id)"
               >
                 <div class="px-4 py-3">
@@ -181,18 +179,18 @@ function openTransaction(id: string) {
                     <div class="flex min-w-0 items-center gap-1.5">
                       <IconTarget
                         v-if="b.budgetType === 'G'"
-                        class="h-3.5 w-3.5 flex-none text-neutral-400"
+                        class="h-3.5 w-3.5 flex-none text-icon-muted"
                       />
                       <IconRepeat
                         v-else-if="b.budgetType === 'R'"
-                        class="h-3.5 w-3.5 flex-none text-neutral-400"
+                        class="h-3.5 w-3.5 flex-none text-icon-muted"
                       />
                       <IconBucket
                         v-else-if="b.budgetType === 'C'"
-                        class="h-3.5 w-3.5 flex-none text-neutral-400"
+                        class="h-3.5 w-3.5 flex-none text-icon-muted"
                       />
                       <span
-                        class="min-w-0 truncate text-[14px] font-medium text-neutral-900"
+                        class="min-w-0 truncate text-[14px] font-medium text-fg"
                         >{{ b.name }}</span
                       >
                     </div>
@@ -214,7 +212,7 @@ function openTransaction(id: string) {
                         b.nextFunding &&
                         (b.budgetType === 'G' || b.budgetType === 'C')
                       "
-                      class="truncate text-[12px] text-secondary"
+                      class="truncate text-[12px] text-fg-muted"
                     >
                       <MoneyAmount
                         :amount="b.nextFunding.amount"
@@ -239,13 +237,13 @@ function openTransaction(id: string) {
         <section v-if="recentTx.length > 0">
           <div class="mb-2 flex items-center justify-between">
             <h2
-              class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+              class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
             >
               Recent transactions
             </h2>
             <button
               type="button"
-              class="flex items-center gap-0.5 text-[11px] font-medium text-ocean-600 hover:text-ocean-700"
+              class="flex items-center gap-0.5 text-[11px] font-medium text-fg-link hover:text-accent-hover"
               @click="router.push({ name: 'transactions' })"
             >
               See all
@@ -268,12 +266,12 @@ function openTransaction(id: string) {
         <!-- Empty state -->
         <div
           v-if="budgets.length === 0 && recentTx.length === 0 && !ctx.loading"
-          class="py-10 text-center text-sm text-neutral-400"
+          class="py-10 text-center text-sm text-fg-subtle"
         >
           No budgets or transactions yet.
           <button
             type="button"
-            class="mt-2 block w-full text-ocean-600 hover:text-ocean-700"
+            class="mt-2 block w-full text-fg-link hover:text-accent-hover"
             @click="router.push({ name: 'budget-create' })"
           >
             Create your first budget

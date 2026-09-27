@@ -91,7 +91,7 @@ function manageAccounts() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-neutral-50">
+  <div class="flex min-h-screen bg-canvas">
     <SideNav />
     <div class="flex min-w-0 flex-1 flex-col">
       <TopBar

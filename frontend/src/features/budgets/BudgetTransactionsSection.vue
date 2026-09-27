@@ -55,7 +55,7 @@ function openTransaction(id: string) {
   <section class="mt-2">
     <div class="mb-2 flex items-center justify-between">
       <h2
-        class="text-[11px] font-semibold uppercase tracking-wider text-secondary"
+        class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
       >
         Transactions
       </h2>
@@ -65,8 +65,8 @@ function openTransaction(id: string) {
           class="flex h-7 w-7 items-center justify-center rounded-full transition-colors"
           :class="
             showInternalTxs
-              ? 'bg-ocean-400 text-white hover:bg-ocean-600'
-              : 'text-neutral-500 hover:bg-neutral-100'
+              ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
+              : 'text-fg-muted hover:bg-surface-muted'
           "
           :aria-label="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
           :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
@@ -76,7 +76,7 @@ function openTransaction(id: string) {
         </button>
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100"
+          class="flex h-7 w-7 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
           aria-label="Search transactions"
           @click="toggleSearch"
         >
@@ -100,12 +100,12 @@ function openTransaction(id: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
+          class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
 
-    <p v-if="txError" class="mb-2 text-sm text-coral-600" role="alert">
+    <p v-if="txError" class="mb-2 text-sm text-danger-fg" role="alert">
       {{ txError }}
     </p>
 
@@ -113,7 +113,7 @@ function openTransaction(id: string) {
       <div
         v-for="i in 3"
         :key="i"
-        class="h-16 animate-pulse rounded-card bg-neutral-100"
+        class="h-16 animate-pulse rounded-card bg-surface-muted"
       />
     </div>
 
@@ -130,7 +130,7 @@ function openTransaction(id: string) {
       @remove="onRemoveTransaction"
     />
 
-    <p v-else-if="!txError" class="py-4 text-center text-sm text-secondary">
+    <p v-else-if="!txError" class="py-4 text-center text-sm text-fg-muted">
       {{
         searchQuery
           ? "No matching transactions."

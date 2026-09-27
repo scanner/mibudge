@@ -30,19 +30,19 @@ function shortDate(iso: string): string {
        the section does not appear at all for users who have never
        invited anyone or whose invitations have all been resolved. -->
   <template v-if="invitations.length > 0 || error">
-    <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">
+    <h1 class="mb-5 mt-10 text-[22px] font-medium text-fg">
       Pending invitations
     </h1>
 
     <section>
-      <p v-if="error" class="mb-2 text-sm text-coral-600" role="alert">
+      <p v-if="error" class="mb-2 text-sm text-danger-fg" role="alert">
         {{ error }}
       </p>
       <div
         v-if="invitations.length > 0"
-        class="rounded-card border border-neutral-200 bg-white"
+        class="rounded-card border border-border bg-surface"
       >
-        <ul class="divide-y divide-neutral-100">
+        <ul class="divide-y divide-border-subtle">
           <li
             v-for="inv in invitations"
             :key="inv.id"
@@ -52,14 +52,14 @@ function shortDate(iso: string): string {
               <!-- Account name links the invitation back to its
                    context; the invitee email is the primary identifier. -->
               <p
-                class="text-xs font-medium uppercase tracking-wider text-secondary"
+                class="text-xs font-medium uppercase tracking-wider text-fg-muted"
               >
                 {{ inv.bankAccountName }}
               </p>
-              <p class="mt-0.5 text-sm text-neutral-900">
+              <p class="mt-0.5 text-sm text-fg">
                 {{ inv.inviteeEmail }}
               </p>
-              <p class="mt-0.5 text-xs text-secondary">
+              <p class="mt-0.5 text-xs text-fg-muted">
                 Expires
                 {{ shortDate(inv.expiresAt) }}
               </p>
@@ -67,7 +67,7 @@ function shortDate(iso: string): string {
             <button
               type="button"
               :disabled="cancellingId === inv.id"
-              class="mt-0.5 flex-none text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+              class="mt-0.5 flex-none text-xs font-medium text-danger-fg hover:text-danger-solid-hover disabled:opacity-50"
               @click="cancel(inv)"
             >
               {{ cancellingId === inv.id ? "Cancelling…" : "Cancel" }}

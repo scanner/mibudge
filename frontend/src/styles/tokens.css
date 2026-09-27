@@ -1,0 +1,124 @@
+/*
+ * Design tokens.
+ *
+ * Two tiers, both custom properties on `:root`:
+ *
+ *   --palette-*  raw colour ramps.  Only the semantic tier reads them.
+ *   --color-*    semantic tokens, named for their purpose.  Templates
+ *                reach them through the Tailwind utilities defined in
+ *                `tailwind.config.ts` (`text-fg-muted`, `bg-accent`).
+ *
+ * Colours are space-separated RGB channels so Tailwind's `/<alpha>`
+ * modifier works on every token.  This is the only file in `src/` that
+ * contains colour literals.  See `docs/spa/styling.md`.
+ */
+
+:root {
+  /* Palette */
+  --palette-white: 255 255 255;
+
+  --palette-ocean-50: 234 244 255;
+  --palette-ocean-400: 55 138 221;
+  --palette-ocean-600: 24 95 165;
+  --palette-ocean-800: 12 68 124;
+
+  --palette-mint-50: 225 245 238;
+  --palette-mint-400: 29 158 117;
+  --palette-mint-500: 26 148 111;
+  --palette-mint-600: 15 110 86;
+
+  --palette-amber-50: 255 245 230;
+  --palette-amber-400: 239 159 39;
+  --palette-amber-500: 182 116 24;
+  --palette-amber-600: 133 79 11;
+
+  --palette-coral-50: 252 235 235;
+  --palette-coral-400: 226 75 74;
+  --palette-coral-600: 163 45 45;
+  --palette-coral-800: 122 34 34;
+
+  --palette-neutral-50: 245 244 240;
+  --palette-neutral-100: 241 239 232;
+  --palette-neutral-200: 224 222 216;
+  --palette-neutral-300: 211 209 199;
+  --palette-neutral-400: 180 178 169;
+  --palette-neutral-500: 136 135 128;
+  --palette-neutral-550: 113 112 107;
+  --palette-neutral-600: 95 94 90;
+  --palette-neutral-900: 26 26 26;
+
+  /* Text and icons */
+  --color-fg: var(--palette-neutral-900);
+  --color-fg-muted: var(--palette-neutral-600);
+  --color-fg-subtle: var(--palette-neutral-400);
+  --color-fg-disabled: var(--palette-neutral-400);
+  --color-fg-on-accent: var(--palette-white);
+  --color-fg-link: var(--palette-ocean-600);
+  --color-icon-muted: var(--palette-neutral-400);
+
+  /* Surfaces */
+  --color-canvas: var(--palette-neutral-50);
+  --color-surface: var(--palette-white);
+  --color-surface-sunken: var(--palette-neutral-50);
+  --color-surface-muted: var(--palette-neutral-100);
+  --color-surface-strong: var(--palette-neutral-200);
+  --color-scrim: var(--palette-neutral-900);
+
+  /* Borders */
+  --color-border: var(--palette-neutral-200);
+  --color-border-subtle: var(--palette-neutral-100);
+  --color-border-emphasis: var(--palette-neutral-300);
+  --color-border-strong: var(--palette-neutral-300);
+  --color-border-focus: var(--palette-ocean-400);
+
+  /* Accent */
+  --color-accent: var(--palette-ocean-400);
+  --color-accent-hover: var(--palette-ocean-600);
+  --color-accent-subtle: var(--palette-ocean-50);
+  --color-accent-fg: var(--palette-ocean-600);
+  --color-accent-border: var(--palette-ocean-400);
+
+  /* Status.  `-border` is drawn at `--alpha-status-border`. */
+  --alpha-status-border: 0.4;
+
+  --color-success-bg: var(--palette-mint-50);
+  --color-success-fg: var(--palette-mint-600);
+  --color-success-border: var(--palette-mint-400);
+  --color-success-solid: var(--palette-mint-600);
+
+  --color-warning-bg: var(--palette-amber-50);
+  --color-warning-fg: var(--palette-amber-600);
+  --color-warning-border: var(--palette-amber-400);
+  --color-warning-solid: var(--palette-amber-600);
+
+  --color-danger-bg: var(--palette-coral-50);
+  --color-danger-fg: var(--palette-coral-600);
+  --color-danger-border: var(--palette-coral-400);
+  --color-danger-solid: var(--palette-coral-400);
+  --color-danger-solid-hover: var(--palette-coral-600);
+
+  --color-info-bg: var(--palette-ocean-50);
+  --color-info-fg: var(--palette-ocean-600);
+  --color-info-border: var(--palette-ocean-400);
+  --color-info-solid: var(--palette-ocean-600);
+
+  /* Domain */
+  --color-money-positive: var(--palette-mint-600);
+  --color-money-negative: var(--palette-coral-600);
+
+  --color-progress-funded: var(--palette-mint-400);
+  --color-progress-active: var(--palette-ocean-400);
+  --color-progress-behind: var(--palette-amber-400);
+  --color-progress-over: var(--palette-coral-400);
+  --color-progress-paused: var(--palette-neutral-400);
+  --color-progress-track: var(--palette-neutral-100);
+
+  --color-row-pending: var(--palette-amber-400);
+  --color-row-unallocated: var(--palette-ocean-400);
+
+  /*
+   * The select chevron is an SVG data URI, which cannot read a custom
+   * property, so its stroke is `fg-muted` written out (neutral-600).
+   */
+  --icon-select-chevron: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5E5A' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}

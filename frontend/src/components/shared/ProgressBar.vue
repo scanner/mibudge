@@ -35,15 +35,15 @@ const clamped = computed(() => Math.max(0, Math.min(100, props.value)));
 const toneClass = computed(() => {
   switch (props.tone) {
     case "mint":
-      return "bg-mint-400";
+      return "bg-progress-funded";
     case "ocean":
-      return "bg-ocean-400";
+      return "bg-progress-active";
     case "amber":
-      return "bg-amber-400";
+      return "bg-progress-behind";
     case "coral":
-      return "bg-coral-400";
+      return "bg-progress-over";
     case "neutral":
-      return "bg-neutral-400";
+      return "bg-progress-paused";
   }
 });
 
@@ -61,7 +61,7 @@ const heightClass = computed(() => {
 
 <template>
   <div
-    class="w-full overflow-hidden rounded-full bg-neutral-100"
+    class="w-full overflow-hidden rounded-full bg-progress-track"
     :class="heightClass"
     role="progressbar"
     :aria-valuenow="clamped"

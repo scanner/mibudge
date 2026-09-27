@@ -38,24 +38,21 @@ const emit = defineEmits<{
   <!-- Inline name editor -->
   <div
     v-if="editing"
-    class="rounded-card border border-ocean-400 bg-white px-4 py-4"
+    class="rounded-card border border-accent-border bg-surface px-4 py-4"
   >
-    <label
-      class="mb-1.5 block text-sm font-medium text-neutral-700"
-      for="edit-name"
-    >
+    <label class="mb-1.5 block text-sm font-medium text-fg" for="edit-name">
       Account name
     </label>
     <input
       id="edit-name"
       v-model="name"
       type="text"
-      class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+      class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-sm text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
       @keydown.enter="emit('save')"
       @keydown.escape="emit('cancel')"
     />
     <label
-      class="mb-1.5 mt-3 block text-sm font-medium text-neutral-700"
+      class="mb-1.5 mt-3 block text-sm font-medium text-fg"
       for="edit-account-number"
     >
       Account number
@@ -65,23 +62,23 @@ const emit = defineEmits<{
       v-model="accountNumber"
       type="text"
       inputmode="numeric"
-      class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+      class="w-full rounded-subcard border border-border-strong px-3 py-2.5 font-mono text-sm text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
       @keydown.enter="emit('save')"
       @keydown.escape="emit('cancel')"
     />
-    <p v-if="nameError" class="mt-1 text-xs text-coral-600">{{ nameError }}</p>
+    <p v-if="nameError" class="mt-1 text-xs text-danger-fg">{{ nameError }}</p>
     <div class="mt-3 flex gap-2">
       <button
         type="button"
         :disabled="saving"
-        class="flex-1 rounded-subcard bg-ocean-400 py-2 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+        class="flex-1 rounded-subcard bg-accent py-2 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
         @click="emit('save')"
       >
         {{ saving ? "Saving…" : "Save" }}
       </button>
       <button
         type="button"
-        class="flex-1 rounded-subcard border border-neutral-200 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+        class="flex-1 rounded-subcard border border-border py-2 text-sm font-medium text-fg hover:bg-surface-sunken"
         @click="emit('cancel')"
       >
         Cancel
@@ -92,19 +89,19 @@ const emit = defineEmits<{
   <!-- Account name heading (non-editing) -->
   <div v-else>
     <div class="flex items-center gap-2">
-      <h1 class="text-[22px] font-medium text-neutral-900">
+      <h1 class="text-[22px] font-medium text-fg">
         {{ account.name }}
       </h1>
       <button
         type="button"
-        class="flex h-7 w-7 flex-none items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+        class="flex h-7 w-7 flex-none items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted hover:text-fg-muted"
         aria-label="Edit account"
         @click="emit('edit')"
       >
         <IconPencil class="h-4 w-4" />
       </button>
     </div>
-    <p class="text-sm text-secondary">
+    <p class="text-sm text-fg-muted">
       {{ accountTypeLabel(account.accountType) }}
       <template v-if="bankName"> · {{ bankName }}</template>
     </p>

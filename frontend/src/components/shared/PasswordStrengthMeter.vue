@@ -65,11 +65,11 @@ watch(
 ////////////////////////////////////////////////////////////////////////
 //
 const SCORE_META: { label: string; bar: string; text: string }[] = [
-  { label: "Very weak", bar: "bg-coral-400", text: "text-coral-600" },
-  { label: "Weak", bar: "bg-coral-400", text: "text-coral-600" },
-  { label: "Fair", bar: "bg-amber-400", text: "text-amber-600" },
-  { label: "Strong", bar: "bg-ocean-400", text: "text-neutral-500" },
-  { label: "Very strong", bar: "bg-mint-400", text: "text-neutral-500" },
+  { label: "Very weak", bar: "bg-progress-over", text: "text-danger-fg" },
+  { label: "Weak", bar: "bg-progress-over", text: "text-danger-fg" },
+  { label: "Fair", bar: "bg-progress-behind", text: "text-warning-fg" },
+  { label: "Strong", bar: "bg-progress-active", text: "text-fg-muted" },
+  { label: "Very strong", bar: "bg-progress-funded", text: "text-fg-muted" },
 ];
 </script>
 
@@ -87,7 +87,7 @@ const SCORE_META: { label: string; bar: string; text: string }[] = [
         v-for="i in [0, 1, 2, 3, 4]"
         :key="i"
         class="h-1.5 flex-1 rounded-full transition-colors duration-200"
-        :class="i <= score ? SCORE_META[score].bar : 'bg-neutral-200'"
+        :class="i <= score ? SCORE_META[score].bar : 'bg-surface-strong'"
       />
     </div>
 
@@ -98,10 +98,7 @@ const SCORE_META: { label: string; bar: string; text: string }[] = [
     </p>
 
     <!-- Suggestions -->
-    <ul
-      v-if="suggestions.length"
-      class="list-disc pl-4 text-xs text-neutral-500"
-    >
+    <ul v-if="suggestions.length" class="list-disc pl-4 text-xs text-fg-muted">
       <li v-for="s in suggestions" :key="s">{{ s }}</li>
     </ul>
   </div>

@@ -34,28 +34,26 @@ const emit = defineEmits<{
 
 <template>
   <!-- Funding -->
-  <section
-    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
-  >
+  <section class="overflow-hidden rounded-card border border-border bg-surface">
     <h2
-      class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
+      class="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
     >
       Funding
     </h2>
     <div class="px-4 py-3 space-y-3">
       <div class="flex items-center justify-between text-sm">
-        <span class="text-secondary">Data current through</span>
-        <span class="font-mono text-neutral-900">
+        <span class="text-fg-muted">Data current through</span>
+        <span class="font-mono text-fg">
           {{ lastPostedThrough ?? "—" }}
         </span>
       </div>
-      <p class="text-xs text-secondary">
+      <p class="text-xs text-fg-muted">
         After importing transactions and finishing allocations, run the funding
         engine to move money into budgets based on their schedules.
       </p>
       <div
         v-if="summary && !summary.total.isZero()"
-        class="rounded-subcard border border-ocean-200 bg-ocean-50 px-3 py-2 text-xs text-ocean-700"
+        class="rounded-subcard border border-info-border bg-info-bg px-3 py-2 text-xs text-info-fg"
       >
         Next event:
         <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
@@ -69,8 +67,8 @@ const emit = defineEmits<{
       <!-- Automatic funding toggle -->
       <label class="flex cursor-pointer items-center justify-between">
         <div>
-          <p class="text-sm text-neutral-900">Automatic funding</p>
-          <p class="mt-0.5 text-xs text-secondary">
+          <p class="text-sm text-fg">Automatic funding</p>
+          <p class="mt-0.5 text-xs text-fg-muted">
             Run funding events on a schedule. Disable to fund manually only.
           </p>
         </div>
@@ -83,10 +81,10 @@ const emit = defineEmits<{
           />
           <div
             class="h-6 w-10 rounded-full transition-colors"
-            :class="autoFundingEnabled ? 'bg-ocean-400' : 'bg-neutral-300'"
+            :class="autoFundingEnabled ? 'bg-accent' : 'bg-border-strong'"
           />
           <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+            class="absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform"
             :class="autoFundingEnabled ? 'translate-x-4' : 'translate-x-0.5'"
           />
         </div>
@@ -95,7 +93,7 @@ const emit = defineEmits<{
       <button
         type="button"
         :disabled="running"
-        class="w-full rounded-subcard bg-ocean-400 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+        class="w-full rounded-subcard bg-accent py-2.5 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
         @click="emit('run')"
       >
         {{ running ? "Running…" : "Run funding now" }}
@@ -107,13 +105,13 @@ const emit = defineEmits<{
         class="rounded-subcard border px-3 py-2.5 text-sm"
         :class="
           nothingDue
-            ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
-            : 'border-mint-200 bg-mint-50 text-mint-700'
+            ? 'border-border bg-surface-sunken text-fg-muted'
+            : 'border-success-border bg-success-bg text-success-fg'
         "
       >
         <template v-if="nothingDue">
           Nothing currently due.
-          <span v-if="nextDate" class="text-neutral-500">
+          <span v-if="nextDate" class="text-fg-muted">
             Next funding event: {{ nextDate }}.
           </span>
         </template>
@@ -123,7 +121,7 @@ const emit = defineEmits<{
         </template>
         <ul
           v-if="result.warnings.length"
-          class="mt-1.5 space-y-0.5 text-xs text-amber-600"
+          class="mt-1.5 space-y-0.5 text-xs text-warning-fg"
         >
           <li v-for="w in result.warnings" :key="w">{{ w }}</li>
         </ul>
@@ -138,7 +136,7 @@ const emit = defineEmits<{
       </div>
       <div
         v-if="error"
-        class="rounded-subcard border border-coral-200 bg-coral-50 px-3 py-2.5 text-sm text-coral-600"
+        class="rounded-subcard border border-danger-border bg-danger-bg px-3 py-2.5 text-sm text-danger-fg"
       >
         {{ error }}
       </div>

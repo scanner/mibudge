@@ -116,7 +116,7 @@ function openBudget(id: string) {
       <div class="flex items-center gap-1">
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
           aria-label="Search budgets"
           @click="toggleSearch"
         >
@@ -125,7 +125,7 @@ function openBudget(id: string) {
         </button>
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
           aria-label="Create budget"
           @click="router.push({ name: 'budget-create' })"
         >
@@ -149,13 +149,13 @@ function openBudget(id: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Search budgets…"
-          class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
+          class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
 
     <!-- Filter tabs -->
-    <div class="-mx-4 mb-4 flex border-b border-neutral-200 px-4 pt-3">
+    <div class="-mx-4 mb-4 flex border-b border-border px-4 pt-3">
       <button
         v-for="tab in [
           'all',
@@ -169,8 +169,8 @@ function openBudget(id: string) {
         class="mr-4 pb-2 text-sm font-medium capitalize transition-colors"
         :class="
           activeTab === tab
-            ? 'border-b-2 border-ocean-400 text-ocean-600'
-            : 'text-neutral-500 hover:text-neutral-700'
+            ? 'border-b-2 border-accent-border text-accent-fg'
+            : 'text-fg-muted hover:text-fg'
         "
         @click="activeTab = tab"
       >
@@ -191,7 +191,7 @@ function openBudget(id: string) {
     <!-- Funding summary banner -->
     <div
       v-if="summary && !summary.total.isZero()"
-      class="mb-4 rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
+      class="mb-4 rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-[13px] text-info-fg"
     >
       Funded automatically:
       <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
@@ -214,14 +214,14 @@ function openBudget(id: string) {
       <div
         v-for="i in 4"
         :key="i"
-        class="h-24 animate-pulse rounded-card bg-neutral-100"
+        class="h-24 animate-pulse rounded-card bg-surface-muted"
       />
     </div>
 
     <!-- Error -->
     <div
       v-else-if="error"
-      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+      class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -231,7 +231,7 @@ function openBudget(id: string) {
       <!-- Recurring section -->
       <section v-if="recurringBudgets.length > 0">
         <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
         >
           Recurring
         </h2>
@@ -252,7 +252,7 @@ function openBudget(id: string) {
         :class="recurringBudgets.length > 0 ? 'mt-6' : ''"
       >
         <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
         >
           Capped
         </h2>
@@ -274,7 +274,7 @@ function openBudget(id: string) {
         "
       >
         <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
         >
           Goals
         </h2>

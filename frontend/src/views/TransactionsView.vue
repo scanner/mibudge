@@ -70,8 +70,8 @@ function openTransaction(id: string) {
         class="flex h-10 w-10 items-center justify-center rounded-full transition-colors"
         :class="
           showInternalTxs
-            ? 'bg-ocean-400 text-white hover:bg-ocean-600'
-            : 'text-neutral-700 hover:bg-neutral-100'
+            ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
+            : 'text-fg-muted hover:bg-surface-muted'
         "
         aria-label="Toggle transfers"
         :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
@@ -81,7 +81,7 @@ function openTransaction(id: string) {
       </button>
       <button
         type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+        class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
         aria-label="Search transactions"
         @click="toggleSearch"
       >
@@ -105,7 +105,7 @@ function openTransaction(id: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
+          class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
@@ -119,8 +119,8 @@ function openTransaction(id: string) {
         class="flex-none rounded-full border px-3 py-1 text-xs font-medium transition-colors"
         :class="
           activeFilter === chip.key
-            ? 'border-ocean-400 bg-ocean-50 text-ocean-600'
-            : 'border-neutral-200 bg-white text-secondary hover:border-neutral-300'
+            ? 'border-accent-border bg-accent-subtle text-accent-fg'
+            : 'border-border bg-surface text-fg-muted hover:border-border-emphasis'
         "
         @click="activeFilter = chip.key"
       >
@@ -133,14 +133,14 @@ function openTransaction(id: string) {
       <div
         v-for="i in 6"
         :key="i"
-        class="h-16 animate-pulse rounded-card bg-neutral-100"
+        class="h-16 animate-pulse rounded-card bg-surface-muted"
       />
     </div>
 
     <!-- Error -->
     <div
       v-else-if="error"
-      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+      class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -149,7 +149,7 @@ function openTransaction(id: string) {
     <template v-else>
       <p
         v-if="assignmentsError"
-        class="mb-3 rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
+        class="mb-3 rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
         role="alert"
       >
         {{ assignmentsError }}
@@ -180,12 +180,12 @@ function openTransaction(id: string) {
       <!-- Loading more indicator -->
       <div v-if="loadingMore" class="flex justify-center py-4">
         <div
-          class="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-ocean-400"
+          class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent"
         />
       </div>
       <p
         v-else-if="loadMoreError"
-        class="py-4 text-center text-sm text-coral-600"
+        class="py-4 text-center text-sm text-danger-fg"
         role="alert"
       >
         Couldn't load more transactions: {{ loadMoreError }}

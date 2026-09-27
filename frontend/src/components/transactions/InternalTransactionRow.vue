@@ -50,13 +50,13 @@ const displayAmount = computed(() => {
 
 <template>
   <article
-    class="rounded-card border border-dashed border-neutral-200 bg-white px-4 py-3"
+    class="rounded-card border border-dashed border-border bg-surface px-4 py-3"
   >
     <!-- Row 1: icon + label + amount -->
     <div class="flex items-start justify-between gap-2">
       <div class="flex min-w-0 items-center gap-1.5">
-        <IconArrowsRightLeft class="h-3.5 w-3.5 flex-none text-neutral-400" />
-        <span class="text-[15px] font-medium text-secondary">Transfer</span>
+        <IconArrowsRightLeft class="h-3.5 w-3.5 flex-none text-icon-muted" />
+        <span class="text-[15px] font-medium text-fg-muted">Transfer</span>
       </div>
       <MoneyAmount
         :amount="displayAmount"
@@ -66,14 +66,14 @@ const displayAmount = computed(() => {
     </div>
 
     <!-- Row 2: "Src (now $X) → Dst (now $Y)" -->
-    <div class="mt-0.5 text-[12px] text-secondary">
+    <div class="mt-0.5 text-[12px] text-fg-muted">
       {{ srcName }}
-      <span class="text-secondary"
+      <span class="text-fg-muted"
         >(now {{ formatMoney(itx.srcBudgetBalance) }})</span
       >
       →
       {{ dstName }}
-      <span class="text-secondary"
+      <span class="text-fg-muted"
         >(now {{ formatMoney(itx.dstBudgetBalance) }})</span
       >
     </div>

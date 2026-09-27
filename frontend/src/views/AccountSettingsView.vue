@@ -22,7 +22,7 @@ import AppShell from "@/features/shell/AppShell.vue";
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
       <!-- ── Security ─────────────────────────────────────────────── -->
-      <h1 class="mb-5 text-[22px] font-medium text-neutral-900">Security</h1>
+      <h1 class="mb-5 text-[22px] font-medium text-fg">Security</h1>
 
       <PasswordSection />
 

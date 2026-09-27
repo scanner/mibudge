@@ -57,12 +57,12 @@ async function onDelete() {
 <template>
   <AppShell>
     <div v-if="loading" class="mt-8 flex justify-center">
-      <span class="text-sm text-secondary">Loading…</span>
+      <span class="text-sm text-fg-muted">Loading…</span>
     </div>
 
     <div
       v-else-if="error"
-      class="mt-4 rounded-subcard bg-coral-50 px-4 py-3 text-sm text-coral-600"
+      class="mt-4 rounded-subcard bg-danger-bg px-4 py-3 text-sm text-danger-fg"
       role="alert"
     >
       {{ error }}
@@ -116,25 +116,25 @@ async function onDelete() {
 
       <!-- Budgets -->
       <section
-        class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+        class="overflow-hidden rounded-card border border-border bg-surface"
       >
         <button
           type="button"
-          class="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-50"
+          class="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-surface-sunken"
           @click="viewBudgets"
         >
           <div>
-            <div class="text-sm font-medium text-neutral-900">
+            <div class="text-sm font-medium text-fg">
               Budgets
-              <span v-if="budgetCount !== null" class="ml-1.5 text-secondary">
+              <span v-if="budgetCount !== null" class="ml-1.5 text-fg-muted">
                 {{ budgetCount }}
               </span>
             </div>
-            <div class="text-xs text-secondary">
+            <div class="text-xs text-fg-muted">
               View all budgets for this account
             </div>
           </div>
-          <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
+          <IconChevronRight class="h-4 w-4 flex-none text-icon-muted" />
         </button>
       </section>
 
@@ -155,17 +155,17 @@ async function onDelete() {
       <section class="pt-2">
         <button
           type="button"
-          class="w-full rounded-card border border-coral-400 py-3 text-sm font-medium text-coral-600 hover:bg-coral-50"
+          class="w-full rounded-card border border-danger-solid py-3 text-sm font-medium text-danger-fg hover:bg-danger-bg"
           @click="confirmDelete = true"
         >
           Delete account
         </button>
-        <p class="mt-2 px-1 text-center text-xs text-neutral-400">
+        <p class="mt-2 px-1 text-center text-xs text-fg-subtle">
           Deletes all budgets, transactions, and allocations for this account.
         </p>
         <p
           v-if="detail.deleteError.value"
-          class="mt-2 text-center text-sm text-coral-600"
+          class="mt-2 text-center text-sm text-danger-fg"
           role="alert"
         >
           {{ detail.deleteError.value }}

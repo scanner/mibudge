@@ -199,25 +199,22 @@ useModal(
         v-if="open"
         class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
       >
-        <div
-          class="absolute inset-0 bg-neutral-900/40"
-          @click="emit('cancel')"
-        />
+        <div class="absolute inset-0 bg-scrim/40" @click="emit('cancel')" />
 
         <div
-          class="relative flex max-h-[80vh] w-full flex-col rounded-t-2xl bg-white shadow-xl md:w-[480px] md:rounded-card"
+          class="relative flex max-h-[80vh] w-full flex-col rounded-t-2xl bg-surface shadow-xl md:w-[480px] md:rounded-card"
           role="dialog"
           aria-modal="true"
           aria-label="Edit allocations"
         >
           <!-- Header -->
           <div
-            class="flex items-center justify-between border-b border-neutral-200 px-5 pb-3 pt-5"
+            class="flex items-center justify-between border-b border-border px-5 pb-3 pt-5"
           >
-            <h2 class="text-base font-medium text-neutral-900">Allocations</h2>
+            <h2 class="text-base font-medium text-fg">Allocations</h2>
             <button
               type="button"
-              class="text-sm text-neutral-500 hover:text-neutral-700"
+              class="text-sm text-fg-muted hover:text-fg"
               @click="emit('cancel')"
             >
               Cancel
@@ -235,7 +232,7 @@ useModal(
                 <!-- Budget selector -->
                 <select
                   v-model="row.budgetId"
-                  class="split-row-select min-w-0 flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:border-ocean-400"
+                  class="split-row-select min-w-0 flex-1 rounded-lg border border-border-strong bg-surface-sunken px-3 py-1.5 text-sm text-fg outline-none focus:border-border-focus"
                 >
                   <option value="">Select budget…</option>
                   <option
@@ -264,13 +261,13 @@ useModal(
                   type="text"
                   inputmode="decimal"
                   placeholder="0.00"
-                  class="w-24 flex-none rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-right font-mono text-sm text-neutral-900 outline-none focus:border-ocean-400"
+                  class="w-24 flex-none rounded-lg border border-border-strong bg-surface-sunken px-3 py-1.5 text-right font-mono text-sm text-fg outline-none focus:border-border-focus"
                 />
 
                 <!-- Remove row -->
                 <button
                   type="button"
-                  class="flex h-6 w-6 flex-none items-center justify-center rounded-full text-neutral-400 hover:bg-coral-50 hover:text-coral-600"
+                  class="flex h-6 w-6 flex-none items-center justify-center rounded-full text-fg-muted hover:bg-danger-bg hover:text-danger-fg"
                   aria-label="Remove split"
                   @click="removeRow(i)"
                 >
@@ -282,7 +279,7 @@ useModal(
             <!-- Add row button -->
             <button
               type="button"
-              class="mt-2 flex items-center gap-1.5 px-1 py-1.5 text-sm font-medium text-ocean-600 hover:text-ocean-800"
+              class="mt-2 flex items-center gap-1.5 px-1 py-1.5 text-sm font-medium text-fg-link hover:text-accent-hover"
               @click="addRow"
             >
               <IconPlus class="h-4 w-4" />
@@ -291,19 +288,17 @@ useModal(
           </div>
 
           <!-- Footer: remainder indicator + Save -->
-          <div class="border-t border-neutral-200 px-4 py-3">
+          <div class="border-t border-border px-4 py-3">
             <div class="mb-3 flex items-center justify-between text-sm">
               <span
-                :class="
-                  isOver ? 'font-medium text-coral-600' : 'text-neutral-500'
-                "
+                :class="isOver ? 'font-medium text-danger-fg' : 'text-fg-muted'"
               >
                 {{ isOver ? "Over by" : "Unallocated" }}
               </span>
               <span
                 :class="[
                   'font-mono font-medium',
-                  isOver ? 'text-coral-600' : 'text-ocean-600',
+                  isOver ? 'text-danger-fg' : 'text-info-fg',
                 ]"
               >
                 {{
@@ -319,8 +314,8 @@ useModal(
               class="w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors"
               :class="
                 canSave
-                  ? 'bg-ocean-600 text-white hover:bg-ocean-800'
-                  : 'cursor-not-allowed bg-neutral-200 text-neutral-400'
+                  ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
+                  : 'cursor-not-allowed bg-surface-strong text-fg-disabled'
               "
               :disabled="!canSave"
               @click="save"

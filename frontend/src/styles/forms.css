@@ -1,0 +1,47 @@
+/*
+ * Form-control base styles, on design tokens.
+ *
+ * `@tailwindcss/forms` normalises inputs, selects and textareas and gives
+ * them a border, placeholder, focus ring, checkbox colour and select
+ * chevron.  These rules come later in the base layer with equal
+ * specificity, so every one of those colours is a semantic token.
+ * Utility classes on an element still take precedence.
+ */
+
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    --tw-ring-color: rgb(var(--color-border-focus) / 0.5);
+  }
+
+  input,
+  textarea,
+  select {
+    border-color: rgb(var(--color-border-strong));
+    background-color: rgb(var(--color-surface));
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    --tw-ring-color: rgb(var(--color-border-focus));
+    --tw-ring-offset-color: rgb(var(--color-surface));
+    border-color: rgb(var(--color-border-focus));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--color-fg-subtle));
+  }
+
+  select {
+    background-image: var(--icon-select-chevron);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    color: rgb(var(--color-accent));
+  }
+}

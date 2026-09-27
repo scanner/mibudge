@@ -56,8 +56,8 @@ const money = computed(() => props.amount);
 //
 const colourClass = computed(() => {
   if (!props.coloured) return "";
-  if (money.value.isNegative()) return "text-coral-600";
-  if (money.value.isPositive()) return "text-mint-600";
+  if (money.value.isNegative()) return "text-money-negative";
+  if (money.value.isPositive()) return "text-money-positive";
   return "";
 });
 

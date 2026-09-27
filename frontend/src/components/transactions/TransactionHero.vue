@@ -22,15 +22,15 @@ defineProps<{
 
 <template>
   <section class="pb-4 pt-2 text-center">
-    <h1 class="text-lg font-medium text-neutral-900">{{ partyName }}</h1>
+    <h1 class="text-lg font-medium text-fg">{{ partyName }}</h1>
     <MoneyAmount :amount="amount" size="hero" coloured class="mt-1" />
     <div
-      class="mt-1.5 flex items-center justify-center gap-2 text-xs text-neutral-500"
+      class="mt-1.5 flex items-center justify-center gap-2 text-xs text-fg-muted"
     >
       <span>{{ formattedDate }}</span>
       <span
         v-if="pending"
-        class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-600"
+        class="rounded-full bg-warning-bg px-2 py-0.5 text-[11px] font-medium text-warning-fg"
       >
         PENDING
       </span>

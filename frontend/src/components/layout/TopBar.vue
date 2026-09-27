@@ -39,13 +39,13 @@ const emit = defineEmits<{
 
 <template>
   <header
-    class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-4"
+    class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface px-4"
   >
     <div class="flex w-10 justify-start">
       <button
         v-if="showBack"
         type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
+        class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
         aria-label="Back"
         @click="emit('back')"
       >
@@ -60,7 +60,7 @@ const emit = defineEmits<{
       aria-label="Switch bank account"
       @click="emit('switch-account')"
     >
-      <span class="flex items-center gap-1 text-[11px] text-secondary">
+      <span class="flex items-center gap-1 text-[11px] text-fg-muted">
         <span class="truncate">{{ account.name }}, Available:</span>
         <MoneyAmount
           :amount="account.availableBalance"
@@ -69,10 +69,10 @@ const emit = defineEmits<{
         />
         <IconChevronDown class="h-3 w-3 flex-none" />
       </span>
-      <span class="text-[14px] font-medium text-mint-600">
+      <span class="text-[14px] font-medium text-money-positive">
         Unallocated
         <MoneyAmount v-if="unallocated" :amount="unallocated" size="sm" />
-        <span v-else class="font-mono text-neutral-400">—</span>
+        <span v-else class="font-mono text-fg-subtle">—</span>
       </span>
     </button>
     <div v-else class="flex-1" />
