@@ -40,7 +40,7 @@ const tabs: TabDef[] = [
     class="sticky top-0 hidden h-screen flex-col border-r border-border bg-surface md:flex md:w-16 lg:w-56"
     aria-label="Primary"
   >
-    <div class="px-3 py-4 text-sm font-semibold text-fg">
+    <div class="px-3 py-4 text-label font-semibold text-fg">
       <span class="hidden lg:inline">mibudge</span>
       <span class="lg:hidden">m</span>
     </div>
@@ -49,7 +49,7 @@ const tabs: TabDef[] = [
         v-for="tab in tabs"
         :key="tab.label"
         :to="tab.to"
-        class="flex items-center gap-3 rounded-subcard px-3 py-2 text-sm text-fg-muted hover:bg-surface-sunken"
+        class="flex items-center gap-3 rounded-control px-3 py-2 text-body-sm text-fg-muted hover:bg-surface-sunken"
         active-class="bg-accent-subtle text-accent-fg"
       >
         <component :is="tab.icon" class="h-5 w-5 flex-none" />

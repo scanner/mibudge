@@ -105,7 +105,7 @@ function manageAccounts() {
           <slot name="action" />
         </template>
       </TopBar>
-      <main class="flex-1 px-4 pb-4">
+      <main class="flex-1 px-page-x pb-4">
         <slot />
       </main>
       <BottomNav />

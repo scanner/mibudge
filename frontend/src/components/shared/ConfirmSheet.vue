@@ -48,29 +48,29 @@ useModal(
     <Transition name="fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+        class="fixed inset-0 z-dialog flex items-end justify-center md:items-center"
       >
         <div class="absolute inset-0 bg-scrim/40" @click="emit('cancel')" />
         <div
-          class="relative w-full rounded-t-2xl bg-surface p-5 shadow-xl md:w-[420px] md:rounded-card"
+          class="relative w-full rounded-t-card bg-surface p-5 shadow-overlay md:w-sheet md:rounded-card"
           role="dialog"
           aria-modal="true"
         >
-          <h2 class="text-base font-medium text-fg">{{ title }}</h2>
-          <p v-if="message" class="mt-2 text-sm text-fg-muted">
+          <h2 class="text-title text-fg">{{ title }}</h2>
+          <p v-if="message" class="mt-2 text-body-sm text-fg-muted">
             {{ message }}
           </p>
           <div class="mt-5 flex justify-end gap-2">
             <button
               type="button"
-              class="rounded-full px-4 py-2 text-sm font-medium text-fg hover:bg-surface-muted"
+              class="rounded-pill px-4 py-2 text-label text-fg hover:bg-surface-muted"
               @click="emit('cancel')"
             >
               {{ cancelLabel }}
             </button>
             <button
               type="button"
-              class="rounded-full px-4 py-2 text-sm font-medium text-fg-on-accent"
+              class="rounded-pill px-4 py-2 text-label text-fg-on-accent"
               :class="
                 tone === 'coral'
                   ? 'bg-danger-solid hover:bg-danger-solid-hover'

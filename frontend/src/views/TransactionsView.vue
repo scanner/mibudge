@@ -67,7 +67,7 @@ function openTransaction(id: string) {
     <template #action>
       <button
         type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full transition-colors"
+        class="flex h-10 w-10 items-center justify-center rounded-pill transition-colors"
         :class="
           showInternalTxs
             ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
@@ -77,25 +77,25 @@ function openTransaction(id: string) {
         :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
         @click="toggleInternalTxs"
       >
-        <IconArrowsRightLeft class="h-5 w-5" />
+        <IconArrowsRightLeft class="size-icon-md" />
       </button>
       <button
         type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+        class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
         aria-label="Search transactions"
         @click="toggleSearch"
       >
-        <IconSearch v-if="!searchOpen" class="h-5 w-5" />
-        <IconX v-else class="h-5 w-5" />
+        <IconSearch v-if="!searchOpen" class="size-icon-md" />
+        <IconX v-else class="size-icon-md" />
       </button>
     </template>
 
     <!-- Search bar -->
     <Transition
-      enter-active-class="transition-all duration-200 ease-out"
+      enter-active-class="transition-all duration-base ease-enter"
       enter-from-class="max-h-0 opacity-0"
       enter-to-class="max-h-12 opacity-100"
-      leave-active-class="transition-all duration-150 ease-in"
+      leave-active-class="transition-all duration-fast ease-exit"
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
@@ -105,7 +105,7 @@ function openTransaction(id: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+          class="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
@@ -116,7 +116,7 @@ function openTransaction(id: string) {
         v-for="chip in filterChips"
         :key="chip.key"
         type="button"
-        class="flex-none rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+        class="flex-none rounded-pill border px-3 py-1 text-meta font-medium transition-colors"
         :class="
           activeFilter === chip.key
             ? 'border-accent-border bg-accent-subtle text-accent-fg'
@@ -140,7 +140,7 @@ function openTransaction(id: string) {
     <!-- Error -->
     <div
       v-else-if="error"
-      class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+      class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -149,7 +149,7 @@ function openTransaction(id: string) {
     <template v-else>
       <p
         v-if="assignmentsError"
-        class="mb-3 rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+        class="mb-3 rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
         role="alert"
       >
         {{ assignmentsError }}
@@ -180,12 +180,12 @@ function openTransaction(id: string) {
       <!-- Loading more indicator -->
       <div v-if="loadingMore" class="flex justify-center py-4">
         <div
-          class="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent"
+          class="h-5 w-5 animate-spin rounded-pill border-2 border-border border-t-accent"
         />
       </div>
       <p
         v-else-if="loadMoreError"
-        class="py-4 text-center text-sm text-danger-fg"
+        class="py-4 text-center text-body-sm text-danger-fg"
         role="alert"
       >
         Couldn't load more transactions: {{ loadMoreError }}

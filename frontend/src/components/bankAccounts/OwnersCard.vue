@@ -34,15 +34,11 @@ const emit = defineEmits<{
     <div
       class="flex items-center justify-between border-b border-border-subtle px-4 py-3"
     >
-      <h2
-        class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-      >
-        Owners
-      </h2>
+      <h2 class="text-overline uppercase text-fg-muted">Owners</h2>
       <button
         v-if="!formOpen"
         type="button"
-        class="text-xs font-medium text-fg-link hover:text-accent-hover"
+        class="text-meta font-medium text-fg-link hover:text-accent-hover"
         @click="emit('open')"
       >
         + Invite co-owner
@@ -54,11 +50,13 @@ const emit = defineEmits<{
       <li
         v-for="owner in owners"
         :key="owner"
-        class="px-4 py-3 text-sm text-fg"
+        class="px-4 py-3 text-body-sm text-fg"
       >
         {{ owner }}
       </li>
-      <li v-if="!owners.length" class="px-4 py-3 text-sm text-fg-subtle">—</li>
+      <li v-if="!owners.length" class="px-4 py-3 text-body-sm text-fg-subtle">
+        —
+      </li>
     </ul>
 
     <!-- Inline invite form — step 1: enter the email address.
@@ -67,10 +65,7 @@ const emit = defineEmits<{
          opens the ConfirmSheet for step 2 rather than sending directly,
          giving the user a chance to double-check the address. -->
     <div v-if="formOpen" class="border-t border-border-subtle px-4 py-4">
-      <label
-        class="mb-1.5 block text-sm font-medium text-fg"
-        for="invite-email"
-      >
+      <label class="mb-1.5 block text-label text-fg" for="invite-email">
         Email address to invite
       </label>
       <input
@@ -79,23 +74,23 @@ const emit = defineEmits<{
         type="email"
         autocomplete="email"
         placeholder="colleague@example.com"
-        class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-sm text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+        class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
         @keydown.enter="emit('review')"
         @keydown.escape="emit('close')"
       />
-      <p v-if="error" class="mt-1 text-xs text-danger-fg">{{ error }}</p>
+      <p v-if="error" class="mt-1 text-meta text-danger-fg">{{ error }}</p>
       <div class="mt-3 flex gap-2">
         <button
           type="button"
           :disabled="sending"
-          class="flex-1 rounded-subcard bg-accent py-2 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+          class="flex-1 rounded-control bg-accent py-2 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
           @click="emit('review')"
         >
           {{ sending ? "Sending…" : "Review" }}
         </button>
         <button
           type="button"
-          class="flex-1 rounded-subcard border border-border py-2 text-sm font-medium text-fg hover:bg-surface-sunken"
+          class="flex-1 rounded-control border border-border py-2 text-label text-fg hover:bg-surface-sunken"
           @click="emit('close')"
         >
           Cancel
@@ -108,7 +103,7 @@ const emit = defineEmits<{
          the action that triggered it. -->
     <div
       v-if="sent && !formOpen"
-      class="border-t border-border-subtle px-4 py-3 text-sm text-success-fg"
+      class="border-t border-border-subtle px-4 py-3 text-body-sm text-success-fg"
     >
       Invitation sent.
     </div>

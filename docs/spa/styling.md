@@ -196,7 +196,7 @@ can't go in that entry: the font family and `uppercase`. So:
 | Amount         | `text-amount`         | 15 / 20 / 500                          | mono | Card and row balances; the TopBar unallocated amount.            |
 | Small amount   | `text-amount-sm`      | 12 / 16 / 400                          | mono | Targets, running balances, amounts in meta lines.                |
 | Page title     | `text-page-title`     | 22 / 28 / 500                          | sans | The one title of a page.                                         |
-| Sheet title    | `text-sheet-title`    | 18 / 24 / 500                          | sans | The title of a sheet or dialog.                                  |
+| Title          | `text-title`          | 18 / 24 / 500                          | sans | The title of a sheet, dialog, auth card or detail hero.          |
 | Item title     | `text-item-title`     | 15 / 20 / 500                          | sans | The name in a card or list row.                                  |
 | Body           | `text-body`           | 14 / 20 / 400                          | sans | Standalone prose: explanations, empty states, auth pages.        |
 | Body small     | `text-body-sm`        | 13 / 18 / 400                          | sans | Copy inside cards and rows; button labels.                       |
@@ -224,12 +224,13 @@ can't go in that entry: the font family and `uppercase`. So:
 The spacing scale is Tailwind's own: at the 16px root, `p-4` is 16px,
 as every Tailwind developer expects. Named aliases cover the recurring
 layout distances, so a change such as "tighten card padding" is one
-edit:
+edit. Page and card padding are 12px each, which leaves a transaction
+row's budget line and balance room to show in full on a phone:
 
 | Alias      | Value | Use for                                             |
 |------------|-------|-----------------------------------------------------|
-| `page-x`   | 16px  | Horizontal page padding (`px-page-x`).              |
-| `card-x`   | 16px  | Card and list-row horizontal padding.               |
+| `page-x`   | 12px  | Horizontal page padding (`px-page-x`).              |
+| `card-x`   | 12px  | Card and list-row horizontal padding.               |
 | `card-y`   | 12px  | Card and list-row vertical padding.                 |
 | `stack-sm` | 8px   | The gap between related items (a label and field).  |
 | `stack-md` | 12px  | The gap between cards in a list (`space-y-stack-md`). |
@@ -277,10 +278,12 @@ the page.
 
 | Token           | Value                        | Use for                        |
 |-----------------|------------------------------|--------------------------------|
-| `duration-fast` | 120ms                        | Fades (scrims, popovers).      |
+| `duration-fast` | 120ms                        | Fades (scrims, popovers), leave transitions; the default for `transition-*` utilities. |
 | `duration-base` | 200ms                        | Colour and toggle transitions. |
 | `duration-slow` | 250ms                        | Sheet slide-up.                |
-| `ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Everything.                    |
+| `ease-standard` | `cubic-bezier(0.4, 0, 0.2, 1)` | Transitions that change a state in place (the default). |
+| `ease-enter`    | `cubic-bezier(0, 0, 0.2, 1)` | Something appearing: it decelerates into place. |
+| `ease-exit`     | `cubic-bezier(0.4, 0, 1, 1)` | Something leaving: it accelerates away. |
 
 `motion.css` defines the one `fade` and one `slide-up` transition that
 every `<Transition>` uses. Reduced-motion handling comes with the
@@ -297,7 +300,9 @@ planned accessibility work.
 | `tap-min`                       | 44px        | The minimum hit area of any control (`min-h-tap-min`).  |
 | `h-topbar`                      | 64px        | The TopBar height.                                      |
 | `h-bottomnav`                   | 64px        | The BottomNav height.                                   |
-| `max-w-sheet`                   | 480px       | Sheet and dialog width from `md`.                       |
+| `w-sheet`                       | 480px       | Sheet and dialog width from `md`.                       |
+| `max-h-sheet`                   | 80vh        | The tallest a sheet or dialog grows before it scrolls.  |
+| `border-l-rule`                 | 3px         | The coloured left rule on a transaction row.            |
 | `h-progress-sm` / `-md` / `-lg` | 3 / 5 / 8px | Progress bars: the fill-up band, budget card, detail hero. |
 
 Icons are Tabler (`@tabler/icons-vue`), sized with `size-icon-*`.
@@ -329,8 +334,8 @@ Icons are Tabler (`@tabler/icons-vue`), sized with `size-icon-*`.
 - Navigation is the BottomNav below `md` and the SideNav from `md`; the
   SideNav shows labels from `lg`.
 - Form pages are `max-w-lg`.
-- Sheets are full width on phones, and a centred `max-w-sheet` card
-  from `md`.
+- Sheets are full width on phones, and a centred `w-sheet` card from
+  `md`.
 
 ## 8. How to change an existing style
 

@@ -50,18 +50,18 @@ const toneClass = computed(() => {
 const heightClass = computed(() => {
   switch (props.height) {
     case 3:
-      return "h-[3px]";
+      return "h-progress-sm";
     case 5:
-      return "h-[5px]";
+      return "h-progress-md";
     case 8:
-      return "h-[8px]";
+      return "h-progress-lg";
   }
 });
 </script>
 
 <template>
   <div
-    class="w-full overflow-hidden rounded-full bg-progress-track"
+    class="w-full overflow-hidden rounded-pill bg-progress-track"
     :class="heightClass"
     role="progressbar"
     :aria-valuenow="clamped"
@@ -69,7 +69,7 @@ const heightClass = computed(() => {
     aria-valuemax="100"
   >
     <div
-      class="h-full rounded-full transition-[width]"
+      class="h-full rounded-pill transition-width"
       :class="toneClass"
       :style="{ width: `${clamped}%` }"
     />

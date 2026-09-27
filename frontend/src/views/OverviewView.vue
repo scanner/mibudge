@@ -67,20 +67,14 @@ function openTransaction(id: string) {
       <!-- Balance strip -->
       <section v-if="ctx.activeBankAccount" class="grid grid-cols-3 gap-2">
         <div class="rounded-card border border-border bg-surface px-3 py-3">
-          <div
-            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
-            Posted
-          </div>
+          <div class="mb-0.5 text-overline uppercase text-fg-muted">Posted</div>
           <MoneyAmount
             :amount="ctx.activeBankAccount.postedBalance"
             size="md"
           />
         </div>
         <div class="rounded-card border border-border bg-surface px-3 py-3">
-          <div
-            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
+          <div class="mb-0.5 text-overline uppercase text-fg-muted">
             Available
           </div>
           <MoneyAmount
@@ -89,26 +83,20 @@ function openTransaction(id: string) {
           />
         </div>
         <div class="rounded-card border border-border bg-surface px-3 py-3">
-          <div
-            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
-            Free
-          </div>
+          <div class="mb-0.5 text-overline uppercase text-fg-muted">Free</div>
           <MoneyAmount
             v-if="unallocated"
             :amount="unallocated.balance"
             size="md"
           />
-          <span v-else class="font-mono text-[15px] font-medium text-fg-subtle"
-            >—</span
-          >
+          <span v-else class="font-mono text-amount text-fg-subtle">—</span>
         </div>
       </section>
 
       <!-- Funding summary banner -->
       <div
         v-if="summary && !summary.total.isZero()"
-        class="rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-[13px] text-info-fg"
+        class="rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-body-sm text-info-fg"
       >
         Funded automatically:
         <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
@@ -140,7 +128,7 @@ function openTransaction(id: string) {
       <!-- Error -->
       <div
         v-else-if="error"
-        class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+        class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
         role="alert"
       >
         {{ error }}
@@ -150,18 +138,14 @@ function openTransaction(id: string) {
         <!-- Budgets section -->
         <section v-if="budgets.length > 0">
           <div class="mb-2 flex items-center justify-between">
-            <h2
-              class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-            >
-              Budgets
-            </h2>
+            <h2 class="text-overline uppercase text-fg-muted">Budgets</h2>
             <button
               type="button"
-              class="flex items-center gap-0.5 text-[11px] font-medium text-fg-link hover:text-accent-hover"
+              class="flex items-center gap-0.5 text-meta font-medium text-fg-link hover:text-accent-hover"
               @click="router.push({ name: 'budgets' })"
             >
               See all
-              <IconChevronRight class="h-3.5 w-3.5" />
+              <IconChevronRight class="size-icon-xs" />
             </button>
           </div>
           <div
@@ -179,18 +163,18 @@ function openTransaction(id: string) {
                     <div class="flex min-w-0 items-center gap-1.5">
                       <IconTarget
                         v-if="b.budgetType === 'G'"
-                        class="h-3.5 w-3.5 flex-none text-icon-muted"
+                        class="size-icon-xs flex-none text-icon-muted"
                       />
                       <IconRepeat
                         v-else-if="b.budgetType === 'R'"
-                        class="h-3.5 w-3.5 flex-none text-icon-muted"
+                        class="size-icon-xs flex-none text-icon-muted"
                       />
                       <IconBucket
                         v-else-if="b.budgetType === 'C'"
-                        class="h-3.5 w-3.5 flex-none text-icon-muted"
+                        class="size-icon-xs flex-none text-icon-muted"
                       />
                       <span
-                        class="min-w-0 truncate text-[14px] font-medium text-fg"
+                        class="min-w-0 truncate text-body font-medium text-fg"
                         >{{ b.name }}</span
                       >
                     </div>
@@ -212,7 +196,7 @@ function openTransaction(id: string) {
                         b.nextFunding &&
                         (b.budgetType === 'G' || b.budgetType === 'C')
                       "
-                      class="truncate text-[12px] text-fg-muted"
+                      class="truncate text-meta text-fg-muted"
                     >
                       <MoneyAmount
                         :amount="b.nextFunding.amount"
@@ -236,18 +220,16 @@ function openTransaction(id: string) {
         <!-- Recent transactions -->
         <section v-if="recentTx.length > 0">
           <div class="mb-2 flex items-center justify-between">
-            <h2
-              class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-            >
+            <h2 class="text-overline uppercase text-fg-muted">
               Recent transactions
             </h2>
             <button
               type="button"
-              class="flex items-center gap-0.5 text-[11px] font-medium text-fg-link hover:text-accent-hover"
+              class="flex items-center gap-0.5 text-meta font-medium text-fg-link hover:text-accent-hover"
               @click="router.push({ name: 'transactions' })"
             >
               See all
-              <IconChevronRight class="h-3.5 w-3.5" />
+              <IconChevronRight class="size-icon-xs" />
             </button>
           </div>
           <div class="space-y-2">
@@ -266,7 +248,7 @@ function openTransaction(id: string) {
         <!-- Empty state -->
         <div
           v-if="budgets.length === 0 && recentTx.length === 0 && !ctx.loading"
-          class="py-10 text-center text-sm text-fg-subtle"
+          class="py-10 text-center text-body-sm text-fg-subtle"
         >
           No budgets or transactions yet.
           <button

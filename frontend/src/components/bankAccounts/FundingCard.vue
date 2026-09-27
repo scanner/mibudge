@@ -36,24 +36,24 @@ const emit = defineEmits<{
   <!-- Funding -->
   <section class="overflow-hidden rounded-card border border-border bg-surface">
     <h2
-      class="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
+      class="border-b border-border-subtle px-4 py-3 text-overline uppercase text-fg-muted"
     >
       Funding
     </h2>
     <div class="px-4 py-3 space-y-3">
-      <div class="flex items-center justify-between text-sm">
+      <div class="flex items-center justify-between text-body-sm">
         <span class="text-fg-muted">Data current through</span>
         <span class="font-mono text-fg">
           {{ lastPostedThrough ?? "—" }}
         </span>
       </div>
-      <p class="text-xs text-fg-muted">
+      <p class="text-meta text-fg-muted">
         After importing transactions and finishing allocations, run the funding
         engine to move money into budgets based on their schedules.
       </p>
       <div
         v-if="summary && !summary.total.isZero()"
-        class="rounded-subcard border border-info-border bg-info-bg px-3 py-2 text-xs text-info-fg"
+        class="rounded-control border border-info-border bg-info-bg px-3 py-2 text-meta text-info-fg"
       >
         Next event:
         <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
@@ -67,8 +67,8 @@ const emit = defineEmits<{
       <!-- Automatic funding toggle -->
       <label class="flex cursor-pointer items-center justify-between">
         <div>
-          <p class="text-sm text-fg">Automatic funding</p>
-          <p class="mt-0.5 text-xs text-fg-muted">
+          <p class="text-body-sm text-fg">Automatic funding</p>
+          <p class="mt-0.5 text-meta text-fg-muted">
             Run funding events on a schedule. Disable to fund manually only.
           </p>
         </div>
@@ -80,11 +80,11 @@ const emit = defineEmits<{
             @change="emit('toggle-auto-funding')"
           />
           <div
-            class="h-6 w-10 rounded-full transition-colors"
+            class="h-6 w-10 rounded-pill transition-colors"
             :class="autoFundingEnabled ? 'bg-accent' : 'bg-border-strong'"
           />
           <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform"
+            class="absolute top-0.5 h-5 w-5 rounded-pill bg-surface shadow-control transition-transform"
             :class="autoFundingEnabled ? 'translate-x-4' : 'translate-x-0.5'"
           />
         </div>
@@ -93,7 +93,7 @@ const emit = defineEmits<{
       <button
         type="button"
         :disabled="running"
-        class="w-full rounded-subcard bg-accent py-2.5 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+        class="w-full rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
         @click="emit('run')"
       >
         {{ running ? "Running…" : "Run funding now" }}
@@ -102,7 +102,7 @@ const emit = defineEmits<{
       <!-- Result -->
       <div
         v-if="result"
-        class="rounded-subcard border px-3 py-2.5 text-sm"
+        class="rounded-control border px-3 py-2.5 text-body-sm"
         :class="
           nothingDue
             ? 'border-border bg-surface-sunken text-fg-muted'
@@ -121,13 +121,13 @@ const emit = defineEmits<{
         </template>
         <ul
           v-if="result.warnings.length"
-          class="mt-1.5 space-y-0.5 text-xs text-warning-fg"
+          class="mt-1.5 space-y-0.5 text-meta text-warning-fg"
         >
           <li v-for="w in result.warnings" :key="w">{{ w }}</li>
         </ul>
         <div v-if="result.skippedBudgets.length" class="mt-1.5">
-          <span class="text-xs font-medium">Skipped (paused):</span>
-          <ul class="mt-0.5 space-y-0.5 text-xs opacity-80">
+          <span class="text-meta font-medium">Skipped (paused):</span>
+          <ul class="mt-0.5 space-y-0.5 text-meta opacity-80">
             <li v-for="name in result.skippedBudgets" :key="name">
               {{ name }}
             </li>
@@ -136,7 +136,7 @@ const emit = defineEmits<{
       </div>
       <div
         v-if="error"
-        class="rounded-subcard border border-danger-border bg-danger-bg px-3 py-2.5 text-sm text-danger-fg"
+        class="rounded-control border border-danger-border bg-danger-bg px-3 py-2.5 text-body-sm text-danger-fg"
       >
         {{ error }}
       </div>

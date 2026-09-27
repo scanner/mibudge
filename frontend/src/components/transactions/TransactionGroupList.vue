@@ -42,7 +42,7 @@ const emit = defineEmits<{
     <section v-for="group in groups" :key="group.date">
       <component
         :is="headingTag"
-        class="sticky top-0 z-10 -mx-4 bg-canvas/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-muted backdrop-blur-sm"
+        class="sticky top-0 z-sticky -mx-4 bg-canvas/95 px-4 py-1.5 text-overline uppercase text-fg-muted backdrop-blur-sm"
       >
         {{ group.label }}
       </component>

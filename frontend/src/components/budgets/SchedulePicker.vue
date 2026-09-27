@@ -185,9 +185,7 @@ function yearlyDayLabel(n: number): string {
   <div class="rounded-card border border-border bg-surface">
     <!-- Label -->
     <div class="px-4 pt-3">
-      <p
-        class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-      >
+      <p class="text-overline uppercase text-fg-muted">
         {{ label }}
       </p>
     </div>
@@ -198,7 +196,7 @@ function yearlyDayLabel(n: number): string {
         v-for="f in ['WEEKLY', 'MONTHLY', 'YEARLY'] as Freq[]"
         :key="f"
         type="button"
-        class="rounded-t-md px-3 py-1.5 text-sm font-medium transition-colors"
+        class="rounded-t-xs px-3 py-1.5 text-label transition-colors"
         :class="
           freq === f
             ? 'border-b-2 border-accent-border text-accent-fg'
@@ -215,7 +213,7 @@ function yearlyDayLabel(n: number): string {
       <template v-if="freq === 'WEEKLY'">
         <select
           :value="weeklyInterval"
-          class="w-full rounded-subcard border border-border-strong px-3 py-2 text-sm text-fg"
+          class="w-full rounded-control border border-border-strong px-3 py-2 text-input text-fg"
           @change="
             weeklyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -236,7 +234,7 @@ function yearlyDayLabel(n: number): string {
             v-for="d in WEEKDAY_ORDER"
             :key="d"
             type="button"
-            class="flex-1 rounded-full py-1.5 text-xs font-medium transition-colors"
+            class="flex-1 rounded-pill py-1.5 text-meta font-medium transition-colors"
             :class="
               weeklyDays.has(d)
                 ? 'bg-accent text-fg-on-accent'
@@ -253,7 +251,7 @@ function yearlyDayLabel(n: number): string {
       <template v-else-if="freq === 'MONTHLY'">
         <select
           :value="monthlyInterval"
-          class="w-full rounded-subcard border border-border-strong px-3 py-2 text-sm text-fg"
+          class="w-full rounded-control border border-border-strong px-3 py-2 text-input text-fg"
           @change="
             monthlyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -275,7 +273,7 @@ function yearlyDayLabel(n: number): string {
             v-for="d in Array.from({ length: 31 }, (_, i) => i + 1)"
             :key="d"
             type="button"
-            class="rounded-md py-1 text-xs font-medium transition-colors"
+            class="rounded-xs py-1 text-meta font-medium transition-colors"
             :class="
               monthlyDays.has(d)
                 ? 'bg-accent text-fg-on-accent'
@@ -287,7 +285,7 @@ function yearlyDayLabel(n: number): string {
           </button>
           <button
             type="button"
-            class="col-span-2 rounded-md py-1 text-xs font-medium transition-colors"
+            class="col-span-2 rounded-xs py-1 text-meta font-medium transition-colors"
             :class="
               monthlyDays.has(-1)
                 ? 'bg-accent text-fg-on-accent'
@@ -304,7 +302,7 @@ function yearlyDayLabel(n: number): string {
       <template v-else>
         <select
           :value="yearlyInterval"
-          class="w-full rounded-subcard border border-border-strong px-3 py-2 text-sm text-fg"
+          class="w-full rounded-control border border-border-strong px-3 py-2 text-input text-fg"
           @change="
             yearlyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -318,7 +316,7 @@ function yearlyDayLabel(n: number): string {
         <div v-if="!intervalOnly" class="grid grid-cols-2 gap-2">
           <select
             :value="yearlyMonth"
-            class="rounded-subcard border border-border-strong px-3 py-2 text-sm text-fg"
+            class="rounded-control border border-border-strong px-3 py-2 text-input text-fg"
             @change="
               yearlyMonth = Number(($event.target as HTMLSelectElement).value)
             "
@@ -334,7 +332,7 @@ function yearlyDayLabel(n: number): string {
 
           <select
             :value="yearlyDay"
-            class="rounded-subcard border border-border-strong px-3 py-2 text-sm text-fg"
+            class="rounded-control border border-border-strong px-3 py-2 text-input text-fg"
             @change="
               yearlyDay = Number(($event.target as HTMLSelectElement).value)
             "
@@ -349,9 +347,9 @@ function yearlyDayLabel(n: number): string {
       <!-- Preview block -->
       <div
         v-if="!intervalOnly"
-        class="rounded-subcard bg-surface-sunken px-3 py-2"
+        class="rounded-control bg-surface-sunken px-3 py-2"
       >
-        <p class="text-sm text-fg">{{ rruleHuman(currentRrule) }}</p>
+        <p class="text-body-sm text-fg">{{ rruleHuman(currentRrule) }}</p>
       </div>
     </div>
   </div>

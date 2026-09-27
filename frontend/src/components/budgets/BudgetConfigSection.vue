@@ -66,7 +66,7 @@ const nextFunding = computed(() => {
 <template>
   <section class="overflow-hidden rounded-card border border-border bg-surface">
     <h2
-      class="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
+      class="border-b border-border-subtle px-4 py-3 text-overline uppercase text-fg-muted"
     >
       Configuration
     </h2>
@@ -76,28 +76,28 @@ const nextFunding = computed(() => {
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconTarget class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Target amount</span>
+        <IconTarget class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Target amount</span>
         <MoneyAmount
           v-if="budget.targetBalance"
           :amount="budget.targetBalance"
           size="md"
         />
-        <span v-else class="text-sm text-fg-muted">—</span>
+        <span v-else class="text-body-sm text-fg-muted">—</span>
       </div>
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconCalendar class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Target date</span>
-        <span class="text-sm text-fg-muted">
+        <IconCalendar class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Target date</span>
+        <span class="text-body-sm text-fg-muted">
           {{ shortDate(budget.targetDate) }}
         </span>
       </div>
       <div class="flex items-center gap-3 px-4 py-3">
-        <IconClock class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Funding schedule</span>
-        <span class="text-right text-sm text-fg-muted">
+        <IconClock class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Funding schedule</span>
+        <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.fundingSchedule) }}
         </span>
       </div>
@@ -108,31 +108,31 @@ const nextFunding = computed(() => {
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconTarget class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Cap</span>
+        <IconTarget class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Cap</span>
         <MoneyAmount
           v-if="budget.targetBalance"
           :amount="budget.targetBalance"
           size="md"
         />
-        <span v-else class="text-sm text-fg-muted">—</span>
+        <span v-else class="text-body-sm text-fg-muted">—</span>
       </div>
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconCoin class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Amount per event</span>
+        <IconCoin class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Amount per event</span>
         <MoneyAmount
           v-if="budget.fundingAmount"
           :amount="budget.fundingAmount"
           size="md"
         />
-        <span v-else class="text-sm text-fg-muted">—</span>
+        <span v-else class="text-body-sm text-fg-muted">—</span>
       </div>
       <div class="flex items-center gap-3 px-4 py-3">
-        <IconClock class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Funding schedule</span>
-        <span class="text-right text-sm text-fg-muted">
+        <IconClock class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Funding schedule</span>
+        <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.fundingSchedule) }}
         </span>
       </div>
@@ -143,41 +143,41 @@ const nextFunding = computed(() => {
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconRefresh class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Refresh cycle</span>
-        <span class="text-right text-sm text-fg-muted">
+        <IconRefresh class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Refresh cycle</span>
+        <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.recurrenceSchedule) }}
         </span>
       </div>
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconCalendar class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Next refresh</span>
-        <span class="text-sm text-fg-muted">
+        <IconCalendar class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Next refresh</span>
+        <span class="text-body-sm text-fg-muted">
           {{ shortDate(budget.nextRecurrence) }}
         </span>
       </div>
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconClock class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Funding schedule</span>
-        <span class="text-right text-sm text-fg-muted">
+        <IconClock class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Funding schedule</span>
+        <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.fundingSchedule) }}
         </span>
       </div>
       <div
         class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
       >
-        <IconTarget class="h-4 w-4 flex-none text-icon-muted" />
-        <span class="flex-1 text-sm text-fg">Target amount</span>
+        <IconTarget class="size-icon-sm flex-none text-icon-muted" />
+        <span class="flex-1 text-body-sm text-fg">Target amount</span>
         <MoneyAmount
           v-if="budget.targetBalance"
           :amount="budget.targetBalance"
           size="md"
         />
-        <span v-else class="text-sm text-fg-muted">—</span>
+        <span v-else class="text-body-sm text-fg-muted">—</span>
       </div>
     </template>
 
@@ -186,13 +186,13 @@ const nextFunding = computed(() => {
       v-if="nextFunding"
       class="flex items-start gap-3 border-t border-border-subtle px-4 py-3"
     >
-      <IconCalendar class="mt-0.5 h-4 w-4 flex-none text-icon-muted" />
+      <IconCalendar class="mt-0.5 size-icon-sm flex-none text-icon-muted" />
       <div class="flex-1">
-        <span class="text-sm text-fg"> Next fill-up deposit </span>
+        <span class="text-body-sm text-fg"> Next fill-up deposit </span>
       </div>
       <div class="text-right">
         <MoneyAmount :amount="nextFunding.amount" size="md" />
-        <div class="mt-0.5 text-xs text-fg-muted">
+        <div class="mt-0.5 text-meta text-fg-muted">
           {{ shortDate(nextFunding.date) }}
           <span v-if="nextFunding.daysAway === 0">(today)</span>
           <span v-else-if="nextFunding.daysAway === 1">(tomorrow)</span>

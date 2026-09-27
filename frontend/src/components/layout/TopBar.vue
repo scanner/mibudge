@@ -39,17 +39,17 @@ const emit = defineEmits<{
 
 <template>
   <header
-    class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface px-4"
+    class="sticky top-0 z-nav flex h-topbar items-center justify-between border-b border-border bg-surface px-page-x"
   >
     <div class="flex w-10 justify-start">
       <button
         v-if="showBack"
         type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+        class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
         aria-label="Back"
         @click="emit('back')"
       >
-        <IconChevronLeft class="h-5 w-5" />
+        <IconChevronLeft class="size-icon-md" />
       </button>
     </div>
 
@@ -60,16 +60,16 @@ const emit = defineEmits<{
       aria-label="Switch bank account"
       @click="emit('switch-account')"
     >
-      <span class="flex items-center gap-1 text-[11px] text-fg-muted">
+      <span class="flex items-center gap-1 text-meta text-fg-muted">
         <span class="truncate">{{ account.name }}, Available:</span>
         <MoneyAmount
           :amount="account.availableBalance"
           size="sm"
           class="whitespace-nowrap"
         />
-        <IconChevronDown class="h-3 w-3 flex-none" />
+        <IconChevronDown class="size-icon-xs flex-none" />
       </span>
-      <span class="text-[14px] font-medium text-money-positive">
+      <span class="text-amount text-money-positive">
         Unallocated
         <MoneyAmount v-if="unallocated" :amount="unallocated" size="sm" />
         <span v-else class="font-mono text-fg-subtle">—</span>

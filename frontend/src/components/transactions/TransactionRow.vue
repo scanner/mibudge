@@ -128,17 +128,17 @@ const allocInfo = computed<{
     class="group/row cursor-pointer rounded-card border border-border bg-surface transition-colors hover:bg-surface-sunken"
     :class="
       transaction.pending
-        ? 'border-l-[3px] border-l-row-pending'
+        ? 'border-l-rule border-l-row-pending'
         : allocInfo.isUnallocated
-          ? 'border-l-[3px] border-l-row-unallocated'
+          ? 'border-l-rule border-l-row-unallocated'
           : ''
     "
     @click="emit('select', transaction.id)"
   >
-    <div class="px-4 py-3">
+    <div class="px-card-x py-card-y">
       <!-- Row 1: party name + amount (+ account balance below) + optional remove -->
       <div class="flex items-start justify-between gap-2">
-        <span class="min-w-0 truncate text-[15px] font-medium text-fg">
+        <span class="min-w-0 truncate text-item-title text-fg">
           {{ partyName }}
         </span>
         <div class="flex flex-none flex-col items-end">
@@ -147,14 +147,14 @@ const allocInfo = computed<{
             <button
               v-if="removable"
               type="button"
-              class="flex h-5 w-5 items-center justify-center rounded-full text-fg-muted opacity-0 transition-opacity hover:bg-danger-bg hover:text-danger-fg group-hover/row:opacity-100"
+              class="flex h-5 w-5 items-center justify-center rounded-pill text-fg-muted opacity-0 transition-opacity hover:bg-danger-bg hover:text-danger-fg group-hover/row:opacity-100"
               aria-label="Remove from budget"
               @click.stop="emit('remove', transaction.id)"
             >
-              <IconX class="h-3.5 w-3.5" />
+              <IconX class="size-icon-xs" />
             </button>
           </div>
-          <span class="tabular-nums text-[11px] text-fg-muted">
+          <span class="tabular-nums text-meta text-fg-muted">
             {{ formatMoney(transaction.accountAvailableBalance) }}
           </span>
         </div>
@@ -167,24 +167,24 @@ const allocInfo = computed<{
       >
         <span
           v-if="transaction.pending"
-          class="min-w-0 truncate text-[12px] text-fg-link"
+          class="min-w-0 truncate text-meta text-fg-link"
         >
           Unallocated
           <span v-if="allocations?.[0]" class="text-fg-muted">
             (now {{ formatMoney(allocations[0].budgetBalance) }})
           </span>
         </span>
-        <span v-else class="min-w-0 truncate text-[12px] italic text-fg-muted">
+        <span v-else class="min-w-0 truncate text-meta italic text-fg-muted">
           Unallocated — tap to assign
         </span>
         <div class="flex flex-none items-center gap-1.5">
           <span
             v-if="transaction.pending"
-            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-fg ring-1 ring-warning-border"
+            class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
           >
             Pending
           </span>
-          <span v-if="typeLabel" class="text-[12px] text-fg-muted">{{
+          <span v-if="typeLabel" class="text-meta text-fg-muted">{{
             typeLabel
           }}</span>
         </div>
@@ -195,7 +195,7 @@ const allocInfo = computed<{
         v-else-if="allocInfo.single"
         class="mt-0.5 flex items-center justify-between gap-2"
       >
-        <span class="min-w-0 truncate text-[12px] text-fg-link">
+        <span class="min-w-0 truncate text-meta text-fg-link">
           {{ allocInfo.single.name }}
           <span class="text-fg-muted"
             >(now {{ formatMoney(allocInfo.single.balance) }})</span
@@ -204,11 +204,11 @@ const allocInfo = computed<{
         <div class="flex flex-none items-center gap-1.5">
           <span
             v-if="transaction.pending"
-            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-fg ring-1 ring-warning-border"
+            class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
           >
             Pending
           </span>
-          <span v-if="typeLabel" class="text-[12px] text-fg-muted">{{
+          <span v-if="typeLabel" class="text-meta text-fg-muted">{{
             typeLabel
           }}</span>
         </div>
@@ -218,18 +218,18 @@ const allocInfo = computed<{
       <div v-else-if="allocInfo.isSplit" class="mt-0.5">
         <div class="flex items-center justify-between gap-2">
           <span
-            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-muted ring-1 ring-border-emphasis"
+            class="rounded-xs px-1 py-0.5 text-badge uppercase text-fg-muted ring-1 ring-border-emphasis"
           >
             Split
           </span>
           <div class="flex flex-none items-center gap-1.5">
             <span
               v-if="transaction.pending"
-              class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-fg ring-1 ring-warning-border"
+              class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
             >
               Pending
             </span>
-            <span v-if="typeLabel" class="text-[12px] text-fg-muted">{{
+            <span v-if="typeLabel" class="text-meta text-fg-muted">{{
               typeLabel
             }}</span>
           </div>
@@ -239,13 +239,13 @@ const allocInfo = computed<{
           :key="i"
           class="mt-0.5 flex items-baseline gap-1.5"
         >
-          <span class="min-w-0 flex-1 truncate text-[12px] text-fg-link">
+          <span class="min-w-0 flex-1 truncate text-meta text-fg-link">
             {{ leg.name }}
             <span class="text-fg-muted"
               >(now {{ formatMoney(leg.balance) }})</span
             >
           </span>
-          <span class="flex-none text-[12px] font-medium text-fg">
+          <span class="flex-none text-meta font-medium text-fg">
             {{ formatMoney(leg.amount) }}
           </span>
         </div>
@@ -258,11 +258,11 @@ const allocInfo = computed<{
       >
         <span
           v-if="transaction.pending"
-          class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-fg ring-1 ring-warning-border"
+          class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
         >
           Pending
         </span>
-        <span v-if="typeLabel" class="text-[12px] text-fg-muted">{{
+        <span v-if="typeLabel" class="text-meta text-fg-muted">{{
           typeLabel
         }}</span>
       </div>

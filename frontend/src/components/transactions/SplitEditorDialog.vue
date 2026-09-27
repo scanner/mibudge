@@ -145,7 +145,7 @@ function fallbackBudgetLabel(id: string): string {
 //
 const txTotal = computed(() => props.transactionAmount.amount.abs());
 
-// A row's amount as it is sent: positive and rounded to cents.  The
+// A row's amount as it is sent: positive and rounded-xs to cents.  The
 // remainder and the over-allocation check use the same value, so a
 // split that passes the check never exceeds the transaction once sent.
 // `null` when the text is not a number.
@@ -197,12 +197,12 @@ useModal(
     <Transition name="fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+        class="fixed inset-0 z-dialog flex items-end justify-center md:items-center"
       >
         <div class="absolute inset-0 bg-scrim/40" @click="emit('cancel')" />
 
         <div
-          class="relative flex max-h-[80vh] w-full flex-col rounded-t-2xl bg-surface shadow-xl md:w-[480px] md:rounded-card"
+          class="relative flex max-h-sheet w-full flex-col rounded-t-card bg-surface shadow-overlay md:w-sheet md:rounded-card"
           role="dialog"
           aria-modal="true"
           aria-label="Edit allocations"
@@ -211,10 +211,10 @@ useModal(
           <div
             class="flex items-center justify-between border-b border-border px-5 pb-3 pt-5"
           >
-            <h2 class="text-base font-medium text-fg">Allocations</h2>
+            <h2 class="text-title text-fg">Allocations</h2>
             <button
               type="button"
-              class="text-sm text-fg-muted hover:text-fg"
+              class="text-body-sm text-fg-muted hover:text-fg"
               @click="emit('cancel')"
             >
               Cancel
@@ -232,7 +232,7 @@ useModal(
                 <!-- Budget selector -->
                 <select
                   v-model="row.budgetId"
-                  class="split-row-select min-w-0 flex-1 rounded-lg border border-border-strong bg-surface-sunken px-3 py-1.5 text-sm text-fg outline-none focus:border-border-focus"
+                  class="split-row-select min-w-0 flex-1 rounded-control border border-border-strong bg-surface-sunken px-3 py-1.5 text-input text-fg outline-none focus:border-border-focus"
                 >
                   <option value="">Select budget…</option>
                   <option
@@ -261,17 +261,17 @@ useModal(
                   type="text"
                   inputmode="decimal"
                   placeholder="0.00"
-                  class="w-24 flex-none rounded-lg border border-border-strong bg-surface-sunken px-3 py-1.5 text-right font-mono text-sm text-fg outline-none focus:border-border-focus"
+                  class="w-24 flex-none rounded-control border border-border-strong bg-surface-sunken px-3 py-1.5 text-right font-mono text-input text-fg outline-none focus:border-border-focus"
                 />
 
                 <!-- Remove row -->
                 <button
                   type="button"
-                  class="flex h-6 w-6 flex-none items-center justify-center rounded-full text-fg-muted hover:bg-danger-bg hover:text-danger-fg"
+                  class="flex h-6 w-6 flex-none items-center justify-center rounded-pill text-fg-muted hover:bg-danger-bg hover:text-danger-fg"
                   aria-label="Remove split"
                   @click="removeRow(i)"
                 >
-                  <IconX class="h-3.5 w-3.5" />
+                  <IconX class="size-icon-xs" />
                 </button>
               </div>
             </div>
@@ -279,17 +279,17 @@ useModal(
             <!-- Add row button -->
             <button
               type="button"
-              class="mt-2 flex items-center gap-1.5 px-1 py-1.5 text-sm font-medium text-fg-link hover:text-accent-hover"
+              class="mt-2 flex items-center gap-1.5 px-1 py-1.5 text-label text-fg-link hover:text-accent-hover"
               @click="addRow"
             >
-              <IconPlus class="h-4 w-4" />
+              <IconPlus class="size-icon-sm" />
               Add split
             </button>
           </div>
 
           <!-- Footer: remainder indicator + Save -->
           <div class="border-t border-border px-4 py-3">
-            <div class="mb-3 flex items-center justify-between text-sm">
+            <div class="mb-3 flex items-center justify-between text-body-sm">
               <span
                 :class="isOver ? 'font-medium text-danger-fg' : 'text-fg-muted'"
               >
@@ -311,7 +311,7 @@ useModal(
 
             <button
               type="button"
-              class="w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              class="w-full rounded-control px-4 py-2 text-label transition-colors"
               :class="
                 canSave
                   ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'

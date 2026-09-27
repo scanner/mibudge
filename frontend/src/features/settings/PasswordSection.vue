@@ -38,9 +38,7 @@ const {
 <template>
   <!-- Password change card -->
   <section>
-    <h2
-      class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-    >
+    <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
       Change password
     </h2>
 
@@ -48,7 +46,7 @@ const {
       <!-- No usable password: guide user to reset flow -->
       <div
         v-if="!session.user?.hasUsablePassword"
-        class="space-y-2 text-sm text-fg"
+        class="space-y-2 text-body-sm text-fg"
       >
         <p>
           Your account doesn't have a password set yet — this happens when your
@@ -56,7 +54,7 @@ const {
         </p>
         <a
           href="/accounts/password/reset/"
-          class="inline-block rounded-subcard bg-accent px-4 py-2.5 text-sm font-medium text-fg-on-accent hover:bg-accent-hover"
+          class="inline-block rounded-control bg-accent px-4 py-2.5 text-label text-fg-on-accent hover:bg-accent-hover"
         >
           Set a password via email
         </a>
@@ -66,7 +64,7 @@ const {
         <!-- Success banner -->
         <div
           v-if="success"
-          class="mb-4 rounded-subcard bg-success-bg px-4 py-3 text-sm text-success-fg"
+          class="mb-4 rounded-control bg-success-bg px-4 py-3 text-body-sm text-success-fg"
           role="alert"
         >
           Password changed successfully.
@@ -75,7 +73,7 @@ const {
         <!-- Form-level error -->
         <div
           v-if="formError"
-          class="mb-4 rounded-subcard bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+          class="mb-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
           role="alert"
         >
           {{ formError }}
@@ -85,7 +83,7 @@ const {
           <!-- Current password -->
           <div>
             <label
-              class="mb-1.5 block text-sm font-medium text-fg"
+              class="mb-1.5 block text-label text-fg"
               for="current-password"
             >
               Current password
@@ -95,7 +93,7 @@ const {
               v-model="currentPassword"
               type="password"
               autocomplete="current-password"
-              class="w-full rounded-subcard border px-3 py-2.5 text-sm text-fg focus:outline-none focus:ring-1"
+              class="w-full rounded-control border px-3 py-2.5 text-input text-fg focus:outline-none focus:ring-1"
               :class="
                 fieldError('current_password')
                   ? 'border-danger-solid focus:border-danger-solid focus:ring-danger-solid'
@@ -104,7 +102,7 @@ const {
             />
             <p
               v-if="fieldError('current_password')"
-              class="mt-1 text-xs text-danger-fg"
+              class="mt-1 text-meta text-danger-fg"
             >
               {{ fieldError("current_password") }}
             </p>
@@ -112,10 +110,7 @@ const {
 
           <!-- New password -->
           <div>
-            <label
-              class="mb-1.5 block text-sm font-medium text-fg"
-              for="new-password"
-            >
+            <label class="mb-1.5 block text-label text-fg" for="new-password">
               New password
             </label>
             <input
@@ -123,7 +118,7 @@ const {
               v-model="newPassword"
               type="password"
               autocomplete="new-password"
-              class="w-full rounded-subcard border px-3 py-2.5 text-sm text-fg focus:outline-none focus:ring-1"
+              class="w-full rounded-control border px-3 py-2.5 text-input text-fg focus:outline-none focus:ring-1"
               :class="
                 fieldError('new_password')
                   ? 'border-danger-solid focus:border-danger-solid focus:ring-danger-solid'
@@ -136,7 +131,7 @@ const {
             />
             <p
               v-if="fieldError('new_password')"
-              class="mt-1 text-xs text-danger-fg"
+              class="mt-1 text-meta text-danger-fg"
             >
               {{ fieldError("new_password") }}
             </p>
@@ -145,7 +140,7 @@ const {
           <!-- Confirm password -->
           <div>
             <label
-              class="mb-1.5 block text-sm font-medium text-fg"
+              class="mb-1.5 block text-label text-fg"
               for="confirm-password"
             >
               Confirm new password
@@ -155,7 +150,7 @@ const {
               v-model="confirmPassword"
               type="password"
               autocomplete="new-password"
-              class="w-full rounded-subcard border px-3 py-2.5 text-sm text-fg focus:outline-none focus:ring-1"
+              class="w-full rounded-control border px-3 py-2.5 text-input text-fg focus:outline-none focus:ring-1"
               :class="
                 fieldError('confirm_password')
                   ? 'border-danger-solid focus:border-danger-solid focus:ring-danger-solid'
@@ -164,7 +159,7 @@ const {
             />
             <p
               v-if="fieldError('confirm_password')"
-              class="mt-1 text-xs text-danger-fg"
+              class="mt-1 text-meta text-danger-fg"
             >
               {{ fieldError("confirm_password") }}
             </p>
@@ -175,13 +170,13 @@ const {
             <button
               type="submit"
               :disabled="submitDisabled"
-              class="flex-1 rounded-subcard bg-accent py-2.5 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+              class="flex-1 rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
             >
               {{ saving ? "Saving…" : "Change password" }}
             </button>
             <button
               type="button"
-              class="flex-1 rounded-subcard border border-border py-2.5 text-sm font-medium text-fg hover:bg-surface-sunken"
+              class="flex-1 rounded-control border border-border py-2.5 text-label text-fg hover:bg-surface-sunken"
               @click="router.push({ name: 'account' })"
             >
               Cancel

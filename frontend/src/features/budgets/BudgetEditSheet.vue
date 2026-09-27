@@ -32,11 +32,11 @@ useModal(
     <Transition name="slide-up">
       <div
         v-if="open && budget"
-        class="fixed inset-0 z-40 overflow-y-auto bg-canvas"
+        class="fixed inset-0 z-sheet overflow-y-auto bg-canvas"
       >
         <div class="mx-auto max-w-lg px-4 pb-8 pt-4">
           <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-[18px] font-medium text-fg">Edit budget</h2>
+            <h2 class="text-title text-fg">Edit budget</h2>
           </div>
           <BudgetForm
             mode="edit"

@@ -149,44 +149,44 @@ function onAttach(field: AttachmentField) {
       <div class="flex items-center gap-1">
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
           aria-label="Back"
           @click="router.back()"
         >
-          <IconArrowLeft class="h-5 w-5" />
+          <IconArrowLeft class="size-icon-md" />
         </button>
         <button
           v-if="prevTxId"
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
           aria-label="Previous transaction"
           @click="goToPrev"
         >
-          <IconChevronUp class="h-5 w-5" />
+          <IconChevronUp class="size-icon-md" />
         </button>
         <button
           v-if="nextTxId"
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
           aria-label="Next transaction"
           @click="goToNext"
         >
-          <IconChevronDown class="h-5 w-5" />
+          <IconChevronDown class="size-icon-md" />
         </button>
       </div>
     </template>
 
     <!-- Loading -->
     <div v-if="loading" class="space-y-4 pt-6">
-      <div class="h-8 w-48 animate-pulse rounded bg-surface-muted" />
-      <div class="h-12 w-32 animate-pulse rounded bg-surface-muted" />
-      <div class="h-4 w-64 animate-pulse rounded bg-surface-muted" />
+      <div class="h-8 w-48 animate-pulse rounded-xs bg-surface-muted" />
+      <div class="h-12 w-32 animate-pulse rounded-xs bg-surface-muted" />
+      <div class="h-4 w-64 animate-pulse rounded-xs bg-surface-muted" />
     </div>
 
     <!-- Error -->
     <div
       v-else-if="error"
-      class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+      class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -204,21 +204,19 @@ function onAttach(field: AttachmentField) {
       <!-- Metadata section -->
       <section class="space-y-3 border-t border-border pt-4">
         <div>
-          <label
-            class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
+          <label class="text-overline uppercase text-fg-muted">
             Description
           </label>
           <input
             v-model="description"
             type="text"
-            class="mt-0.5 block w-full border-b border-transparent bg-transparent text-sm text-fg outline-none transition-colors focus:border-border-focus"
+            class="mt-0.5 block w-full border-b border-transparent bg-transparent text-input text-fg outline-none transition-colors focus:border-border-focus"
             @input="onDescriptionInput"
             @blur="onDescriptionBlur"
           />
           <p
             v-if="descriptionError"
-            class="mt-1 text-xs text-danger-fg"
+            class="mt-1 text-meta text-danger-fg"
             role="alert"
           >
             {{ descriptionError }}
@@ -226,30 +224,24 @@ function onAttach(field: AttachmentField) {
         </div>
 
         <div v-if="transaction.rawDescription !== transaction.description">
-          <label
-            class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
+          <label class="text-overline uppercase text-fg-muted">
             Raw description
           </label>
-          <p class="mt-0.5 text-sm text-fg-muted">
+          <p class="mt-0.5 text-body-sm text-fg-muted">
             {{ transaction.rawDescription }}
           </p>
         </div>
 
         <div v-if="typeLabel" class="flex items-center gap-2">
-          <label
-            class="flex-none text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
+          <label class="flex-none text-overline uppercase text-fg-muted">
             Type
           </label>
           <span class="min-w-0 flex-1 border-b border-dotted border-border" />
-          <span class="flex-none text-sm text-fg">{{ typeLabel }}</span>
+          <span class="flex-none text-body-sm text-fg">{{ typeLabel }}</span>
         </div>
 
         <div class="flex items-center gap-2">
-          <label
-            class="flex-none text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
+          <label class="flex-none text-overline uppercase text-fg-muted">
             {{ accountName }} balance after
           </label>
           <span class="min-w-0 flex-1 border-b border-dotted border-border" />
@@ -272,7 +264,11 @@ function onAttach(field: AttachmentField) {
         @assign="pickerOpen = true"
         @navigate-budget="navigateBudget"
       />
-      <p v-if="splitError" class="mt-2 text-sm text-danger-fg" role="alert">
+      <p
+        v-if="splitError"
+        class="mt-2 text-body-sm text-danger-fg"
+        role="alert"
+      >
         {{ splitError }}
       </p>
 
@@ -283,20 +279,20 @@ function onAttach(field: AttachmentField) {
       <template v-if="!transaction.pending">
         <!-- Memo -->
         <section class="mt-6">
-          <label
-            class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-          >
-            Memo
-          </label>
+          <label class="text-overline uppercase text-fg-muted"> Memo </label>
           <textarea
             v-model="memo"
             rows="2"
             placeholder="Add a memo…"
-            class="mt-1 block w-full resize-none rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus"
+            class="mt-1 block w-full resize-none rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus"
             @input="onMemoInput"
             @blur="onMemoBlur"
           />
-          <p v-if="memoError" class="mt-1 text-xs text-danger-fg" role="alert">
+          <p
+            v-if="memoError"
+            class="mt-1 text-meta text-danger-fg"
+            role="alert"
+          >
             {{ memoError }}
           </p>
         </section>
@@ -305,14 +301,14 @@ function onAttach(field: AttachmentField) {
         <section class="mt-6 flex gap-3">
           <button
             type="button"
-            class="flex-1 rounded-lg border border-border px-3 py-2 text-center text-sm text-fg-muted transition-colors hover:border-border-emphasis hover:bg-surface-sunken"
+            class="flex-1 rounded-control border border-border px-3 py-2 text-center text-body-sm text-fg-muted transition-colors hover:border-border-emphasis hover:bg-surface-sunken"
             @click="onAttach('image')"
           >
             {{ transaction.image ? "Replace photo" : "Attach photo" }}
           </button>
           <button
             type="button"
-            class="flex-1 rounded-lg border border-border px-3 py-2 text-center text-sm text-fg-muted transition-colors hover:border-border-emphasis hover:bg-surface-sunken"
+            class="flex-1 rounded-control border border-border px-3 py-2 text-center text-body-sm text-fg-muted transition-colors hover:border-border-emphasis hover:bg-surface-sunken"
             @click="onAttach('document')"
           >
             {{ transaction.document ? "Replace document" : "Attach document" }}
@@ -320,7 +316,7 @@ function onAttach(field: AttachmentField) {
         </section>
         <p
           v-if="attachmentError"
-          class="mt-2 text-sm text-danger-fg"
+          class="mt-2 text-body-sm text-danger-fg"
           role="alert"
         >
           {{ attachmentError }}
@@ -328,7 +324,7 @@ function onAttach(field: AttachmentField) {
       </template>
 
       <!-- Footer -->
-      <p class="mt-8 pb-4 text-center text-xs text-fg-subtle">
+      <p class="mt-8 pb-4 text-center text-meta text-fg-subtle">
         Transactions are imported from bank statements and cannot be created or
         deleted.
       </p>

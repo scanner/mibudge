@@ -79,11 +79,11 @@ async function submit() {
         @click="budgetType = 'G'"
       >
         <IconTarget
-          class="h-5 w-5"
+          class="size-icon-md"
           :class="budgetType === 'G' ? 'text-accent-fg' : 'text-icon-muted'"
         />
-        <div class="mt-1 text-[14px] font-medium text-fg">Goal</div>
-        <div class="mt-0.5 text-[11px] text-fg-muted">Save toward a target</div>
+        <div class="mt-1 text-body font-medium text-fg">Goal</div>
+        <div class="mt-0.5 text-meta text-fg-muted">Save toward a target</div>
       </button>
       <button
         type="button"
@@ -96,13 +96,11 @@ async function submit() {
         @click="budgetType = 'R'"
       >
         <IconRepeat
-          class="h-5 w-5"
+          class="size-icon-md"
           :class="budgetType === 'R' ? 'text-accent-fg' : 'text-icon-muted'"
         />
-        <div class="mt-1 text-[14px] font-medium text-fg">Recurring</div>
-        <div class="mt-0.5 text-[11px] text-fg-muted">
-          Refills on a schedule
-        </div>
+        <div class="mt-1 text-body font-medium text-fg">Recurring</div>
+        <div class="mt-0.5 text-meta text-fg-muted">Refills on a schedule</div>
       </button>
       <button
         type="button"
@@ -115,29 +113,29 @@ async function submit() {
         @click="budgetType = 'C'"
       >
         <IconBucket
-          class="h-5 w-5"
+          class="size-icon-md"
           :class="budgetType === 'C' ? 'text-accent-fg' : 'text-icon-muted'"
         />
-        <div class="mt-1 text-[14px] font-medium text-fg">Capped</div>
-        <div class="mt-0.5 text-[11px] text-fg-muted">Tops up to a cap</div>
+        <div class="mt-1 text-body font-medium text-fg">Capped</div>
+        <div class="mt-0.5 text-meta text-fg-muted">Tops up to a cap</div>
       </button>
     </div>
 
     <!-- Read-only type + account in edit mode -->
     <div v-if="mode === 'edit'" class="space-y-1">
       <div
-        class="flex items-center justify-between rounded-subcard bg-surface-sunken px-4 py-3"
+        class="flex items-center justify-between rounded-control bg-surface-sunken px-4 py-3"
       >
-        <span class="text-sm text-fg-muted">Type</span>
-        <span class="text-sm font-medium text-fg">
+        <span class="text-body-sm text-fg-muted">Type</span>
+        <span class="text-label text-fg">
           {{ budget?.budgetType === "G" ? "Goal" : "Recurring" }}
         </span>
       </div>
       <div
-        class="flex items-center justify-between rounded-subcard bg-surface-sunken px-4 py-3"
+        class="flex items-center justify-between rounded-control bg-surface-sunken px-4 py-3"
       >
-        <span class="text-sm text-fg-muted">Account</span>
-        <span class="text-sm font-medium text-fg">
+        <span class="text-body-sm text-fg-muted">Account</span>
+        <span class="text-label text-fg">
           {{ accountName }}
         </span>
       </div>
@@ -145,10 +143,7 @@ async function submit() {
 
     <!-- Name -->
     <div>
-      <label
-        class="mb-1 block text-[13px] font-medium text-fg"
-        for="budget-name"
-      >
+      <label class="mb-1 block text-label text-fg" for="budget-name">
         Name
       </label>
       <input
@@ -157,16 +152,13 @@ async function submit() {
         type="text"
         required
         placeholder="e.g. Groceries"
-        class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-[15px] text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
+        class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
       />
     </div>
 
     <!-- Target amount (both types) -->
     <div>
-      <label
-        class="mb-1 block text-[13px] font-medium text-fg"
-        for="target-balance"
-      >
+      <label class="mb-1 block text-label text-fg" for="target-balance">
         Target amount
       </label>
       <input
@@ -176,7 +168,7 @@ async function submit() {
         min="0"
         step="0.01"
         placeholder="0.00"
-        class="w-full rounded-subcard border border-border-strong px-3 py-2.5 font-mono text-[15px] text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
+        class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
       />
     </div>
 
@@ -184,11 +176,11 @@ async function submit() {
     <template v-if="isGoal">
       <!-- Funding type toggle -->
       <div>
-        <p class="mb-1.5 text-[13px] font-medium text-fg">Funding type</p>
+        <p class="mb-1.5 text-label text-fg">Funding type</p>
         <div class="flex gap-2">
           <button
             type="button"
-            class="flex-1 rounded-full border py-2 text-sm font-medium transition-colors"
+            class="flex-1 rounded-pill border py-2 text-label transition-colors"
             :class="
               fundingType === 'D'
                 ? 'border-accent-border bg-accent-subtle text-accent-fg'
@@ -200,7 +192,7 @@ async function submit() {
           </button>
           <button
             type="button"
-            class="flex-1 rounded-full border py-2 text-sm font-medium transition-colors"
+            class="flex-1 rounded-pill border py-2 text-label transition-colors"
             :class="
               fundingType === 'F'
                 ? 'border-accent-border bg-accent-subtle text-accent-fg'
@@ -215,27 +207,21 @@ async function submit() {
 
       <template v-if="fundingType === 'D'">
         <div>
-          <label
-            class="mb-1 block text-[13px] font-medium text-fg"
-            for="target-date"
-          >
+          <label class="mb-1 block text-label text-fg" for="target-date">
             Target date
           </label>
           <input
             id="target-date"
             v-model="targetDate"
             type="date"
-            class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-[15px] text-fg focus:border-border-focus focus:outline-none"
+            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none"
           />
         </div>
       </template>
 
       <template v-else>
         <div>
-          <label
-            class="mb-1 block text-[13px] font-medium text-fg"
-            for="funding-amount"
-          >
+          <label class="mb-1 block text-label text-fg" for="funding-amount">
             Amount per funding event
           </label>
           <input
@@ -245,7 +231,7 @@ async function submit() {
             min="0"
             step="0.01"
             placeholder="0.00"
-            class="w-full rounded-subcard border border-border-strong px-3 py-2.5 font-mono text-[15px] text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
+            class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
           />
         </div>
       </template>
@@ -255,15 +241,12 @@ async function submit() {
 
     <!-- Capped-specific fields -->
     <template v-else-if="isCapped">
-      <p class="rounded-subcard bg-info-bg px-3 py-2 text-[12px] text-info-fg">
+      <p class="rounded-control bg-info-bg px-3 py-2 text-meta text-info-fg">
         Funds a fixed amount on a schedule up to the cap above. Resumes
         automatically whenever spending brings the balance below the cap.
       </p>
       <div>
-        <label
-          class="mb-1 block text-[13px] font-medium text-fg"
-          for="funding-amount"
-        >
+        <label class="mb-1 block text-label text-fg" for="funding-amount">
           Amount per funding event
         </label>
         <input
@@ -273,24 +256,24 @@ async function submit() {
           min="0"
           step="0.01"
           placeholder="0.00"
-          class="w-full rounded-subcard border border-border-strong px-3 py-2.5 font-mono text-[15px] text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
+          class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
         />
       </div>
       <SchedulePicker v-model="fundingSchedule" label="Funding schedule" />
 
       <!-- Start paused toggle -->
       <label
-        class="flex cursor-pointer items-center justify-between rounded-subcard border border-border bg-surface px-4 py-3"
+        class="flex cursor-pointer items-center justify-between rounded-control border border-border bg-surface px-4 py-3"
       >
-        <div class="text-[15px] font-medium text-fg">Start paused</div>
+        <div class="text-item-title text-fg">Start paused</div>
         <div class="relative">
           <input v-model="paused" type="checkbox" class="sr-only" />
           <div
-            class="h-6 w-10 rounded-full transition-colors"
+            class="h-6 w-10 rounded-pill transition-colors"
             :class="paused ? 'bg-accent' : 'bg-border-strong'"
           />
           <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform"
+            class="absolute top-0.5 h-5 w-5 rounded-pill bg-surface shadow-control transition-transform"
             :class="paused ? 'translate-x-4' : 'translate-x-0.5'"
           />
         </div>
@@ -307,20 +290,17 @@ async function submit() {
 
       <!-- Next refresh date (stored as DTSTART in recurrence_schedule) -->
       <div>
-        <label
-          class="mb-1 block text-[13px] font-medium text-fg"
-          for="next-refresh-date"
-        >
+        <label class="mb-1 block text-label text-fg" for="next-refresh-date">
           Next refresh date
         </label>
-        <p class="mb-1.5 text-[11px] text-fg-muted">
+        <p class="mb-1.5 text-meta text-fg-muted">
           When the budgeted expense next hits and the budget refreshes
         </p>
         <input
           id="next-refresh-date"
           v-model="nextRefreshDate"
           type="date"
-          class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-[15px] text-fg focus:border-border-focus focus:outline-none"
+          class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none"
         />
       </div>
 
@@ -328,17 +308,17 @@ async function submit() {
 
       <!-- Start paused toggle -->
       <label
-        class="flex cursor-pointer items-center justify-between rounded-subcard border border-border bg-surface px-4 py-3"
+        class="flex cursor-pointer items-center justify-between rounded-control border border-border bg-surface px-4 py-3"
       >
-        <div class="text-[15px] font-medium text-fg">Start paused</div>
+        <div class="text-item-title text-fg">Start paused</div>
         <div class="relative">
           <input v-model="paused" type="checkbox" class="sr-only" />
           <div
-            class="h-6 w-10 rounded-full transition-colors"
+            class="h-6 w-10 rounded-pill transition-colors"
             :class="paused ? 'bg-accent' : 'bg-border-strong'"
           />
           <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform"
+            class="absolute top-0.5 h-5 w-5 rounded-pill bg-surface shadow-control transition-transform"
             :class="paused ? 'translate-x-4' : 'translate-x-0.5'"
           />
         </div>
@@ -348,7 +328,7 @@ async function submit() {
     <!-- Error -->
     <p
       v-if="error"
-      class="rounded-subcard bg-danger-bg px-4 py-2 text-sm text-danger-fg"
+      class="rounded-control bg-danger-bg px-4 py-2 text-body-sm text-danger-fg"
     >
       {{ error }}
     </p>
@@ -357,7 +337,7 @@ async function submit() {
     <div class="flex gap-2 pt-2">
       <button
         type="button"
-        class="flex-1 rounded-full border border-border py-3 text-sm font-medium text-fg hover:bg-surface-sunken"
+        class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
         @click="emit('cancel')"
       >
         Cancel
@@ -365,7 +345,7 @@ async function submit() {
       <button
         type="submit"
         :disabled="!canSubmit"
-        class="flex-1 rounded-full py-3 text-sm font-medium text-fg-on-accent transition-colors"
+        class="flex-1 rounded-pill py-3 text-label text-fg-on-accent transition-colors"
         :class="
           canSubmit
             ? 'bg-accent hover:bg-accent-hover'

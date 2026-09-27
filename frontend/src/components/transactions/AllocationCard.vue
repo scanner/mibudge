@@ -69,11 +69,11 @@ const budgetId = computed(() => props.allocation.budgetId);
     <!-- Remove button -->
     <button
       type="button"
-      class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-fg-muted opacity-0 transition-opacity hover:bg-danger-bg hover:text-danger-fg group-hover:opacity-100"
+      class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-pill text-fg-muted opacity-0 transition-opacity hover:bg-danger-bg hover:text-danger-fg group-hover:opacity-100"
       aria-label="Remove allocation"
       @click="emit('remove', allocation.id)"
     >
-      <IconTrash class="h-3.5 w-3.5" />
+      <IconTrash class="size-icon-xs" />
     </button>
 
     <!-- Budget name + reassign -->
@@ -81,15 +81,15 @@ const budgetId = computed(() => props.allocation.budgetId);
       <button
         v-if="budgetId"
         type="button"
-        class="text-sm font-medium text-fg-link hover:underline"
+        class="text-label text-fg-link hover:underline"
         @click="emit('navigate-budget', budgetId)"
       >
         {{ budgetName }}
       </button>
-      <span v-else class="text-sm italic text-fg-muted">Unallocated</span>
+      <span v-else class="text-body-sm italic text-fg-muted">Unallocated</span>
       <button
         type="button"
-        class="text-[11px] text-fg-muted hover:text-accent-fg"
+        class="text-meta text-fg-muted hover:text-accent-fg"
         @click="emit('reassign', allocation.id)"
       >
         change
@@ -103,7 +103,7 @@ const budgetId = computed(() => props.allocation.budgetId);
           v-model="amountInput"
           type="text"
           inputmode="decimal"
-          class="w-28 border-b border-accent-border bg-transparent font-mono text-[15px] font-medium text-fg outline-none"
+          class="w-28 border-b border-accent-border bg-transparent font-mono text-input font-medium text-fg outline-none"
           @blur="commitEdit"
           @keydown.enter="commitEdit"
         />
@@ -116,7 +116,7 @@ const budgetId = computed(() => props.allocation.budgetId);
     </div>
 
     <!-- Budget balance after this allocation -->
-    <div class="mt-1 flex items-center gap-2 text-xs text-fg-muted">
+    <div class="mt-1 flex items-center gap-2 text-meta text-fg-muted">
       <span class="flex-none">Budget balance after</span>
       <span class="min-w-0 flex-1 border-b border-dotted border-border" />
       <MoneyAmount
@@ -127,7 +127,10 @@ const budgetId = computed(() => props.allocation.budgetId);
     </div>
 
     <!-- Category -->
-    <div v-if="allocation.categoryFullName" class="mt-1 text-xs text-fg-muted">
+    <div
+      v-if="allocation.categoryFullName"
+      class="mt-1 text-meta text-fg-muted"
+    >
       {{ allocation.categoryFullName }}
     </div>
   </div>

@@ -25,14 +25,14 @@ defineEmits<{
     <div class="mb-3 text-icon-muted">
       <slot />
     </div>
-    <h2 class="text-base font-medium text-fg">{{ title }}</h2>
-    <p v-if="message" class="mt-1 max-w-xs text-sm text-fg-muted">
+    <h2 class="text-item-title text-fg">{{ title }}</h2>
+    <p v-if="message" class="mt-1 max-w-xs text-body-sm text-fg-muted">
       {{ message }}
     </p>
     <button
       v-if="actionLabel"
       type="button"
-      class="mt-4 rounded-full bg-accent px-4 py-2 text-sm font-medium text-fg-on-accent hover:bg-accent-hover"
+      class="mt-4 rounded-pill bg-accent px-4 py-2 text-label text-fg-on-accent hover:bg-accent-hover"
       @click="$emit('action')"
     >
       {{ actionLabel }}

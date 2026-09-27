@@ -88,10 +88,10 @@ async function confirmArchive() {
       <button
         v-if="budget && !isUnallocated"
         type="button"
-        class="flex h-10 items-center rounded-full px-3 text-sm font-medium text-fg-link hover:bg-accent-subtle"
+        class="flex h-10 items-center rounded-pill px-3 text-label text-fg-link hover:bg-accent-subtle"
         @click="showEditSheet = true"
       >
-        <IconPencil class="mr-1 h-4 w-4" />
+        <IconPencil class="mr-1 size-icon-sm" />
         Edit
       </button>
     </template>
@@ -106,7 +106,7 @@ async function confirmArchive() {
     <!-- Error -->
     <div
       v-else-if="error && !budget"
-      class="mt-4 rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+      class="mt-4 rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -128,11 +128,11 @@ async function confirmArchive() {
           @click="showMoveMoneyForm = true"
         >
           <IconArrowsRightLeft
-            class="mt-0.5 h-5 w-5 flex-none text-accent-fg"
+            class="mt-0.5 size-icon-md flex-none text-accent-fg"
           />
           <div>
-            <div class="text-[15px] font-medium text-fg-link">Move money</div>
-            <div class="text-xs text-fg-muted">
+            <div class="text-item-title text-fg-link">Move money</div>
+            <div class="text-meta text-fg-muted">
               Transfer to or from another budget
             </div>
           </div>
@@ -150,18 +150,18 @@ async function confirmArchive() {
         <div v-if="!isUnallocated" class="mt-2 flex gap-2">
           <button
             type="button"
-            class="flex-1 rounded-full border border-border py-3 text-sm font-medium text-fg hover:bg-surface-sunken"
+            class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
             @click="togglePause"
           >
-            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
+            <IconPlayerPause class="mr-1 inline-block size-icon-sm" />
             {{ budget.paused ? "Resume budget" : "Pause budget" }}
           </button>
           <button
             type="button"
-            class="flex-1 rounded-full border border-border py-3 text-sm font-medium text-fg hover:bg-surface-sunken"
+            class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
             @click="showArchiveConfirm = true"
           >
-            <IconArchive class="mr-1 inline-block h-4 w-4" />
+            <IconArchive class="mr-1 inline-block size-icon-sm" />
             Archive
           </button>
         </div>
@@ -172,7 +172,7 @@ async function confirmArchive() {
         <!-- Inline error banner -->
         <p
           v-if="error"
-          class="rounded-subcard bg-danger-bg px-4 py-2 text-sm text-danger-fg"
+          class="rounded-control bg-danger-bg px-4 py-2 text-body-sm text-danger-fg"
         >
           {{ error }}
         </p>

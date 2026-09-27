@@ -41,7 +41,7 @@ const text = computed(() => props.label ?? entry.value.label);
 
 <template>
   <span
-    class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+    class="inline-flex items-center rounded-pill px-2 py-0.5 text-badge font-medium"
     :class="[entry.bg, entry.text]"
   >
     {{ text }}

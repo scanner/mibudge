@@ -75,23 +75,21 @@ async function submitMove() {
     <Transition name="fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-40 flex items-end justify-center md:items-center"
+        class="fixed inset-0 z-sheet flex items-end justify-center md:items-center"
       >
         <div class="absolute inset-0 bg-scrim/40" @click="emit('close')" />
         <div
-          class="relative w-full rounded-t-2xl bg-surface p-5 shadow-xl md:w-[480px] md:rounded-card"
+          class="relative w-full rounded-t-card bg-surface p-5 shadow-overlay md:w-sheet md:rounded-card"
         >
-          <h2 class="mb-4 text-[18px] font-medium text-fg">Move money</h2>
+          <h2 class="mb-4 text-title text-fg">Move money</h2>
 
           <div class="space-y-3">
             <div>
-              <label class="mb-1 block text-[13px] font-medium text-fg"
-                >Direction</label
-              >
-              <div class="flex rounded-subcard border border-border">
+              <label class="mb-1 block text-label text-fg">Direction</label>
+              <div class="flex rounded-control border border-border">
                 <button
                   type="button"
-                  class="flex-1 rounded-l-subcard py-2.5 text-sm font-medium transition-colors"
+                  class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
                   :class="
                     moveDirection === 'outof'
                       ? 'bg-accent text-fg-on-accent'
@@ -103,7 +101,7 @@ async function submitMove() {
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-r-subcard py-2.5 text-sm font-medium transition-colors"
+                  class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
                   :class="
                     moveDirection === 'into'
                       ? 'bg-accent text-fg-on-accent'
@@ -117,13 +115,11 @@ async function submitMove() {
             </div>
 
             <div v-if="fillupBudget">
-              <label class="mb-1 block text-[13px] font-medium text-fg"
-                >This budget</label
-              >
-              <div class="flex rounded-subcard border border-border">
+              <label class="mb-1 block text-label text-fg">This budget</label>
+              <div class="flex rounded-control border border-border">
                 <button
                   type="button"
-                  class="flex-1 rounded-l-subcard py-2.5 text-sm font-medium transition-colors"
+                  class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
                   :class="
                     !moveTargetFillup
                       ? 'bg-accent text-fg-on-accent'
@@ -135,7 +131,7 @@ async function submitMove() {
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-r-subcard py-2.5 text-sm font-medium transition-colors"
+                  class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
                   :class="
                     moveTargetFillup
                       ? 'bg-accent text-fg-on-accent'
@@ -149,12 +145,12 @@ async function submitMove() {
             </div>
 
             <div>
-              <label class="mb-1 block text-[13px] font-medium text-fg">
+              <label class="mb-1 block text-label text-fg">
                 {{ moveDirection === "outof" ? "To" : "From" }}
               </label>
               <select
                 v-model="moveOtherId"
-                class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-sm text-fg"
+                class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg"
               >
                 <option
                   v-for="b in movePickerBudgets"
@@ -167,9 +163,7 @@ async function submitMove() {
             </div>
 
             <div>
-              <label class="mb-1 block text-[13px] font-medium text-fg"
-                >Amount</label
-              >
+              <label class="mb-1 block text-label text-fg">Amount</label>
               <input
                 ref="moveAmountInput"
                 v-model="moveAmount"
@@ -177,19 +171,19 @@ async function submitMove() {
                 min="0.01"
                 step="0.01"
                 placeholder="0.00"
-                class="w-full rounded-subcard border border-border-strong px-3 py-2.5 font-mono text-[15px] text-fg focus:border-border-focus focus:outline-none"
+                class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg focus:border-border-focus focus:outline-none"
                 @keydown.enter="canSubmit && submitMove()"
               />
             </div>
 
-            <p v-if="moveError" class="text-sm text-danger-fg">
+            <p v-if="moveError" class="text-body-sm text-danger-fg">
               {{ moveError }}
             </p>
 
             <div class="flex gap-2 pt-1">
               <button
                 type="button"
-                class="flex-1 rounded-full border border-border py-3 text-sm font-medium text-fg hover:bg-surface-sunken"
+                class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
                 @click="emit('close')"
               >
                 Cancel
@@ -197,7 +191,7 @@ async function submitMove() {
               <button
                 type="button"
                 :disabled="!canSubmit"
-                class="flex-1 rounded-full py-3 text-sm font-medium text-fg-on-accent transition-colors"
+                class="flex-1 rounded-pill py-3 text-label text-fg-on-accent transition-colors"
                 :class="
                   canSubmit
                     ? 'bg-accent hover:bg-accent-hover'

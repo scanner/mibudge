@@ -65,17 +65,17 @@ const fundingSchedule = computed(() =>
         <div class="flex min-w-0 items-center gap-1.5">
           <IconTarget
             v-if="budget.budgetType === 'G'"
-            class="h-4 w-4 flex-none text-icon-muted"
+            class="size-icon-sm flex-none text-icon-muted"
           />
           <IconRepeat
             v-else-if="budget.budgetType === 'R'"
-            class="h-4 w-4 flex-none text-icon-muted"
+            class="size-icon-sm flex-none text-icon-muted"
           />
           <IconBucket
             v-else-if="budget.budgetType === 'C'"
-            class="h-4 w-4 flex-none text-icon-muted"
+            class="size-icon-sm flex-none text-icon-muted"
           />
-          <span class="truncate text-[15px] font-medium text-fg">
+          <span class="truncate text-item-title text-fg">
             {{ budget.name }}
           </span>
         </div>
@@ -84,10 +84,10 @@ const fundingSchedule = computed(() =>
 
       <!-- Row 2: meta + target -->
       <div class="mt-0.5 flex items-center justify-between gap-2">
-        <span class="truncate text-[12px] text-fg-muted">{{ meta }}</span>
+        <span class="truncate text-meta text-fg-muted">{{ meta }}</span>
         <span
           v-if="budget.targetBalance"
-          class="flex-none text-[12px] text-fg-muted"
+          class="flex-none text-meta text-fg-muted"
         >
           of&nbsp;<MoneyAmount :amount="budget.targetBalance" size="sm" />
         </span>
@@ -100,7 +100,7 @@ const fundingSchedule = computed(() =>
       <div class="mt-2 flex items-center justify-between gap-2">
         <span
           v-if="budget.nextFunding"
-          class="truncate text-[12px] text-fg-muted"
+          class="truncate text-meta text-fg-muted"
         >
           <MoneyAmount
             :amount="budget.nextFunding.amount"
@@ -111,7 +111,7 @@ const fundingSchedule = computed(() =>
         </span>
         <span
           v-else-if="budget.budgetType === 'C' && budget.fundingAmount"
-          class="truncate text-[12px] text-fg-muted"
+          class="truncate text-meta text-fg-muted"
         >
           <MoneyAmount
             :amount="budget.fundingAmount"
@@ -122,7 +122,7 @@ const fundingSchedule = computed(() =>
         </span>
         <span
           v-else-if="fundingSchedule"
-          class="truncate text-[12px] text-fg-muted"
+          class="truncate text-meta text-fg-muted"
         >
           Funded&thinsp;·&thinsp;{{ fundingSchedule }}
         </span>

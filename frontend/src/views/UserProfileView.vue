@@ -44,11 +44,11 @@ async function save() {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
-      <h1 class="mb-5 text-[22px] font-medium text-fg">Profile</h1>
+      <h1 class="mb-5 text-page-title text-fg">Profile</h1>
 
       <div
         v-if="error"
-        class="mb-4 rounded-subcard bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+        class="mb-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
         role="alert"
       >
         {{ error }}
@@ -58,10 +58,7 @@ async function save() {
       <form class="space-y-4" @submit.prevent="save">
         <!-- Name -->
         <div>
-          <label
-            class="mb-1.5 block text-sm font-medium text-fg"
-            for="profile-name"
-          >
+          <label class="mb-1.5 block text-label text-fg" for="profile-name">
             Name
           </label>
           <input
@@ -69,16 +66,16 @@ async function save() {
             v-model="name"
             type="text"
             autocomplete="name"
-            class="w-full rounded-subcard border border-border-strong px-3 py-2.5 text-sm text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
             placeholder="Your full name"
           />
         </div>
 
         <!-- Email — read-only -->
         <div>
-          <div class="mb-1.5 text-sm font-medium text-fg">Email</div>
+          <div class="mb-1.5 text-label text-fg">Email</div>
           <div
-            class="rounded-subcard border border-border bg-surface-sunken px-3 py-2.5 text-sm text-fg-muted"
+            class="rounded-control border border-border bg-surface-sunken px-3 py-2.5 text-body-sm text-fg-muted"
           >
             {{ auth.user?.email }}
           </div>
@@ -86,16 +83,13 @@ async function save() {
 
         <!-- Timezone -->
         <div>
-          <label
-            class="mb-1.5 block text-sm font-medium text-fg"
-            for="profile-timezone"
-          >
+          <label class="mb-1.5 block text-label text-fg" for="profile-timezone">
             Timezone
           </label>
           <select
             id="profile-timezone"
             v-model="timezone"
-            class="w-full rounded-subcard border border-border-strong bg-surface px-3 py-2.5 text-sm text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+            class="w-full rounded-control border border-border-strong bg-surface px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
           >
             <option
               v-for="opt in TIMEZONE_OPTIONS"
@@ -105,7 +99,7 @@ async function save() {
               {{ opt.label }}
             </option>
           </select>
-          <p class="mt-1 text-xs text-fg-muted">
+          <p class="mt-1 text-meta text-fg-muted">
             Used to display transaction dates in your local time.
           </p>
         </div>
@@ -115,13 +109,13 @@ async function save() {
           <button
             type="submit"
             :disabled="saving"
-            class="flex-1 rounded-subcard bg-accent py-2.5 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+            class="flex-1 rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
           >
             {{ saving ? "Saving…" : "Save" }}
           </button>
           <button
             type="button"
-            class="flex-1 rounded-subcard border border-border py-2.5 text-sm font-medium text-fg hover:bg-surface-sunken"
+            class="flex-1 rounded-control border border-border py-2.5 text-label text-fg hover:bg-surface-sunken"
             @click="router.push({ name: 'account' })"
           >
             Cancel
@@ -131,9 +125,7 @@ async function save() {
 
       <!-- Change email — separate section, never nested inside the profile form -->
       <section class="mt-8">
-        <h2
-          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
+        <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
           Change email
         </h2>
 
@@ -141,7 +133,7 @@ async function save() {
           <!-- No usable password -->
           <div
             v-if="!auth.user?.hasUsablePassword"
-            class="text-sm text-fg-muted"
+            class="text-body-sm text-fg-muted"
           >
             Your account doesn't have a password set yet.
             <a
@@ -157,7 +149,7 @@ async function save() {
             <!-- Success -->
             <div
               v-if="emailSuccess"
-              class="rounded-subcard bg-success-bg px-3 py-3 text-sm text-success-fg"
+              class="rounded-control bg-success-bg px-3 py-3 text-body-sm text-success-fg"
               role="alert"
             >
               Check your new address for a verification link, and your current
@@ -168,7 +160,7 @@ async function save() {
               <!-- Error -->
               <div
                 v-if="emailError"
-                class="mb-3 rounded-subcard bg-danger-bg px-3 py-3 text-sm text-danger-fg"
+                class="mb-3 rounded-control bg-danger-bg px-3 py-3 text-body-sm text-danger-fg"
                 role="alert"
               >
                 {{ emailError }}
@@ -181,17 +173,17 @@ async function save() {
                   autocomplete="email"
                   placeholder="New email address"
                   required
-                  class="min-w-0 flex-1 rounded-subcard border border-border-strong px-3 py-2.5 text-sm text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+                  class="min-w-0 flex-1 rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
                 />
                 <button
                   type="submit"
                   :disabled="emailSaving || !newEmail"
-                  class="rounded-subcard bg-accent px-4 py-2.5 text-sm font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+                  class="rounded-control bg-accent px-4 py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
                 >
                   {{ emailSaving ? "Sending…" : "Send link" }}
                 </button>
               </form>
-              <p class="mt-1.5 text-xs text-fg-muted">
+              <p class="mt-1.5 text-meta text-fg-muted">
                 A verification link will be sent to the new address. Your
                 current address will receive a security notice with a link to
                 cancel the change for 7 days after confirmation.

@@ -80,14 +80,14 @@ const endDate = computed(() =>
     <div class="px-5 pb-4 pt-5">
       <!-- Row 1: name + type chip -->
       <div class="flex items-center justify-between gap-3">
-        <h1 class="truncate text-[22px] font-medium text-fg">
+        <h1 class="truncate text-page-title text-fg">
           {{ budget.name }}
         </h1>
         <StatusChip :status="status" :label="typeLabel" class="flex-none" />
       </div>
 
       <!-- Row 2: account + meta -->
-      <p class="mt-1 text-sm text-fg-muted">
+      <p class="mt-1 text-body-sm text-fg-muted">
         <span v-if="accountName">{{ accountName }}&thinsp;·&thinsp;</span>
         {{ meta }}
       </p>
@@ -95,7 +95,10 @@ const endDate = computed(() =>
       <!-- Row 3: balance / target -->
       <div class="mt-3 flex items-baseline gap-2">
         <MoneyAmount :amount="budget.balance" size="hero" :coloured="true" />
-        <span v-if="budget.targetBalance" class="text-[15px] text-fg-subtle">
+        <span
+          v-if="budget.targetBalance"
+          class="text-amount font-normal text-fg-subtle"
+        >
           /&nbsp;<MoneyAmount :amount="budget.targetBalance" size="md" />
         </span>
       </div>
@@ -106,7 +109,7 @@ const endDate = computed(() =>
       <!-- Axis labels -->
       <div
         v-if="endDate"
-        class="mt-1 flex justify-between text-[11px] text-fg-subtle"
+        class="mt-1 flex justify-between text-meta text-fg-subtle"
       >
         <span>{{ startDate }}</span>
         <span>{{ endDate }}</span>
@@ -115,7 +118,7 @@ const endDate = computed(() =>
       <!-- Status + next funding -->
       <div class="mt-2 flex items-center justify-between gap-2">
         <StatusChip :status="status" />
-        <span v-if="nextFunding" class="text-[12px] text-fg-muted">
+        <span v-if="nextFunding" class="text-meta text-fg-muted">
           Next funding: {{ nextFunding }}
         </span>
       </div>

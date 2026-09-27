@@ -54,15 +54,11 @@ function openTransaction(id: string) {
 <template>
   <section class="mt-2">
     <div class="mb-2 flex items-center justify-between">
-      <h2
-        class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-      >
-        Transactions
-      </h2>
+      <h2 class="text-overline uppercase text-fg-muted">Transactions</h2>
       <div class="flex items-center gap-1">
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-full transition-colors"
+          class="flex h-7 w-7 items-center justify-center rounded-pill transition-colors"
           :class="
             showInternalTxs
               ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
@@ -72,25 +68,25 @@ function openTransaction(id: string) {
           :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
           @click="toggleInternalTxs"
         >
-          <IconArrowsRightLeft class="h-4 w-4" />
+          <IconArrowsRightLeft class="size-icon-sm" />
         </button>
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+          class="flex h-7 w-7 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
           aria-label="Search transactions"
           @click="toggleSearch"
         >
-          <IconSearch v-if="!searchOpen" class="h-4 w-4" />
-          <IconX v-else class="h-4 w-4" />
+          <IconSearch v-if="!searchOpen" class="size-icon-sm" />
+          <IconX v-else class="size-icon-sm" />
         </button>
       </div>
     </div>
 
     <Transition
-      enter-active-class="transition-all duration-200 ease-out"
+      enter-active-class="transition-all duration-base ease-enter"
       enter-from-class="max-h-0 opacity-0"
       enter-to-class="max-h-12 opacity-100"
-      leave-active-class="transition-all duration-150 ease-in"
+      leave-active-class="transition-all duration-fast ease-exit"
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
@@ -100,12 +96,12 @@ function openTransaction(id: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+          class="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
 
-    <p v-if="txError" class="mb-2 text-sm text-danger-fg" role="alert">
+    <p v-if="txError" class="mb-2 text-body-sm text-danger-fg" role="alert">
       {{ txError }}
     </p>
 
@@ -130,7 +126,7 @@ function openTransaction(id: string) {
       @remove="onRemoveTransaction"
     />
 
-    <p v-else-if="!txError" class="py-4 text-center text-sm text-fg-muted">
+    <p v-else-if="!txError" class="py-4 text-center text-body-sm text-fg-muted">
       {{
         searchQuery
           ? "No matching transactions."

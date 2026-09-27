@@ -116,30 +116,30 @@ function openBudget(id: string) {
       <div class="flex items-center gap-1">
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
           aria-label="Search budgets"
           @click="toggleSearch"
         >
-          <IconSearch v-if="!searchOpen" class="h-5 w-5" />
-          <IconX v-else class="h-5 w-5" />
+          <IconSearch v-if="!searchOpen" class="size-icon-md" />
+          <IconX v-else class="size-icon-md" />
         </button>
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-muted"
+          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
           aria-label="Create budget"
           @click="router.push({ name: 'budget-create' })"
         >
-          <IconPlus class="h-5 w-5" />
+          <IconPlus class="size-icon-md" />
         </button>
       </div>
     </template>
 
     <!-- Search bar -->
     <Transition
-      enter-active-class="transition-all duration-200 ease-out"
+      enter-active-class="transition-all duration-base ease-enter"
       enter-from-class="max-h-0 opacity-0"
       enter-to-class="max-h-12 opacity-100"
-      leave-active-class="transition-all duration-150 ease-in"
+      leave-active-class="transition-all duration-fast ease-exit"
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
@@ -149,7 +149,7 @@ function openBudget(id: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Search budgets…"
-          class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+          class="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
@@ -166,7 +166,7 @@ function openBudget(id: string) {
         ] as Tab[]"
         :key="tab"
         type="button"
-        class="mr-4 pb-2 text-sm font-medium capitalize transition-colors"
+        class="mr-4 pb-2 text-label capitalize transition-colors"
         :class="
           activeTab === tab
             ? 'border-b-2 border-accent-border text-accent-fg'
@@ -191,7 +191,7 @@ function openBudget(id: string) {
     <!-- Funding summary banner -->
     <div
       v-if="summary && !summary.total.isZero()"
-      class="mb-4 rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-[13px] text-info-fg"
+      class="mb-4 rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-body-sm text-info-fg"
     >
       Funded automatically:
       <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
@@ -221,7 +221,7 @@ function openBudget(id: string) {
     <!-- Error -->
     <div
       v-else-if="error"
-      class="rounded-card bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+      class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
     >
       {{ error }}
     </div>
@@ -230,11 +230,7 @@ function openBudget(id: string) {
     <template v-else-if="activeTab === 'all'">
       <!-- Recurring section -->
       <section v-if="recurringBudgets.length > 0">
-        <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
-          Recurring
-        </h2>
+        <h2 class="mb-2 text-overline uppercase text-fg-muted">Recurring</h2>
         <div class="space-y-3">
           <BudgetCard
             v-for="b in recurringBudgets"
@@ -251,11 +247,7 @@ function openBudget(id: string) {
         v-if="cappedBudgets.length > 0"
         :class="recurringBudgets.length > 0 ? 'mt-6' : ''"
       >
-        <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
-          Capped
-        </h2>
+        <h2 class="mb-2 text-overline uppercase text-fg-muted">Capped</h2>
         <div class="space-y-3">
           <BudgetCard
             v-for="b in cappedBudgets"
@@ -273,11 +265,7 @@ function openBudget(id: string) {
           recurringBudgets.length > 0 || cappedBudgets.length > 0 ? 'mt-6' : ''
         "
       >
-        <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
-          Goals
-        </h2>
+        <h2 class="mb-2 text-overline uppercase text-fg-muted">Goals</h2>
         <div class="space-y-3">
           <BudgetCard
             v-for="b in goalBudgets"

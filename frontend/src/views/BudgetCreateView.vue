@@ -28,7 +28,7 @@ function onSaved(budget: Budget) {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg pt-4">
-      <h1 class="mb-5 text-[22px] font-medium text-fg">New budget</h1>
+      <h1 class="mb-5 text-page-title text-fg">New budget</h1>
       <BudgetForm
         mode="create"
         @saved="onSaved"

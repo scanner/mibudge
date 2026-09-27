@@ -1,16 +1,18 @@
 /*
  * Design tokens.
  *
- * Two tiers, both custom properties on `:root`:
+ * Every style value in the SPA is a custom property here, on `:root`:
  *
- *   --palette-*  raw colour ramps.  Only the semantic tier reads them.
- *   --color-*    semantic tokens, named for their purpose.  Templates
- *                reach them through the Tailwind utilities defined in
- *                `tailwind.config.ts` (`text-fg-muted`, `bg-accent`).
+ *   --palette-*  raw colour ramps.  Only the semantic colours read them.
+ *   --color-*    semantic colours, named for their purpose.
+ *   --text-*, --leading-*, --weight-*, --tracking-*   typography roles.
+ *   --space-*, --size-*, --radius-*, --shadow-*, --duration-*, --ease-*
  *
+ * Templates reach them through the Tailwind utilities defined in
+ * `tailwind.config.ts` (`text-fg-muted`, `text-label`, `rounded-card`).
  * Colours are space-separated RGB channels so Tailwind's `/<alpha>`
- * modifier works on every token.  This is the only file in `src/` that
- * contains colour literals.  See `docs/spa/styling.md`.
+ * modifier works.  This is the only file in `src/` that contains colour
+ * literals.  See `docs/spa/styling.md`.
  */
 
 :root {
@@ -117,8 +119,100 @@
   --color-row-unallocated: var(--palette-ocean-400);
 
   /*
+   * Typography roles: size / line height / weight (/ tracking).  Sizes
+   * are rem so the user's text-size setting scales them.
+   */
+  --text-display-amount: 2.25rem;
+  --leading-display-amount: 2.5rem;
+  --text-title-amount: 1.375rem;
+  --leading-title-amount: 1.75rem;
+  --text-amount: 0.9375rem;
+  --leading-amount: 1.25rem;
+  --text-amount-sm: 0.75rem;
+  --leading-amount-sm: 1rem;
+  --text-page-title: 1.375rem;
+  --leading-page-title: 1.75rem;
+  --text-title: 1.125rem;
+  --leading-title: 1.5rem;
+  --text-item-title: 0.9375rem;
+  --leading-item-title: 1.25rem;
+  --text-body: 0.875rem;
+  --leading-body: 1.25rem;
+  --text-body-sm: 0.8125rem;
+  --leading-body-sm: 1.125rem;
+  --text-label: 0.8125rem;
+  --leading-label: 1.125rem;
+  --text-meta: 0.75rem;
+  --leading-meta: 1rem;
+  --text-overline: 0.6875rem;
+  --leading-overline: 1rem;
+  --tracking-overline: 0.06em;
+  --text-badge: 0.625rem;
+  --leading-badge: 0.875rem;
+  --tracking-badge: 0.025em;
+  /* 16px on phones keeps iOS Safari from zooming into a focused field. */
+  --text-input: 1rem;
+  --leading-input: 1.5rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing aliases */
+  --space-page-x: 0.75rem;
+  --space-card-x: 0.75rem;
+  --space-card-y: 0.75rem;
+  --space-stack-sm: 0.5rem;
+  --space-stack-md: 0.75rem;
+  --space-section: 1.5rem;
+
+  /* Sizing */
+  --size-icon-xs: 0.75rem;
+  --size-icon-sm: 1rem;
+  --size-icon-md: 1.25rem;
+  --size-icon-lg: 1.5rem;
+  --size-tap-min: 2.75rem;
+  --size-topbar: 4rem;
+  --size-bottomnav: 4rem;
+  --size-sheet: 30rem;
+  --size-sheet-max-height: 80vh;
+  --size-progress-sm: 3px;
+  --size-progress-md: 5px;
+  --size-progress-lg: 8px;
+  --width-rule: 3px;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-control: 10px;
+  --radius-card: 14px;
+
+  /* Elevation */
+  --shadow-raised: 0 1px 2px 0 rgb(var(--palette-neutral-900) / 0.05);
+  --shadow-control:
+    0 1px 3px 0 rgb(var(--palette-neutral-900) / 0.1),
+    0 1px 2px -1px rgb(var(--palette-neutral-900) / 0.1);
+  --shadow-overlay:
+    0 20px 25px -5px rgb(var(--palette-neutral-900) / 0.1),
+    0 8px 10px -6px rgb(var(--palette-neutral-900) / 0.1);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /*
    * The select chevron is an SVG data URI, which cannot read a custom
    * property, so its stroke is `fg-muted` written out (neutral-600).
    */
   --icon-select-chevron: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5E5A' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}
+
+@media (min-width: 768px) {
+  :root {
+    --text-input: 0.875rem;
+    --leading-input: 1.25rem;
+  }
 }

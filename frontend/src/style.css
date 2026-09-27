@@ -19,14 +19,18 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * The root font size is the browser default (16px, scaled by the
+   * user's text-size setting); every size in the app is rem.  Body text
+   * takes the `text-body` role.
+   */
   html,
   body {
     @apply font-sans text-fg bg-surface antialiased;
-    font-size: 14px;
-    line-height: 1.5;
   }
 
   body {
+    @apply text-body;
     margin: 0;
   }
 

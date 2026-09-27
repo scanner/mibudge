@@ -60,19 +60,19 @@ const { signOut } = useSignOut();
           @click="router.push({ name: 'user-profile' })"
         >
           <div
-            class="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-accent-subtle text-[18px] font-medium text-accent-fg"
+            class="flex h-12 w-12 flex-none items-center justify-center rounded-pill bg-accent-subtle text-title text-accent-fg"
             aria-hidden="true"
           >
             <template v-if="initials">{{ initials }}</template>
-            <IconUser v-else class="h-6 w-6" />
+            <IconUser v-else class="size-icon-lg" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="truncate text-[15px] font-medium text-fg">
+            <div class="truncate text-item-title text-fg">
               {{ auth.user?.name || auth.user?.username || "—" }}
             </div>
-            <div class="text-xs text-fg-muted">{{ auth.user?.username }}</div>
+            <div class="text-meta text-fg-muted">{{ auth.user?.username }}</div>
           </div>
-          <IconChevronRight class="h-5 w-5 flex-none text-icon-muted" />
+          <IconChevronRight class="size-icon-md flex-none text-icon-muted" />
         </button>
       </section>
 
@@ -80,9 +80,7 @@ const { signOut } = useSignOut();
         Section 2 — Bank accounts list
       -->
       <section>
-        <h2
-          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
+        <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
           Bank accounts
         </h2>
         <div
@@ -105,13 +103,13 @@ const { signOut } = useSignOut();
                 "
               >
                 <span
-                  class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-accent"
+                  class="mt-0.5 h-2.5 w-2.5 flex-none rounded-pill bg-accent"
                 />
                 <div class="min-w-0 flex-1">
-                  <div class="truncate text-[15px] font-medium text-fg">
+                  <div class="truncate text-item-title text-fg">
                     {{ account.name }}
                   </div>
-                  <div class="text-xs text-fg-muted">
+                  <div class="text-meta text-fg-muted">
                     {{
                       accountTypeMeta(
                         account.accountType,
@@ -121,17 +119,17 @@ const { signOut } = useSignOut();
                   </div>
                 </div>
                 <div class="flex flex-none flex-col items-end gap-0.5">
-                  <span class="text-[11px] text-fg-muted">
+                  <span class="text-meta text-fg-muted">
                     Available:
                     <MoneyAmount :amount="account.availableBalance" size="sm" />
                   </span>
-                  <span class="text-[11px] text-fg-muted">
+                  <span class="text-meta text-fg-muted">
                     Posted:
                     <MoneyAmount :amount="account.postedBalance" size="sm" />
                   </span>
                   <span
                     v-if="unallocatedFor(account)"
-                    class="text-[11px] font-medium text-money-positive"
+                    class="text-meta font-medium text-money-positive"
                   >
                     <MoneyAmount
                       :amount="unallocatedFor(account)!.balance"
@@ -141,13 +139,15 @@ const { signOut } = useSignOut();
                   </span>
                   <span
                     v-if="nextFundingFor(account)"
-                    class="text-[11px] text-accent-fg"
+                    class="text-meta text-accent-fg"
                   >
                     <MoneyAmount :amount="nextFundingFor(account)!" size="sm" />
                     next event
                   </span>
                 </div>
-                <IconChevronRight class="h-4 w-4 flex-none text-icon-muted" />
+                <IconChevronRight
+                  class="size-icon-sm flex-none text-icon-muted"
+                />
               </button>
             </li>
           </ul>
@@ -160,13 +160,13 @@ const { signOut } = useSignOut();
           >
             <button
               type="button"
-              class="flex w-full items-center gap-3 rounded-b-card px-4 py-3.5 text-left text-sm font-medium text-fg-link hover:bg-accent-subtle"
+              class="flex w-full items-center gap-3 rounded-b-card px-4 py-3.5 text-left text-label text-fg-link hover:bg-accent-subtle"
               @click="router.push({ name: 'bank-account-create' })"
             >
               <span
-                class="flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-accent-border"
+                class="flex h-6 w-6 items-center justify-center rounded-pill border border-dashed border-accent-border"
               >
-                <IconPlus class="h-3.5 w-3.5" />
+                <IconPlus class="size-icon-xs" />
               </span>
               Add bank account
             </button>
@@ -185,9 +185,7 @@ const { signOut } = useSignOut();
         Section 3 — Settings
       -->
       <section>
-        <h2
-          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
+        <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
           Settings
         </h2>
         <div
@@ -196,13 +194,13 @@ const { signOut } = useSignOut();
           <!-- Default account -->
           <div class="flex items-center justify-between px-4 py-3.5">
             <div class="flex items-center gap-3 text-fg">
-              <IconBuildingBank class="h-4 w-4" />
-              <span class="text-sm">Default account</span>
+              <IconBuildingBank class="size-icon-sm" />
+              <span class="text-body-sm">Default account</span>
             </div>
             <select
               :value="defaultAccountId"
               :disabled="ctx.accounts.length === 0"
-              class="rounded-md border border-border-strong bg-surface py-1 pl-2 pr-6 text-xs text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus disabled:opacity-50"
+              class="rounded-xs border border-border-strong bg-surface py-1 pl-2 pr-6 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus disabled:opacity-50"
               @change="
                 setDefaultAccount(($event.target as HTMLSelectElement).value)
               "
@@ -215,7 +213,7 @@ const { signOut } = useSignOut();
           </div>
           <p
             v-if="defaultAccountError"
-            class="px-4 pb-3 text-xs text-danger-fg"
+            class="px-4 pb-3 text-meta text-danger-fg"
             role="alert"
           >
             {{ defaultAccountError }}
@@ -228,11 +226,13 @@ const { signOut } = useSignOut();
               class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-sunken"
               @click="router.push({ name: 'account-settings' })"
             >
-              <IconLock class="h-4 w-4 text-fg-muted" />
-              <span class="flex-1 text-sm text-fg"
+              <IconLock class="size-icon-sm text-fg-muted" />
+              <span class="flex-1 text-body-sm text-fg"
                 >Security &amp; Notifications</span
               >
-              <IconChevronRight class="h-4 w-4 flex-none text-icon-muted" />
+              <IconChevronRight
+                class="size-icon-sm flex-none text-icon-muted"
+              />
             </button>
           </div>
 
@@ -240,7 +240,7 @@ const { signOut } = useSignOut();
           <div class="border-t border-border-subtle">
             <button
               type="button"
-              class="flex w-full items-center gap-3 rounded-b-card px-4 py-3.5 text-left text-sm font-medium text-danger-fg hover:bg-danger-bg"
+              class="flex w-full items-center gap-3 rounded-b-card px-4 py-3.5 text-left text-label text-danger-fg hover:bg-danger-bg"
               @click="signOut"
             >
               Sign out

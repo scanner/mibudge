@@ -57,12 +57,12 @@ async function onDelete() {
 <template>
   <AppShell>
     <div v-if="loading" class="mt-8 flex justify-center">
-      <span class="text-sm text-fg-muted">Loading…</span>
+      <span class="text-body-sm text-fg-muted">Loading…</span>
     </div>
 
     <div
       v-else-if="error"
-      class="mt-4 rounded-subcard bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+      class="mt-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
       role="alert"
     >
       {{ error }}
@@ -124,17 +124,17 @@ async function onDelete() {
           @click="viewBudgets"
         >
           <div>
-            <div class="text-sm font-medium text-fg">
+            <div class="text-label text-fg">
               Budgets
               <span v-if="budgetCount !== null" class="ml-1.5 text-fg-muted">
                 {{ budgetCount }}
               </span>
             </div>
-            <div class="text-xs text-fg-muted">
+            <div class="text-meta text-fg-muted">
               View all budgets for this account
             </div>
           </div>
-          <IconChevronRight class="h-4 w-4 flex-none text-icon-muted" />
+          <IconChevronRight class="size-icon-sm flex-none text-icon-muted" />
         </button>
       </section>
 
@@ -155,17 +155,17 @@ async function onDelete() {
       <section class="pt-2">
         <button
           type="button"
-          class="w-full rounded-card border border-danger-solid py-3 text-sm font-medium text-danger-fg hover:bg-danger-bg"
+          class="w-full rounded-card border border-danger-solid py-3 text-label text-danger-fg hover:bg-danger-bg"
           @click="confirmDelete = true"
         >
           Delete account
         </button>
-        <p class="mt-2 px-1 text-center text-xs text-fg-subtle">
+        <p class="mt-2 px-1 text-center text-meta text-fg-subtle">
           Deletes all budgets, transactions, and allocations for this account.
         </p>
         <p
           v-if="detail.deleteError.value"
-          class="mt-2 text-center text-sm text-danger-fg"
+          class="mt-2 text-center text-body-sm text-danger-fg"
           role="alert"
         >
           {{ detail.deleteError.value }}

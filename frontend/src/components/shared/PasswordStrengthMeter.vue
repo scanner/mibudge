@@ -86,19 +86,22 @@ const SCORE_META: { label: string; bar: string; text: string }[] = [
       <div
         v-for="i in [0, 1, 2, 3, 4]"
         :key="i"
-        class="h-1.5 flex-1 rounded-full transition-colors duration-200"
+        class="h-1.5 flex-1 rounded-pill transition-colors duration-base"
         :class="i <= score ? SCORE_META[score].bar : 'bg-surface-strong'"
       />
     </div>
 
     <!-- Label + warning on the same line -->
-    <p class="text-xs" :class="SCORE_META[score].text">
+    <p class="text-meta" :class="SCORE_META[score].text">
       {{ SCORE_META[score].label
       }}<template v-if="warning"> — {{ warning }}</template>
     </p>
 
     <!-- Suggestions -->
-    <ul v-if="suggestions.length" class="list-disc pl-4 text-xs text-fg-muted">
+    <ul
+      v-if="suggestions.length"
+      class="list-disc pl-4 text-meta text-fg-muted"
+    >
       <li v-for="s in suggestions" :key="s">{{ s }}</li>
     </ul>
   </div>

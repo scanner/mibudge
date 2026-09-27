@@ -35,17 +35,17 @@ const tone = computed(() => progressTone(budgetStatus(props.budget)));
     class="border-t border-info-border/60 bg-info-bg/50 px-4 pb-3 pt-2 group-hover:bg-info-bg"
   >
     <div class="flex items-center justify-between gap-2">
-      <span v-if="budget.nextFunding" class="truncate text-[12px] text-info-fg">
+      <span v-if="budget.nextFunding" class="truncate text-meta text-info-fg">
         <MoneyAmount :amount="budget.nextFunding.amount" size="sm" />/event
       </span>
       <span v-else class="flex-1" />
       <div class="flex-none text-right">
-        <span class="font-mono text-[13px] font-medium text-info-fg">
+        <span class="font-mono text-amount-sm font-medium text-info-fg">
           <MoneyAmount :amount="budget.balance" size="sm" />
         </span>
         <span
           v-if="budget.targetBalance"
-          class="font-mono text-[11px] text-fg-subtle"
+          class="font-mono text-amount-sm text-fg-subtle"
         >
           &nbsp;of&nbsp;
           <MoneyAmount :amount="budget.targetBalance" size="sm" />

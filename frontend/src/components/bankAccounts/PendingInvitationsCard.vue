@@ -44,7 +44,7 @@ function fmtDate(iso: string): string {
     class="overflow-hidden rounded-card border border-border bg-surface"
   >
     <h2
-      class="border-b border-border-subtle px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
+      class="border-b border-border-subtle px-4 py-3 text-overline uppercase text-fg-muted"
     >
       Pending invitations
     </h2>
@@ -55,8 +55,8 @@ function fmtDate(iso: string): string {
         class="flex items-center justify-between px-4 py-3"
       >
         <div>
-          <p class="text-sm text-fg">{{ inv.inviteeEmail }}</p>
-          <p class="mt-0.5 text-xs text-fg-muted">
+          <p class="text-body-sm text-fg">{{ inv.inviteeEmail }}</p>
+          <p class="mt-0.5 text-meta text-fg-muted">
             Expires {{ fmtDate(inv.expiresAt) }}
           </p>
         </div>
@@ -67,14 +67,14 @@ function fmtDate(iso: string): string {
           v-if="canCancel(inv)"
           type="button"
           :disabled="cancellingId === inv.id"
-          class="text-xs font-medium text-danger-fg hover:text-danger-solid-hover disabled:opacity-50"
+          class="text-meta font-medium text-danger-fg hover:text-danger-solid-hover disabled:opacity-50"
           @click="emit('cancel', inv)"
         >
           {{ cancellingId === inv.id ? "Cancelling…" : "Cancel" }}
         </button>
       </li>
     </ul>
-    <p v-if="error" class="px-4 pb-3 text-xs text-danger-fg" role="alert">
+    <p v-if="error" class="px-4 pb-3 text-meta text-danger-fg" role="alert">
       {{ error }}
     </p>
   </section>
