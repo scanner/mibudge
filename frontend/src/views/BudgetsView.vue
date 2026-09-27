@@ -19,14 +19,19 @@ import { useRouter } from "vue-router";
 // app imports
 //
 import BudgetCard from "@/components/budgets/BudgetCard.vue";
-import EmptyState from "@/components/shared/EmptyState.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import EmptyState from "@/components/base/EmptyState.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { useFindShortcut } from "@/composables/useFindShortcut";
 import { useFuzzySearch } from "@/composables/useFuzzySearch";
 import { formatLocalDate } from "@/domain/dates";
 import { useBudgetList } from "@/features/budgets/useBudgetList";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -114,23 +119,16 @@ function openBudget(id: string) {
   <AppShell>
     <template #action>
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-          aria-label="Search budgets"
-          @click="toggleSearch"
-        >
+        <BaseIconButton label="Search budgets" @click="toggleSearch">
           <IconSearch v-if="!searchOpen" class="size-icon-md" />
           <IconX v-else class="size-icon-md" />
-        </button>
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-          aria-label="Create budget"
+        </BaseIconButton>
+        <BaseIconButton
+          label="Create budget"
           @click="router.push({ name: 'budget-create' })"
         >
           <IconPlus class="size-icon-md" />
-        </button>
+        </BaseIconButton>
       </div>
     </template>
 
@@ -143,19 +141,18 @@ function openBudget(id: string) {
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
-      <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
-        <input
+      <div v-if="searchOpen" class="-mx-page-x overflow-hidden px-page-x pb-3">
+        <BaseInput
           ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search budgets…"
-          class="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
 
     <!-- Filter tabs -->
-    <div class="-mx-4 mb-4 flex border-b border-border px-4 pt-3">
+    <div class="-mx-page-x mb-4 flex border-b border-border px-page-x pt-3">
       <button
         v-for="tab in [
           'all',
@@ -189,48 +186,37 @@ function openBudget(id: string) {
     </div>
 
     <!-- Funding summary banner -->
-    <div
+    <BaseBanner
       v-if="summary && !summary.total.isZero()"
-      class="mb-4 rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-body-sm text-info-fg"
+      tone="info"
+      class="mb-4"
     >
       Funded automatically:
       <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
       <template v-if="summary.schedules[0]?.nextDate">
         on
-        {{
-          formatLocalDate(summary.schedules[0].nextDate, {
-            month: "short",
-            day: "numeric",
-          })
-        }}
+        {{ formatLocalDate(summary.schedules[0].nextDate, "month-day") }}
       </template>
       <template v-if="summary.schedules.length > 1">
         across {{ summary.schedules.length }} schedules
       </template>
-    </div>
+    </BaseBanner>
 
     <!-- Loading skeletons -->
     <div v-if="loading" class="space-y-3">
-      <div
-        v-for="i in 4"
-        :key="i"
-        class="h-24 animate-pulse rounded-card bg-surface-muted"
-      />
+      <BaseSkeleton v-for="i in 4" :key="i" class="h-24" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error"
-      class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-    >
+    <BaseBanner v-else-if="error" tone="danger">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <!-- "All" tab: two sections -->
     <template v-else-if="activeTab === 'all'">
       <!-- Recurring section -->
       <section v-if="recurringBudgets.length > 0">
-        <h2 class="mb-2 text-overline uppercase text-fg-muted">Recurring</h2>
+        <BaseSectionHeader title="Recurring" class="mb-2" />
         <div class="space-y-3">
           <BudgetCard
             v-for="b in recurringBudgets"
@@ -247,7 +233,7 @@ function openBudget(id: string) {
         v-if="cappedBudgets.length > 0"
         :class="recurringBudgets.length > 0 ? 'mt-6' : ''"
       >
-        <h2 class="mb-2 text-overline uppercase text-fg-muted">Capped</h2>
+        <BaseSectionHeader title="Capped" class="mb-2" />
         <div class="space-y-3">
           <BudgetCard
             v-for="b in cappedBudgets"
@@ -265,7 +251,7 @@ function openBudget(id: string) {
           recurringBudgets.length > 0 || cappedBudgets.length > 0 ? 'mt-6' : ''
         "
       >
-        <h2 class="mb-2 text-overline uppercase text-fg-muted">Goals</h2>
+        <BaseSectionHeader title="Goals" class="mb-2" />
         <div class="space-y-3">
           <BudgetCard
             v-for="b in goalBudgets"

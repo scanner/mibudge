@@ -11,6 +11,14 @@
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import { formatInstantDate } from "@/domain/dates";
 import { EXPIRY_PRESETS, useApiKeys } from "./useApiKeys";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -34,15 +42,13 @@ const {
 } = useApiKeys();
 
 function mediumDate(iso: string): string {
-  return formatInstantDate(iso, { dateStyle: "medium" });
+  return formatInstantDate(iso, "date");
 }
 </script>
 
 <template>
   <!-- ── API keys ─────────────────────────────────────────────── -->
-  <h2 class="mb-2 mt-10 px-1 text-overline uppercase text-fg-muted">
-    API keys
-  </h2>
+  <BaseSectionHeader title="API keys" class="mb-2 mt-10 px-1" />
 
   <section>
     <p class="mb-3 px-1 text-meta text-fg-muted">
@@ -58,13 +64,9 @@ function mediumDate(iso: string): string {
     </p>
 
     <!-- Error banner -->
-    <div
-      v-if="error"
-      class="mb-3 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-      role="alert"
-    >
+    <BaseBanner v-if="error" tone="danger" class="mb-3">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <!-- One-time plaintext display -->
     <div
@@ -98,63 +100,70 @@ function mediumDate(iso: string): string {
     </div>
 
     <!-- Create key form -->
-    <div class="rounded-card border border-border bg-surface px-4 py-4">
+    <BaseCard padded>
       <form class="flex flex-wrap items-end gap-3" @submit.prevent="create">
         <div class="min-w-40 flex-1">
-          <label class="mb-1.5 block text-label text-fg" for="new-key-name">
-            Name
-          </label>
-          <input
-            id="new-key-name"
-            v-model="newKeyName"
-            type="text"
-            required
-            placeholder="e.g. Bank of America importer"
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-          />
+          <BaseFormField id="new-key-name" label="Name">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="newKeyName"
+                type="text"
+                required
+                placeholder="e.g. Bank of America importer"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
         <div>
-          <label class="mb-1.5 block text-label text-fg" for="new-key-expiry">
-            Expires
-          </label>
-          <select
-            id="new-key-expiry"
-            v-model="newKeyExpiryPreset"
-            class="rounded-control border border-border-strong bg-surface py-2.5 pl-2.5 pr-7 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-          >
-            <option
-              v-for="opt in EXPIRY_PRESETS"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </option>
-          </select>
+          <BaseFormField id="new-key-expiry" label="Expires">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseSelect
+                :id="id"
+                v-model="newKeyExpiryPreset"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+                inline
+              >
+                <option
+                  v-for="opt in EXPIRY_PRESETS"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </BaseSelect>
+            </template>
+          </BaseFormField>
         </div>
         <div v-if="newKeyExpiryPreset === 'custom'" class="w-24">
-          <label class="mb-1.5 block text-label text-fg" for="new-key-days">
-            Days
-          </label>
-          <input
-            id="new-key-days"
-            v-model="newKeyCustomDays"
-            type="number"
-            min="1"
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-          />
+          <BaseFormField id="new-key-days" label="Days">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="newKeyCustomDays"
+                type="number"
+                min="1"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
-        <button
+        <BaseButton
           type="submit"
-          :disabled="creating || !newKeyName.trim()"
-          class="rounded-control bg-accent px-4 py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+          :disabled="!newKeyName.trim()"
+          :loading="creating"
         >
           {{ creating ? "Creating…" : "Create key" }}
-        </button>
+        </BaseButton>
       </form>
       <p v-if="createError" class="mt-2 text-meta text-danger-fg">
         {{ createError }}
       </p>
-    </div>
+    </BaseCard>
 
     <!-- Existing keys -->
     <div
@@ -167,11 +176,13 @@ function mediumDate(iso: string): string {
       v-else-if="keys.length > 0"
       class="mt-3 rounded-card border border-border bg-surface"
     >
-      <ul class="divide-y divide-border-subtle">
-        <li
+      <ul>
+        <BaseListRow
           v-for="key in keys"
+          as="li"
+          align="start"
+          class="justify-between"
           :key="key.id"
-          class="flex items-start justify-between px-4 py-3"
         >
           <div>
             <p class="text-label text-fg">{{ key.name }}</p>
@@ -196,16 +207,17 @@ function mediumDate(iso: string): string {
           >
             Revoked
           </span>
-          <button
+          <BaseButton
             v-else
-            type="button"
-            :disabled="revokingId === key.id"
-            class="mt-0.5 flex-none text-meta font-medium text-danger-fg hover:text-danger-solid-hover disabled:opacity-50"
+            variant="link-danger"
+            size="sm"
+            :loading="revokingId === key.id"
+            class="mt-0.5 flex-none"
             @click="revokeTarget = key"
           >
             {{ revokingId === key.id ? "Revoking…" : "Revoke" }}
-          </button>
-        </li>
+          </BaseButton>
+        </BaseListRow>
       </ul>
     </div>
   </section>
@@ -215,7 +227,6 @@ function mediumDate(iso: string): string {
     title="Revoke this API key?"
     :message="`Any service using '${revokeTarget?.name}' will immediately lose access. This cannot be undone.`"
     confirm-label="Revoke"
-    tone="coral"
     @cancel="revokeTarget = null"
     @confirm="revokeTarget && revoke(revokeTarget)"
   />

@@ -25,7 +25,13 @@ its token or its primitive; every place that uses it follows.
   them is a bug.
 - **Primitives before markup.** Buttons, inputs, form fields, cards,
   list rows, headers, banners, sheets, toggles, badges and skeletons
-  come from `components/base/`.
+  come from `components/base/`. A caller may add classes for
+  properties the primitive does not set -- margin, width, flex,
+  position, a hover tint, an elevation, a background on a header -- and
+  never a class for a property it does set (its colours, type, padding
+  or shape); those come from its props. Two utilities for the same
+  property resolve by stylesheet order, not by the order they are
+  written, so an override would work by accident or not at all.
 - **Accessibility floor (WCAG 2.2 AA).**
   - Text is at least 4.5:1 against its background.
   - Meaningful non-text marks (input borders, focus rings, progress
@@ -184,8 +190,11 @@ rem.
 **How a role is applied.** Each role is one `fontSize` entry that
 carries the size, line height, letter spacing and weight. Two things
 can't go in that entry: the font family and `uppercase`. So:
-- the amount roles are applied only by `MoneyAmount`, which adds
-  `font-mono`;
+- the amount roles are always paired with `font-mono`. `MoneyAmount`
+  does both for a `Money` value; any other element that takes an amount
+  role (a formatted figure, an account number, a key prefix, the
+  currency code, the "--" for a missing amount) adds `font-mono` beside
+  it;
 - `text-overline` is applied only by `BaseSectionHeader`, which adds
   `uppercase`.
 
@@ -211,13 +220,32 @@ can't go in that entry: the font family and `uppercase`. So:
   Body (14px) is for text that stands alone.
 - **The TopBar unallocated amount** is reference information the user
   checks occasionally. It uses `text-amount`, so it stays secondary to
-  the page's own content.
+  the page's own content; the word "Unallocated" beside it takes the
+  same role in Plex Sans so the two read as one line.
 - **Inputs are 16px on phones,** so iOS Safari does not zoom the page
   when a field takes focus, and 14px from `md` up.
   - One `fontSize` entry can't change at a breakpoint, so the role is a
     `--text-input` variable in `tokens.css`, redefined under the `md`
     media query.
   - Only `BaseInput`, `BaseSelect` and `BaseTextarea` use it.
+
+**Dates, times and numbers.** How they are displayed is declared once,
+in `DISPLAY_FORMAT` (`frontend/src/domain/displayFormat.ts`): the locale,
+the date style (`words`, "Jul 17, 2026", or `iso`, "2026-07-17") and the
+clock (the locale's own, `12h` or `24h`). Every date formatter and
+`formatMoney` read it, so a call site names only *which* form it shows:
+
+| Form         | Words                        | ISO          | Use for                                         |
+|--------------|------------------------------|--------------|-------------------------------------------------|
+| `month-day`  | Sep 30                       | 2026-09-30   | A date within the current year (list headers, next funding). |
+| `date`       | Jul 17, 2026                 | 2026-07-17   | Any other calendar date.                        |
+| `month-year` | Aug 2026                     | 2026-08      | A goal's target month.                          |
+| `full`       | Tuesday, October 15, 2024 at 2:34 PM | 2024-10-15 14:34 | A transaction's detail heading.     |
+
+A date is set in Plex Sans in either style: it is read as a date, not
+digit by digit. A date is never shown as a raw API string; it goes
+through a form. A user's display preference, when there is one, is this
+same object.
 
 ### 3.8 Spacing
 
@@ -323,6 +351,9 @@ Icons are Tabler (`@tabler/icons-vue`), sized with `size-icon-*`.
 | 1px borders                                                  | Hairlines render consistently and stay visible on every display.                                               |
 | 16px inputs on phones                                        | iOS Safari does not zoom the page when a field takes focus.                                                    |
 | One sheet width                                              | Every sheet and dialog opens at the same size from `md` up.                                                    |
+| A disabled filled button turns grey; other controls fade to 50% | The change of colour marks the state at a glance; outlined and text controls keep their shape and fade.   |
+| Secondary buttons are filled with `surface`                  | They read as buttons on the canvas as well as inside cards.                                                    |
+| A field's hint sits below the control                        | Label, control, then help and errors: the order a reader meets them.                                           |
 
 ## 5. Purpose -> token / primitive lookup
 

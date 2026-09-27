@@ -5,6 +5,10 @@
 // parent can pass any @tabler/icons-vue component.
 //
 
+// app imports
+//
+import BaseButton from "@/components/base/BaseButton.vue";
+
 ////////////////////////////////////////////////////////////////////////
 //
 interface Props {
@@ -29,13 +33,8 @@ defineEmits<{
     <p v-if="message" class="mt-1 max-w-xs text-body-sm text-fg-muted">
       {{ message }}
     </p>
-    <button
-      v-if="actionLabel"
-      type="button"
-      class="mt-4 rounded-pill bg-accent px-4 py-2 text-label text-fg-on-accent hover:bg-accent-hover"
-      @click="$emit('action')"
-    >
+    <BaseButton v-if="actionLabel" class="mt-4" @click="$emit('action')">
       {{ actionLabel }}
-    </button>
+    </BaseButton>
   </div>
 </template>

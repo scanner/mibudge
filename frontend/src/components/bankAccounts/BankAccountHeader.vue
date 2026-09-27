@@ -13,6 +13,10 @@ import { IconPencil } from "@tabler/icons-vue";
 //
 import { accountTypeLabel } from "@/domain/labels";
 import type { BankAccount } from "@/models/bankAccount";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -40,51 +44,44 @@ const emit = defineEmits<{
     v-if="editing"
     class="rounded-card border border-accent-border bg-surface px-4 py-4"
   >
-    <label class="mb-1.5 block text-label text-fg" for="edit-name">
-      Account name
-    </label>
-    <input
-      id="edit-name"
-      v-model="name"
-      type="text"
-      class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-      @keydown.enter="emit('save')"
-      @keydown.escape="emit('cancel')"
-    />
+    <BaseFormField id="edit-name" label="Account name">
+      <template #default="{ id, describedBy, invalid }">
+        <BaseInput
+          :id="id"
+          v-model="name"
+          type="text"
+          @keydown.enter="emit('save')"
+          @keydown.escape="emit('cancel')"
+          :aria-describedby="describedBy"
+          :invalid="invalid"
+        />
+      </template>
+    </BaseFormField>
     <label
       class="mb-1.5 mt-3 block text-label text-fg"
       for="edit-account-number"
     >
       Account number
     </label>
-    <input
+    <BaseInput
       id="edit-account-number"
       v-model="accountNumber"
       type="text"
       inputmode="numeric"
-      class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
       @keydown.enter="emit('save')"
       @keydown.escape="emit('cancel')"
+      mono
     />
     <p v-if="nameError" class="mt-1 text-meta text-danger-fg">
       {{ nameError }}
     </p>
     <div class="mt-3 flex gap-2">
-      <button
-        type="button"
-        :disabled="saving"
-        class="flex-1 rounded-control bg-accent py-2 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
-        @click="emit('save')"
-      >
+      <BaseButton :loading="saving" class="flex-1" @click="emit('save')">
         {{ saving ? "Saving…" : "Save" }}
-      </button>
-      <button
-        type="button"
-        class="flex-1 rounded-control border border-border py-2 text-label text-fg hover:bg-surface-sunken"
-        @click="emit('cancel')"
-      >
+      </BaseButton>
+      <BaseButton variant="secondary" class="flex-1" @click="emit('cancel')">
         Cancel
-      </button>
+      </BaseButton>
     </div>
   </div>
 
@@ -94,14 +91,9 @@ const emit = defineEmits<{
       <h1 class="text-page-title text-fg">
         {{ account.name }}
       </h1>
-      <button
-        type="button"
-        class="flex h-7 w-7 flex-none items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted hover:text-fg-muted"
-        aria-label="Edit account"
-        @click="emit('edit')"
-      >
+      <BaseIconButton label="Edit account" size="sm" @click="emit('edit')">
         <IconPencil class="size-icon-sm" />
-      </button>
+      </BaseIconButton>
     </div>
     <p class="text-body-sm text-fg-muted">
       {{ accountTypeLabel(account.accountType) }}

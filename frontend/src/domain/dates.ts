@@ -1,7 +1,8 @@
 //
 // Calendar dates and instants for display.  Domain layer: pure
-// TypeScript; the timezone, the clock ("now") and the locale are
-// parameters, never read from globals behind the caller's back.
+// TypeScript; the timezone and the clock ("now") are parameters, and
+// every formatter takes the display format as a last parameter that
+// defaults to `DISPLAY_FORMAT` (`domain/displayFormat.ts`).
 //
 // Two kinds of value come from the API:
 //
@@ -18,6 +19,11 @@
 // midnight in the user's zone (e.g. `2024-10-15T07:00:00Z` for midnight
 // PDT), so `txDateStr(iso, profileZone)` recovers the bank's date.
 //
+
+// app imports
+//
+import { DISPLAY_FORMAT } from "@/domain/displayFormat";
+import type { DateForm, DisplayFormat } from "@/domain/displayFormat";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -119,16 +125,38 @@ export function daysBetween(from: LocalDate, to: LocalDate): number {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Format a calendar date, e.g.
-// `formatLocalDate(d, { month: "short", day: "numeric" })` → `"Aug 1"`.
-// The same day is rendered in every browser zone.
+// `Intl` options for each `DateForm` when dates are shown in words.
+//
+const WORD_FORMS: Record<
+  Exclude<DateForm, "full">,
+  Intl.DateTimeFormatOptions
+> = {
+  "month-day": { month: "short", day: "numeric" },
+  date: { month: "short", day: "numeric", year: "numeric" },
+  "month-year": { month: "short", year: "numeric" },
+};
+
+////////////////////////////////////////////////////////////////////////
+//
+function isoForm(date: LocalDate, form: DateForm): string {
+  return form === "month-year" ? date.slice(0, 7) : date;
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// Format a calendar date in `form`, e.g. `formatLocalDate(d, "date")`
+// -> `"Aug 1, 2026"` (or `"2026-08-01"` with ISO dates).  The same day
+// is rendered in every browser zone.
 //
 export function formatLocalDate(
   date: LocalDate,
-  options: Intl.DateTimeFormatOptions,
-  locale?: string,
+  form: DateForm,
+  fmt: DisplayFormat = DISPLAY_FORMAT,
 ): string {
-  return utcMidnight(date).toLocaleDateString(locale, {
+  if (fmt.dates === "iso") return isoForm(date, form);
+  const options =
+    form === "full" ? { dateStyle: "full" as const } : WORD_FORMS[form];
+  return utcMidnight(date).toLocaleDateString(fmt.locale, {
     ...options,
     timeZone: "UTC",
   });
@@ -136,32 +164,31 @@ export function formatLocalDate(
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Format the date part of an instant, e.g. an account's `created_at`.
-// `timezone` defaults to the browser's zone.
+// Format the date part of an instant, e.g. an account's `created_at`,
+// in `form`.  `timezone` defaults to the browser's zone.
 //
 export function formatInstantDate(
   isoString: string,
-  options: Intl.DateTimeFormatOptions,
+  form: DateForm,
   timezone?: string,
-  locale?: string,
+  fmt: DisplayFormat = DISPLAY_FORMAT,
 ): string {
-  return new Date(isoString).toLocaleDateString(locale, {
-    ...options,
-    ...(timezone ? { timeZone: timezone } : {}),
-  });
+  const zone = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return formatLocalDate(txDateStr(isoString, zone), form, fmt);
 }
 
 ////////////////////////////////////////////////////////////////////////
 //
-// List-group header for a calendar date: `"Today"`, `"Yesterday"`, a
-// short date (`"Apr 15"`), or a short date with the year when the year
-// differs from today's (`"Dec 25, 2025"`).  `todayStr` comes from
-// `todayDateStr(profileZone)`, so "today" follows the profile zone.
+// List-group header for a calendar date: `"Today"`, `"Yesterday"`, or
+// the date -- `month-day` within this year, `date` for another year
+// (`"Apr 15"`, `"Dec 25, 2025"`; ISO dates always show the full date).
+// `todayStr` comes from `todayDateStr(profileZone)`, so "today" follows
+// the profile zone.
 //
 export function formatDateHeader(
   dateStr: string,
   todayStr: string,
-  locale?: string,
+  fmt: DisplayFormat = DISPLAY_FORMAT,
 ): string {
   const date = toLocalDate(dateStr);
   const today = toLocalDate(todayStr);
@@ -169,50 +196,49 @@ export function formatDateHeader(
   if (date === today) return "Today";
   if (date === addDays(today, -1)) return "Yesterday";
 
-  const differentYear = date.slice(0, 4) !== today.slice(0, 4);
-  return formatLocalDate(
-    date,
-    {
-      month: "short",
-      day: "numeric",
-      ...(differentYear ? { year: "numeric" } : {}),
-    },
-    locale,
-  );
+  const sameYear = date.slice(0, 4) === today.slice(0, 4);
+  return formatLocalDate(date, sameYear ? "month-day" : "date", fmt);
 }
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Long form of a transaction instant in `timezone`, e.g.
-// `"Tuesday, October 15, 2024"`, or with the time when the local time
-// is not midnight: `"Tuesday, October 15, 2024 at 2:34 PM"`.  The
-// locale supplies the words and the joiner.
+// The `full` form of a transaction instant in `timezone`, e.g.
+// `"Tuesday, October 15, 2024"`, with the time when the local time is
+// not midnight: `"Tuesday, October 15, 2024 at 2:34 PM"` (or
+// `"2024-10-15 14:34"` with ISO dates and the 24-hour clock).
 //
 export function formatTxDateLong(
   isoString: string,
   timezone: string,
-  locale?: string,
+  fmt: DisplayFormat = DISPLAY_FORMAT,
 ): string {
   const d = new Date(isoString);
+  const hourCycle =
+    fmt.clock === "locale" ? undefined : fmt.clock === "24h" ? "h23" : "h12";
 
-  const timeParts = new Intl.DateTimeFormat("en-US", {
+  const time = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
+    hourCycle: "h23",
+  }).format(d);
+  const atMidnight = time === "00:00";
 
-  const hour = parseInt(timeParts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = parseInt(
-    timeParts.find((p) => p.type === "minute")?.value ?? "0",
-  );
+  if (fmt.dates === "iso") {
+    const day = txDateStr(isoString, timezone);
+    if (atMidnight) return day;
+    const clock = new Intl.DateTimeFormat(fmt.locale, {
+      timeZone: timezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hourCycle,
+    }).format(d);
+    return `${day} ${clock}`;
+  }
 
-  // `hour12: false` renders midnight as "24" in some engines.
-  const atMidnight = (hour === 0 || hour === 24) && minute === 0;
-
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(fmt.locale, {
     timeZone: timezone,
     dateStyle: "full",
-    ...(atMidnight ? {} : { timeStyle: "short" }),
+    ...(atMidnight ? {} : { timeStyle: "short", hourCycle }),
   }).format(d);
 }

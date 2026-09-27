@@ -22,14 +22,18 @@ import { useRouter } from "vue-router";
 
 // app imports
 //
-import EmptyState from "@/components/shared/EmptyState.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import EmptyState from "@/components/base/EmptyState.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { accountTypeMeta } from "@/domain/labels";
 import { useSignOut } from "@/features/auth/useSignOut";
 import { useAccountHub } from "@/features/settings/useAccountHub";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useSessionStore } from "@/stores/session";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -54,9 +58,11 @@ const { signOut } = useSignOut();
         Section 1 — Profile card
       -->
       <section>
-        <button
+        <BaseCard
+          as="button"
+          padded
+          class="flex w-full items-center gap-4 text-left hover:bg-surface-sunken"
           type="button"
-          class="flex w-full items-center gap-4 rounded-card border border-border bg-surface px-4 py-4 text-left hover:bg-surface-sunken"
           @click="router.push({ name: 'user-profile' })"
         >
           <div
@@ -73,28 +79,23 @@ const { signOut } = useSignOut();
             <div class="text-meta text-fg-muted">{{ auth.user?.username }}</div>
           </div>
           <IconChevronRight class="size-icon-md flex-none text-icon-muted" />
-        </button>
+        </BaseCard>
       </section>
 
       <!--
         Section 2 — Bank accounts list
       -->
       <section>
-        <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
-          Bank accounts
-        </h2>
-        <div
-          class="overflow-hidden rounded-card border border-border bg-surface"
-        >
+        <BaseSectionHeader title="Bank accounts" class="mb-2 px-1" />
+        <BaseCard>
           <ul>
             <li
               v-for="(account, idx) in ctx.accounts"
               :key="account.id"
               :class="idx > 0 ? 'border-t border-border-subtle' : ''"
             >
-              <button
-                type="button"
-                class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-sunken"
+              <BaseListRow
+                as="button"
                 @click="
                   router.push({
                     name: 'bank-account-detail',
@@ -148,7 +149,7 @@ const { signOut } = useSignOut();
                 <IconChevronRight
                   class="size-icon-sm flex-none text-icon-muted"
                 />
-              </button>
+              </BaseListRow>
             </li>
           </ul>
 
@@ -171,7 +172,7 @@ const { signOut } = useSignOut();
               Add bank account
             </button>
           </div>
-        </div>
+        </BaseCard>
 
         <EmptyState
           v-if="ctx.accounts.length === 0 && !ctx.loading"
@@ -185,32 +186,27 @@ const { signOut } = useSignOut();
         Section 3 — Settings
       -->
       <section>
-        <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
-          Settings
-        </h2>
-        <div
-          class="overflow-hidden rounded-card border border-border bg-surface"
-        >
+        <BaseSectionHeader title="Settings" class="mb-2 px-1" />
+        <BaseCard>
           <!-- Default account -->
-          <div class="flex items-center justify-between px-4 py-3.5">
+          <BaseListRow class="justify-between">
             <div class="flex items-center gap-3 text-fg">
               <IconBuildingBank class="size-icon-sm" />
               <span class="text-body-sm">Default account</span>
             </div>
-            <select
-              :value="defaultAccountId"
+            <BaseSelect
+              :model-value="defaultAccountId"
               :disabled="ctx.accounts.length === 0"
-              class="rounded-xs border border-border-strong bg-surface py-1 pl-2 pr-6 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus disabled:opacity-50"
-              @change="
-                setDefaultAccount(($event.target as HTMLSelectElement).value)
-              "
+              @update:model-value="setDefaultAccount(String($event ?? ''))"
+              size="sm"
+              inline
             >
               <option value="">None</option>
               <option v-for="a in ctx.accounts" :key="a.id" :value="a.id">
                 {{ a.name }}
               </option>
-            </select>
-          </div>
+            </BaseSelect>
+          </BaseListRow>
           <p
             v-if="defaultAccountError"
             class="px-4 pb-3 text-meta text-danger-fg"
@@ -221,9 +217,8 @@ const { signOut } = useSignOut();
 
           <!-- Security & notifications -->
           <div class="border-t border-border-subtle">
-            <button
-              type="button"
-              class="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-sunken"
+            <BaseListRow
+              as="button"
               @click="router.push({ name: 'account-settings' })"
             >
               <IconLock class="size-icon-sm text-fg-muted" />
@@ -233,7 +228,7 @@ const { signOut } = useSignOut();
               <IconChevronRight
                 class="size-icon-sm flex-none text-icon-muted"
               />
-            </button>
+            </BaseListRow>
           </div>
 
           <!-- Sign out -->
@@ -246,7 +241,7 @@ const { signOut } = useSignOut();
               Sign out
             </button>
           </div>
-        </div>
+        </BaseCard>
       </section>
     </div>
   </AppShell>

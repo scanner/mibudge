@@ -21,11 +21,14 @@ import { computed } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import type { LocalDate } from "@/domain/dates";
 import { daysBetween, formatLocalDate } from "@/domain/dates";
 import { rruleHuman } from "@/domain/rrule";
 import type { Budget } from "@/models/budget";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -36,14 +39,8 @@ const props = defineProps<{
   today: LocalDate;
 }>();
 
-const SHORT_DATE: Intl.DateTimeFormatOptions = {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-};
-
 function shortDate(date: LocalDate | null): string {
-  return date ? formatLocalDate(date, SHORT_DATE) : "—";
+  return date ? formatLocalDate(date, "date") : "—";
 }
 
 function schedule(rule: string | null): string {
@@ -64,18 +61,12 @@ const nextFunding = computed(() => {
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-card border border-border bg-surface">
-    <h2
-      class="border-b border-border-subtle px-4 py-3 text-overline uppercase text-fg-muted"
-    >
-      Configuration
-    </h2>
+  <BaseCard as="section">
+    <BaseSectionHeader title="Configuration" card />
 
     <!-- Goal-specific rows -->
     <template v-if="budget.budgetType === 'G'">
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      <BaseListRow>
         <IconTarget class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Target amount</span>
         <MoneyAmount
@@ -84,30 +75,26 @@ const nextFunding = computed(() => {
           size="md"
         />
         <span v-else class="text-body-sm text-fg-muted">—</span>
-      </div>
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      </BaseListRow>
+      <BaseListRow>
         <IconCalendar class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Target date</span>
         <span class="text-body-sm text-fg-muted">
           {{ shortDate(budget.targetDate) }}
         </span>
-      </div>
-      <div class="flex items-center gap-3 px-4 py-3">
+      </BaseListRow>
+      <BaseListRow>
         <IconClock class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Funding schedule</span>
         <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.fundingSchedule) }}
         </span>
-      </div>
+      </BaseListRow>
     </template>
 
     <!-- Capped-specific rows -->
     <template v-else-if="budget.budgetType === 'C'">
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      <BaseListRow>
         <IconTarget class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Cap</span>
         <MoneyAmount
@@ -116,10 +103,8 @@ const nextFunding = computed(() => {
           size="md"
         />
         <span v-else class="text-body-sm text-fg-muted">—</span>
-      </div>
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      </BaseListRow>
+      <BaseListRow>
         <IconCoin class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Amount per event</span>
         <MoneyAmount
@@ -128,48 +113,40 @@ const nextFunding = computed(() => {
           size="md"
         />
         <span v-else class="text-body-sm text-fg-muted">—</span>
-      </div>
-      <div class="flex items-center gap-3 px-4 py-3">
+      </BaseListRow>
+      <BaseListRow>
         <IconClock class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Funding schedule</span>
         <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.fundingSchedule) }}
         </span>
-      </div>
+      </BaseListRow>
     </template>
 
     <!-- Recurring-specific rows -->
     <template v-else>
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      <BaseListRow>
         <IconRefresh class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Refresh cycle</span>
         <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.recurrenceSchedule) }}
         </span>
-      </div>
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      </BaseListRow>
+      <BaseListRow>
         <IconCalendar class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Next refresh</span>
         <span class="text-body-sm text-fg-muted">
           {{ shortDate(budget.nextRecurrence) }}
         </span>
-      </div>
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      </BaseListRow>
+      <BaseListRow>
         <IconClock class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Funding schedule</span>
         <span class="text-right text-body-sm text-fg-muted">
           {{ schedule(budget.fundingSchedule) }}
         </span>
-      </div>
-      <div
-        class="flex items-center gap-3 border-b border-border-subtle px-4 py-3"
-      >
+      </BaseListRow>
+      <BaseListRow>
         <IconTarget class="size-icon-sm flex-none text-icon-muted" />
         <span class="flex-1 text-body-sm text-fg">Target amount</span>
         <MoneyAmount
@@ -178,14 +155,11 @@ const nextFunding = computed(() => {
           size="md"
         />
         <span v-else class="text-body-sm text-fg-muted">—</span>
-      </div>
+      </BaseListRow>
     </template>
 
     <!-- Next funding row — shown for any budget that has an upcoming event -->
-    <div
-      v-if="nextFunding"
-      class="flex items-start gap-3 border-t border-border-subtle px-4 py-3"
-    >
+    <BaseListRow v-if="nextFunding" align="start">
       <IconCalendar class="mt-0.5 size-icon-sm flex-none text-icon-muted" />
       <div class="flex-1">
         <span class="text-body-sm text-fg"> Next fill-up deposit </span>
@@ -202,6 +176,6 @@ const nextFunding = computed(() => {
           <span v-else>({{ Math.abs(nextFunding.daysAway) }} days ago)</span>
         </div>
       </div>
-    </div>
-  </section>
+    </BaseListRow>
+  </BaseCard>
 </template>

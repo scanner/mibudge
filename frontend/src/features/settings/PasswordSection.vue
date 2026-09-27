@@ -15,6 +15,12 @@ import { useRouter } from "vue-router";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter.vue";
 import { useSessionStore } from "@/stores/session";
 import { usePasswordChange } from "./usePasswordChange";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -38,11 +44,9 @@ const {
 <template>
   <!-- Password change card -->
   <section>
-    <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
-      Change password
-    </h2>
+    <BaseSectionHeader title="Change password" class="mb-2 px-1" />
 
-    <div class="rounded-card border border-border bg-surface px-4 py-4">
+    <BaseCard padded>
       <!-- No usable password: guide user to reset flow -->
       <div
         v-if="!session.user?.hasUsablePassword"
@@ -52,138 +56,96 @@ const {
           Your account doesn't have a password set yet — this happens when your
           account was created via an invitation.
         </p>
-        <a
-          href="/accounts/password/reset/"
-          class="inline-block rounded-control bg-accent px-4 py-2.5 text-label text-fg-on-accent hover:bg-accent-hover"
-        >
+        <BaseButton as="a" href="/accounts/password/reset/">
           Set a password via email
-        </a>
+        </BaseButton>
       </div>
 
       <template v-else>
         <!-- Success banner -->
-        <div
-          v-if="success"
-          class="mb-4 rounded-control bg-success-bg px-4 py-3 text-body-sm text-success-fg"
-          role="alert"
-        >
+        <BaseBanner v-if="success" tone="success" class="mb-4">
           Password changed successfully.
-        </div>
+        </BaseBanner>
 
         <!-- Form-level error -->
-        <div
-          v-if="formError"
-          class="mb-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-          role="alert"
-        >
+        <BaseBanner v-if="formError" tone="danger" class="mb-4">
           {{ formError }}
-        </div>
+        </BaseBanner>
 
         <form class="space-y-4" @submit.prevent="submit">
           <!-- Current password -->
-          <div>
-            <label
-              class="mb-1.5 block text-label text-fg"
-              for="current-password"
-            >
-              Current password
-            </label>
-            <input
-              id="current-password"
-              v-model="currentPassword"
-              type="password"
-              autocomplete="current-password"
-              class="w-full rounded-control border px-3 py-2.5 text-input text-fg focus:outline-none focus:ring-1"
-              :class="
-                fieldError('current_password')
-                  ? 'border-danger-solid focus:border-danger-solid focus:ring-danger-solid'
-                  : 'border-border-strong focus:border-border-focus focus:ring-border-focus'
-              "
-            />
-            <p
-              v-if="fieldError('current_password')"
-              class="mt-1 text-meta text-danger-fg"
-            >
-              {{ fieldError("current_password") }}
-            </p>
-          </div>
+          <BaseFormField
+            id="current-password"
+            label="Current password"
+            :error="fieldError('current_password')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="currentPassword"
+                type="password"
+                autocomplete="current-password"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
 
           <!-- New password -->
-          <div>
-            <label class="mb-1.5 block text-label text-fg" for="new-password">
-              New password
-            </label>
-            <input
-              id="new-password"
-              v-model="newPassword"
-              type="password"
-              autocomplete="new-password"
-              class="w-full rounded-control border px-3 py-2.5 text-input text-fg focus:outline-none focus:ring-1"
-              :class="
-                fieldError('new_password')
-                  ? 'border-danger-solid focus:border-danger-solid focus:ring-danger-solid'
-                  : 'border-border-strong focus:border-border-focus focus:ring-border-focus'
-              "
-            />
-            <PasswordStrengthMeter
-              :password="newPassword"
-              @score="strengthScore = $event"
-            />
-            <p
-              v-if="fieldError('new_password')"
-              class="mt-1 text-meta text-danger-fg"
-            >
-              {{ fieldError("new_password") }}
-            </p>
-          </div>
+          <BaseFormField
+            id="new-password"
+            label="New password"
+            :error="fieldError('new_password')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="newPassword"
+                type="password"
+                autocomplete="new-password"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+              <PasswordStrengthMeter
+                :password="newPassword"
+                @score="strengthScore = $event"
+              />
+            </template>
+          </BaseFormField>
 
           <!-- Confirm password -->
-          <div>
-            <label
-              class="mb-1.5 block text-label text-fg"
-              for="confirm-password"
-            >
-              Confirm new password
-            </label>
-            <input
-              id="confirm-password"
-              v-model="confirmPassword"
-              type="password"
-              autocomplete="new-password"
-              class="w-full rounded-control border px-3 py-2.5 text-input text-fg focus:outline-none focus:ring-1"
-              :class="
-                fieldError('confirm_password')
-                  ? 'border-danger-solid focus:border-danger-solid focus:ring-danger-solid'
-                  : 'border-border-strong focus:border-border-focus focus:ring-border-focus'
-              "
-            />
-            <p
-              v-if="fieldError('confirm_password')"
-              class="mt-1 text-meta text-danger-fg"
-            >
-              {{ fieldError("confirm_password") }}
-            </p>
-          </div>
+          <BaseFormField
+            id="confirm-password"
+            label="Confirm new password"
+            :error="fieldError('confirm_password')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="confirmPassword"
+                type="password"
+                autocomplete="new-password"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
 
           <!-- Actions -->
           <div class="flex gap-3 pt-2">
-            <button
-              type="submit"
-              :disabled="submitDisabled"
-              class="flex-1 rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
-            >
+            <BaseButton type="submit" :disabled="submitDisabled" class="flex-1">
               {{ saving ? "Saving…" : "Change password" }}
-            </button>
-            <button
-              type="button"
-              class="flex-1 rounded-control border border-border py-2.5 text-label text-fg hover:bg-surface-sunken"
+            </BaseButton>
+            <BaseButton
+              variant="secondary"
+              class="flex-1"
               @click="router.push({ name: 'account' })"
             >
               Cancel
-            </button>
+            </BaseButton>
           </div>
         </form>
       </template>
-    </div>
+    </BaseCard>
   </section>
 </template>

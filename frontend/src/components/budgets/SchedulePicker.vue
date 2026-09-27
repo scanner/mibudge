@@ -29,6 +29,9 @@ import type {
   RruleYearly,
   Weekday,
 } from "@/domain/rrule";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -182,12 +185,10 @@ function yearlyDayLabel(n: number): string {
 </script>
 
 <template>
-  <div class="rounded-card border border-border bg-surface">
+  <BaseCard>
     <!-- Label -->
     <div class="px-4 pt-3">
-      <p class="text-overline uppercase text-fg-muted">
-        {{ label }}
-      </p>
+      <BaseSectionHeader :title="label" as="div" />
     </div>
 
     <!-- Frequency tabs -->
@@ -211,9 +212,8 @@ function yearlyDayLabel(n: number): string {
     <div class="space-y-3 p-4">
       <!-- ── WEEKLY ── -->
       <template v-if="freq === 'WEEKLY'">
-        <select
+        <BaseSelect
           :value="weeklyInterval"
-          class="w-full rounded-control border border-border-strong px-3 py-2 text-input text-fg"
           @change="
             weeklyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -227,7 +227,7 @@ function yearlyDayLabel(n: number): string {
           >
             {{ opt.label }}
           </option>
-        </select>
+        </BaseSelect>
 
         <div v-if="!intervalOnly" class="flex gap-1.5">
           <button
@@ -249,9 +249,8 @@ function yearlyDayLabel(n: number): string {
 
       <!-- ── MONTHLY ── -->
       <template v-else-if="freq === 'MONTHLY'">
-        <select
+        <BaseSelect
           :value="monthlyInterval"
-          class="w-full rounded-control border border-border-strong px-3 py-2 text-input text-fg"
           @change="
             monthlyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -265,7 +264,7 @@ function yearlyDayLabel(n: number): string {
           >
             {{ opt.label }}
           </option>
-        </select>
+        </BaseSelect>
 
         <!-- Day-of-month grid: 1–31 + Last -->
         <div v-if="!intervalOnly" class="grid grid-cols-8 gap-1">
@@ -300,9 +299,8 @@ function yearlyDayLabel(n: number): string {
 
       <!-- ── YEARLY ── -->
       <template v-else>
-        <select
+        <BaseSelect
           :value="yearlyInterval"
-          class="w-full rounded-control border border-border-strong px-3 py-2 text-input text-fg"
           @change="
             yearlyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -311,15 +309,15 @@ function yearlyDayLabel(n: number): string {
         >
           <option :value="1">Every year</option>
           <option :value="2">Every 2 years</option>
-        </select>
+        </BaseSelect>
 
         <div v-if="!intervalOnly" class="grid grid-cols-2 gap-2">
-          <select
+          <BaseSelect
             :value="yearlyMonth"
-            class="rounded-control border border-border-strong px-3 py-2 text-input text-fg"
             @change="
               yearlyMonth = Number(($event.target as HTMLSelectElement).value)
             "
+            inline
           >
             <option
               v-for="(name, idx) in MONTH_NAMES"
@@ -328,19 +326,19 @@ function yearlyDayLabel(n: number): string {
             >
               {{ name }}
             </option>
-          </select>
+          </BaseSelect>
 
-          <select
+          <BaseSelect
             :value="yearlyDay"
-            class="rounded-control border border-border-strong px-3 py-2 text-input text-fg"
             @change="
               yearlyDay = Number(($event.target as HTMLSelectElement).value)
             "
+            inline
           >
             <option v-for="d in YEARLY_DAY_OPTIONS" :key="d" :value="d">
               {{ yearlyDayLabel(d) }}
             </option>
-          </select>
+          </BaseSelect>
         </div>
       </template>
 
@@ -352,5 +350,5 @@ function yearlyDayLabel(n: number): string {
         <p class="text-body-sm text-fg">{{ rruleHuman(currentRrule) }}</p>
       </div>
     </div>
-  </div>
+  </BaseCard>
 </template>

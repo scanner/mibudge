@@ -10,6 +10,9 @@
 //
 import { formatInstantDate } from "@/domain/dates";
 import type { Invitation } from "@/models/invitation";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -23,11 +26,7 @@ defineProps<{
 const emit = defineEmits<{ (e: "cancel", inv: Invitation): void }>();
 
 function fmtDate(iso: string): string {
-  return formatInstantDate(iso, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatInstantDate(iso, "date");
 }
 </script>
 
@@ -43,16 +42,13 @@ function fmtDate(iso: string): string {
     v-if="invitations.length > 0 || error"
     class="overflow-hidden rounded-card border border-border bg-surface"
   >
-    <h2
-      class="border-b border-border-subtle px-4 py-3 text-overline uppercase text-fg-muted"
-    >
-      Pending invitations
-    </h2>
-    <ul class="divide-y divide-border-subtle">
-      <li
+    <BaseSectionHeader title="Pending invitations" card />
+    <ul>
+      <BaseListRow
         v-for="inv in invitations"
+        as="li"
+        class="justify-between"
         :key="inv.id"
-        class="flex items-center justify-between px-4 py-3"
       >
         <div>
           <p class="text-body-sm text-fg">{{ inv.inviteeEmail }}</p>
@@ -63,16 +59,16 @@ function fmtDate(iso: string): string {
         <!-- Only show Cancel for invitations sent by the current user.
              The backend enforces the same rule (403 if not the sender),
              but hiding the button for others avoids a confusing error. -->
-        <button
+        <BaseButton
           v-if="canCancel(inv)"
-          type="button"
-          :disabled="cancellingId === inv.id"
-          class="text-meta font-medium text-danger-fg hover:text-danger-solid-hover disabled:opacity-50"
+          variant="link-danger"
+          size="sm"
+          :loading="cancellingId === inv.id"
           @click="emit('cancel', inv)"
         >
           {{ cancellingId === inv.id ? "Cancelling…" : "Cancel" }}
-        </button>
-      </li>
+        </BaseButton>
+      </BaseListRow>
     </ul>
     <p v-if="error" class="px-4 pb-3 text-meta text-danger-fg" role="alert">
       {{ error }}

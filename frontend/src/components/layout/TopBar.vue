@@ -17,9 +17,10 @@ import { IconChevronDown, IconChevronLeft } from "@tabler/icons-vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import type { Money } from "@/domain/money";
 import type { BankAccount } from "@/models/bankAccount";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -42,15 +43,9 @@ const emit = defineEmits<{
     class="sticky top-0 z-nav flex h-topbar items-center justify-between border-b border-border bg-surface px-page-x"
   >
     <div class="flex w-10 justify-start">
-      <button
-        v-if="showBack"
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-        aria-label="Back"
-        @click="emit('back')"
-      >
+      <BaseIconButton v-if="showBack" label="Back" @click="emit('back')">
         <IconChevronLeft class="size-icon-md" />
-      </button>
+      </BaseIconButton>
     </div>
 
     <button

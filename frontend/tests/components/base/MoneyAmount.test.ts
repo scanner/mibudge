@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { Money } from "@/domain/money";
 
 ////////////////////////////////////////////////////////////////////////

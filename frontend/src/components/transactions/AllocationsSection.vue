@@ -14,8 +14,9 @@ import { computed } from "vue";
 // app imports
 //
 import AllocationCard from "./AllocationCard.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import type { Allocation, AllocationCoverage } from "@/models/allocation";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -55,7 +56,7 @@ const allocationStatus = computed(() =>
 
 <template>
   <section class="mt-6">
-    <h2 class="mb-2 text-overline uppercase text-fg-muted">Allocations</h2>
+    <BaseSectionHeader title="Allocations" class="mb-2" />
 
     <div v-if="allocations.length > 0" class="space-y-2">
       <AllocationCard

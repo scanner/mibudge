@@ -1,8 +1,11 @@
 <script setup lang="ts">
 //
-// ProgressBar — horizontal progress indicator used on budget cards,
-// detail heroes, and fill-up bands.  Fill colour follows the rules in
-// UI_SPEC.md §2.4 and can be overridden via the `tone` prop.
+// ProgressBar -- horizontal progress indicator used on budget cards,
+// detail heroes, and fill-up bands.  Presentational (base).
+//
+// `tone` picks the `progress-*` fill (`progressTone()` maps a budget
+// status to it); `size` is `sm` (fill-up band), `md` (budget card) or
+// `lg` (detail hero).
 //
 
 // 3rd party imports
@@ -19,13 +22,12 @@ import type { ProgressTone } from "@/domain/budgetStatus";
 interface Props {
   value: number; // 0..100
   tone?: ProgressTone;
-  // Heights from UI_SPEC: 5px (card), 8px (detail hero), 3px (fill-up).
-  height?: 3 | 5 | 8;
+  size?: "sm" | "md" | "lg";
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  tone: "ocean",
-  height: 5,
+  tone: "active",
+  size: "md",
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -34,26 +36,26 @@ const clamped = computed(() => Math.max(0, Math.min(100, props.value)));
 
 const toneClass = computed(() => {
   switch (props.tone) {
-    case "mint":
+    case "funded":
       return "bg-progress-funded";
-    case "ocean":
+    case "active":
       return "bg-progress-active";
-    case "amber":
+    case "behind":
       return "bg-progress-behind";
-    case "coral":
+    case "over":
       return "bg-progress-over";
-    case "neutral":
+    case "paused":
       return "bg-progress-paused";
   }
 });
 
 const heightClass = computed(() => {
-  switch (props.height) {
-    case 3:
+  switch (props.size) {
+    case "sm":
       return "h-progress-sm";
-    case 5:
+    case "md":
       return "h-progress-md";
-    case 8:
+    case "lg":
       return "h-progress-lg";
   }
 });

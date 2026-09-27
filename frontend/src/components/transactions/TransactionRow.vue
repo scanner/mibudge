@@ -27,7 +27,7 @@ import { computed } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { transactionTypeLabel } from "@/domain/labels";
 import { formatMoney } from "@/domain/money";
 import type { Money } from "@/domain/money";
@@ -35,6 +35,9 @@ import type { Allocation } from "@/models/allocation";
 import { isUnallocated } from "@/models/allocation";
 import type { Transaction } from "@/models/transaction";
 import { displayName } from "@/models/transaction";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseBadge from "@/components/base/BaseBadge.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -124,8 +127,9 @@ const allocInfo = computed<{
 </script>
 
 <template>
-  <article
-    class="group/row cursor-pointer rounded-card border border-border bg-surface transition-colors hover:bg-surface-sunken"
+  <BaseCard
+    as="article"
+    class="group/row cursor-pointer transition-colors hover:bg-surface-sunken"
     :class="
       transaction.pending
         ? 'border-l-rule border-l-row-pending'
@@ -144,15 +148,16 @@ const allocInfo = computed<{
         <div class="flex flex-none flex-col items-end">
           <div class="flex items-center gap-1.5">
             <MoneyAmount :amount="transaction.amount" size="md" coloured />
-            <button
+            <BaseIconButton
               v-if="removable"
-              type="button"
-              class="flex h-5 w-5 items-center justify-center rounded-pill text-fg-muted opacity-0 transition-opacity hover:bg-danger-bg hover:text-danger-fg group-hover/row:opacity-100"
-              aria-label="Remove from budget"
+              label="Remove from budget"
+              size="sm"
+              tone="danger"
+              class="opacity-0 group-hover/row:opacity-100"
               @click.stop="emit('remove', transaction.id)"
             >
               <IconX class="size-icon-xs" />
-            </button>
+            </BaseIconButton>
           </div>
           <span class="tabular-nums text-meta text-fg-muted">
             {{ formatMoney(transaction.accountAvailableBalance) }}
@@ -178,12 +183,9 @@ const allocInfo = computed<{
           Unallocated — tap to assign
         </span>
         <div class="flex flex-none items-center gap-1.5">
-          <span
-            v-if="transaction.pending"
-            class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
-          >
+          <BaseBadge v-if="transaction.pending" tone="warning">
             Pending
-          </span>
+          </BaseBadge>
           <span v-if="typeLabel" class="text-meta text-fg-muted">{{
             typeLabel
           }}</span>
@@ -202,12 +204,9 @@ const allocInfo = computed<{
           >
         </span>
         <div class="flex flex-none items-center gap-1.5">
-          <span
-            v-if="transaction.pending"
-            class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
-          >
+          <BaseBadge v-if="transaction.pending" tone="warning">
             Pending
-          </span>
+          </BaseBadge>
           <span v-if="typeLabel" class="text-meta text-fg-muted">{{
             typeLabel
           }}</span>
@@ -217,18 +216,11 @@ const allocInfo = computed<{
       <!-- Rows 2+ (split): header row + one line per leg -->
       <div v-else-if="allocInfo.isSplit" class="mt-0.5">
         <div class="flex items-center justify-between gap-2">
-          <span
-            class="rounded-xs px-1 py-0.5 text-badge uppercase text-fg-muted ring-1 ring-border-emphasis"
-          >
-            Split
-          </span>
+          <BaseBadge tone="neutral"> Split </BaseBadge>
           <div class="flex flex-none items-center gap-1.5">
-            <span
-              v-if="transaction.pending"
-              class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
-            >
+            <BaseBadge v-if="transaction.pending" tone="warning">
               Pending
-            </span>
+            </BaseBadge>
             <span v-if="typeLabel" class="text-meta text-fg-muted">{{
               typeLabel
             }}</span>
@@ -256,16 +248,13 @@ const allocInfo = computed<{
         v-else-if="typeLabel || transaction.pending"
         class="mt-0.5 flex justify-end gap-1.5"
       >
-        <span
-          v-if="transaction.pending"
-          class="rounded-xs px-1 py-0.5 text-badge uppercase text-warning-fg ring-1 ring-warning-border"
-        >
+        <BaseBadge v-if="transaction.pending" tone="warning">
           Pending
-        </span>
+        </BaseBadge>
         <span v-if="typeLabel" class="text-meta text-fg-muted">{{
           typeLabel
         }}</span>
       </div>
     </div>
-  </article>
+  </BaseCard>
 </template>

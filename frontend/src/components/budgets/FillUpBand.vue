@@ -13,8 +13,8 @@ import { computed } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import ProgressBar from "@/components/shared/ProgressBar.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
+import ProgressBar from "@/components/base/ProgressBar.vue";
 import {
   budgetProgress,
   budgetStatus,
@@ -52,6 +52,6 @@ const tone = computed(() => progressTone(budgetStatus(props.budget)));
         </span>
       </div>
     </div>
-    <ProgressBar class="mt-1.5" :value="pct" :tone="tone" :height="3" />
+    <ProgressBar class="mt-1.5" :value="pct" :tone="tone" size="sm" />
   </div>
 </template>

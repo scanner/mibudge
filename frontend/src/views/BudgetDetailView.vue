@@ -38,6 +38,9 @@ import MoveMoneySheet from "@/features/budgets/MoveMoneySheet.vue";
 import { useBudgetDetail } from "@/features/budgets/useBudgetDetail";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -85,31 +88,28 @@ async function confirmArchive() {
 <template>
   <AppShell>
     <template #action>
-      <button
+      <BaseButton
         v-if="budget && !isUnallocated"
-        type="button"
-        class="flex h-10 items-center rounded-pill px-3 text-label text-fg-link hover:bg-accent-subtle"
+        variant="ghost"
+        size="sm"
         @click="showEditSheet = true"
       >
-        <IconPencil class="mr-1 size-icon-sm" />
+        <IconPencil class="size-icon-sm" />
         Edit
-      </button>
+      </BaseButton>
     </template>
 
     <!-- Loading skeleton -->
     <div v-if="loading" class="space-y-4 pt-4">
-      <div class="h-48 animate-pulse rounded-card bg-surface-muted" />
-      <div class="h-14 animate-pulse rounded-card bg-surface-muted" />
-      <div class="h-32 animate-pulse rounded-card bg-surface-muted" />
+      <BaseSkeleton class="h-48" />
+      <BaseSkeleton class="h-14" />
+      <BaseSkeleton class="h-32" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error && !budget"
-      class="mt-4 rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-    >
+    <BaseBanner v-else-if="error && !budget" tone="danger" class="mt-4">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <template v-else-if="budget">
       <div class="space-y-4 pt-4">
@@ -148,34 +148,27 @@ async function confirmArchive() {
 
         <!-- Action row -->
         <div v-if="!isUnallocated" class="mt-2 flex gap-2">
-          <button
-            type="button"
-            class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
-            @click="togglePause"
-          >
-            <IconPlayerPause class="mr-1 inline-block size-icon-sm" />
+          <BaseButton variant="secondary" class="flex-1" @click="togglePause">
+            <IconPlayerPause class="size-icon-sm" />
             {{ budget.paused ? "Resume budget" : "Pause budget" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            class="flex-1"
             @click="showArchiveConfirm = true"
           >
-            <IconArchive class="mr-1 inline-block size-icon-sm" />
+            <IconArchive class="size-icon-sm" />
             Archive
-          </button>
+          </BaseButton>
         </div>
 
         <!-- Transactions section -->
         <BudgetTransactionsSection :budget-id="id" />
 
         <!-- Inline error banner -->
-        <p
-          v-if="error"
-          class="rounded-control bg-danger-bg px-4 py-2 text-body-sm text-danger-fg"
-        >
+        <BaseBanner v-if="error" tone="danger">
           {{ error }}
-        </p>
+        </BaseBanner>
       </div>
     </template>
 

@@ -12,9 +12,12 @@ import { computed, ref, watch } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { toDecimal } from "@/domain/money";
 import type { Allocation } from "@/models/allocation";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -63,29 +66,27 @@ const budgetId = computed(() => props.allocation.budgetId);
 </script>
 
 <template>
-  <div
-    class="group relative rounded-card border border-border bg-surface px-4 py-3"
-  >
+  <BaseCard padded class="group relative">
     <!-- Remove button -->
-    <button
-      type="button"
-      class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-pill text-fg-muted opacity-0 transition-opacity hover:bg-danger-bg hover:text-danger-fg group-hover:opacity-100"
-      aria-label="Remove allocation"
+    <BaseIconButton
+      label="Remove allocation"
+      size="sm"
+      tone="danger"
+      class="absolute right-2 top-2 opacity-0 group-hover:opacity-100"
       @click="emit('remove', allocation.id)"
     >
       <IconTrash class="size-icon-xs" />
-    </button>
+    </BaseIconButton>
 
     <!-- Budget name + reassign -->
     <div class="flex items-center gap-2">
-      <button
+      <BaseButton
         v-if="budgetId"
-        type="button"
-        class="text-label text-fg-link hover:underline"
+        variant="link"
         @click="emit('navigate-budget', budgetId)"
       >
         {{ budgetName }}
-      </button>
+      </BaseButton>
       <span v-else class="text-body-sm italic text-fg-muted">Unallocated</span>
       <button
         type="button"
@@ -133,5 +134,5 @@ const budgetId = computed(() => props.allocation.budgetId);
     >
       {{ allocation.categoryFullName }}
     </div>
-  </div>
+  </BaseCard>
 </template>

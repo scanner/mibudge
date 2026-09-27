@@ -4,13 +4,13 @@
 //
 // Shows current splits as editable rows (budget selector + amount).
 // A "+" button appends a new empty row.  A footer shows the unallocated
-// remainder in ocean-blue, or the over-allocated amount in coral.
+// remainder in the info colour, or the over-allocated amount in the
+// danger colour.
 // Save is disabled when over-allocated or any row is incomplete.
 // Any remainder is assigned by the backend to the unallocated budget.
 //
 // Presentational: emits `save` with the splits body (budget id →
-// positive amount) or `cancel`.  `useModal` provides the scroll lock,
-// Escape-to-cancel and focus return.
+// positive amount) or `cancel`.  The shell is a dialog-layer BaseSheet.
 //
 
 // 3rd party imports
@@ -21,10 +21,14 @@ import { computed, nextTick, ref, watch } from "vue";
 
 // app imports
 //
-import { useModal } from "@/composables/useModal";
+import BaseSheet from "@/components/base/BaseSheet.vue";
 import { formatMoney, Money } from "@/domain/money";
 import type { Budget } from "@/models/budget";
 import { isAssignableBudget } from "@/models/budget";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -185,157 +189,99 @@ function save() {
   }
   emit("save", splits);
 }
-
-useModal(
-  () => props.open,
-  () => emit("cancel"),
-);
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div
-        v-if="open"
-        class="fixed inset-0 z-dialog flex items-end justify-center md:items-center"
+  <BaseSheet
+    :open="open"
+    title="Allocations"
+    layer="dialog"
+    @close="emit('cancel')"
+  >
+    <template #header-actions>
+      <button
+        type="button"
+        class="text-body-sm text-fg-muted hover:text-fg"
+        @click="emit('cancel')"
       >
-        <div class="absolute inset-0 bg-scrim/40" @click="emit('cancel')" />
+        Cancel
+      </button>
+    </template>
 
-        <div
-          class="relative flex max-h-sheet w-full flex-col rounded-t-card bg-surface shadow-overlay md:w-sheet md:rounded-card"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Edit allocations"
+    <div class="space-y-2">
+      <div v-for="(row, i) in rows" :key="i" class="flex items-center gap-2">
+        <!-- Budget selector -->
+        <BaseSelect
+          v-model="row.budgetId"
+          class="split-row-select min-w-0 flex-1"
+          size="sm"
+          inline
         >
-          <!-- Header -->
-          <div
-            class="flex items-center justify-between border-b border-border px-5 pb-3 pt-5"
+          <option value="">Select budget…</option>
+          <option v-for="b in availableForRow(i)" :key="b.id" :value="b.id">
+            {{ budgetLabel(b) }}
+          </option>
+          <!-- Keep the current selection visible even when temporarily
+                 displaced by another row's selection. -->
+          <option
+            v-if="
+              row.budgetId &&
+              !availableForRow(i).find((b) => b.id === row.budgetId)
+            "
+            :value="row.budgetId"
           >
-            <h2 class="text-title text-fg">Allocations</h2>
-            <button
-              type="button"
-              class="text-body-sm text-fg-muted hover:text-fg"
-              @click="emit('cancel')"
-            >
-              Cancel
-            </button>
-          </div>
+            {{ fallbackBudgetLabel(row.budgetId) }}
+          </option>
+        </BaseSelect>
 
-          <!-- Split rows -->
-          <div class="flex-1 overflow-y-auto px-4 py-3">
-            <div class="space-y-2">
-              <div
-                v-for="(row, i) in rows"
-                :key="i"
-                class="flex items-center gap-2"
-              >
-                <!-- Budget selector -->
-                <select
-                  v-model="row.budgetId"
-                  class="split-row-select min-w-0 flex-1 rounded-control border border-border-strong bg-surface-sunken px-3 py-1.5 text-input text-fg outline-none focus:border-border-focus"
-                >
-                  <option value="">Select budget…</option>
-                  <option
-                    v-for="b in availableForRow(i)"
-                    :key="b.id"
-                    :value="b.id"
-                  >
-                    {{ budgetLabel(b) }}
-                  </option>
-                  <!-- Keep the current selection visible even when temporarily
-                       displaced by another row's selection. -->
-                  <option
-                    v-if="
-                      row.budgetId &&
-                      !availableForRow(i).find((b) => b.id === row.budgetId)
-                    "
-                    :value="row.budgetId"
-                  >
-                    {{ fallbackBudgetLabel(row.budgetId) }}
-                  </option>
-                </select>
+        <!-- Amount input -->
+        <BaseInput
+          v-model="row.amount"
+          type="text"
+          inputmode="decimal"
+          placeholder="0.00"
+          class="w-24 flex-none text-right"
+          mono
+          size="sm"
+          inline
+        />
 
-                <!-- Amount input -->
-                <input
-                  v-model="row.amount"
-                  type="text"
-                  inputmode="decimal"
-                  placeholder="0.00"
-                  class="w-24 flex-none rounded-control border border-border-strong bg-surface-sunken px-3 py-1.5 text-right font-mono text-input text-fg outline-none focus:border-border-focus"
-                />
-
-                <!-- Remove row -->
-                <button
-                  type="button"
-                  class="flex h-6 w-6 flex-none items-center justify-center rounded-pill text-fg-muted hover:bg-danger-bg hover:text-danger-fg"
-                  aria-label="Remove split"
-                  @click="removeRow(i)"
-                >
-                  <IconX class="size-icon-xs" />
-                </button>
-              </div>
-            </div>
-
-            <!-- Add row button -->
-            <button
-              type="button"
-              class="mt-2 flex items-center gap-1.5 px-1 py-1.5 text-label text-fg-link hover:text-accent-hover"
-              @click="addRow"
-            >
-              <IconPlus class="size-icon-sm" />
-              Add split
-            </button>
-          </div>
-
-          <!-- Footer: remainder indicator + Save -->
-          <div class="border-t border-border px-4 py-3">
-            <div class="mb-3 flex items-center justify-between text-body-sm">
-              <span
-                :class="isOver ? 'font-medium text-danger-fg' : 'text-fg-muted'"
-              >
-                {{ isOver ? "Over by" : "Unallocated" }}
-              </span>
-              <span
-                :class="[
-                  'font-mono font-medium',
-                  isOver ? 'text-danger-fg' : 'text-info-fg',
-                ]"
-              >
-                {{
-                  formatMoney(
-                    Money.of(remainder.abs(), transactionAmount.currency),
-                  )
-                }}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              class="w-full rounded-control px-4 py-2 text-label transition-colors"
-              :class="
-                canSave
-                  ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
-                  : 'cursor-not-allowed bg-surface-strong text-fg-disabled'
-              "
-              :disabled="!canSave"
-              @click="save"
-            >
-              Save
-            </button>
-          </div>
-        </div>
+        <!-- Remove row -->
+        <BaseIconButton
+          label="Remove split"
+          size="sm"
+          tone="danger"
+          @click="removeRow(i)"
+        >
+          <IconX class="size-icon-xs" />
+        </BaseIconButton>
       </div>
-    </Transition>
-  </Teleport>
-</template>
+    </div>
 
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 120ms ease-out;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>
+    <!-- Add row button -->
+    <BaseButton variant="link" class="mt-3" @click="addRow">
+      <IconPlus class="size-icon-sm" />
+      Add split
+    </BaseButton>
+
+    <template #footer>
+      <div class="mb-3 flex items-center justify-between text-body-sm">
+        <span :class="isOver ? 'font-medium text-danger-fg' : 'text-fg-muted'">
+          {{ isOver ? "Over by" : "Unallocated" }}
+        </span>
+        <span
+          :class="[
+            'font-mono font-medium',
+            isOver ? 'text-danger-fg' : 'text-info-fg',
+          ]"
+        >
+          {{
+            formatMoney(Money.of(remainder.abs(), transactionAmount.currency))
+          }}
+        </span>
+      </div>
+
+      <BaseButton block :disabled="!canSave" @click="save">Save</BaseButton>
+    </template>
+  </BaseSheet>
+</template>

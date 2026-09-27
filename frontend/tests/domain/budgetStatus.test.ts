@@ -59,17 +59,17 @@ describe("budgetStatus / progressTone", () => {
   // THEN:  paused wins, then overdrawn, then funded, then behind-pace
   //
   it.each<[string, Partial<Budget>, string, string]>([
-    ["paused", { paused: true, balance: "-5.00" }, "paused", "neutral"],
-    ["overdrawn", { balance: "-0.01" }, "over", "coral"],
-    ["complete", { complete: true, balance: "1.00" }, "funded", "mint"],
+    ["paused", { paused: true, balance: "-5.00" }, "paused", "paused"],
+    ["overdrawn", { balance: "-0.01" }, "over", "over"],
+    ["complete", { complete: true, balance: "1.00" }, "funded", "funded"],
     [
       "at target",
       { balance: "500.00", target_balance: "500.00" },
       "funded",
-      "mint",
+      "funded",
     ],
-    ["behind pace", { funding_pace: "behind" }, "warn", "amber"],
-    ["in progress", {}, "progress", "ocean"],
+    ["behind pace", { funding_pace: "behind" }, "warn", "behind"],
+    ["in progress", {}, "progress", "active"],
   ])("%s", (_label, overrides, status, tone) => {
     const s = budgetStatus(figures(overrides));
     expect(s).toBe(status);

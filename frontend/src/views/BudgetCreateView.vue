@@ -15,6 +15,7 @@ import { useRouter } from "vue-router";
 import BudgetForm from "@/features/budgets/BudgetForm.vue";
 import AppShell from "@/features/shell/AppShell.vue";
 import type { Budget } from "@/models/budget";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -28,7 +29,7 @@ function onSaved(budget: Budget) {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg pt-4">
-      <h1 class="mb-5 text-page-title text-fg">New budget</h1>
+      <BasePageHeader title="New budget" />
       <BudgetForm
         mode="create"
         @saved="onSaved"

@@ -22,6 +22,12 @@ import {
   useBankAccountCreate,
 } from "@/features/bankAccounts/useBankAccountCreate";
 import AppShell from "@/features/shell/AppShell.vue";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -52,15 +58,11 @@ async function submit() {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
-      <h1 class="mb-5 text-page-title text-fg">New bank account</h1>
+      <BasePageHeader title="New bank account" />
 
-      <div
-        v-if="error"
-        class="mb-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-        role="alert"
-      >
+      <BaseBanner v-if="error" tone="danger" class="mb-4">
         {{ error }}
-      </div>
+      </BaseBanner>
 
       <form class="space-y-5" @submit.prevent="submit">
         <!-- Account type grid -->
@@ -92,12 +94,11 @@ async function submit() {
           <label class="mb-1.5 block text-label text-fg" for="acct-name">
             Account name <span class="text-danger-fg">*</span>
           </label>
-          <input
+          <BaseInput
             id="acct-name"
             v-model="name"
             type="text"
             required
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
             placeholder="e.g. Chase Checking"
           />
         </div>
@@ -131,16 +132,12 @@ async function submit() {
             <!-- GAP-7: no free-text bank entry yet -->
           </template>
           <template v-else>
-            <select
-              id="acct-bank"
-              v-model="selectedBankId"
-              class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-            >
+            <BaseSelect id="acct-bank" v-model="selectedBankId">
               <option :value="null" disabled>Select a bank…</option>
               <option v-for="bank in banks" :key="bank.id" :value="bank.id">
                 {{ bank.name }}
               </option>
-            </select>
+            </BaseSelect>
           </template>
         </div>
 
@@ -149,13 +146,13 @@ async function submit() {
           <label class="mb-1.5 block text-label text-fg" for="acct-number">
             Account number <span class="text-danger-fg">*</span>
           </label>
-          <input
+          <BaseInput
             id="acct-number"
             v-model="accountNumber"
             type="text"
             inputmode="numeric"
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
             placeholder="Account number"
+            mono
           />
         </div>
 
@@ -173,56 +170,64 @@ async function submit() {
         <!-- Balances -->
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="mb-1.5 block text-label text-fg" for="acct-posted">
-              Posted balance
-              <span class="font-normal text-fg-subtle">(optional)</span>
-            </label>
-            <input
-              id="acct-posted"
-              v-model="postedBalance"
-              type="text"
-              inputmode="decimal"
-              class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-              placeholder="0.00"
-            />
+            <BaseFormField id="acct-posted" label="Posted balance" optional>
+              <template #default="{ id, describedBy, invalid }">
+                <BaseInput
+                  :id="id"
+                  v-model="postedBalance"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="0.00"
+                  :aria-describedby="describedBy"
+                  :invalid="invalid"
+                  mono
+                />
+              </template>
+            </BaseFormField>
           </div>
           <div>
-            <label class="mb-1.5 block text-label text-fg" for="acct-available">
-              Available balance
-              <span class="font-normal text-fg-subtle">(optional)</span>
-            </label>
-            <input
+            <BaseFormField
               id="acct-available"
-              v-model="availableBalance"
-              type="text"
-              inputmode="decimal"
-              class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-              placeholder="0.00"
-            />
+              label="Available balance"
+              optional
+            >
+              <template #default="{ id, describedBy, invalid }">
+                <BaseInput
+                  :id="id"
+                  v-model="availableBalance"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="0.00"
+                  :aria-describedby="describedBy"
+                  :invalid="invalid"
+                  mono
+                />
+              </template>
+            </BaseFormField>
           </div>
         </div>
 
         <!-- Actions -->
         <div class="flex gap-3 pt-1">
-          <button
+          <BaseButton
             type="submit"
             :disabled="
-              saving ||
               !name.trim() ||
               (!selectedBankId && banks.length > 0) ||
               !accountNumber.trim()
             "
-            class="flex-1 rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+            :loading="saving"
+            class="flex-1"
           >
             {{ saving ? "Creating…" : "Create account" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-control border border-border py-2.5 text-label text-fg hover:bg-surface-sunken"
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            class="flex-1"
             @click="router.push({ name: 'account' })"
           >
             Cancel
-          </button>
+          </BaseButton>
         </div>
 
         <!-- Footer note -->

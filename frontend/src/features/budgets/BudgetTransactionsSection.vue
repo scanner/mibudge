@@ -19,6 +19,10 @@ import { useFindShortcut } from "@/composables/useFindShortcut";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useBudgetTransactions } from "./useBudgetTransactions";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -54,31 +58,25 @@ function openTransaction(id: string) {
 <template>
   <section class="mt-2">
     <div class="mb-2 flex items-center justify-between">
-      <h2 class="text-overline uppercase text-fg-muted">Transactions</h2>
+      <BaseSectionHeader title="Transactions" />
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-pill transition-colors"
-          :class="
-            showInternalTxs
-              ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
-              : 'text-fg-muted hover:bg-surface-muted'
-          "
-          :aria-label="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
+        <BaseIconButton
+          :label="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
+          size="sm"
+          :pressed="showInternalTxs"
           :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
           @click="toggleInternalTxs"
         >
           <IconArrowsRightLeft class="size-icon-sm" />
-        </button>
-        <button
-          type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-          aria-label="Search transactions"
+        </BaseIconButton>
+        <BaseIconButton
+          label="Search transactions"
+          size="sm"
           @click="toggleSearch"
         >
           <IconSearch v-if="!searchOpen" class="size-icon-sm" />
           <IconX v-else class="size-icon-sm" />
-        </button>
+        </BaseIconButton>
       </div>
     </div>
 
@@ -90,13 +88,12 @@ function openTransaction(id: string) {
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
-      <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
-        <input
+      <div v-if="searchOpen" class="-mx-page-x overflow-hidden px-page-x pb-3">
+        <BaseInput
           ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
@@ -106,11 +103,7 @@ function openTransaction(id: string) {
     </p>
 
     <div v-if="txLoading" class="space-y-2">
-      <div
-        v-for="i in 3"
-        :key="i"
-        class="h-16 animate-pulse rounded-card bg-surface-muted"
-      />
+      <BaseSkeleton v-for="i in 3" :key="i" class="h-16" />
     </div>
 
     <TransactionGroupList

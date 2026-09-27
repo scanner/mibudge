@@ -27,6 +27,10 @@ import { useFundingRun } from "@/features/bankAccounts/useFundingRun";
 import { useInviteFlow } from "@/features/bankAccounts/useInviteFlow";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -60,13 +64,9 @@ async function onDelete() {
       <span class="text-body-sm text-fg-muted">Loading…</span>
     </div>
 
-    <div
-      v-else-if="error"
-      class="mt-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-      role="alert"
-    >
+    <BaseBanner v-else-if="error" tone="danger" class="mt-4">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <div v-else-if="account" class="mx-auto max-w-lg space-y-5 py-4">
       <BankAccountHeader
@@ -115,14 +115,8 @@ async function onDelete() {
       />
 
       <!-- Budgets -->
-      <section
-        class="overflow-hidden rounded-card border border-border bg-surface"
-      >
-        <button
-          type="button"
-          class="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-surface-sunken"
-          @click="viewBudgets"
-        >
+      <BaseCard as="section">
+        <BaseListRow as="button" class="justify-between" @click="viewBudgets">
           <div>
             <div class="text-label text-fg">
               Budgets
@@ -135,8 +129,8 @@ async function onDelete() {
             </div>
           </div>
           <IconChevronRight class="size-icon-sm flex-none text-icon-muted" />
-        </button>
-      </section>
+        </BaseListRow>
+      </BaseCard>
 
       <FundingCard
         :last-posted-through="account.lastPostedThrough"
@@ -153,13 +147,13 @@ async function onDelete() {
 
       <!-- Delete -->
       <section class="pt-2">
-        <button
-          type="button"
-          class="w-full rounded-card border border-danger-solid py-3 text-label text-danger-fg hover:bg-danger-bg"
+        <BaseButton
+          variant="danger-secondary"
+          block
           @click="confirmDelete = true"
         >
           Delete account
-        </button>
+        </BaseButton>
         <p class="mt-2 px-1 text-center text-meta text-fg-subtle">
           Deletes all budgets, transactions, and allocations for this account.
         </p>
@@ -184,7 +178,7 @@ async function onDelete() {
       title="Send co-owner invitation?"
       :message="`Send a co-owner invitation to ${invite.email.value}? They will receive an email with a link to accept or decline.`"
       confirm-label="Send invitation"
-      tone="ocean"
+      tone="primary"
       @confirm="invite.send"
       @cancel="invite.confirming.value = false"
     />

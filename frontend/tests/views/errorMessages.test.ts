@@ -507,7 +507,7 @@ describe("bank-account pages", () => {
     );
     const { wrapper } = await openAccount();
 
-    await wrapper.get('input[type="checkbox"]').trigger("change");
+    await wrapper.get('input[type="checkbox"]').setValue(false);
     await flushPromises();
 
     expect(wrapper.text()).toContain("Funding run in progress.");

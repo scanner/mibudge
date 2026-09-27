@@ -8,6 +8,10 @@
 // app imports
 //
 import { useLogin } from "@/features/auth/useLogin";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -24,8 +28,9 @@ const {
   <div
     class="flex min-h-screen items-center justify-center bg-canvas px-page-x"
   >
-    <form
-      class="w-full max-w-sm rounded-card border border-border bg-surface p-6 shadow-raised"
+    <BaseCard
+      as="form"
+      class="w-full max-w-sm p-6 shadow-raised"
       @submit.prevent="onSubmit"
     >
       <h1 class="text-title text-fg">Sign in to mibudge</h1>
@@ -33,27 +38,29 @@ const {
         Your budget dashboard awaits.
       </p>
 
-      <label class="mt-5 block text-label text-fg">
-        Email
-        <input
-          v-model="email"
-          type="email"
-          autocomplete="email"
-          required
-          class="mt-1 w-full rounded-control border-border-strong bg-surface text-input focus:border-border-focus focus:ring-border-focus"
-        />
-      </label>
+      <BaseFormField label="Email" class="mt-5">
+        <template #default="{ id }">
+          <BaseInput
+            :id="id"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+        </template>
+      </BaseFormField>
 
-      <label class="mt-4 block text-label text-fg">
-        Password
-        <input
-          v-model="password"
-          type="password"
-          autocomplete="current-password"
-          required
-          class="mt-1 w-full rounded-control border-border-strong bg-surface text-input focus:border-border-focus focus:ring-border-focus"
-        />
-      </label>
+      <BaseFormField label="Password" class="mt-4">
+        <template #default="{ id }">
+          <BaseInput
+            :id="id"
+            v-model="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </template>
+      </BaseFormField>
 
       <div class="mt-1 flex justify-end">
         <a
@@ -71,13 +78,15 @@ const {
         {{ errorMessage }}
       </p>
 
-      <button
+      <BaseButton
         type="submit"
-        :disabled="submitting || !email || !password"
-        class="mt-5 w-full rounded-pill bg-accent px-4 py-2 text-label text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-strong"
+        block
+        :disabled="!email || !password"
+        :loading="submitting"
+        class="mt-5"
       >
         {{ submitting ? "Signing in…" : "Sign in" }}
-      </button>
-    </form>
+      </BaseButton>
+    </BaseCard>
   </div>
 </template>

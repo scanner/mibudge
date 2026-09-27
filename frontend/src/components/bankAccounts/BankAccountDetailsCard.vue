@@ -11,6 +11,10 @@ import { IconPencil } from "@tabler/icons-vue";
 // app imports
 //
 import type { BankAccount } from "@/models/bankAccount";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -25,14 +29,10 @@ const emit = defineEmits<{ (e: "edit"): void }>();
 
 <template>
   <!-- Details -->
-  <section class="overflow-hidden rounded-card border border-border bg-surface">
-    <h2
-      class="border-b border-border-subtle px-4 py-3 text-overline uppercase text-fg-muted"
-    >
-      Details
-    </h2>
-    <dl class="divide-y divide-border-subtle">
-      <div class="flex items-center justify-between px-4 py-3">
+  <BaseCard as="section">
+    <BaseSectionHeader title="Details" card />
+    <dl>
+      <BaseListRow class="justify-between">
         <dt class="text-body-sm text-fg-muted">Account number</dt>
         <dd class="flex items-center gap-2">
           <span class="font-mono text-amount-sm text-fg">
@@ -42,24 +42,23 @@ const emit = defineEmits<{ (e: "edit"): void }>();
                 : "—"
             }}
           </span>
-          <button
-            type="button"
-            class="flex h-6 w-6 flex-none items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted hover:text-fg-muted"
-            aria-label="Edit account number"
+          <BaseIconButton
+            label="Edit account number"
+            size="sm"
             @click="emit('edit')"
           >
             <IconPencil class="size-icon-xs" />
-          </button>
+          </BaseIconButton>
         </dd>
-      </div>
-      <div class="flex items-center justify-between px-4 py-3">
+      </BaseListRow>
+      <BaseListRow class="justify-between">
         <dt class="text-body-sm text-fg-muted">Bank</dt>
         <dd class="text-body-sm text-fg">{{ bankName ?? "—" }}</dd>
-      </div>
-      <div class="flex items-center justify-between px-4 py-3">
+      </BaseListRow>
+      <BaseListRow class="justify-between">
         <dt class="text-body-sm text-fg-muted">Created</dt>
         <dd class="text-body-sm text-fg">{{ createdDate }}</dd>
-      </div>
+      </BaseListRow>
     </dl>
-  </section>
+  </BaseCard>
 </template>

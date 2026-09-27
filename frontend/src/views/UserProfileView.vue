@@ -17,6 +17,14 @@ import {
 } from "@/features/settings/useProfileForm";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -44,31 +52,29 @@ async function save() {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
-      <h1 class="mb-5 text-page-title text-fg">Profile</h1>
+      <BasePageHeader title="Profile" />
 
-      <div
-        v-if="error"
-        class="mb-4 rounded-control bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-        role="alert"
-      >
+      <BaseBanner v-if="error" tone="danger" class="mb-4">
         {{ error }}
-      </div>
+      </BaseBanner>
 
       <!-- Profile form: name + timezone only -->
       <form class="space-y-4" @submit.prevent="save">
         <!-- Name -->
         <div>
-          <label class="mb-1.5 block text-label text-fg" for="profile-name">
-            Name
-          </label>
-          <input
-            id="profile-name"
-            v-model="name"
-            type="text"
-            autocomplete="name"
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-            placeholder="Your full name"
-          />
+          <BaseFormField id="profile-name" label="Name">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="name"
+                type="text"
+                autocomplete="name"
+                placeholder="Your full name"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
 
         <!-- Email — read-only -->
@@ -83,53 +89,50 @@ async function save() {
 
         <!-- Timezone -->
         <div>
-          <label class="mb-1.5 block text-label text-fg" for="profile-timezone">
-            Timezone
-          </label>
-          <select
+          <BaseFormField
             id="profile-timezone"
-            v-model="timezone"
-            class="w-full rounded-control border border-border-strong bg-surface px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+            label="Timezone"
+            hint="Used to display transaction dates in your local time."
           >
-            <option
-              v-for="opt in TIMEZONE_OPTIONS"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </option>
-          </select>
-          <p class="mt-1 text-meta text-fg-muted">
-            Used to display transaction dates in your local time.
-          </p>
+            <template #default="{ id, describedBy, invalid }">
+              <BaseSelect
+                :id="id"
+                v-model="timezone"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              >
+                <option
+                  v-for="opt in TIMEZONE_OPTIONS"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </BaseSelect>
+            </template>
+          </BaseFormField>
         </div>
 
         <!-- Actions -->
         <div class="flex gap-3 pt-2">
-          <button
-            type="submit"
-            :disabled="saving"
-            class="flex-1 rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
-          >
+          <BaseButton type="submit" :loading="saving" class="flex-1">
             {{ saving ? "Saving…" : "Save" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-control border border-border py-2.5 text-label text-fg hover:bg-surface-sunken"
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            class="flex-1"
             @click="router.push({ name: 'account' })"
           >
             Cancel
-          </button>
+          </BaseButton>
         </div>
       </form>
 
       <!-- Change email — separate section, never nested inside the profile form -->
       <section class="mt-8">
-        <h2 class="mb-2 px-1 text-overline uppercase text-fg-muted">
-          Change email
-        </h2>
+        <BaseSectionHeader title="Change email" class="mb-2 px-1" />
 
-        <div class="rounded-card border border-border bg-surface px-4 py-4">
+        <BaseCard padded>
           <!-- No usable password -->
           <div
             v-if="!auth.user?.hasUsablePassword"
@@ -147,41 +150,34 @@ async function save() {
 
           <template v-else>
             <!-- Success -->
-            <div
-              v-if="emailSuccess"
-              class="rounded-control bg-success-bg px-3 py-3 text-body-sm text-success-fg"
-              role="alert"
-            >
+            <BaseBanner v-if="emailSuccess" tone="success">
               Check your new address for a verification link, and your current
               address for a security notice.
-            </div>
+            </BaseBanner>
 
             <template v-else>
               <!-- Error -->
-              <div
-                v-if="emailError"
-                class="mb-3 rounded-control bg-danger-bg px-3 py-3 text-body-sm text-danger-fg"
-                role="alert"
-              >
+              <BaseBanner v-if="emailError" tone="danger" class="mb-3">
                 {{ emailError }}
-              </div>
+              </BaseBanner>
 
               <form class="flex gap-2" @submit.prevent="submitEmailChange">
-                <input
+                <BaseInput
                   v-model="newEmail"
                   type="email"
                   autocomplete="email"
                   placeholder="New email address"
                   required
-                  class="min-w-0 flex-1 rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+                  class="min-w-0 flex-1"
+                  inline
                 />
-                <button
+                <BaseButton
                   type="submit"
-                  :disabled="emailSaving || !newEmail"
-                  class="rounded-control bg-accent px-4 py-2.5 text-label text-fg-on-accent hover:bg-accent-hover disabled:opacity-50"
+                  :disabled="!newEmail"
+                  :loading="emailSaving"
                 >
                   {{ emailSaving ? "Sending…" : "Send link" }}
-                </button>
+                </BaseButton>
               </form>
               <p class="mt-1.5 text-meta text-fg-muted">
                 A verification link will be sent to the new address. Your
@@ -190,7 +186,7 @@ async function save() {
               </p>
             </template>
           </template>
-        </div>
+        </BaseCard>
       </section>
     </div>
   </AppShell>

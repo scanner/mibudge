@@ -2,9 +2,8 @@
 //
 // MoveMoneySheet — the "Move money" form: transfer between this budget
 // (or its fill-up goal) and another budget of the account.  Feature
-// component (budgets); state and the transfer live in `useMoveMoney`,
-// and `useModal` provides the scroll lock, Escape-to-close and focus
-// return.  Emits `close` when dismissed or after a transfer.
+// component (budgets) in a BaseSheet; state and the transfer live in
+// `useMoveMoney`.  Emits `close` when dismissed or after a transfer.
 //
 
 // 3rd party imports
@@ -13,9 +12,12 @@ import { nextTick, ref, watch } from "vue";
 
 // app imports
 //
-import { useModal } from "@/composables/useModal";
+import BaseSheet from "@/components/base/BaseSheet.vue";
 import type { Budget } from "@/models/budget";
 import { useMoveMoney } from "./useMoveMoney";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -45,12 +47,7 @@ const {
   () => props.fillupBudget,
 );
 
-const moveAmountInput = ref<HTMLInputElement | null>(null);
-
-useModal(
-  () => props.open,
-  () => emit("close"),
-);
+const moveAmountInput = ref<{ focus(): void } | null>(null);
 
 watch(
   () => props.open,
@@ -71,151 +68,105 @@ async function submitMove() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div
-        v-if="open"
-        class="fixed inset-0 z-sheet flex items-end justify-center md:items-center"
-      >
-        <div class="absolute inset-0 bg-scrim/40" @click="emit('close')" />
-        <div
-          class="relative w-full rounded-t-card bg-surface p-5 shadow-overlay md:w-sheet md:rounded-card"
-        >
-          <h2 class="mb-4 text-title text-fg">Move money</h2>
-
-          <div class="space-y-3">
-            <div>
-              <label class="mb-1 block text-label text-fg">Direction</label>
-              <div class="flex rounded-control border border-border">
-                <button
-                  type="button"
-                  class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
-                  :class="
-                    moveDirection === 'outof'
-                      ? 'bg-accent text-fg-on-accent'
-                      : 'text-fg-muted hover:bg-surface-sunken'
-                  "
-                  @click="moveDirection = 'outof'"
-                >
-                  Out of this budget
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
-                  :class="
-                    moveDirection === 'into'
-                      ? 'bg-accent text-fg-on-accent'
-                      : 'text-fg-muted hover:bg-surface-sunken'
-                  "
-                  @click="moveDirection = 'into'"
-                >
-                  Into this budget
-                </button>
-              </div>
-            </div>
-
-            <div v-if="fillupBudget">
-              <label class="mb-1 block text-label text-fg">This budget</label>
-              <div class="flex rounded-control border border-border">
-                <button
-                  type="button"
-                  class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
-                  :class="
-                    !moveTargetFillup
-                      ? 'bg-accent text-fg-on-accent'
-                      : 'text-fg-muted hover:bg-surface-sunken'
-                  "
-                  @click="setMoveTarget(false)"
-                >
-                  {{ budget?.name }}
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
-                  :class="
-                    moveTargetFillup
-                      ? 'bg-accent text-fg-on-accent'
-                      : 'text-fg-muted hover:bg-surface-sunken'
-                  "
-                  @click="setMoveTarget(true)"
-                >
-                  {{ fillupBudget.name }} (fill-up)
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label class="mb-1 block text-label text-fg">
-                {{ moveDirection === "outof" ? "To" : "From" }}
-              </label>
-              <select
-                v-model="moveOtherId"
-                class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg"
-              >
-                <option
-                  v-for="b in movePickerBudgets"
-                  :key="b.id"
-                  :value="b.id"
-                >
-                  {{ budgetPickerLabel(b) }}
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label class="mb-1 block text-label text-fg">Amount</label>
-              <input
-                ref="moveAmountInput"
-                v-model="moveAmount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="0.00"
-                class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg focus:border-border-focus focus:outline-none"
-                @keydown.enter="canSubmit && submitMove()"
-              />
-            </div>
-
-            <p v-if="moveError" class="text-body-sm text-danger-fg">
-              {{ moveError }}
-            </p>
-
-            <div class="flex gap-2 pt-1">
-              <button
-                type="button"
-                class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
-                @click="emit('close')"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                :disabled="!canSubmit"
-                class="flex-1 rounded-pill py-3 text-label text-fg-on-accent transition-colors"
-                :class="
-                  canSubmit
-                    ? 'bg-accent hover:bg-accent-hover'
-                    : 'cursor-not-allowed bg-surface-strong'
-                "
-                @click="submitMove"
-              >
-                {{ moveSaving ? "Transferring…" : "Transfer" }}
-              </button>
-            </div>
-          </div>
+  <BaseSheet :open="open" title="Move money" @close="emit('close')">
+    <div class="space-y-3">
+      <div>
+        <label class="mb-1 block text-label text-fg">Direction</label>
+        <div class="flex rounded-control border border-border">
+          <button
+            type="button"
+            class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
+            :class="
+              moveDirection === 'outof'
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="moveDirection = 'outof'"
+          >
+            Out of this budget
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
+            :class="
+              moveDirection === 'into'
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="moveDirection = 'into'"
+          >
+            Into this budget
+          </button>
         </div>
       </div>
-    </Transition>
-  </Teleport>
-</template>
 
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 120ms ease-out;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>
+      <div v-if="fillupBudget">
+        <label class="mb-1 block text-label text-fg">This budget</label>
+        <div class="flex rounded-control border border-border">
+          <button
+            type="button"
+            class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
+            :class="
+              !moveTargetFillup
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="setMoveTarget(false)"
+          >
+            {{ budget?.name }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
+            :class="
+              moveTargetFillup
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="setMoveTarget(true)"
+          >
+            {{ fillupBudget.name }} (fill-up)
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-label text-fg">
+          {{ moveDirection === "outof" ? "To" : "From" }}
+        </label>
+        <BaseSelect v-model="moveOtherId">
+          <option v-for="b in movePickerBudgets" :key="b.id" :value="b.id">
+            {{ budgetPickerLabel(b) }}
+          </option>
+        </BaseSelect>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-label text-fg">Amount</label>
+        <BaseInput
+          ref="moveAmountInput"
+          v-model="moveAmount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          placeholder="0.00"
+          @keydown.enter="canSubmit && submitMove()"
+          mono
+        />
+      </div>
+
+      <p v-if="moveError" class="text-body-sm text-danger-fg">
+        {{ moveError }}
+      </p>
+
+      <div class="flex gap-2 pt-1">
+        <BaseButton variant="secondary" class="flex-1" @click="emit('close')">
+          Cancel
+        </BaseButton>
+        <BaseButton :disabled="!canSubmit" class="flex-1" @click="submitMove">
+          {{ moveSaving ? "Transferring…" : "Transfer" }}
+        </BaseButton>
+      </div>
+    </div>
+  </BaseSheet>
+</template>

@@ -6,15 +6,18 @@
 // This is a public route (no auth required) because the user may arrive
 // directly from their email client.
 //
+
+// app imports
+//
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 </script>
 
 <template>
   <div
     class="flex min-h-screen items-center justify-center bg-canvas px-page-x"
   >
-    <div
-      class="w-full max-w-sm rounded-card border border-border bg-surface px-8 py-10 text-center shadow-raised"
-    >
+    <BaseCard class="w-full max-w-sm px-8 py-10 text-center shadow-raised">
       <div class="mb-4 flex justify-center">
         <span
           class="flex h-12 w-12 items-center justify-center rounded-pill bg-success-bg text-page-title text-success-fg"
@@ -34,12 +37,7 @@
         notice with a cancellation link was sent there and remains valid for 7
         days.
       </p>
-      <a
-        href="/app/login/"
-        class="block w-full rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover"
-      >
-        Sign in
-      </a>
-    </div>
+      <BaseButton as="a" href="/app/login/" block> Sign in </BaseButton>
+    </BaseCard>
   </div>
 </template>

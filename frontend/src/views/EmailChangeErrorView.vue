@@ -8,6 +8,11 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 
+// app imports
+//
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+
 const route = useRoute();
 
 const MESSAGES: Record<string, string> = {
@@ -39,9 +44,7 @@ const message = computed(() => {
   <div
     class="flex min-h-screen items-center justify-center bg-canvas px-page-x"
   >
-    <div
-      class="w-full max-w-sm rounded-card border border-border bg-surface px-8 py-10 text-center shadow-raised"
-    >
+    <BaseCard class="w-full max-w-sm px-8 py-10 text-center shadow-raised">
       <div class="mb-4 flex justify-center">
         <span
           class="flex h-12 w-12 items-center justify-center rounded-pill bg-danger-bg text-page-title text-danger-fg"
@@ -53,12 +56,7 @@ const message = computed(() => {
         Unable to process link
       </h1>
       <p class="mb-6 text-body-sm text-fg-muted">{{ message }}</p>
-      <a
-        href="/app/login/"
-        class="block w-full rounded-control bg-accent py-2.5 text-label text-fg-on-accent hover:bg-accent-hover"
-      >
-        Sign in
-      </a>
-    </div>
+      <BaseButton as="a" href="/app/login/" block> Sign in </BaseButton>
+    </BaseCard>
   </div>
 </template>

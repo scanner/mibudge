@@ -21,9 +21,9 @@ import { computed } from "vue";
 // app imports
 //
 import FillUpBand from "./FillUpBand.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import ProgressBar from "@/components/shared/ProgressBar.vue";
-import StatusChip from "@/components/shared/StatusChip.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
+import ProgressBar from "@/components/base/ProgressBar.vue";
+import StatusChip from "@/components/base/StatusChip.vue";
 import {
   budgetMeta,
   budgetProgress,
@@ -34,6 +34,7 @@ import { formatInstantDate, formatLocalDate } from "@/domain/dates";
 import { BUDGET_TYPE_LABELS } from "@/domain/labels";
 import { rruleHuman } from "@/domain/rrule";
 import type { Budget } from "@/models/budget";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -55,14 +56,8 @@ const nextFunding = computed(() => {
   return rruleHuman(props.budget.fundingSchedule);
 });
 
-const SHORT_DATE: Intl.DateTimeFormatOptions = {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-};
-
 const startDate = computed(() =>
-  formatInstantDate(props.budget.createdAt, SHORT_DATE),
+  formatInstantDate(props.budget.createdAt, "date"),
 );
 
 // `targetDate` is a calendar date; `formatLocalDate` renders that day
@@ -70,13 +65,13 @@ const startDate = computed(() =>
 //
 const endDate = computed(() =>
   props.budget.targetDate
-    ? formatLocalDate(props.budget.targetDate, SHORT_DATE)
+    ? formatLocalDate(props.budget.targetDate, "date")
     : null,
 );
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-card border border-border bg-surface">
+  <BaseCard>
     <div class="px-5 pb-4 pt-5">
       <!-- Row 1: name + type chip -->
       <div class="flex items-center justify-between gap-3">
@@ -104,7 +99,7 @@ const endDate = computed(() =>
       </div>
 
       <!-- Progress bar -->
-      <ProgressBar class="mt-3" :value="pct" :tone="tone" :height="8" />
+      <ProgressBar class="mt-3" :value="pct" :tone="tone" size="lg" />
 
       <!-- Axis labels -->
       <div
@@ -126,5 +121,5 @@ const endDate = computed(() =>
 
     <!-- Fill-up band -->
     <FillUpBand v-if="fillupBudget" :budget="fillupBudget" />
-  </div>
+  </BaseCard>
 </template>

@@ -1,0 +1,25 @@
+/*
+ * Shared `<Transition>` classes.
+ *
+ * `fade` brings a sheet or dialog (with its scrim) in and out;
+ * `slide-up` brings a full-screen sheet up from the bottom edge.
+ * `BaseSheet` picks one; nothing else defines its own transition CSS.
+ */
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--duration-fast) var(--ease-enter);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform var(--duration-slow) var(--ease-enter);
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+}

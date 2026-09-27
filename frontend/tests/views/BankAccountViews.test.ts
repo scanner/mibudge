@@ -191,7 +191,7 @@ describe("BankAccountDetailView", () => {
   //
   it("toggles automatic funding", async () => {
     const { wrapper } = await open();
-    await wrapper.get('input[type="checkbox"]').trigger("change");
+    await wrapper.get('input[type="checkbox"]').setValue(false);
     await flushPromises();
     const [patch] = await requestsTo(
       "PATCH",
@@ -220,8 +220,8 @@ describe("BankAccountDetailView", () => {
     const { wrapper } = await open();
     const toggle = wrapper.get('input[type="checkbox"]');
 
-    await toggle.trigger("change");
-    await toggle.trigger("change");
+    await toggle.setValue(false);
+    await toggle.setValue(true);
     await vi.waitFor(() => expect(gates.length).toBeGreaterThanOrEqual(1));
     gates[0]();
     await flushPromises();

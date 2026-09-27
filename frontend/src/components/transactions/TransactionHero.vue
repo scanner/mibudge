@@ -6,8 +6,9 @@
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import type { Money } from "@/domain/money";
+import BaseBadge from "@/components/base/BaseBadge.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -28,12 +29,9 @@ defineProps<{
       class="mt-1.5 flex items-center justify-center gap-2 text-meta text-fg-muted"
     >
       <span>{{ formattedDate }}</span>
-      <span
-        v-if="pending"
-        class="rounded-pill bg-warning-bg px-2 py-0.5 text-badge font-medium text-warning-fg"
-      >
+      <BaseBadge v-if="pending" tone="warning" variant="soft">
         PENDING
-      </span>
+      </BaseBadge>
       <span v-if="accountName">· {{ accountName }}</span>
     </div>
   </section>

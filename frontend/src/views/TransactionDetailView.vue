@@ -24,7 +24,7 @@ import { useRouter } from "vue-router";
 import AllocationsSection from "@/components/transactions/AllocationsSection.vue";
 import SplitEditorDialog from "@/components/transactions/SplitEditorDialog.vue";
 import TransactionHero from "@/components/transactions/TransactionHero.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { isModalOpen } from "@/composables/useModal";
 import { formatTxDateLong } from "@/domain/dates";
 import { transactionTypeLabel } from "@/domain/labels";
@@ -33,6 +33,11 @@ import type { AttachmentField } from "@/features/transactions/useTransactionDeta
 import { useTransactionDetail } from "@/features/transactions/useTransactionDetail";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseTextarea from "@/components/base/BaseTextarea.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -147,49 +152,37 @@ function onAttach(field: AttachmentField) {
   <AppShell>
     <template #action>
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-          aria-label="Back"
-          @click="router.back()"
-        >
+        <BaseIconButton label="Back" @click="router.back()">
           <IconArrowLeft class="size-icon-md" />
-        </button>
-        <button
+        </BaseIconButton>
+        <BaseIconButton
           v-if="prevTxId"
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-          aria-label="Previous transaction"
+          label="Previous transaction"
           @click="goToPrev"
         >
           <IconChevronUp class="size-icon-md" />
-        </button>
-        <button
+        </BaseIconButton>
+        <BaseIconButton
           v-if="nextTxId"
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-          aria-label="Next transaction"
+          label="Next transaction"
           @click="goToNext"
         >
           <IconChevronDown class="size-icon-md" />
-        </button>
+        </BaseIconButton>
       </div>
     </template>
 
     <!-- Loading -->
     <div v-if="loading" class="space-y-4 pt-6">
-      <div class="h-8 w-48 animate-pulse rounded-xs bg-surface-muted" />
-      <div class="h-12 w-32 animate-pulse rounded-xs bg-surface-muted" />
-      <div class="h-4 w-64 animate-pulse rounded-xs bg-surface-muted" />
+      <BaseSkeleton shape="line" class="h-8 w-48" />
+      <BaseSkeleton shape="line" class="h-12 w-32" />
+      <BaseSkeleton shape="line" class="h-4 w-64" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error"
-      class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-    >
+    <BaseBanner v-else-if="error" tone="danger">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <template v-else-if="transaction">
       <!-- Hero block -->
@@ -204,9 +197,7 @@ function onAttach(field: AttachmentField) {
       <!-- Metadata section -->
       <section class="space-y-3 border-t border-border pt-4">
         <div>
-          <label class="text-overline uppercase text-fg-muted">
-            Description
-          </label>
+          <BaseSectionHeader title="Description" as="label" />
           <input
             v-model="description"
             type="text"
@@ -224,26 +215,24 @@ function onAttach(field: AttachmentField) {
         </div>
 
         <div v-if="transaction.rawDescription !== transaction.description">
-          <label class="text-overline uppercase text-fg-muted">
-            Raw description
-          </label>
+          <BaseSectionHeader title="Raw description" as="label" />
           <p class="mt-0.5 text-body-sm text-fg-muted">
             {{ transaction.rawDescription }}
           </p>
         </div>
 
         <div v-if="typeLabel" class="flex items-center gap-2">
-          <label class="flex-none text-overline uppercase text-fg-muted">
-            Type
-          </label>
+          <BaseSectionHeader title="Type" as="label" class="flex-none" />
           <span class="min-w-0 flex-1 border-b border-dotted border-border" />
           <span class="flex-none text-body-sm text-fg">{{ typeLabel }}</span>
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="flex-none text-overline uppercase text-fg-muted">
-            {{ accountName }} balance after
-          </label>
+          <BaseSectionHeader
+            :title="`${accountName} balance after`"
+            as="label"
+            class="flex-none"
+          />
           <span class="min-w-0 flex-1 border-b border-dotted border-border" />
           <MoneyAmount
             class="flex-none"
@@ -279,12 +268,12 @@ function onAttach(field: AttachmentField) {
       <template v-if="!transaction.pending">
         <!-- Memo -->
         <section class="mt-6">
-          <label class="text-overline uppercase text-fg-muted"> Memo </label>
-          <textarea
+          <BaseSectionHeader title="Memo" as="label" />
+          <BaseTextarea
             v-model="memo"
             rows="2"
             placeholder="Add a memo…"
-            class="mt-1 block w-full resize-none rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus"
+            class="mt-1"
             @input="onMemoInput"
             @blur="onMemoBlur"
           />

@@ -21,9 +21,9 @@ import { computed } from "vue";
 // app imports
 //
 import FillUpBand from "./FillUpBand.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
-import ProgressBar from "@/components/shared/ProgressBar.vue";
-import StatusChip from "@/components/shared/StatusChip.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
+import ProgressBar from "@/components/base/ProgressBar.vue";
+import StatusChip from "@/components/base/StatusChip.vue";
 import {
   budgetMeta,
   budgetProgress,
@@ -32,6 +32,7 @@ import {
 } from "@/domain/budgetStatus";
 import { rruleHuman } from "@/domain/rrule";
 import type { Budget } from "@/models/budget";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -55,10 +56,7 @@ const fundingSchedule = computed(() =>
 </script>
 
 <template>
-  <article
-    class="overflow-hidden rounded-card border border-border bg-surface"
-    @click="emit('select', budget.id)"
-  >
+  <BaseCard as="article" @click="emit('select', budget.id)">
     <div class="cursor-pointer px-4 pb-3 pt-4">
       <!-- Row 1: name + balance -->
       <div class="flex items-start justify-between gap-2">
@@ -94,7 +92,7 @@ const fundingSchedule = computed(() =>
       </div>
 
       <!-- Progress bar -->
-      <ProgressBar class="mt-2.5" :value="pct" :tone="tone" :height="5" />
+      <ProgressBar class="mt-2.5" :value="pct" :tone="tone" size="md" />
 
       <!-- Row 3: funding info + status chip -->
       <div class="mt-2 flex items-center justify-between gap-2">
@@ -133,5 +131,5 @@ const fundingSchedule = computed(() =>
 
     <!-- Fill-up band (if present) -->
     <FillUpBand v-if="fillupBudget" :budget="fillupBudget" />
-  </article>
+  </BaseCard>
 </template>

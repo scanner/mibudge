@@ -21,6 +21,11 @@ import { IconBucket, IconRepeat, IconTarget } from "@tabler/icons-vue";
 import SchedulePicker from "@/components/budgets/SchedulePicker.vue";
 import type { Budget } from "@/models/budget";
 import { useBudgetForm } from "./useBudgetForm";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseToggle from "@/components/base/BaseToggle.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -143,33 +148,38 @@ async function submit() {
 
     <!-- Name -->
     <div>
-      <label class="mb-1 block text-label text-fg" for="budget-name">
-        Name
-      </label>
-      <input
-        id="budget-name"
-        v-model="name"
-        type="text"
-        required
-        placeholder="e.g. Groceries"
-        class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
-      />
+      <BaseFormField id="budget-name" label="Name">
+        <template #default="{ id, describedBy, invalid }">
+          <BaseInput
+            :id="id"
+            v-model="name"
+            type="text"
+            required
+            placeholder="e.g. Groceries"
+            :aria-describedby="describedBy"
+            :invalid="invalid"
+          />
+        </template>
+      </BaseFormField>
     </div>
 
     <!-- Target amount (both types) -->
     <div>
-      <label class="mb-1 block text-label text-fg" for="target-balance">
-        Target amount
-      </label>
-      <input
-        id="target-balance"
-        v-model="targetBalance"
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="0.00"
-        class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
-      />
+      <BaseFormField id="target-balance" label="Target amount">
+        <template #default="{ id, describedBy, invalid }">
+          <BaseInput
+            :id="id"
+            v-model="targetBalance"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            :aria-describedby="describedBy"
+            :invalid="invalid"
+            mono
+          />
+        </template>
+      </BaseFormField>
     </div>
 
     <!-- Goal-specific fields -->
@@ -207,32 +217,37 @@ async function submit() {
 
       <template v-if="fundingType === 'D'">
         <div>
-          <label class="mb-1 block text-label text-fg" for="target-date">
-            Target date
-          </label>
-          <input
-            id="target-date"
-            v-model="targetDate"
-            type="date"
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none"
-          />
+          <BaseFormField id="target-date" label="Target date">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="targetDate"
+                type="date"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
       </template>
 
       <template v-else>
         <div>
-          <label class="mb-1 block text-label text-fg" for="funding-amount">
-            Amount per funding event
-          </label>
-          <input
-            id="funding-amount"
-            v-model="fundingAmount"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
-          />
+          <BaseFormField id="funding-amount" label="Amount per funding event">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="fundingAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+                mono
+              />
+            </template>
+          </BaseFormField>
         </div>
       </template>
 
@@ -241,23 +256,26 @@ async function submit() {
 
     <!-- Capped-specific fields -->
     <template v-else-if="isCapped">
-      <p class="rounded-control bg-info-bg px-3 py-2 text-meta text-info-fg">
+      <BaseBanner tone="info">
         Funds a fixed amount on a schedule up to the cap above. Resumes
         automatically whenever spending brings the balance below the cap.
-      </p>
+      </BaseBanner>
       <div>
-        <label class="mb-1 block text-label text-fg" for="funding-amount">
-          Amount per funding event
-        </label>
-        <input
-          id="funding-amount"
-          v-model="fundingAmount"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
-          class="w-full rounded-control border border-border-strong px-3 py-2.5 font-mono text-input text-fg placeholder-fg-subtle focus:border-border-focus focus:outline-none"
-        />
+        <BaseFormField id="funding-amount" label="Amount per funding event">
+          <template #default="{ id, describedBy, invalid }">
+            <BaseInput
+              :id="id"
+              v-model="fundingAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              :aria-describedby="describedBy"
+              :invalid="invalid"
+              mono
+            />
+          </template>
+        </BaseFormField>
       </div>
       <SchedulePicker v-model="fundingSchedule" label="Funding schedule" />
 
@@ -266,17 +284,7 @@ async function submit() {
         class="flex cursor-pointer items-center justify-between rounded-control border border-border bg-surface px-4 py-3"
       >
         <div class="text-item-title text-fg">Start paused</div>
-        <div class="relative">
-          <input v-model="paused" type="checkbox" class="sr-only" />
-          <div
-            class="h-6 w-10 rounded-pill transition-colors"
-            :class="paused ? 'bg-accent' : 'bg-border-strong'"
-          />
-          <div
-            class="absolute top-0.5 h-5 w-5 rounded-pill bg-surface shadow-control transition-transform"
-            :class="paused ? 'translate-x-4' : 'translate-x-0.5'"
-          />
-        </div>
+        <BaseToggle v-model="paused" />
       </label>
     </template>
 
@@ -296,11 +304,10 @@ async function submit() {
         <p class="mb-1.5 text-meta text-fg-muted">
           When the budgeted expense next hits and the budget refreshes
         </p>
-        <input
+        <BaseInput
           id="next-refresh-date"
           v-model="nextRefreshDate"
           type="date"
-          class="w-full rounded-control border border-border-strong px-3 py-2.5 text-input text-fg focus:border-border-focus focus:outline-none"
         />
       </div>
 
@@ -311,49 +318,23 @@ async function submit() {
         class="flex cursor-pointer items-center justify-between rounded-control border border-border bg-surface px-4 py-3"
       >
         <div class="text-item-title text-fg">Start paused</div>
-        <div class="relative">
-          <input v-model="paused" type="checkbox" class="sr-only" />
-          <div
-            class="h-6 w-10 rounded-pill transition-colors"
-            :class="paused ? 'bg-accent' : 'bg-border-strong'"
-          />
-          <div
-            class="absolute top-0.5 h-5 w-5 rounded-pill bg-surface shadow-control transition-transform"
-            :class="paused ? 'translate-x-4' : 'translate-x-0.5'"
-          />
-        </div>
+        <BaseToggle v-model="paused" />
       </label>
     </template>
 
     <!-- Error -->
-    <p
-      v-if="error"
-      class="rounded-control bg-danger-bg px-4 py-2 text-body-sm text-danger-fg"
-    >
+    <BaseBanner v-if="error" tone="danger">
       {{ error }}
-    </p>
+    </BaseBanner>
 
     <!-- Actions -->
     <div class="flex gap-2 pt-2">
-      <button
-        type="button"
-        class="flex-1 rounded-pill border border-border py-3 text-label text-fg hover:bg-surface-sunken"
-        @click="emit('cancel')"
-      >
+      <BaseButton variant="secondary" class="flex-1" @click="emit('cancel')">
         Cancel
-      </button>
-      <button
-        type="submit"
-        :disabled="!canSubmit"
-        class="flex-1 rounded-pill py-3 text-label text-fg-on-accent transition-colors"
-        :class="
-          canSubmit
-            ? 'bg-accent hover:bg-accent-hover'
-            : 'cursor-not-allowed bg-surface-strong'
-        "
-      >
+      </BaseButton>
+      <BaseButton type="submit" :disabled="!canSubmit" class="flex-1">
         {{ saving ? "Saving…" : mode === "create" ? "Create" : "Save" }}
-      </button>
+      </BaseButton>
     </div>
   </form>
 </template>

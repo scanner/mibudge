@@ -95,15 +95,16 @@ value. Actions on the value (save, cancel) are still events.
 
 ## Modals and sheets
 
-Sheets and dialogs call `useModal(() => props.open, () => emit("close"))`.
-It provides the shared behaviour and nothing else:
+Every sheet and dialog is a `BaseSheet` (`components/base/`). It
+teleports to the body, draws the scrim and transition, and calls
+`useModal`, which provides:
 
 - a reference-counted body scroll lock;
 - Escape closes only the topmost modal;
 - focus returns to where it was when the modal closes.
 
-The component keeps its own markup, `Teleport` and transitions. Don't
-add `@keydown.esc` handlers to sheet markup; `useModal` handles Escape.
+A sheet component supplies the title and content and listens for
+`close`. Don't add `@keydown.esc` handlers to sheet markup.
 
 ## Styling
 

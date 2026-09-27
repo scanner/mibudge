@@ -18,7 +18,7 @@ import { computed } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { formatMoney } from "@/domain/money";
 import type { InternalTransaction } from "@/models/internalTransaction";
 import { amountRelativeTo } from "@/models/internalTransaction";

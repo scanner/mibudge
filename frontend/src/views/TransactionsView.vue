@@ -13,7 +13,7 @@ import { useRouter } from "vue-router";
 
 // app imports
 //
-import EmptyState from "@/components/shared/EmptyState.vue";
+import EmptyState from "@/components/base/EmptyState.vue";
 import TransactionGroupList from "@/components/transactions/TransactionGroupList.vue";
 import { useFindShortcut } from "@/composables/useFindShortcut";
 import { FILTER_CHIPS as filterChips } from "@/features/transactions/useTransactionList";
@@ -21,6 +21,10 @@ import { useTransactionList } from "@/features/transactions/useTransactionList";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -65,29 +69,18 @@ function openTransaction(id: string) {
 <template>
   <AppShell>
     <template #action>
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-pill transition-colors"
-        :class="
-          showInternalTxs
-            ? 'bg-accent text-fg-on-accent hover:bg-accent-hover'
-            : 'text-fg-muted hover:bg-surface-muted'
-        "
-        aria-label="Toggle transfers"
+      <BaseIconButton
+        label="Toggle transfers"
+        :pressed="showInternalTxs"
         :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
         @click="toggleInternalTxs"
       >
         <IconArrowsRightLeft class="size-icon-md" />
-      </button>
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-pill text-fg-muted hover:bg-surface-muted"
-        aria-label="Search transactions"
-        @click="toggleSearch"
-      >
+      </BaseIconButton>
+      <BaseIconButton label="Search transactions" @click="toggleSearch">
         <IconSearch v-if="!searchOpen" class="size-icon-md" />
         <IconX v-else class="size-icon-md" />
-      </button>
+      </BaseIconButton>
     </template>
 
     <!-- Search bar -->
@@ -99,19 +92,20 @@ function openTransaction(id: string) {
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
-      <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
-        <input
+      <div v-if="searchOpen" class="-mx-page-x overflow-hidden px-page-x pb-3">
+        <BaseInput
           ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-input text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:ring-1 focus:ring-border-focus"
         />
       </div>
     </Transition>
 
     <!-- Filter chips -->
-    <div class="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pt-1 scrollbar-none">
+    <div
+      class="-mx-page-x mb-4 flex gap-2 overflow-x-auto px-page-x pt-1 scrollbar-none"
+    >
       <button
         v-for="chip in filterChips"
         :key="chip.key"
@@ -130,30 +124,19 @@ function openTransaction(id: string) {
 
     <!-- Loading skeletons -->
     <div v-if="loading" class="space-y-3">
-      <div
-        v-for="i in 6"
-        :key="i"
-        class="h-16 animate-pulse rounded-card bg-surface-muted"
-      />
+      <BaseSkeleton v-for="i in 6" :key="i" class="h-16" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error"
-      class="rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-    >
+    <BaseBanner v-else-if="error" tone="danger">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <!-- Transaction list -->
     <template v-else>
-      <p
-        v-if="assignmentsError"
-        class="mb-3 rounded-card bg-danger-bg px-4 py-3 text-body-sm text-danger-fg"
-        role="alert"
-      >
+      <BaseBanner v-if="assignmentsError" tone="danger" class="mb-3">
         {{ assignmentsError }}
-      </p>
+      </BaseBanner>
 
       <TransactionGroupList
         v-if="displayTransactions.length > 0"
