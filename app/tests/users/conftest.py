@@ -4,7 +4,6 @@ from typing import Any
 
 # 3rd party imports
 import pytest
-from django.conf import LazySettings
 from django.test import RequestFactory
 from pytest_factoryboy import register
 
@@ -16,16 +15,6 @@ from .factories import UserInvitationFactory
 register(
     UserInvitationFactory
 )  # UserInvitationFactory -> user_invitation_factory
-
-
-####################################################################
-#
-@pytest.fixture
-def site_email_settings(settings: LazySettings) -> None:
-    """Pin the site identity that outgoing emails and their links use."""
-    settings.SITE_URL = "http://testserver"
-    settings.SITE_DISPLAY_NAME = "MiBudge [test]"
-    settings.SUPPORT_EMAIL = "support@test.example.com"
 
 
 ####################################################################

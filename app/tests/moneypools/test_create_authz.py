@@ -19,6 +19,7 @@ from typing import Any, cast
 
 # 3rd party imports
 import pytest
+import pytest_check as check
 from django.urls import reverse
 from djmoney.money import Money
 from rest_framework import status
@@ -196,19 +197,30 @@ class TestCreateScopedToOwnedAccounts:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "bank_account" in response.data
-        assert "does not exist" in str(response.data["bank_account"][0])
-
-        victim.refresh_from_db()
-        assert victim.posted_balance == posted_before
-        assert victim.available_balance == available_before
-        assert model.objects.filter(bank_account=victim).count() == (
-            count_before
+        check.is_in(
+            "does not exist",
+            str(response.data.get("bank_account", "")),
+            "same error as a nonexistent account",
         )
-        budget_balances_after = {
-            b.id: b.balance for b in Budget.objects.filter(bank_account=victim)
-        }
-        assert budget_balances_after == budget_balances_before
+        victim.refresh_from_db()
+        check.equal(
+            (victim.posted_balance, victim.available_balance),
+            (posted_before, available_before),
+            "account balances unchanged",
+        )
+        check.equal(
+            model.objects.filter(bank_account=victim).count(),
+            count_before,
+            "nothing created on the account",
+        )
+        check.equal(
+            {
+                b.id: b.balance
+                for b in Budget.objects.filter(bank_account=victim)
+            },
+            budget_balances_before,
+            "budget balances unchanged",
+        )
 
     ####################################################################
     #
@@ -312,34 +324,44 @@ class TestCreateOwnershipDefenseInDepth:
 
     ####################################################################
     #
+    @pytest.mark.parametrize(
+        "build_data",
+        [
+            pytest.param(
+                lambda account, budget: {"bank_account": account, "name": "x"},
+                id="account",
+            ),
+            pytest.param(
+                lambda account, budget: {"src_budget": budget},
+                id="budget",
+            ),
+            # A `many=True` related field validates to a list of instances.
+            pytest.param(
+                lambda account, budget: {"budgets": [budget]},
+                id="budget-list",
+            ),
+        ],
+    )
     def test_unowned_related_object_denied(
         self,
         budget_viewset: BudgetViewSet,
         user_factory: Callable[..., User],
         make_account_with_budgets: Callable[[User], AccountWithBudgets],
+        build_data: Callable[[BankAccount, Budget], dict[str, Any]],
     ) -> None:
         """
-        GIVEN: validated create data naming an account and a budget that
-               belong to another user (as an unscoped serializer field
-               would produce)
+        GIVEN: validated create data naming an account, a budget, or a
+               list of budgets that belong to another user (as an
+               unscoped serializer field would produce)
         WHEN:  the view's create-path ownership check runs
         THEN:  the request is denied with 403 Permission Denied
         """
         victim, [victim_budget, _] = make_account_with_budgets(user_factory())
 
-        data: dict[str, Any] = {"bank_account": victim, "name": "x"}
         with pytest.raises(PermissionDenied):
-            budget_viewset.check_create_ownership(data)
-
-        data = {"src_budget": victim_budget}
-        with pytest.raises(PermissionDenied):
-            budget_viewset.check_create_ownership(data)
-
-        # A `many=True` related field validates to a list of instances.
-        #
-        data = {"budgets": [victim_budget]}
-        with pytest.raises(PermissionDenied):
-            budget_viewset.check_create_ownership(data)
+            budget_viewset.check_create_ownership(
+                build_data(victim, victim_budget)
+            )
 
     ####################################################################
     #
@@ -385,8 +407,7 @@ class TestBudgetCreateFundingTypeDefault:
     def test_omitted_funding_type_uses_default(
         self,
         auth_client: APIClient,
-        user: User,
-        bank_account_factory: Callable[..., BankAccount],
+        account: BankAccount,
         omitted: tuple[str, ...],
     ) -> None:
         """
@@ -397,7 +418,6 @@ class TestBudgetCreateFundingTypeDefault:
         AND:   the budget has the documented defaults: Goal budget type
                and Target Date funding type
         """
-        account = bank_account_factory(owners=[user])
         payload = _budget_payload(account, [])
         for key in omitted:
             payload.pop(key)
@@ -408,5 +428,9 @@ class TestBudgetCreateFundingTypeDefault:
 
         assert response.status_code == status.HTTP_201_CREATED
         budget = Budget.objects.get(id=response.data["id"])
-        assert budget.budget_type == Budget.BudgetType.GOAL
-        assert budget.funding_type == Budget.FundingType.TARGET_DATE
+        check.equal(budget.budget_type, Budget.BudgetType.GOAL, "Goal type")
+        check.equal(
+            budget.funding_type,
+            Budget.FundingType.TARGET_DATE,
+            "Target Date funding",
+        )

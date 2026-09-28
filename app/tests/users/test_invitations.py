@@ -54,19 +54,6 @@ pytestmark = [
 ####################################################################
 #
 @pytest.fixture
-def invitation_limits(settings) -> None:
-    """Pin the limits the boundary tests below are written against."""
-    settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
-    settings.INVITATION_EXPIRY_DAYS = 7
-    settings.INVITATION_MAX_RESENDS = 3
-    settings.INVITATION_RESEND_COOLDOWN_HOURS = 1
-    settings.INVITATION_MAX_PER_WINDOW = 5
-    settings.INVITATION_WINDOW_DAYS = 30
-
-
-####################################################################
-#
-@pytest.fixture
 def inviter(user_factory: Callable[..., User]) -> User:
     """The ordinary user who sends the invitations."""
     return user_factory()

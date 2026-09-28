@@ -223,7 +223,11 @@ def test_something(factory_cls) -> None: ...
   (parametrized: runs a test once with a JWT session and once with an
   API key; use it for endpoints machine credentials can reach). Never
   build an `APIClient()` in a test. A module whose tests all act as one
-  particular user overrides `user`, so `auth_client` follows it.
+  particular user overrides `user`, so `auth_client` follows it. The
+  root conftest also pins email and invitation settings
+  (`site_email_settings`, `invitation_limits`) for both invitation
+  flows; `app/tests/moneypools/conftest.py` provides `account`, a bank
+  account owned by `user`.
 - **Data**: values a test does not assert on come from the model
   factories or the `faker` fixture (`faker.unique.email()` for
   addresses: `UserFactory` gets-or-creates on email, so a repeat

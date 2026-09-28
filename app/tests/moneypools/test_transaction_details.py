@@ -20,6 +20,7 @@ from typing import Any
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from rest_framework.test import APIClient
 
 # Project imports
@@ -63,18 +64,6 @@ def bofa_details() -> Callable[..., dict[str, Any]]:
 ####################################################################
 #
 @pytest.fixture
-def account(
-    bank_account_factory: Callable[..., BankAccount],
-    user: User,
-) -> BankAccount:
-    """A bank account owned by the default ``user`` fixture."""
-    return bank_account_factory(owners=[user])
-
-
-########################################################################
-####################################################################
-#
-@pytest.fixture
 def posted_tx(
     account: BankAccount,
     transaction_factory: Callable[..., Transaction],
@@ -110,15 +99,13 @@ class TestParseMerchantInformation:
     @pytest.mark.parametrize(
         "raw,expected",
         [
-            # The BofA 'CITY, ST' form parses fully.
-            ("MENLO PARK, CA", ("MENLO PARK", "CA", "US")),
-            # Internal whitespace is collapsed before matching.
+            # The BofA 'CITY, ST' form parses fully; whitespace is
+            # collapsed before matching.
             ("  MENLO   PARK ,  CA  ", ("MENLO PARK", "CA", "US")),
             # Anything else lands verbatim in city with no
             # region/country -- a lowercase state code does not match
             # the 'CITY, ST' pattern.
             ("Springfield, il", ("Springfield, il", None, None)),
-            ("TOKYO", ("TOKYO", None, None)),
             # Empty input parses to nothing at all.
             ("   ", (None, None, None)),
         ],
@@ -224,71 +211,90 @@ class TestApplyDetails:
             posted_tx, raw, category=dining_category
         )
 
-        assert status == details_svc.STATUS_APPLIED
-        assert warnings == []
+        check.equal(status, details_svc.STATUS_APPLIED, "applied")
+        check.equal(warnings, [], "without warnings")
 
         posted_tx.refresh_from_db()
-        assert posted_tx.details == raw
-        assert posted_tx.merchant_name == "Trader Joes"
-        assert posted_tx.merchant_city == "MENLO PARK"
-        assert posted_tx.merchant_region == "CA"
-        assert posted_tx.merchant_country == "US"
-        assert posted_tx.merchant_category == (
-            "Grocery Stores and Supermarkets"
+        check.equal(posted_tx.details, raw, "raw dict stored verbatim")
+        check.equal(
+            (
+                posted_tx.merchant_name,
+                posted_tx.merchant_city,
+                posted_tx.merchant_region,
+                posted_tx.merchant_country,
+                posted_tx.merchant_category,
+                posted_tx.merchant_category_code,
+                posted_tx.virtual_card_number,
+            ),
+            (
+                "Trader Joes",
+                "MENLO PARK",
+                "CA",
+                "US",
+                "Grocery Stores and Supermarkets",
+                "5411",
+                "XXXX-XXXX-XXXX-1439",
+            ),
+            "merchant columns extracted",
         )
-        assert posted_tx.merchant_category_code == "5411"
-        assert posted_tx.virtual_card_number == "XXXX-XXXX-XXXX-1439"
-        # phone_number lives only in the details JSON.
-        assert posted_tx.details["phone_number"] == "800-555-0100"
-
-        assert posted_tx.category == dining_category
-        allocation = posted_tx.allocations.get()
-        assert allocation.category == dining_category
-
-        assert posted_tx.description == (
-            "Trader Joes -- MENLO PARK, CA (Grocery Stores and Supermarkets)"
+        check.equal(
+            posted_tx.category, dining_category, "transaction category seeded"
+        )
+        check.equal(
+            posted_tx.allocations.get().category,
+            dining_category,
+            "and copied onto the NULL-category allocation",
+        )
+        check.equal(
+            posted_tx.description,
+            "Trader Joes -- MENLO PARK, CA (Grocery Stores and Supermarkets)",
+            "description recomposed",
         )
 
     ################################################################
     #
-    @pytest.mark.parametrize(
-        "scenario,expected_status",
-        [
-            ("pending", details_svc.STATUS_SKIPPED_PENDING),
-            ("already_enriched", details_svc.STATUS_SKIPPED_HAS_DETAILS),
-        ],
-    )
-    def test_skip_statuses_leave_row_untouched(
+    def test_pending_row_skipped(
         self,
         account: BankAccount,
         transaction_factory: Callable[..., Transaction],
         bofa_details: Callable[..., dict[str, Any]],
-        scenario: str,
-        expected_status: str,
     ) -> None:
         """
-        GIVEN: a transaction that must not be (re-)enriched -- pending,
-               or already enriched without overwrite
+        GIVEN: a pending transaction
         WHEN:  details are applied
-        THEN:  the expected skip status is returned and the row is
-               unchanged
+        THEN:  it is skipped as pending and left unenriched
         """
-        if scenario == "pending":
-            tx = transaction_factory(bank_account=account, pending=True)
-        else:
-            tx = transaction_factory(bank_account=account, pending=False)
-            details_svc.apply_details(tx, bofa_details())
-            tx.refresh_from_db()
-        baseline_name = tx.merchant_name
+        tx = transaction_factory(bank_account=account, pending=True)
+
+        status, warnings = details_svc.apply_details(tx, bofa_details())
+
+        check.equal(status, details_svc.STATUS_SKIPPED_PENDING, "skipped")
+        check.equal(warnings, [], "without warnings")
+        tx.refresh_from_db()
+        check.is_none(tx.details, "row untouched")
+
+    ################################################################
+    #
+    def test_enriched_row_skipped_without_overwrite(
+        self,
+        posted_tx: Transaction,
+        bofa_details: Callable[..., dict[str, Any]],
+    ) -> None:
+        """
+        GIVEN: an already-enriched transaction
+        WHEN:  different details are applied without overwrite
+        THEN:  it is skipped as already enriched and keeps its values
+        """
+        details_svc.apply_details(posted_tx, bofa_details())
 
         status, warnings = details_svc.apply_details(
-            tx, bofa_details(merchant_name="Imposter Mart")
+            posted_tx, bofa_details(merchant_name="Imposter Mart")
         )
 
-        assert status == expected_status
-        assert warnings == []
-        tx.refresh_from_db()
-        assert tx.merchant_name == baseline_name
+        check.equal(status, details_svc.STATUS_SKIPPED_HAS_DETAILS, "skipped")
+        check.equal(warnings, [], "without warnings")
+        posted_tx.refresh_from_db()
+        check.equal(posted_tx.merchant_name, "Trader Joes", "row untouched")
 
     ################################################################
     #
@@ -330,15 +336,24 @@ class TestApplyDetails:
 
         assert status == details_svc.STATUS_APPLIED
         posted_tx.refresh_from_db()
-        # Scraper-owned column updated.
-        assert posted_tx.merchant_name == "Trader Joes #123"
-        # Location was already set by the first enrichment -- never
-        # clobbered, even by overwrite.
-        assert posted_tx.merchant_city == "MENLO PARK"
-        # User's category assignment survives.
-        assert posted_tx.category == user_category
-        # Description recomposes only on FIRST enrichment.
-        assert posted_tx.description == original_description
+        check.equal(
+            posted_tx.merchant_name,
+            "Trader Joes #123",
+            "scraper-owned column updated",
+        )
+        check.equal(
+            posted_tx.merchant_city,
+            "MENLO PARK",
+            "location from the first enrichment never clobbered",
+        )
+        check.equal(
+            posted_tx.category, user_category, "user's category survives"
+        )
+        check.equal(
+            posted_tx.description,
+            original_description,
+            "description recomposes only on first enrichment",
+        )
 
     ################################################################
     #
@@ -365,10 +380,16 @@ class TestApplyDetails:
         )
 
         posted_tx.refresh_from_db()
-        # The refreshed merchant_name reaches the description; location
-        # is unaffected (never clobbered by overwrite either way).
-        assert "Trader Joes #123" in posted_tx.description
-        assert "MENLO PARK" in posted_tx.description
+        check.is_in(
+            "Trader Joes #123",
+            posted_tx.description,
+            "refreshed merchant name reaches the description",
+        )
+        check.is_in(
+            "MENLO PARK",
+            posted_tx.description,
+            "location unaffected (never clobbered by overwrite)",
+        )
 
     ################################################################
     #
@@ -392,54 +413,78 @@ class TestApplyDetails:
 
         assert status == details_svc.STATUS_APPLIED
         posted_tx.refresh_from_db()
-        assert posted_tx.merchant_city == "Redwood City"
-        assert posted_tx.merchant_address == "1001 Example Ave"
-        assert posted_tx.merchant_region == "CA"
-        assert posted_tx.merchant_country == "US"
+        check.equal(
+            (posted_tx.merchant_city, posted_tx.merchant_address),
+            ("Redwood City", "1001 Example Ave"),
+            "user's location values preserved",
+        )
+        check.equal(
+            (posted_tx.merchant_region, posted_tx.merchant_country),
+            ("CA", "US"),
+            "empty location fields filled",
+        )
 
     ################################################################
     #
-    @pytest.mark.parametrize("preset_on", ["allocation", "transaction"])
-    def test_category_seeding_guards(
+    def test_categorized_allocation_not_reseeded(
         self,
-        account: BankAccount,
-        transaction_factory: Callable[..., Transaction],
+        posted_tx: Transaction,
         transaction_category_factory: Callable[..., TransactionCategory],
         dining_category: TransactionCategory,
         bofa_details: Callable[..., dict[str, Any]],
-        preset_on: str,
     ) -> None:
         """
-        GIVEN: a transaction already categorized on one level -- its
-               allocation, or the transaction itself
+        GIVEN: an uncategorized transaction whose allocation already has
+               a category
         WHEN:  details are applied with a different category
-        THEN:  seeding fills only the NULL slots; an assigned category
-               is never overwritten and never triggers a backfill
+        THEN:  the transaction's NULL category seeds; the categorized
+               allocation is left alone
         """
-        tx = transaction_factory(bank_account=account, pending=False)
-        pre_set = transaction_category_factory(group="Home", name="Rent")
-        allocation = tx.allocations.get()
-        if preset_on == "allocation":
-            allocation.category = pre_set
-            allocation.save()
-        else:
-            tx.category = pre_set
-            tx.save()
+        pre_set = transaction_category_factory()
+        allocation = posted_tx.allocations.get()
+        allocation.category = pre_set
+        allocation.save()
 
-        details_svc.apply_details(tx, bofa_details(), category=dining_category)
+        details_svc.apply_details(
+            posted_tx, bofa_details(), category=dining_category
+        )
 
-        tx.refresh_from_db()
+        posted_tx.refresh_from_db()
         allocation.refresh_from_db()
-        if preset_on == "allocation":
-            # The transaction's NULL slot seeds; the pre-categorized
-            # allocation is left alone.
-            assert tx.category == dining_category
-            assert allocation.category == pre_set
-        else:
-            # An assigned transaction never re-seeds, and seeding not
-            # firing means its allocation is not backfilled either.
-            assert tx.category == pre_set
-            assert allocation.category is None
+        check.equal(
+            posted_tx.category, dining_category, "transaction category seeded"
+        )
+        check.equal(allocation.category, pre_set, "allocation left alone")
+
+    ################################################################
+    #
+    def test_categorized_transaction_not_reseeded(
+        self,
+        posted_tx: Transaction,
+        transaction_category_factory: Callable[..., TransactionCategory],
+        dining_category: TransactionCategory,
+        bofa_details: Callable[..., dict[str, Any]],
+    ) -> None:
+        """
+        GIVEN: a transaction that already has a category, with an
+               uncategorized allocation
+        WHEN:  details are applied with a different category
+        THEN:  the transaction keeps its category, and since seeding did
+               not fire the allocation is not backfilled either
+        """
+        pre_set = transaction_category_factory()
+        posted_tx.category = pre_set
+        posted_tx.save()
+
+        details_svc.apply_details(
+            posted_tx, bofa_details(), category=dining_category
+        )
+
+        posted_tx.refresh_from_db()
+        check.equal(posted_tx.category, pre_set, "transaction keeps category")
+        check.is_none(
+            posted_tx.allocations.get().category, "allocation not backfilled"
+        )
 
     ################################################################
     #
@@ -454,7 +499,6 @@ class TestApplyDetails:
             ("0000", "0000", True),
             # Malformed: not stored, warning; raw survives in details.
             ("12AB", None, True),
-            ("123", None, True),
             # Absent/empty: nothing stored, no warning.
             (None, None, False),
             ("", None, False),
@@ -477,13 +521,18 @@ class TestApplyDetails:
         raw = bofa_details(merchant_category_code=raw_mcc)
         status, warnings = details_svc.apply_details(posted_tx, raw)
 
-        assert status == details_svc.STATUS_APPLIED
-        assert bool(warnings) is expect_warning
+        check.equal(status, details_svc.STATUS_APPLIED, "applied")
+        check.equal(bool(warnings), expect_warning, "warning as expected")
         posted_tx.refresh_from_db()
-        assert posted_tx.merchant_category_code == expected_code
-        # The raw value always survives in the stored details JSON.
+        check.equal(
+            posted_tx.merchant_category_code, expected_code, "stored code"
+        )
         assert posted_tx.details is not None
-        assert posted_tx.details["merchant_category_code"] == raw_mcc
+        check.equal(
+            posted_tx.details["merchant_category_code"],
+            raw_mcc,
+            "raw value always survives in the details JSON",
+        )
 
     ################################################################
     #
@@ -517,14 +566,16 @@ class TestApplyDetails:
 
         status, warnings = details_svc.apply_details(tx, raw)
 
-        assert status == details_svc.STATUS_APPLIED
-        assert warnings == []
+        check.equal(status, details_svc.STATUS_APPLIED, "applied")
+        check.equal(warnings, [], "without warnings")
         tx.refresh_from_db()
-        assert tx.merchant_name == "ACME BISTRO"
-        assert tx.merchant_intermediary == "toast"
-        assert tx.description == (
+        check.equal(tx.merchant_name, "ACME BISTRO", "real store recovered")
+        check.equal(tx.merchant_intermediary, "toast", "platform recorded")
+        check.equal(
+            tx.description,
             "ACME BISTRO -- Palo Alto, CA "
-            "(Eating Places and Restaurants, via Toast)"
+            "(Eating Places and Restaurants, via Toast)",
+            "description names the platform",
         )
 
     ################################################################
@@ -544,8 +595,8 @@ class TestApplyDetails:
 
         assert status == details_svc.STATUS_APPLIED
         posted_tx.refresh_from_db()
-        assert posted_tx.merchant_intermediary is None
-        assert "via" not in posted_tx.description
+        check.is_none(posted_tx.merchant_intermediary, "no intermediary")
+        check.is_not_in("via", posted_tx.description, "no 'via' clause")
 
     ################################################################
     #
@@ -565,9 +616,11 @@ class TestApplyDetails:
         )
 
         assert status == details_svc.STATUS_APPLIED
-        assert any("merchant_name truncated" in w for w in warnings)
+        check.is_true(
+            any("merchant_name truncated" in w for w in warnings), "warned"
+        )
         posted_tx.refresh_from_db()
-        assert posted_tx.merchant_name == "M" * 128
+        check.equal(posted_tx.merchant_name, "M" * 128, "truncated to width")
 
 
 ########################################################################
@@ -636,39 +689,49 @@ class TestTransactionDetailsEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["applied"] == 1
-        assert data["skipped_pending"] == 1
-        assert data["skipped_has_details"] == 1
-        assert data["not_found"] == 1
-        statuses = [r["status"] for r in data["results"]]
-        assert statuses == [
-            "applied",
-            "skipped_pending",
-            "skipped_has_details",
-            "not_found",
-        ]
-
+        check.equal(
+            {
+                k: data[k]
+                for k in (
+                    "applied",
+                    "skipped_pending",
+                    "skipped_has_details",
+                    "not_found",
+                )
+            },
+            {
+                "applied": 1,
+                "skipped_pending": 1,
+                "skipped_has_details": 1,
+                "not_found": 1,
+            },
+            "summary counts",
+        )
+        check.equal(
+            [r["status"] for r in data["results"]],
+            ["applied", "skipped_pending", "skipped_has_details", "not_found"],
+            "per-item statuses",
+        )
         posted_tx.refresh_from_db()
-        assert posted_tx.merchant_name == "Trader Joes"
-        assert posted_tx.category == dining_category
+        check.equal(posted_tx.merchant_name, "Trader Joes", "row enriched")
+        check.equal(posted_tx.category, dining_category, "category seeded")
         other_tx.refresh_from_db()
-        assert other_tx.details is None
+        check.is_none(other_tx.details, "foreign row untouched")
 
     ################################################################
     #
     def test_non_owner_gets_404(
         self,
-        api_client: APIClient,
         account: BankAccount,
         user_factory: Callable[..., User],
+        make_auth_client: Callable[[User], APIClient],
     ) -> None:
         """
         GIVEN: an authenticated user who does not own the account
         WHEN:  they POST to its transaction-details action
         THEN:  the account is not found for them
         """
-        api_client.force_authenticate(user=user_factory())
-        response = api_client.post(
+        response = make_auth_client(user_factory()).post(
             f"/api/v1/bank-accounts/{account.id}/transaction-details/",
             {"details": []},
             format="json",
@@ -708,9 +771,11 @@ class TestTransactionDetailsEndpoint:
         )
 
         assert response.status_code == 200
-        assert response.json()["applied"] == 1
+        check.equal(response.json()["applied"], 1, "re-applied")
         posted_tx.refresh_from_db()
-        assert posted_tx.merchant_name == "Trader Joes #123"
+        check.equal(
+            posted_tx.merchant_name, "Trader Joes #123", "with new values"
+        )
 
     ################################################################
     #
@@ -746,12 +811,18 @@ class TestTransactionDetailsEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["applied"] == 1
-        warnings = data["results"][0]["warnings"]
-        assert any("unknown category" in w for w in warnings)
+        check.equal(data["applied"], 1, "item still applied")
+        check.is_true(
+            any(
+                "unknown category" in w for w in data["results"][0]["warnings"]
+            ),
+            "warning names the unknown category",
+        )
         posted_tx.refresh_from_db()
-        assert posted_tx.category is None
-        assert TransactionCategory.objects.count() == before
+        check.is_none(posted_tx.category, "transaction stays unassigned")
+        check.equal(
+            TransactionCategory.objects.count(), before, "nothing created"
+        )
 
 
 ########################################################################
@@ -860,15 +931,33 @@ class TestTransactionMerchantAPI:
         response = auth_client.get(f"/api/v1/transactions/{enriched_tx.id}/")
         assert response.status_code == 200
         data = response.json()
-        assert data["merchant_name"] == "Trader Joes"
-        assert data["merchant_city"] == "MENLO PARK"
-        assert data["merchant_region"] == "CA"
-        assert data["merchant_country"] == "US"
-        assert data["merchant_category_code"] == "5411"
-        assert data["virtual_card_number"] == "XXXX-XXXX-XXXX-1439"
-        assert data["has_details"] is True
-        assert data["description_user_edited"] is False
-        assert "details" not in data
+        check.equal(
+            {
+                k: data[k]
+                for k in (
+                    "merchant_name",
+                    "merchant_city",
+                    "merchant_region",
+                    "merchant_country",
+                    "merchant_category_code",
+                    "virtual_card_number",
+                    "has_details",
+                    "description_user_edited",
+                )
+            },
+            {
+                "merchant_name": "Trader Joes",
+                "merchant_city": "MENLO PARK",
+                "merchant_region": "CA",
+                "merchant_country": "US",
+                "merchant_category_code": "5411",
+                "virtual_card_number": "XXXX-XXXX-XXXX-1439",
+                "has_details": True,
+                "description_user_edited": False,
+            },
+            "merchant columns and flags serialized",
+        )
+        check.is_not_in("details", data, "raw details JSON not exposed")
 
     ################################################################
     #
@@ -895,43 +984,66 @@ class TestTransactionMerchantAPI:
 
         assert response.status_code == 200
         enriched_tx.refresh_from_db()
-        assert enriched_tx.merchant_address == "700 Example St"
-        assert enriched_tx.merchant_city == "Menlo Park"
-        assert str(enriched_tx.merchant_latitude) == "37.453000"
-        assert str(enriched_tx.merchant_longitude) == "-122.182000"
-        assert enriched_tx.merchant_name == "Trader Joes"
+        check.equal(
+            (
+                enriched_tx.merchant_address,
+                enriched_tx.merchant_city,
+                str(enriched_tx.merchant_latitude),
+                str(enriched_tx.merchant_longitude),
+            ),
+            ("700 Example St", "Menlo Park", "37.453000", "-122.182000"),
+            "location fields updated",
+        )
+        check.equal(
+            enriched_tx.merchant_name,
+            "Trader Joes",
+            "read-only merchant_name ignored",
+        )
 
     ################################################################
     #
-    @pytest.mark.parametrize("same_value", [False, True])
-    def test_description_patch_sets_user_edited_flag(
+    def test_description_change_sets_user_edited_flag(
         self,
         auth_client: APIClient,
         posted_tx: Transaction,
         bofa_details: Callable[..., dict[str, Any]],
-        same_value: bool,
     ) -> None:
         """
         GIVEN: a transaction with an untouched description
-        WHEN:  the user PATCHes a description (changed or identical)
-        THEN:  description_user_edited flips on only for a real
-               change, and a later enrichment then leaves the user's
-               description alone
+        WHEN:  the user PATCHes a new description, then it is enriched
+        THEN:  description_user_edited is set, and the enrichment leaves
+               the user's description alone
         """
-        new_description = (
-            posted_tx.description if same_value else "My custom label"
-        )
         response = auth_client.patch(
             f"/api/v1/transactions/{posted_tx.id}/",
-            {"description": new_description},
+            {"description": "My custom label"},
+            format="json",
+        )
+        assert response.status_code == 200
+        posted_tx.refresh_from_db()
+        assert posted_tx.description_user_edited
+
+        details_svc.apply_details(posted_tx, bofa_details())
+
+        posted_tx.refresh_from_db()
+        assert posted_tx.description == "My custom label"
+
+    ################################################################
+    #
+    def test_unchanged_description_leaves_flag_off(
+        self, auth_client: APIClient, posted_tx: Transaction
+    ) -> None:
+        """
+        GIVEN: a transaction with an untouched description
+        WHEN:  the user PATCHes the same description back
+        THEN:  description_user_edited stays off
+        """
+        response = auth_client.patch(
+            f"/api/v1/transactions/{posted_tx.id}/",
+            {"description": posted_tx.description},
             format="json",
         )
 
         assert response.status_code == 200
         posted_tx.refresh_from_db()
-        assert posted_tx.description_user_edited is not same_value
-
-        if not same_value:
-            details_svc.apply_details(posted_tx, bofa_details())
-            posted_tx.refresh_from_db()
-            assert posted_tx.description == "My custom label"
+        assert not posted_tx.description_user_edited

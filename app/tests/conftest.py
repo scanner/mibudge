@@ -260,6 +260,33 @@ def mock_send_notification_now(mocker: MockerFixture) -> MagicMock:
 ####################################################################
 #
 @pytest.fixture
+def site_email_settings(settings: LazySettings) -> None:
+    """Pin the site identity that outgoing emails and their links use."""
+    settings.SITE_URL = "http://testserver"
+    settings.SITE_DISPLAY_NAME = "MiBudge [test]"
+    settings.SUPPORT_EMAIL = "support@test.example.com"
+
+
+####################################################################
+#
+@pytest.fixture
+def invitation_limits(settings: LazySettings) -> None:
+    """Pin the invitation limits and email locale the tests assume.
+
+    Both invitation flows (admin user invitations and bank-account
+    co-ownership invitations) read the same `INVITATION_*` settings.
+    """
+    settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
+    settings.INVITATION_EXPIRY_DAYS = 7
+    settings.INVITATION_MAX_RESENDS = 3
+    settings.INVITATION_RESEND_COOLDOWN_HOURS = 1
+    settings.INVITATION_MAX_PER_WINDOW = 5
+    settings.INVITATION_WINDOW_DAYS = 30
+
+
+####################################################################
+#
+@pytest.fixture
 def user() -> User:
     """
     Return a persisted User instance created by UserFactory.
