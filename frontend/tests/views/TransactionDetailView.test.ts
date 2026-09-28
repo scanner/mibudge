@@ -53,7 +53,6 @@ function serveTransactions(txs: ReturnType<typeof makeTransaction>[]) {
         : {};
       return HttpResponse.json({ ...base, ...body });
     }),
-    http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
   );
 }
 
@@ -143,20 +142,11 @@ describe("TransactionDetailView", () => {
     const household = makeBankAccount({ name: "Household" });
     const savings = makeBankAccount({ name: "Savings" });
     withAccounts([household, savings], savings.id);
-    const tx = makeTransaction({ bank_account: household.id });
+    const tx = makeTransaction({
+      bank_account: household.id,
+      allocations: [makeAllocation({ budget: household.unallocated_budget })],
+    });
     serveTransactions([tx]);
-    server.use(
-      http.get("/api/v1/allocations/", () =>
-        HttpResponse.json(
-          makePage([
-            makeAllocation({
-              transaction: tx.id,
-              budget: household.unallocated_budget,
-            }),
-          ]),
-        ),
-      ),
-    );
 
     const { wrapper } = await openApp(`/transactions/${tx.id}/`);
 

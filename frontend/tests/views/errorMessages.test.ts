@@ -96,7 +96,6 @@ describe("budget pages", () => {
         HttpResponse.json(budget),
       ),
       http.get("/api/v1/budgets/", () => HttpResponse.json(makePage([budget]))),
-      http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
     );
   }
 
@@ -179,15 +178,15 @@ describe("budget pages", () => {
     serveBudget(budget);
     server.use(
       http.get(
-        "/api/v1/allocations/",
-        refuse("Allocations are unavailable.", 503),
+        "/api/v1/transactions/",
+        refuse("Transactions are unavailable.", 503),
       ),
     );
 
     const { wrapper } = await open(`/budgets/${budget.id}/`);
 
     await vi.waitFor(() =>
-      expect(wrapper.text()).toContain("Allocations are unavailable."),
+      expect(wrapper.text()).toContain("Transactions are unavailable."),
     );
     expect(wrapper.text()).not.toContain("No transactions assigned");
   });
@@ -202,19 +201,12 @@ describe("budget pages", () => {
     const tx = makeTransaction({
       bank_account: account.id,
       party: "Corner Market",
+      allocations: [makeAllocation({ budget: budget.id, amount: "-12.34" })],
     });
     serveBudget(budget);
     server.use(
-      http.get("/api/v1/allocations/", () =>
-        HttpResponse.json(
-          makePage([
-            makeAllocation({
-              transaction: tx.id,
-              budget: budget.id,
-              amount: tx.amount,
-            }),
-          ]),
-        ),
+      http.get("/api/v1/transactions/", () =>
+        HttpResponse.json(makePage([tx])),
       ),
       http.get(`/api/v1/transactions/${tx.id}/`, () => HttpResponse.json(tx)),
       http.post(
@@ -243,7 +235,6 @@ describe("transaction detail", () => {
   function serveTransaction(tx: ReturnType<typeof makeTransaction>) {
     server.use(
       http.get(`/api/v1/transactions/${tx.id}/`, () => HttpResponse.json(tx)),
-      http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
     );
   }
 
@@ -358,7 +349,6 @@ describe("transaction list", () => {
           ),
         );
       }),
-      http.get("/api/v1/allocations/", () => HttpResponse.json(makePage([]))),
     );
     const { wrapper } = await open("/transactions/");
     await vi.waitFor(() => expect(wrapper.text()).toContain("Newest"));

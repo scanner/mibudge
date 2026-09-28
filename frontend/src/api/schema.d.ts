@@ -787,7 +787,7 @@ export interface paths {
         };
         /**
          * List transactions
-         * @description Return transactions belonging to the authenticated user's accounts. Filterable by bank_account, pending status, transaction_type, and date range (date_from/date_to). Searchable by description, raw_description, and party. Orderable by transaction_date, amount, or created_at.
+         * @description Return transactions belonging to the authenticated user's accounts, each with all of its allocations embedded. Filterable by bank_account, budget (transactions with an allocation to that budget), unallocated (true: no allocation to a budget other than the account's Unallocated budget), pending status, transaction_type, date range (date_from/date_to), category, and merchant fields. Searchable by description, raw_description, and party. Orderable by transaction_date, amount, or created_at.
          */
         get: operations["transactions_list"];
         put?: never;
@@ -811,7 +811,7 @@ export interface paths {
         };
         /**
          * Get transaction details
-         * @description Return a single transaction by UUID.
+         * @description Return a single transaction by UUID, with all of its allocations embedded.
          */
         get: operations["transactions_retrieve"];
         /**
@@ -2165,6 +2165,7 @@ export interface components {
             readonly merchant_category_code: string | null;
             readonly virtual_card_number: string | null;
             readonly has_details: boolean;
+            readonly allocations: components["schemas"]["TransactionAllocation"][];
             bank_transaction_id?: string | null;
             /** Format: uuid */
             readonly linked_transaction: string;
@@ -2231,6 +2232,38 @@ export interface components {
             readonly created_at: string;
             /** Format: date-time */
             readonly modified_at: string;
+        };
+        /**
+         * @description Serializer for transaction allocations.
+         *
+         *     An allocation maps a portion of a transaction's amount to a budget.
+         *     On create the caller supplies transaction, amount, and optionally
+         *     budget (defaults to unallocated) and category.  After creation,
+         *     budget, category, and memo are updatable.
+         *
+         *     The serializer enforces two key constraints:
+         *
+         *     1. **Same-account restriction** -- the budget must belong to the
+         *        same bank account as the transaction.  Cross-account allocations
+         *        are rejected with a 400 error.
+         *     2. **Sum constraint** -- the total allocated amount across all
+         *        allocations for a transaction must not exceed the transaction
+         *        amount.
+         *
+         *     The ``amount_currency`` is read from raw request data by
+         *     djmoney's ``MoneyField.get_value()`` -- no explicit currency
+         *     field declaration is needed.
+         */
+        TransactionAllocationRequest: {
+            /** Format: uuid */
+            transaction: string;
+            /** Format: uuid */
+            budget?: string | null;
+            /** Format: decimal */
+            amount: string;
+            /** Format: uuid */
+            category?: string | null;
+            memo?: string | null;
         };
         /**
          * @description Serializer for transaction categories.
@@ -3765,6 +3798,7 @@ export interface operations {
         parameters: {
             query?: {
                 bank_account?: string;
+                budget?: string;
                 category?: string;
                 category_group?: string;
                 date_from?: string;
@@ -3813,6 +3847,7 @@ export interface operations {
                  *     * `` - --------
                  */
                 transaction_type?: "" | "ach" | "ach_reversal" | "adjustment" | "atm_withdrawal" | "balance_sweep" | "bank_generated_credit" | "bill_payment" | "c2c" | "check" | "check_deposit" | "courtesy_credit" | "fee" | "fx_order" | "interest_credit" | "migration_interbank_transfer" | "pin_purchase" | "protected_goal_account_transfer" | "round-up_transfer" | "shared_transfer" | "signature_credit" | "signature_purchase" | "signature_return" | "wire_transfer";
+                unallocated?: boolean;
                 uncategorized?: boolean;
                 virtual_card_last4?: string;
             };
@@ -3983,6 +4018,7 @@ export interface operations {
         parameters: {
             query?: {
                 bank_account?: string;
+                budget?: string;
                 category?: string;
                 category_group?: string;
                 date_from?: string;
@@ -4031,6 +4067,7 @@ export interface operations {
                  *     * `` - --------
                  */
                 transaction_type?: "" | "ach" | "ach_reversal" | "adjustment" | "atm_withdrawal" | "balance_sweep" | "bank_generated_credit" | "bill_payment" | "c2c" | "check" | "check_deposit" | "courtesy_credit" | "fee" | "fx_order" | "interest_credit" | "migration_interbank_transfer" | "pin_purchase" | "protected_goal_account_transfer" | "round-up_transfer" | "shared_transfer" | "signature_credit" | "signature_purchase" | "signature_return" | "wire_transfer";
+                unallocated?: boolean;
                 uncategorized?: boolean;
                 virtual_card_last4?: string;
             };

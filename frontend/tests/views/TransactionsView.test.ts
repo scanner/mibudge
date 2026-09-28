@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // app imports
 //
-import type { BankAccountDto, BudgetDto, TransactionDto } from "@/api/dto";
+import type { BankAccountDto, BudgetDto } from "@/api/dto";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import TransactionsView from "@/views/TransactionsView.vue";
@@ -23,7 +23,7 @@ import {
   makePage,
   makeTransaction,
 } from "../mocks/factories";
-import { server } from "../mocks/server";
+import { requestsTo, server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -187,7 +187,6 @@ describe("TransactionsView", () => {
 //
 describe("TransactionsView budget assignments", () => {
   let account: BankAccountDto;
-  let tx: TransactionDto;
   let groceries: BudgetDto;
   let rent: BudgetDto;
 
@@ -195,34 +194,32 @@ describe("TransactionsView budget assignments", () => {
     withAuth();
     account = makeBankAccount();
     withAccounts([account]);
-    tx = makeTransaction({ bank_account: account.id, party: "Corner Market" });
     groceries = makeBudget({ name: "Groceries", bank_account: account.id });
     rent = makeBudget({ name: "Rent", bank_account: account.id });
     server.use(
-      http.get("/api/v1/transactions/", () =>
-        HttpResponse.json(makePage([tx])),
-      ),
       http.get("/api/v1/budgets/", () =>
         HttpResponse.json(makePage([groceries, rent])),
       ),
     );
   });
 
-  function allocatedTo(budget: BudgetDto) {
-    return makePage([
-      makeAllocation({ transaction: tx.id, budget: budget.id }),
-    ]);
+  function allocatedTo(budget: BudgetDto, party = "Corner Market") {
+    return makeTransaction({
+      bank_account: account.id,
+      party,
+      allocations: [makeAllocation({ budget: budget.id })],
+    });
   }
 
   // GIVEN: the list was visited with a transaction assigned to Groceries
   // WHEN:  the transaction is re-assigned to Rent elsewhere (a co-owner,
   //        or a sync) and the list is visited again
-  // THEN:  the list shows Rent
+  // THEN:  the list shows Rent, from the transactions it reloaded
   //
-  it("refetches budget assignments on every visit", async () => {
+  it("shows each visit's budget assignments", async () => {
     server.use(
-      http.get("/api/v1/allocations/", () =>
-        HttpResponse.json(allocatedTo(groceries)),
+      http.get("/api/v1/transactions/", () =>
+        HttpResponse.json(makePage([allocatedTo(groceries)])),
       ),
     );
     const first = await mountWithApp(TransactionsView, {
@@ -232,8 +229,8 @@ describe("TransactionsView budget assignments", () => {
     first.wrapper.unmount();
 
     server.use(
-      http.get("/api/v1/allocations/", () =>
-        HttpResponse.json(allocatedTo(rent)),
+      http.get("/api/v1/transactions/", () =>
+        HttpResponse.json(makePage([allocatedTo(rent)])),
       ),
     );
     const second = await mountWithApp(TransactionsView, {
@@ -244,56 +241,47 @@ describe("TransactionsView budget assignments", () => {
     expect(second.wrapper.text()).not.toContain("Groceries");
   });
 
-  // GIVEN: the "Unallocated" filter is active and a transaction is
-  //        assigned to a budget
-  // WHEN:  the list opens and the budget assignments are still loading
-  // THEN:  the transaction is never shown as unallocated
+  // GIVEN: a list with assigned and unassigned transactions
+  // WHEN:  the "Unallocated" chip is selected, then "All"
+  // THEN:  the list is reloaded with `unallocated=true` and shows the
+  //        server's matches, then reloaded without it
   //
-  it("does not match every row while assignments load", async () => {
-    useTransactionNavStore().savedFilter = "unallocated";
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
+  it("asks the server for unallocated transactions", async () => {
+    const assigned = allocatedTo(groceries, "Assigned Shop");
+    const unassigned = makeTransaction({
+      bank_account: account.id,
+      party: "Unassigned Shop",
+    });
     server.use(
-      http.get("/api/v1/allocations/", async () => {
-        await gate;
-        return HttpResponse.json(allocatedTo(groceries));
+      http.get("/api/v1/transactions/", ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        return HttpResponse.json(
+          makePage(
+            params.get("unallocated") === "true"
+              ? [unassigned]
+              : [assigned, unassigned],
+          ),
+        );
       }),
     );
-
     const { wrapper } = await mountWithApp(TransactionsView, {
       route: "/transactions/",
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(wrapper.text()).not.toContain("Corner Market");
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Assigned Shop"));
+    const chip = (label: string) =>
+      wrapper.findAll("button").find((b) => b.text() === label)!;
 
-    release();
-    await flushPromises();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(wrapper.text()).not.toContain("Corner Market");
-  });
-
-  // GIVEN: the budget assignments fail to load
-  // WHEN:  the list opens
-  // THEN:  the server's error message is shown
-  //  AND:  the transactions, which did load, are still listed
-  //
-  it("reports a failed assignment load", async () => {
-    server.use(
-      http.get("/api/v1/allocations/", () =>
-        HttpResponse.json(
-          { detail: "Allocations are unavailable." },
-          { status: 503 },
-        ),
-      ),
-    );
-
-    const { wrapper } = await mountWithApp(TransactionsView, {
-      route: "/transactions/",
+    await chip("Unallocated").trigger("click");
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain("Unassigned Shop");
+      expect(wrapper.text()).not.toContain("Assigned Shop");
     });
 
-    await vi.waitFor(() =>
-      expect(wrapper.text()).toContain("Allocations are unavailable."),
-    );
-    expect(wrapper.text()).toContain("Corner Market");
+    await chip("All").trigger("click");
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Assigned Shop"));
+    const lists = await requestsTo("GET", "/api/v1/transactions/");
+    expect(
+      lists.map((r) => new URL(r.url).searchParams.get("unallocated")),
+    ).toEqual([null, "true", null]);
   });
 });

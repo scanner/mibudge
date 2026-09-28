@@ -10,21 +10,14 @@ import { describe, expect, it } from "vitest";
 
 // app imports
 //
-import { allocationFromDto } from "@/models/allocation";
 import { budgetFromDto } from "@/models/budget";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { useAllocationsStore } from "@/stores/allocations";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useSessionStore } from "@/stores/session";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import { withAccounts, withAuth } from "../helpers";
-import {
-  makeAllocation,
-  makeBankAccount,
-  makeBudget,
-  makePage,
-} from "../mocks/factories";
+import { makeBankAccount, makeBudget, makePage } from "../mocks/factories";
 import { server } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
@@ -61,8 +54,8 @@ describe("store reset", () => {
     expect(typeof useStore().reset).toBe("function");
   });
 
-  // GIVEN: a signed-in session with accounts, budgets, allocations and
-  //        a remembered list position
+  // GIVEN: a signed-in session with accounts, budgets and a remembered
+  //        list position
   // WHEN:  the user signs out
   // THEN:  every store is empty and the tab's stored account is gone
   //
@@ -72,15 +65,9 @@ describe("store reset", () => {
     withAccounts([account]);
     const budgets = useBudgetsStore();
     budgets.upsert(budgetFromDto(makeBudget()));
-    const allocations = useAllocationsStore();
-    allocations.invalidate();
     const nav = useTransactionNavStore();
     nav.setIds(["a", "b"]);
     nav.savedSearch = "coffee";
-    // Seed an allocation index by hand (normally fetched).
-    allocations.setForTransaction(account.id, "t", [
-      allocationFromDto(makeAllocation()),
-    ]);
 
     useSessionStore().logout();
 
@@ -88,7 +75,6 @@ describe("store reset", () => {
     expect(useBankAccountsStore().all).toEqual([]);
     expect(useAccountContextStore().activeBankAccountId).toBeNull();
     expect(budgets.all).toEqual([]);
-    expect(allocations.indexFor(account.id)).toBeNull();
     expect(nav.orderedIds).toEqual([]);
     expect(nav.savedSearch).toBe("");
     expect(

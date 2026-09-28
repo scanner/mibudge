@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 import pytest_check as check
 import recurrence
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from djmoney.money import Money
 from rest_framework import status
@@ -25,6 +27,7 @@ from moneypools.models import (
     InternalTransaction,
     Transaction,
     TransactionAllocation,
+    TransactionCategory,
     get_default_currency,
 )
 from moneypools.service import transaction as transaction_svc
@@ -1220,6 +1223,209 @@ class TestTransactionAPI:
         assert [t["id"] for t in response.data["results"]] == [str(grocery.id)]
 
 
+####################################################################
+#
+@pytest.fixture
+def ledger(
+    account: BankAccount,
+    unallocated: Budget,
+    goal: Budget,
+    make_goal: Callable[[], Budget],
+    transaction_factory: Callable[..., Transaction],
+) -> dict[str, Any]:
+    """Transactions on `account` covering each way a row can be allocated.
+
+    Returns:
+        A dict of budgets ('unallocated', 'goal', 'other') and
+        transactions: 'unassigned' (all on Unallocated), 'assigned'
+        (all on `goal`), 'partial' ($40 of $100 on `goal`, the rest on
+        Unallocated), 'pending' (pending, on Unallocated) and
+        'elsewhere' (all on a second goal).
+    """
+    other = make_goal()
+
+    def spend(raw_description: str, **kwargs: Any) -> Transaction:
+        return transaction_factory(
+            bank_account=account,
+            amount=Money(-100, "USD"),
+            raw_description=raw_description,
+            **kwargs,
+        )
+
+    rows = {
+        "unassigned": spend("UNASSIGNED SHOP"),
+        "assigned": spend("ASSIGNED SHOP"),
+        "partial": spend("PARTIAL SHOP"),
+        "pending": spend("PENDING SHOP", pending=True),
+        "elsewhere": spend("ELSEWHERE SHOP"),
+    }
+    transaction_svc.split(rows["assigned"], {str(goal.id): Decimal("100")})
+    transaction_svc.split(rows["partial"], {str(goal.id): Decimal("40")})
+    transaction_svc.split(rows["elsewhere"], {str(other.id): Decimal("100")})
+    return {
+        "unallocated": unallocated,
+        "goal": goal,
+        "other": other,
+        **rows,
+    }
+
+
+####################################################################
+#
+@pytest.fixture
+def make_rich_tx(
+    account: BankAccount,
+    goal: Budget,
+    transaction_factory: Callable[..., Transaction],
+    transaction_category_factory: Callable[..., TransactionCategory],
+) -> Callable[[], Transaction]:
+    """Return a factory for transactions that use every embedded relation.
+
+    Each call makes a categorized transaction split between `goal` and
+    Unallocated and linked to a counterpart transaction (both rows are
+    on `account`).
+
+    Returns:
+        A callable `() -> Transaction`.
+    """
+
+    def _make() -> Transaction:
+        counterpart = transaction_factory(bank_account=account)
+        tx = transaction_factory(
+            bank_account=account, amount=Money(-100, "USD")
+        )
+        tx.category = transaction_category_factory()
+        tx.linked_transaction = counterpart
+        tx.save(update_fields=["category", "linked_transaction"])
+        transaction_svc.split(tx, {str(goal.id): Decimal("30")})
+        return tx
+
+    return _make
+
+
+########################################################################
+########################################################################
+#
+class TestTransactionListAllocations:
+    """Budget filters and embedded allocations on /api/v1/transactions/."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "query, expected",
+        [
+            ({"budget": "goal"}, {"assigned", "partial"}),
+            ({"budget": "unallocated"}, {"unassigned", "partial", "pending"}),
+            ({"unallocated": "true"}, {"unassigned", "pending"}),
+            ({"unallocated": "false"}, {"assigned", "partial", "elsewhere"}),
+        ],
+        ids=["budget", "unallocated_budget", "unallocated", "allocated"],
+    )
+    def test_filter(
+        self,
+        any_auth_client: APIClient,
+        ledger: dict[str, Any],
+        query: dict[str, str],
+        expected: set[str],
+    ) -> None:
+        """
+        GIVEN: transactions allocated in every way a row can be
+        WHEN:  GET /api/v1/transactions/ with a budget or unallocated
+               filter
+        THEN:  exactly the matching transactions are returned, a
+               partly assigned split counting as allocated
+        """
+        params = {
+            key: str(ledger[value].id) if key == "budget" else value
+            for key, value in query.items()
+        }
+
+        response = any_auth_client.get(
+            reverse("api_v1:transaction-list"), params
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert {r["id"] for r in response.data["results"]} == {
+            str(ledger[name].id) for name in expected
+        }
+
+    ####################################################################
+    #
+    def test_budget_filter_with_search(
+        self, auth_client: APIClient, ledger: dict[str, Any]
+    ) -> None:
+        """
+        GIVEN: two transactions allocated to a goal
+        WHEN:  GET /api/v1/transactions/?budget=<goal>&search=PARTIAL
+        THEN:  only the goal's transaction matching the search is
+               returned
+        """
+        response = auth_client.get(
+            reverse("api_v1:transaction-list"),
+            {"budget": str(ledger["goal"].id), "search": "PARTIAL"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [r["id"] for r in response.data["results"]] == [
+            str(ledger["partial"].id)
+        ]
+
+    ####################################################################
+    #
+    def test_budget_filtered_row_embeds_every_allocation(
+        self, auth_client: APIClient, ledger: dict[str, Any]
+    ) -> None:
+        """
+        GIVEN: a split transaction, $40 on a goal and $60 on Unallocated
+        WHEN:  GET /api/v1/transactions/?budget=<goal>
+        THEN:  its row embeds both allocations, not only the goal's
+        """
+        response = auth_client.get(
+            reverse("api_v1:transaction-list"),
+            {"budget": str(ledger["goal"].id)},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        row = next(
+            r
+            for r in response.data["results"]
+            if r["id"] == str(ledger["partial"].id)
+        )
+        assert sorted(
+            (a["budget"], Decimal(a["amount"])) for a in row["allocations"]
+        ) == sorted(
+            [
+                (ledger["goal"].id, Decimal("-40")),
+                (ledger["unallocated"].id, Decimal("-60")),
+            ]
+        )
+
+    ####################################################################
+    #
+    def test_list_query_count_is_constant(
+        self,
+        auth_client: APIClient,
+        make_rich_tx: Callable[[], Transaction],
+    ) -> None:
+        """
+        GIVEN: categorized, linked, split transactions
+        WHEN:  the transaction list is fetched, then fetched again after
+               more such transactions are added
+        THEN:  both fetches run the same number of queries
+        """
+        url = reverse("api_v1:transaction-list")
+        make_rich_tx()
+        with CaptureQueriesContext(connection) as few:
+            assert auth_client.get(url).status_code == status.HTTP_200_OK
+        for _ in range(3):
+            make_rich_tx()
+        with CaptureQueriesContext(connection) as many:
+            response = auth_client.get(url)
+
+        assert response.data["count"] == 8
+        assert len(many) == len(few)
+
+
 ########################################################################
 ########################################################################
 #
@@ -1845,6 +2051,11 @@ class TestResolvePendingAPI:
             Decimal(response.data["amount"]),
             expected_final.amount,
             "final amount",
+        )
+        check.equal(
+            [Decimal(a["amount"]) for a in response.data["allocations"]],
+            [expected_final.amount],
+            "embedded allocation carries the final amount",
         )
         account.refresh_from_db()
         check.equal(

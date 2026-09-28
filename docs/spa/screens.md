@@ -87,7 +87,9 @@ Account tab.
    TopBar opens the full-screen edit sheet (`BudgetEditSheet`); the bank
    account and the budget type cannot change.
 4. Pause / resume and Archive; archiving asks for confirmation.
-5. The budget's transactions, grouped by date, with search, a toggle to
+5. The budget's transactions (`useBudgetTransactions`, paged from
+   `GET /api/v1/transactions/?budget=<id>`), grouped by date, with
+   infinite scroll, search over loaded and older rows, a toggle to
    include transfers, and a per-row "remove from this budget".
 
 **Create** (`/app/budgets/create/`, `BudgetCreateView` + `BudgetForm`):
@@ -101,16 +103,19 @@ monthly or yearly, with the days, and a plain-English preview.
 **List** (`/app/transactions/`, `TransactionsView`,
 `features/transactions/useTransactionList.ts`):
 
-- Filter chips: All, Unallocated, Pending, Income.
+- Filter chips: All, Unallocated, Pending, Income. Unallocated is a
+  server query, so it covers the account's whole history; Pending and
+  Income filter the loaded rows.
 - Rows are grouped by date under sticky headers, newest first, and the
-  next page loads as the list scrolls (`useInfiniteList`).
+  next page loads as the list scrolls (`useInfiniteList`). Each row's
+  allocations come embedded in the page.
 - A `TransactionRow` shows the party, amount, running balance, type and
   its allocation: one budget with that budget's new balance, a split, or
   "Unallocated". A pending transaction is marked PENDING; a transaction
   still to assign has the unallocated left rule.
 - The TopBar toggles transfers between budgets and opens search
   (Cmd/Ctrl-F), which matches loaded rows and asks the server for older
-  ones.
+  ones (`useMergedSearch`).
 
 **Detail** (`/app/transactions/:id/`, `TransactionDetailView`,
 `features/transactions/useTransactionDetail.ts`):

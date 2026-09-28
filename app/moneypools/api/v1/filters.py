@@ -8,9 +8,10 @@ permission checks are needed here.
 """
 
 # system imports
-from django.db.models import Q
+from uuid import UUID
 
 # 3rd party imports
+from django.db.models import Exists, F, OuterRef, Q, QuerySet
 from django_filters import rest_framework as filters
 
 # Project imports
@@ -97,9 +98,18 @@ class BudgetFilter(filters.FilterSet):
 ########################################################################
 #
 class TransactionFilter(filters.FilterSet):
-    """Filter transactions by bank account, date range, status, and type."""
+    """Filter transactions by account, budget, date range, status, and type.
+
+    'budget' keeps transactions with any allocation to that budget.
+    'unallocated=true' keeps transactions with no allocation to a real
+    budget (every allocation is on the account's Unallocated budget or
+    on no budget); 'unallocated=false' keeps the rest.  A partly
+    assigned split is not unallocated.
+    """
 
     bank_account = filters.UUIDFilter(field_name="bank_account__id")
+    budget = filters.UUIDFilter(method="filter_by_budget")
+    unallocated = filters.BooleanFilter(method="filter_by_unallocated")
     pending = filters.BooleanFilter()
     transaction_type = filters.ChoiceFilter(
         choices=Transaction.TransactionType.choices,
@@ -153,6 +163,8 @@ class TransactionFilter(filters.FilterSet):
         model = Transaction
         fields = [
             "bank_account",
+            "budget",
+            "unallocated",
             "pending",
             "transaction_type",
             "date_from",
@@ -170,6 +182,40 @@ class TransactionFilter(filters.FilterSet):
             "virtual_card_last4",
             "has_details",
         ]
+
+    ####################################################################
+    #
+    def filter_by_budget(
+        self, queryset: QuerySet[Transaction], name: str, value: UUID
+    ) -> QuerySet[Transaction]:
+        """Keep transactions with an allocation to the budget `value`."""
+        return queryset.filter(
+            Exists(
+                TransactionAllocation.objects.filter(
+                    transaction__id=OuterRef("id"), budget__id=value
+                )
+            )
+        )
+
+    ####################################################################
+    #
+    def filter_by_unallocated(
+        self, queryset: QuerySet[Transaction], name: str, value: bool
+    ) -> QuerySet[Transaction]:
+        """Keep transactions with (false) or without (true) a real budget.
+
+        A real budget is any budget other than its account's Unallocated
+        budget.  An allocation's budget always shares the transaction's
+        account, so the budget's own account names the Unallocated one.
+        """
+        assigned = Exists(
+            TransactionAllocation.objects.filter(
+                transaction__id=OuterRef("id"), budget__isnull=False
+            ).exclude(budget__bank_account__unallocated_budget=F("budget"))
+        )
+        return (
+            queryset.exclude(assigned) if value else queryset.filter(assigned)
+        )
 
 
 ########################################################################

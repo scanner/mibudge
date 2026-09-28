@@ -18,7 +18,6 @@ holds models from `models/`, never DTOs, and defines `reset()`.
 | `bankAccounts`      | `stores/bankAccounts.ts`   | The user's bank accounts, in list order. `loadAll`, `refresh`, `invalidate`, `fetchOne`, `create`, `update`, `remove`; read with `all` and `byId`. |
 | `accountContext`    | `stores/accountContext.ts` | Which account the user is looking at: `activeBankAccountId`, `activeBankAccount`, `unallocatedBudgetId`. `init()` picks the account: the one stored for this tab, else the user's default, else the first. `refresh()` moves off a deleted account. The choice persists per tab in `sessionStorage`. |
 | `budgets`           | `stores/budgets.ts`        | Budgets keyed by id. `fetchOne`, `fetchList` (every page), `refreshAccount`, `create`, `update`, `archive`, `transfer`; read with `byId`, `forAccount`, `names`. |
-| `allocations`       | `stores/allocations.ts`    | Every allocation of an account, indexed by transaction id. `loadForAccount(id, force?)` (cached unless forced; concurrent unforced callers share one fetch), `setForTransaction`, `invalidate`. The transaction list forces a refetch on every visit. |
 | `transactionNav`    | `stores/transactionNav.ts` | The ids of the rows the transaction list last showed, so the detail page can step to the previous or next row. It also keeps the list's search and filter across a visit to the detail page. |
 
 `stores/reset.ts` is not a store. It holds the reset plugin (below).
@@ -27,14 +26,13 @@ holds models from `models/`, never DTOs, and defines `reset()`.
 
 ## Caching and invalidation
 
-The entity caches (`bankAccounts`, `budgets`, `allocations`) follow the
-same rules:
+The entity caches (`bankAccounts`, `budgets`) follow the same rules:
 
 - **Readers read from the cache.** Views and features use `byId`,
-  `forAccount`, `all` and `indexFor`, all computed from the cached
-  models. A feature that loads data (`useBudgetDetail`, `useOverview`)
-  calls the store's fetch action and then reads the result back through
-  `byId`, not from the fetch's return value. That way a later update by
+  `forAccount` and `all`, all computed from the cached models. A
+  feature that loads data (`useBudgetDetail`, `useOverview`) calls the
+  store's fetch action and then reads the result back through `byId`,
+  not from the fetch's return value. That way a later update by
   anyone shows up on its page.
 - **Mutations go through the store.** `create`, `update`, `archive`,
   `transfer` and `remove` send the request, map the server's answer and
@@ -48,23 +46,19 @@ same rules:
 
   After one of these, the caller refetches what changed:
   `budgets.refreshAccount(accountId)` for an account's budgets, or
-  `fetchOne` for the two ends of a transfer. A split also calls
-  `allocations.setForTransaction(...)`, so the row updates at once.
-- **Data other writers change is refetched on every visit.** A bank sync
-  gives pending transactions new ids, and a co-owner can re-split a
-  transaction from another browser, so the transaction list calls
-  `allocations.loadForAccount(accountId, true)` each time it opens. The
-  cached index stays on screen until the new one lands, and a split
-  saved meanwhile is re-applied to the refetched index. Until an
-  account's first index arrives, the list shows as loading instead of
-  guessing which rows are unallocated.
+  `fetchOne` for the two ends of a transfer. The split's answer (the
+  transaction's new allocations) replaces the ones the detail page
+  shows.
+- **Transactions are not cached.** A bank sync gives pending
+  transactions new ids, and a co-owner can re-split a transaction from
+  another browser, so the transaction lists (the account's list and a
+  budget's) load their pages each time they open. Each transaction
+  carries its allocations, so a row's budgets are always those of the
+  page it came in.
 - **`invalidate` marks data stale without fetching.** The next read
   refetches:
   - `bankAccounts.invalidate()`: the next `loadAll()` refetches.
   - `budgets.invalidate(ids?)`: drops the given entries, or all of them.
-  - `allocations.invalidate(accountId?)`: drops that account's index,
-    or all of them. A load already in flight when you invalidate will
-    not write its now-stale result.
 
   Use it when you know data changed but nothing is on screen to refetch
   it now.
@@ -148,7 +142,7 @@ created. `resetAllStores(pinia)` then calls every recorded store's
   client calls `logout()` before `main.ts`'s `onAuthFailure` redirects
   to `/app/login/?next=<path>`.
 
-After a reset no cached account, budget, allocation, navigation list or
+After a reset no cached account, budget, navigation list or
 stored active-account id survives into the next user's session in the
 same tab.
 
@@ -163,8 +157,8 @@ add a store, add its state to that sign-out test.
 that caches server answers creates a guard with `createSessionGuard()`
 (`stores/reset.ts`), calls `guard.bump()` in `reset()`, and wraps each
 cache write in `guard.whileCurrent(...)` before it awaits the request.
-The budgets and bank-accounts stores do this; the session store and the
-allocations store compare their own in-flight promise instead.
+The budgets and bank-accounts stores do this; the session store compares
+its own in-flight promise instead.
 `tests/stores/reset.test.ts` checks that a late answer leaves the store
 empty.
 

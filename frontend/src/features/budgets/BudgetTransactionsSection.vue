@@ -1,8 +1,8 @@
 <script setup lang="ts">
 //
 // BudgetTransactionsSection — the transactions (and optionally the
-// transfers) of one budget, grouped by date, with search and per-row
-// "remove from this budget".  Feature component (budgets); data lives
+// transfers) of one budget, grouped by date, with search, infinite
+// scroll and per-row "remove from this budget".  Feature component (budgets); data lives
 // in `useBudgetTransactions`.  Cmd/Ctrl-F opens the search.
 //
 
@@ -33,8 +33,11 @@ const ctx = useAccountContextStore();
 const budgets = useBudgetsStore();
 
 const {
-  allocationsByTx: budgetAllocsByTx,
   loading: txLoading,
+  loadingMore,
+  loadMoreError,
+  loadMore,
+  sentinel,
   error: txError,
   showTransfers: showInternalTxs,
   toggleTransfers: toggleInternalTxs,
@@ -49,6 +52,11 @@ const { open: searchOpen, toggle: toggleSearch } = useFindShortcut({
   input: searchInput,
   onClose: clearSearch,
 });
+
+// The infinite-scroll sentinel after the list.
+function setSentinel(el: unknown) {
+  sentinel.value = el instanceof HTMLElement ? el : null;
+}
 
 function openTransaction(id: string) {
   router.push({ name: "transaction-detail", params: { id } });
@@ -109,7 +117,6 @@ function openTransaction(id: string) {
     <TransactionGroupList
       v-else-if="displayTransactions.length > 0"
       :groups="displayTransactions"
-      :allocations-by-tx="budgetAllocsByTx"
       :budget-names="budgets.names"
       :unallocated-budget-id="ctx.unallocatedBudgetId"
       heading-tag="h3"
@@ -126,5 +133,30 @@ function openTransaction(id: string) {
           : "No transactions assigned to this budget yet."
       }}
     </p>
+
+    <template v-if="!txLoading">
+      <!-- Infinite scroll sentinel -->
+      <div :ref="setSentinel" class="h-px" />
+
+      <div v-if="loadingMore" class="flex justify-center py-4">
+        <div
+          class="h-5 w-5 animate-spin rounded-pill border-2 border-border border-t-accent"
+        />
+      </div>
+      <p
+        v-else-if="loadMoreError"
+        class="py-4 text-center text-body-sm text-danger-fg"
+        role="alert"
+      >
+        Couldn't load more transactions: {{ loadMoreError }}
+        <button
+          type="button"
+          class="ml-1 font-medium underline"
+          @click="loadMore"
+        >
+          Try again
+        </button>
+      </p>
+    </template>
   </section>
 </template>

@@ -376,7 +376,7 @@ expect(useBudgetsStore(pinia).fetchOne).toHaveBeenCalledWith(account.unallocated
 ```
 
 `initialState` is keyed by each store's returned state refs:
-`bankAccounts.accounts`, `budgets.cache`, `allocations.byAccount`.
+`bankAccounts.accounts`, `budgets.cache`.
 
 Use `@pinia/testing` 1.x; 2.x requires Pinia 4.
 

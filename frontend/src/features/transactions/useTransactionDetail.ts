@@ -9,9 +9,10 @@
 // saved there and never written to another.  A
 // cleared memo is sent as `null`, which clears it on the server.
 //
-// A split updates the allocation cache for the transaction list and
-// refetches the account's budgets, so balances everywhere (including
-// the top bar's Unallocated) are current.
+// The allocations are the transaction's own (embedded by the server).
+// A split replaces them and refetches the account's budgets, so
+// balances everywhere (including the top bar's Unallocated) are
+// current.
 //
 // A failed autosave, split or upload leaves a message naming what was
 // not saved, with the server's reason (`descriptionError`,
@@ -41,7 +42,6 @@ import {
   transactionFromDto,
   transactionToUpdateDto,
 } from "@/models/transaction";
-import { useAllocationsStore } from "@/stores/allocations";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useTransactionNavStore } from "@/stores/transactionNav";
@@ -53,23 +53,16 @@ export type AttachmentField = "image" | "document";
 // Autosave failures read "Couldn't save the memo: <reason>".
 const SAVE_FAILED = { errorMessage: "save failed." };
 
-async function allocationsOf(transactionId: string): Promise<Allocation[]> {
-  const first = await api.allocations.list({ transaction: transactionId });
-  return (await api.pages.all(first)).map(allocationFromDto);
-}
-
 ////////////////////////////////////////////////////////////////////////
 //
 export function useTransactionDetail(id: () => string) {
   const bankAccounts = useBankAccountsStore();
   const budgets = useBudgetsStore();
-  const allocationsStore = useAllocationsStore();
   const nav = useTransactionNavStore();
 
   ////////////////////////////////////////////////////////////////////
   //
   const transaction = shallowRef<Transaction | null>(null);
-  const allocations = shallowRef<Allocation[]>([]);
   const description = ref("");
   const memo = ref("");
   const attachmentError = ref<string | null>(null);
@@ -78,32 +71,43 @@ export function useTransactionDetail(id: () => string) {
   const resource = useResource(
     id,
     async (txId: string) => {
-      const [tx, allocs] = await Promise.all([
-        api.transactions.get(txId).then(transactionFromDto),
-        allocationsOf(txId),
-      ]);
+      const tx = transactionFromDto(await api.transactions.get(txId));
       // The split editor lists the account's budgets; a failed refresh
       // leaves the cached ones.
       await budgets.refreshAccount(tx.bankAccountId).catch(() => undefined);
-      return { tx, allocs };
+      return tx;
     },
     { errorMessage: "Failed to load transaction." },
   );
 
-  watch(resource.data, (data) => {
-    transaction.value = data?.tx ?? null;
-    allocations.value = data?.allocs ?? [];
-    description.value = data?.tx.description ?? "";
-    memo.value = data?.tx.memo ?? "";
+  watch(resource.data, (tx) => {
+    transaction.value = tx ?? null;
+    description.value = tx?.description ?? "";
+    memo.value = tx?.memo ?? "";
     attachmentError.value = null;
     splitError.value = null;
   });
 
-  // Apply a server answer only while it is still the transaction shown.
+  // Apply a text or attachment save's answer only while it is still the
+  // transaction shown.  The shown allocations are kept: only a split
+  // sets them, and a save answered before a split lands carries the
+  // older ones.
   //
   function applyIfCurrent(txId: string, updated: Transaction): void {
-    if (txId === id() && transaction.value?.id === txId)
-      transaction.value = updated;
+    const current = transaction.value;
+    if (txId === id() && current?.id === txId)
+      transaction.value = { ...updated, allocations: current.allocations };
+  }
+
+  // Replace the shown transaction's allocations, if it is still `txId`.
+  //
+  function setAllocationsIfCurrent(
+    txId: string,
+    allocations: Allocation[],
+  ): void {
+    const current = transaction.value;
+    if (txId === id() && current?.id === txId)
+      transaction.value = { ...current, allocations };
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -171,7 +175,10 @@ export function useTransactionDetail(id: () => string) {
     () => account.value?.unallocatedBudgetId ?? null,
   );
   const visibleAllocations = computed(() =>
-    assignedAllocations(allocations.value, unallocatedBudgetId.value),
+    assignedAllocations(
+      transaction.value?.allocations ?? [],
+      unallocatedBudgetId.value,
+    ),
   );
   const coverage = computed(() =>
     transaction.value
@@ -197,10 +204,10 @@ export function useTransactionDetail(id: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
-  // A failed split says why and reloads the allocations, so the list
-  // shows what the server has (or keeps what it showed, if that reload
-  // fails too).  After a split, a failed budget refresh leaves the
-  // cached balances.
+  // A failed split says why and reloads the transaction's allocations,
+  // so the list shows what the server has (or keeps what it showed, if
+  // that reload fails too).  After a split, a failed budget refresh
+  // leaves the cached balances.
   //
   async function applySplits(splits: Record<string, string>): Promise<void> {
     const tx = transaction.value;
@@ -214,12 +221,12 @@ export function useTransactionDetail(id: () => string) {
     } catch (err) {
       if (tx.id !== id()) return;
       splitError.value = `Couldn't save the split: ${describeError(err, "save failed.")}`;
-      const current = await allocationsOf(tx.id).catch(() => null);
-      if (current && tx.id === id()) allocations.value = current;
+      const current = await api.transactions.get(tx.id).catch(() => null);
+      if (current)
+        setAllocationsIfCurrent(tx.id, transactionFromDto(current).allocations);
       return;
     }
-    if (tx.id === id()) allocations.value = updated;
-    allocationsStore.setForTransaction(tx.bankAccountId, tx.id, updated);
+    setAllocationsIfCurrent(tx.id, updated);
     await budgets.refreshAccount(tx.bankAccountId).catch(() => undefined);
   }
 

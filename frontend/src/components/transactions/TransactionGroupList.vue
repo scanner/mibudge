@@ -12,7 +12,6 @@
 import InternalTransactionRow from "./InternalTransactionRow.vue";
 import TransactionRow from "./TransactionRow.vue";
 import type { DateGroup } from "@/composables/useDateGroupedRows";
-import type { Allocation } from "@/models/allocation";
 import type { TransactionListRow } from "@/models/listRow";
 import { rowKey } from "@/models/listRow";
 import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
@@ -22,7 +21,6 @@ import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
 withDefaults(
   defineProps<{
     groups: DateGroup<TransactionListRow>[];
-    allocationsByTx: Map<string, Allocation[]> | null;
     budgetNames: Map<string, string>;
     unallocatedBudgetId: string | null;
     headingTag?: "h2" | "h3";
@@ -51,7 +49,6 @@ const emit = defineEmits<{
           <TransactionRow
             v-if="row.kind === 'tx'"
             :transaction="row.tx"
-            :allocations="allocationsByTx?.get(row.tx.id)"
             :budget-names="budgetNames"
             :unallocated-budget-id="unallocatedBudgetId"
             :removable="removable"
