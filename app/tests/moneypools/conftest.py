@@ -1,13 +1,16 @@
 # system imports
 import itertools
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 # 3rd party imports
 import pytest
 from django.conf import settings
 from djmoney.money import Money
+from faker import Faker
 from pytest_factoryboy import register
 
 # Project imports
@@ -52,6 +55,39 @@ register(
 )  # MerchantIntermediaryPatternFactory -> merchant_intermediary_pattern_factory
 
 
+########################################################################
+########################################################################
+#
+@dataclass(frozen=True)
+class MerchantPlace:
+    """A made-up merchant location, in the shapes transactions carry it.
+
+    `latitude` and `longitude` are strings with the six decimal places
+    the `merchant_latitude` / `merchant_longitude` columns store.
+    """
+
+    city: str
+    region: str
+    street: str
+    latitude: str
+    longitude: str
+
+
+####################################################################
+#
+@pytest.fixture
+def merchant_place(faker: Faker) -> MerchantPlace:
+    """A generated city, US state code, street and coordinates."""
+    six_places = Decimal("0.000001")
+    return MerchantPlace(
+        city=faker.unique.city(),
+        region=faker.state_abbr(include_territories=False),
+        street=faker.street_address(),
+        latitude=str(faker.latitude().quantize(six_places)),
+        longitude=str(faker.longitude().quantize(six_places)),
+    )
+
+
 ####################################################################
 #
 @pytest.fixture
@@ -68,6 +104,51 @@ def account(
 ) -> BankAccount:
     """A bank account owned by the default `user` fixture."""
     return bank_account_factory(owners=[user])
+
+
+####################################################################
+#
+@pytest.fixture
+def unallocated(account: BankAccount) -> Budget:
+    """The Unallocated budget of `account`."""
+    budget = account.unallocated_budget
+    assert budget is not None
+    return budget
+
+
+####################################################################
+#
+@pytest.fixture
+def make_goal(
+    account: BankAccount, budget_factory: Callable[..., Budget]
+) -> Callable[[], Budget]:
+    """Return a factory for zero-balance Goal budgets on `account`.
+
+    Each Goal funds $10 at a time toward a $100 target.
+
+    Returns:
+        A callable `() -> Budget`.
+    """
+
+    def _make() -> Budget:
+        return budget_factory(
+            bank_account=account,
+            balance=Money(0, "USD"),
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_amount=Money(10, "USD"),
+            target_balance=Money(100, "USD"),
+        )
+
+    return _make
+
+
+####################################################################
+#
+@pytest.fixture
+def goal(make_goal: Callable[[], Budget]) -> Budget:
+    """A zero-balance Goal budget on `account` (see `make_goal`)."""
+    return make_goal()
 
 
 ####################################################################

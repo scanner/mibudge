@@ -21,6 +21,7 @@ from typing import Any
 #
 import pytest
 import pytest_check as check
+from faker import Faker
 from rest_framework.test import APIClient
 
 # Project imports
@@ -30,6 +31,8 @@ from moneypools.models import BankAccount, Transaction, TransactionCategory
 from moneypools.service import transaction_details as details_svc
 from users.models import User
 
+from .conftest import MerchantPlace
+
 pytestmark = pytest.mark.django_db
 
 
@@ -37,17 +40,21 @@ pytestmark = pytest.mark.django_db
 ####################################################################
 #
 @pytest.fixture
-def bofa_details() -> Callable[..., dict[str, Any]]:
+def bofa_details(
+    merchant_place: MerchantPlace,
+) -> Callable[..., dict[str, Any]]:
     """Factory building a details dict shaped like bofa_scraper output.
 
-    Merchant/city values are made up; no real data.  Keyword arguments
-    override (or add) keys.
+    The location is `merchant_place`, in BofA's 'CITY, ST' form.
+    Keyword arguments override (or add) keys.
     """
 
     def _build(**overrides: Any) -> dict[str, Any]:
         details: dict[str, Any] = {
             "merchant_name": "Trader Joes",
-            "merchant_information": "MENLO PARK, CA",
+            "merchant_information": (
+                f"{merchant_place.city.upper()}, {merchant_place.region}"
+            ),
             "merchant_category": "Grocery Stores and Supermarkets",
             "merchant_category_code": "5411",
             "transaction_category": "Dining : Restaurants",
@@ -67,13 +74,17 @@ def bofa_details() -> Callable[..., dict[str, Any]]:
 def posted_tx(
     account: BankAccount,
     transaction_factory: Callable[..., Transaction],
+    merchant_place: MerchantPlace,
 ) -> Transaction:
-    """A posted, never-enriched transaction on ``account``."""
+    """A posted, never-enriched purchase at `merchant_place`."""
     return transaction_factory(
         bank_account=account,
         pending=False,
         posted_date=datetime(2026, 7, 10, tzinfo=UTC),
-        raw_description="TRADER JOES 07/09 MOBILE PURCHASE MENLO PARK CA",
+        raw_description=(
+            "TRADER JOES 07/09 MOBILE PURCHASE "
+            f"{merchant_place.city.upper()} {merchant_place.region}"
+        ),
     )
 
 
@@ -101,7 +112,7 @@ class TestParseMerchantInformation:
         [
             # The BofA 'CITY, ST' form parses fully; whitespace is
             # collapsed before matching.
-            ("  MENLO   PARK ,  CA  ", ("MENLO PARK", "CA", "US")),
+            ("  LAKE   HOLLOW ,  OR  ", ("LAKE HOLLOW", "OR", "US")),
             # Anything else lands verbatim in city with no
             # region/country -- a lowercase state code does not match
             # the 'CITY, ST' pattern.
@@ -139,12 +150,12 @@ class TestComposeEnrichedDescription:
             ("Trader Joes", None, None, None, "Trader Joes"),
             (
                 "Trader Joes",
-                "Menlo Park",
+                "Lake Hollow",
                 None,
                 None,
-                "Trader Joes -- Menlo Park",
+                "Trader Joes -- Lake Hollow",
             ),
-            (None, "Menlo Park", "CA", None, "Menlo Park, CA"),
+            (None, "Lake Hollow", "OR", None, "Lake Hollow, OR"),
             (None, None, None, "Groceries", "Groceries"),
             (
                 "Trader Joes",
@@ -195,6 +206,7 @@ class TestApplyDetails:
         posted_tx: Transaction,
         dining_category: TransactionCategory,
         bofa_details: Callable[..., dict[str, Any]],
+        merchant_place: MerchantPlace,
     ) -> None:
         """
         GIVEN: a posted, never-enriched transaction with an unassigned
@@ -228,8 +240,8 @@ class TestApplyDetails:
             ),
             (
                 "Trader Joes",
-                "MENLO PARK",
-                "CA",
+                merchant_place.city.upper(),
+                merchant_place.region,
                 "US",
                 "Grocery Stores and Supermarkets",
                 "5411",
@@ -247,7 +259,8 @@ class TestApplyDetails:
         )
         check.equal(
             posted_tx.description,
-            "Trader Joes -- MENLO PARK, CA (Grocery Stores and Supermarkets)",
+            f"Trader Joes -- {merchant_place.city.upper()}, "
+            f"{merchant_place.region} (Grocery Stores and Supermarkets)",
             "description recomposed",
         )
 
@@ -304,6 +317,8 @@ class TestApplyDetails:
         dining_category: TransactionCategory,
         transaction_category_factory: Callable[..., TransactionCategory],
         bofa_details: Callable[..., dict[str, Any]],
+        merchant_place: MerchantPlace,
+        faker: Faker,
     ) -> None:
         """
         GIVEN: an enriched transaction whose category was later changed
@@ -328,7 +343,9 @@ class TestApplyDetails:
             posted_tx,
             bofa_details(
                 merchant_name="Trader Joes #123",
-                merchant_information="PALO ALTO, CA",
+                merchant_information=(
+                    f"{faker.unique.city().upper()}, {merchant_place.region}"
+                ),
             ),
             category=dining_category,
             overwrite=True,
@@ -343,7 +360,7 @@ class TestApplyDetails:
         )
         check.equal(
             posted_tx.merchant_city,
-            "MENLO PARK",
+            merchant_place.city.upper(),
             "location from the first enrichment never clobbered",
         )
         check.equal(
@@ -361,6 +378,7 @@ class TestApplyDetails:
         self,
         posted_tx: Transaction,
         bofa_details: Callable[..., dict[str, Any]],
+        merchant_place: MerchantPlace,
     ) -> None:
         """
         GIVEN: an enriched transaction with an unedited description
@@ -386,7 +404,7 @@ class TestApplyDetails:
             "refreshed merchant name reaches the description",
         )
         check.is_in(
-            "MENLO PARK",
+            merchant_place.city.upper(),
             posted_tx.description,
             "location unaffected (never clobbered by overwrite)",
         )
@@ -397,6 +415,8 @@ class TestApplyDetails:
         self,
         posted_tx: Transaction,
         bofa_details: Callable[..., dict[str, Any]],
+        merchant_place: MerchantPlace,
+        faker: Faker,
     ) -> None:
         """
         GIVEN: a transaction whose location was set by the user before
@@ -405,8 +425,9 @@ class TestApplyDetails:
         THEN:  the user's location values are preserved and only the
                fields the user left empty are filled
         """
-        posted_tx.merchant_city = "Redwood City"
-        posted_tx.merchant_address = "1001 Example Ave"
+        user_city, user_address = faker.unique.city(), faker.street_address()
+        posted_tx.merchant_city = user_city
+        posted_tx.merchant_address = user_address
         posted_tx.save()
 
         status, _ = details_svc.apply_details(posted_tx, bofa_details())
@@ -415,12 +436,12 @@ class TestApplyDetails:
         posted_tx.refresh_from_db()
         check.equal(
             (posted_tx.merchant_city, posted_tx.merchant_address),
-            ("Redwood City", "1001 Example Ave"),
+            (user_city, user_address),
             "user's location values preserved",
         )
         check.equal(
             (posted_tx.merchant_region, posted_tx.merchant_country),
-            ("CA", "US"),
+            (merchant_place.region, "US"),
             "empty location fields filled",
         )
 
@@ -541,6 +562,7 @@ class TestApplyDetails:
         account: BankAccount,
         transaction_factory: Callable[..., Transaction],
         bofa_details: Callable[..., dict[str, Any]],
+        merchant_place: MerchantPlace,
     ) -> None:
         """
         GIVEN: a transaction routed through a known payment platform
@@ -555,12 +577,15 @@ class TestApplyDetails:
             pending=False,
             posted_date=datetime(2026, 7, 10, tzinfo=UTC),
             raw_description=(
-                "TST*ACME BISTRO 07/09 MOBILE PURCHASE Palo Alto CA"
+                "TST*ACME BISTRO 07/09 MOBILE PURCHASE "
+                f"{merchant_place.city} {merchant_place.region}"
             ),
         )
         raw = bofa_details(
             merchant_name="TST*ACME BISTRO",
-            merchant_information="Palo Alto, CA",
+            merchant_information=(
+                f"{merchant_place.city}, {merchant_place.region}"
+            ),
             merchant_category="Eating Places and Restaurants",
         )
 
@@ -573,7 +598,7 @@ class TestApplyDetails:
         check.equal(tx.merchant_intermediary, "toast", "platform recorded")
         check.equal(
             tx.description,
-            "ACME BISTRO -- Palo Alto, CA "
+            f"ACME BISTRO -- {merchant_place.city}, {merchant_place.region} "
             "(Eating Places and Restaurants, via Toast)",
             "description names the platform",
         )
@@ -851,9 +876,9 @@ class TestTransactionMerchantAPI:
         [
             ("merchant_name=trader", True),
             ("merchant_name=costco", False),
-            ("merchant_city=menlo", True),
-            ("merchant_region=ca", True),
-            ("merchant_region=il", False),
+            ("merchant_city={city_word}", True),
+            ("merchant_region={region}", True),
+            ("merchant_region=zz", False),
             ("merchant_category_code=5411", True),
             ("merchant_category_code=5812", False),
             ("virtual_card_last4=1439", True),
@@ -866,14 +891,20 @@ class TestTransactionMerchantAPI:
         self,
         auth_client: APIClient,
         enriched_tx: Transaction,
+        merchant_place: MerchantPlace,
         query: str,
         expect_match: bool,
     ) -> None:
         """
         GIVEN: one enriched transaction
         WHEN:  the transaction list is filtered by a merchant lookup
+               (the city by one word of its name, the region exactly)
         THEN:  the row matches (or not) as expected
         """
+        query = query.format(
+            city_word=merchant_place.city.split()[-1].lower(),
+            region=merchant_place.region.lower(),
+        )
         response = auth_client.get(f"/api/v1/transactions/?{query}")
         assert response.status_code == 200
         ids = [row["id"] for row in response.json()["results"]]
@@ -895,6 +926,7 @@ class TestTransactionMerchantAPI:
         account: BankAccount,
         transaction_factory: Callable[..., Transaction],
         bofa_details: Callable[..., dict[str, Any]],
+        merchant_place: MerchantPlace,
         query: str,
         expect_match: bool,
     ) -> None:
@@ -906,7 +938,10 @@ class TestTransactionMerchantAPI:
         tx = transaction_factory(
             bank_account=account,
             pending=False,
-            raw_description="TST*ACME BISTRO 07/09 MOBILE PURCHASE Palo Alto CA",
+            raw_description=(
+                "TST*ACME BISTRO 07/09 MOBILE PURCHASE "
+                f"{merchant_place.city} {merchant_place.region}"
+            ),
         )
         details_svc.apply_details(
             tx, bofa_details(merchant_name="TST*ACME BISTRO")
@@ -920,7 +955,10 @@ class TestTransactionMerchantAPI:
     ################################################################
     #
     def test_merchant_fields_serialized(
-        self, auth_client: APIClient, enriched_tx: Transaction
+        self,
+        auth_client: APIClient,
+        enriched_tx: Transaction,
+        merchant_place: MerchantPlace,
     ) -> None:
         """
         GIVEN: an enriched transaction
@@ -947,8 +985,8 @@ class TestTransactionMerchantAPI:
             },
             {
                 "merchant_name": "Trader Joes",
-                "merchant_city": "MENLO PARK",
-                "merchant_region": "CA",
+                "merchant_city": merchant_place.city.upper(),
+                "merchant_region": merchant_place.region,
                 "merchant_country": "US",
                 "merchant_category_code": "5411",
                 "virtual_card_number": "XXXX-XXXX-XXXX-1439",
@@ -962,7 +1000,10 @@ class TestTransactionMerchantAPI:
     ################################################################
     #
     def test_location_fields_are_writable(
-        self, auth_client: APIClient, enriched_tx: Transaction
+        self,
+        auth_client: APIClient,
+        enriched_tx: Transaction,
+        merchant_place: MerchantPlace,
     ) -> None:
         """
         GIVEN: an enriched transaction
@@ -972,10 +1013,10 @@ class TestTransactionMerchantAPI:
         response = auth_client.patch(
             f"/api/v1/transactions/{enriched_tx.id}/",
             {
-                "merchant_address": "700 Example St",
-                "merchant_city": "Menlo Park",
-                "merchant_latitude": "37.453000",
-                "merchant_longitude": "-122.182000",
+                "merchant_address": merchant_place.street,
+                "merchant_city": merchant_place.city,
+                "merchant_latitude": merchant_place.latitude,
+                "merchant_longitude": merchant_place.longitude,
                 # Read-only: silently ignored.
                 "merchant_name": "Hacked Name",
             },
@@ -991,7 +1032,12 @@ class TestTransactionMerchantAPI:
                 str(enriched_tx.merchant_latitude),
                 str(enriched_tx.merchant_longitude),
             ),
-            ("700 Example St", "Menlo Park", "37.453000", "-122.182000"),
+            (
+                merchant_place.street,
+                merchant_place.city,
+                merchant_place.latitude,
+                merchant_place.longitude,
+            ),
             "location fields updated",
         )
         check.equal(

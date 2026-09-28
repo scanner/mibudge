@@ -51,8 +51,8 @@ describe("transactionFromDto", () => {
     const dto = makeTransaction({
       amount: "-12.34",
       amount_currency: "USD",
-      merchant_name: "Blue Bottle",
-      merchant_city: "Oakland",
+      merchant_name: "Copper Kettle Coffee",
+      merchant_city: "Fernwood",
       description_user_edited: true,
       has_details: true,
       transaction_date: null,
@@ -61,8 +61,8 @@ describe("transactionFromDto", () => {
     const tx = transactionFromDto(dto);
 
     expect(tx.amount.toString()).toBe("-12.34 USD");
-    expect(tx.merchant.name).toBe("Blue Bottle");
-    expect(tx.merchant.city).toBe("Oakland");
+    expect(tx.merchant.name).toBe("Copper Kettle Coffee");
+    expect(tx.merchant.city).toBe("Fernwood");
     expect(tx.descriptionUserEdited).toBe(true);
     expect(tx.hasDetails).toBe(true);
     expect(tx.linkedTransactionId).toBeNull();

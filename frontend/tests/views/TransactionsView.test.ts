@@ -132,7 +132,7 @@ describe("TransactionsView", () => {
               : [
                   makeTransaction({
                     bank_account: account.id,
-                    party: "Blue Bottle",
+                    party: "Copper Kettle Coffee",
                   }),
                   makeTransaction({
                     bank_account: account.id,
@@ -153,13 +153,13 @@ describe("TransactionsView", () => {
       .trigger("click");
     await wrapper
       .get('input[placeholder="Search transactions…"]')
-      .setValue("bottle");
+      .setValue("kettle");
 
     await vi.waitFor(() =>
       expect(wrapper.text()).not.toContain("Hardware Store"),
     );
-    expect(wrapper.text()).toContain("Blue Bottle");
-    expect(useTransactionNavStore().savedSearch).toBe("bottle");
+    expect(wrapper.text()).toContain("Copper Kettle Coffee");
+    expect(useTransactionNavStore().savedSearch).toBe("kettle");
   });
 
   // GIVEN: the transaction list endpoint fails

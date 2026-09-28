@@ -2,11 +2,13 @@
 
 # system imports
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import StringIO
 
 # 3rd party imports
 import pytest
+import pytest_check as check
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from djmoney.money import Money
@@ -18,12 +20,24 @@ from moneypools.models import (
     Transaction,
     TransactionAllocation,
 )
-from moneypools.service import budget as budget_svc
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
 )
 
 pytestmark = pytest.mark.django_db
+
+
+########################################################################
+########################################################################
+#
+@dataclass
+class BrokenChain:
+    """An account whose balances and Unallocated chain were corrupted."""
+
+    account: BankAccount
+    unallocated: Budget
+    # The payroll before the deleted one; its snapshot is left stale.
+    payroll1: Transaction
 
 
 ########################################################################
@@ -39,10 +53,86 @@ class TestRecomputeAfterOrmDelete:
 
     ####################################################################
     #
-    def test_recompute_fixes_chain_broken_by_orm_delete(
+    @pytest.fixture
+    def broken_chain(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        account: BankAccount,
+        unallocated: Budget,
+        make_budget: Callable[..., Budget],
         transaction_factory: Callable[..., Transaction],
+    ) -> BrokenChain:
+        """
+        Three payroll credits in Unallocated and one expense in
+        Groceries, then the middle payroll deleted through the ORM and
+        the account balances corrupted.
+
+        Before the damage the account is clean: Unallocated $9,000,
+        Groceries -$200, posted_balance $8,800 = sum(budget balances).
+
+        The ORM delete (as the Django admin does it) cascades to the
+        payroll's Unallocated allocation but skips the service layer,
+        so Unallocated.balance stays $9,000 and the remaining snapshots
+        (payroll1 $3,000, payroll3 $9,000) no longer form a chain:
+        walking forward from $9,000 - $6,000 of remaining allocations
+        puts payroll1 at $6,000, not $3,000.  The account balances are
+        then overwritten with $99,999 so the account-level repair is
+        exercised too, not just the snapshot chain.
+        """
+        groceries = make_budget(
+            account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.CAPPED,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            target_balance=Money("500.00", "USD"),
+            funding_amount=Money("100.00", "USD"),
+        )
+
+        # Each payroll gets the default Unallocated allocation, with
+        # snapshots $3,000, $6,000 and $9,000.
+        payroll1, payroll2, _ = (
+            transaction_factory(
+                bank_account=account,
+                amount=Money("3000.00", "USD"),
+                posted_date=datetime(2026, month, 15, tzinfo=UTC),
+                raw_description="PAYROLL DIRECT DEPOSIT",
+            )
+            for month in (1, 2, 3)
+        )
+
+        # The expense's default Unallocated allocation is moved to
+        # Groceries, so Unallocated holds only the payrolls.
+        expense = transaction_factory(
+            bank_account=account,
+            amount=Money("-200.00", "USD"),
+            posted_date=datetime(2026, 3, 20, tzinfo=UTC),
+            raw_description="GROCERY STORE PURCHASE",
+        )
+        transaction_allocation_svc.delete(
+            TransactionAllocation.objects.get(
+                transaction=expense, budget=unallocated
+            )
+        )
+        transaction_allocation_svc.create(
+            transaction=expense,
+            budget=groceries,
+            amount=Money("-200.00", "USD"),
+        )
+
+        out = StringIO()
+        call_command("verify_balances", stdout=out)
+        assert "FAIL" not in out.getvalue(), "Expected a clean baseline"
+
+        Transaction.objects.filter(pk=payroll2.pk).delete()
+        BankAccount.objects.filter(pk=account.pk).update(
+            posted_balance=Money("99999.00", "USD"),
+            available_balance=Money("99999.00", "USD"),
+        )
+        return BrokenChain(account, unallocated, payroll1)
+
+    ####################################################################
+    #
+    def test_recompute_fixes_chain_broken_by_orm_delete(
+        self, broken_chain: BrokenChain
     ) -> None:
         """
         GIVEN: an account with three payroll credits allocated to
@@ -53,143 +143,44 @@ class TestRecomputeAfterOrmDelete:
         THEN:  the broken budget_balance chain is repaired and a
                subsequent verify_balances run reports no failures
         """
-        # ── Step 1: account + budgets ─────────────────────────────────
-        # bank_account_svc auto-creates the Unallocated budget on creation.
-        account = bank_account_factory()
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-
-        groceries = budget_svc.create(
-            bank_account=account,
-            name="Groceries",
-            budget_type=Budget.BudgetType.CAPPED,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money("500.00", "USD"),
-            funding_amount=Money("100.00", "USD"),
-        )
-
-        # ── Step 2: three payrolls on distinct dates ──────────────────
-        # transaction_svc.create seeds a default Unallocated allocation
-        # for each.  After all three, Unallocated holds:
-        #   payroll1 alloc: amount=+3000, snapshot=3000
-        #   payroll2 alloc: amount=+3000, snapshot=6000
-        #   payroll3 alloc: amount=+3000, snapshot=9000
-        payroll1 = transaction_factory(
-            bank_account=account,
-            amount=Money("3000.00", "USD"),
-            posted_date=datetime(2026, 1, 15, tzinfo=UTC),
-            raw_description="PAYROLL DIRECT DEPOSIT",
-        )
-        payroll2 = transaction_factory(
-            bank_account=account,
-            amount=Money("3000.00", "USD"),
-            posted_date=datetime(2026, 2, 15, tzinfo=UTC),
-            raw_description="PAYROLL DIRECT DEPOSIT",
-        )
-        _payroll3 = transaction_factory(
-            bank_account=account,
-            amount=Money("3000.00", "USD"),
-            posted_date=datetime(2026, 3, 15, tzinfo=UTC),
-            raw_description="PAYROLL DIRECT DEPOSIT",
-        )
-
-        # ── Step 3: expense reallocated from Unallocated to Groceries ─
-        # transaction_svc creates the default Unallocated allocation; we
-        # immediately move it so Groceries reflects the spend and
-        # Unallocated stays clean (no expense alloc there).
-        expense = transaction_factory(
-            bank_account=account,
-            amount=Money("-200.00", "USD"),
-            posted_date=datetime(2026, 3, 20, tzinfo=UTC),
-            raw_description="GROCERY STORE PURCHASE",
-        )
-        unalloc_expense_alloc = TransactionAllocation.objects.get(
-            transaction=expense, budget=unallocated
-        )
-        transaction_allocation_svc.delete(unalloc_expense_alloc)
-        transaction_allocation_svc.create(
-            transaction=expense,
-            budget=groceries,
-            amount=Money("-200.00", "USD"),
-        )
-
-        # ── Step 4: baseline is clean ─────────────────────────────────
-        # Unallocated.balance=$9,000; Groceries.balance=-$200;
-        # posted_balance=$8,800 = sum(budget balances).  All chains OK.
-        out = StringIO()
-        call_command("verify_balances", stdout=out)
-        assert "FAIL" not in out.getvalue(), "Expected a clean baseline"
-
-        # ── Step 5: ORM-delete the middle payroll ─────────────────────
-        # Emulates a Django admin delete: Transaction.delete() cascades
-        # to remove the Unallocated allocation row, but does NOT call the
-        # service layer, so budget.balance and posted_balance are NOT
-        # decremented.  After the delete:
-        #   - Unallocated.balance stays $9,000   (should be $6,000)
-        #   - posted_balance stays $8,800         (should be $5,800)
-        #   - Remaining Unallocated allocs: payroll1 (snap=$3,000)
-        #                                   payroll3 (snap=$9,000)
-        # The two balances are inflated by the same $3,000 so the
-        # account-level (Level 1) check still passes, but the chain
-        # (Level 3) is broken: walking forward from the recomputed
-        # baseline ($9,000 - $6,000 remaining allocs = $3,000) gives
-        # $3,000 + $3,000 = $6,000 for payroll1's slot, yet the stored
-        # snapshot is $3,000.
-        Transaction.objects.filter(pk=payroll2.pk).delete()
-
-        # ── Step 6: also corrupt the account balance fields ───────────
-        # After the ORM delete, both posted_balance and
-        # sum(budget.balance) are inflated by the same $3,000, so the
-        # Level 1 check would still pass on its own.  Corrupt them here
-        # to simulate the realistic case where balance drift accumulates
-        # independently (e.g. a separate bulk import or admin action).
-        # This ensures the test exercises _recompute_account_balance, not
-        # just the snapshot chain repair.
-        BankAccount.objects.filter(pk=account.pk).update(
-            posted_balance=Money("99999.00", "USD"),
-            available_balance=Money("99999.00", "USD"),
-        )
-
-        # ── Step 7: verify_balances reports both failures ─────────────
-        # Level 1 fails: posted_balance ($99,999) ≠ sum(budget.balance) ($8,800).
-        # Level 3 fails: payroll1's snapshot ($3,000) does not match the
-        # expected running value ($6,000) with payroll2's alloc absent.
+        # verify_balances reports both failures first.  Level 1: the
+        # posted balance ($99,999) differs from the budget sum ($8,800).
+        # Level 3: payroll1's $3,000 snapshot is not the $6,000 running
+        # value once payroll2 is gone.
         out = StringIO()
         with pytest.raises(CommandError):
             call_command("verify_balances", stdout=out)
         output = out.getvalue()
         assert "1 available-balance failure(s)" in output
         assert "1 budget-chain failure(s)" in output
-        assert unallocated.name in output
+        assert broken_chain.unallocated.name in output
 
-        # ── Step 8: recompute_running_balances repairs everything ─────
-        # (a) Rewalks each budget's allocation chain from the earliest
-        #     allocation and rewrites budget_balance snapshots to be
-        #     self-consistent with the current budget.balance.
-        # (b) Recomputes posted_balance and available_balance as
-        #     sum(budget.balance) − sum(pending-tx amounts).
-        # After the recompute both account balances equal $8,800
-        # (Unallocated $9,000 + Groceries −$200; no pending transactions).
-        err = StringIO()
-        call_command("recompute_running_balances", stderr=err)
+        # Rewalks each budget's allocation chain against the current
+        # budget.balance, and recomputes the account balances as
+        # sum(budget.balance) - sum(pending amounts).
+        call_command("recompute_running_balances", stderr=StringIO())
 
-        # ── Step 9: verify_balances is clean after recomputation ──────
         out = StringIO()
         call_command("verify_balances", stdout=out)
         output = out.getvalue()
-        assert "FAIL" not in output
-        assert "0 available-balance failure(s)" in output
-        assert "0 budget-chain failure(s)" in output
+        check.is_not_in("FAIL", output, "verify_balances is clean")
+        check.is_in("0 available-balance failure(s)", output, "level 1")
+        check.is_in("0 budget-chain failure(s)", output, "level 3")
 
-        # posted_balance and available_balance are fixed to match
-        # sum(budget.balance) = $9,000 (Unallocated) − $200 (Groceries).
+        # $9,000 (Unallocated) - $200 (Groceries), nothing pending.
+        account = broken_chain.account
         account.refresh_from_db()
-        assert account.posted_balance == Money("8800.00", "USD")
-        assert account.available_balance == Money("8800.00", "USD")
-
-        # Payroll1's snapshot is updated from $3,000 to $6,000: the correct
-        # running value once payroll2's alloc is no longer in the chain.
-        payroll1_alloc = TransactionAllocation.objects.get(
-            transaction=payroll1, budget=unallocated
+        check.equal(account.posted_balance, Money("8800.00", "USD"), "posted")
+        check.equal(
+            account.available_balance, Money("8800.00", "USD"), "available"
         )
-        assert payroll1_alloc.budget_balance == Money("6000.00", "USD")
+
+        # payroll1 is now the first link after the chain's baseline.
+        payroll1_alloc = TransactionAllocation.objects.get(
+            transaction=broken_chain.payroll1, budget=broken_chain.unallocated
+        )
+        check.equal(
+            payroll1_alloc.budget_balance,
+            Money("6000.00", "USD"),
+            "payroll1 snapshot repaired",
+        )

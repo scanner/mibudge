@@ -7,126 +7,95 @@ from io import StringIO
 
 # 3rd party imports
 import pytest
+import pytest_check as check
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from djmoney.money import Money
 
 # Project imports
 from moneypools.models import BankAccount, Budget
-from moneypools.service import budget as budget_svc
 
 pytestmark = pytest.mark.django_db
 
 
-########################################################################
 ####################################################################
+#
+def _verify(*args: object) -> str:
+    """Run verify_balances and return its stdout."""
+    out = StringIO()
+    call_command("verify_balances", *args, stdout=out)
+    return out.getvalue()
+
+
+########################################################################
+########################################################################
 #
 class TestVerifyBalances:
     """Tests for verify_balances."""
 
     ####################################################################
     #
-    def test_balanced_account_passes(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-    ) -> None:
+    def test_balanced_account_passes(self, account: BankAccount) -> None:
         """
         GIVEN: a freshly created bank account with zero available_balance
                and an auto-created zero-balance Unallocated budget
         WHEN:  verify_balances runs
         THEN:  the command succeeds with a PASS line for the account
         """
-        bank_account_factory()
-        out = StringIO()
-        call_command("verify_balances", stdout=out)
-        assert "PASS" in out.getvalue()
-        assert "FAIL" not in out.getvalue()
+        output = _verify()
+        check.is_in("PASS", output, "reports PASS")
+        check.is_not_in("FAIL", output, "and no FAIL")
 
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "balance_field,balance_value,expected_in_output",
+        "balance_field,expected_in_output",
         [
-            (
-                "available_balance",
-                Money("100.00", "USD"),
-                "delta=100.00",
-            ),
-            (
-                "posted_balance",
-                Money("100.00", "USD"),
-                "delta=100.00",
-            ),
+            # Only the available-balance check prints the per-budget
+            # breakdown (available == sum of budget balances).
+            ("available_balance", ["delta=100.00", "Unallocated"]),
+            ("posted_balance", ["delta=100.00"]),
         ],
         ids=["available-mismatch", "posted-mismatch"],
     )
     def test_mismatch_raises_command_error(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        account: BankAccount,
         balance_field: str,
-        balance_value: Money,
-        expected_in_output: str,
+        expected_in_output: list[str],
     ) -> None:
         """
         GIVEN: an account whose available_balance or posted_balance does not
                match the expected value derived from budget balances
         WHEN:  verify_balances runs
-        THEN:  the command raises CommandError and reports FAIL with a delta
+        THEN:  the command raises CommandError and reports FAIL with a
+               delta (and, for available_balance, the budget breakdown)
         """
-        account = bank_account_factory()
         # Force an invariant break by pushing one balance field away from
         # its expected value (budget sum is zero for a fresh account).
-        setattr(account, balance_field, balance_value)
+        setattr(account, balance_field, Money("100.00", "USD"))
         account.save()
 
         out = StringIO()
         with pytest.raises(CommandError):
             call_command("verify_balances", stdout=out)
         output = out.getvalue()
-        assert "FAIL" in output
-        assert expected_in_output in output
+        check.is_in("FAIL", output, "reports FAIL")
+        for expected in expected_in_output:
+            check.is_in(expected, output, "with the detail")
 
     ####################################################################
     #
-    def test_mismatch_raises_command_error_budget_breakdown(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-    ) -> None:
-        """
-        GIVEN: an account whose available_balance does not equal the sum of
-               its budget balances
-        WHEN:  verify_balances runs
-        THEN:  the per-budget breakdown names the Unallocated budget
-        """
-        account = bank_account_factory()
-        account.available_balance = Money("100.00", account.currency)
-        account.save()
-
-        out = StringIO()
-        with pytest.raises(CommandError):
-            call_command("verify_balances", stdout=out)
-        assert "Unallocated" in out.getvalue()
-
-    ####################################################################
-    #
-    def test_tolerance_absorbs_small_delta(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-    ) -> None:
+    def test_tolerance_absorbs_small_delta(self, account: BankAccount) -> None:
         """
         GIVEN: an account that is off by a penny
         WHEN:  verify_balances runs with --tolerance 0.01
         THEN:  the account is reported as PASS
         """
-        account = bank_account_factory()
         account.available_balance = Money("0.01", account.currency)
         account.save()
 
-        out = StringIO()
-        call_command(
-            "verify_balances", "--tolerance", Decimal("0.01"), stdout=out
-        )
-        assert "PASS" in out.getvalue()
+        assert "PASS" in _verify("--tolerance", Decimal("0.01"))
 
 
 ########################################################################
@@ -137,9 +106,44 @@ class TestVerifyBalancesGoalInvariant:
 
     ####################################################################
     #
+    @pytest.fixture
+    def make_goal_holding_200(
+        self, account: BankAccount, make_budget: Callable[..., Budget]
+    ) -> Callable[..., Budget]:
+        """Return a factory for a Goal holding $200 on a balanced account.
+
+        The account's available and posted balances are set to the
+        budget sum ($200; no pending transactions) so the Level 1 check
+        stays clean and only the goal invariant is under test.
+
+        Returns:
+            A callable `(name, funded_amount) -> Budget`.
+        """
+
+        def _make(name: str, funded_amount: int) -> Budget:
+            budget = make_budget(
+                account,
+                name=name,
+                budget_type=Budget.BudgetType.GOAL,
+                funding_type=Budget.FundingType.FIXED_AMOUNT,
+                target_balance=Money("500.00", "USD"),
+                funding_amount=Money("100.00", "USD"),
+                stored={
+                    "balance": Money("200.00", "USD"),
+                    "funded_amount": Money(funded_amount, "USD"),
+                },
+            )
+            account.available_balance = Money("200.00", "USD")
+            account.posted_balance = Money("200.00", "USD")
+            account.save()
+            return budget
+
+        return _make
+
+    ####################################################################
+    #
     def test_goal_with_consistent_funded_amount_passes(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, make_goal_holding_200: Callable[..., Budget]
     ) -> None:
         """
         GIVEN: a Goal budget where balance == funded_amount - spent_amount
@@ -147,38 +151,16 @@ class TestVerifyBalancesGoalInvariant:
         WHEN:  verify_balances runs
         THEN:  no goal-invariant failure is reported
         """
-        account = bank_account_factory()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Holiday Fund",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money("500.00", "USD"),
-            funding_amount=Money("100.00", "USD"),
-        )
-        # Set balance and funded_amount to the same value so the invariant holds.
-        Budget.objects.filter(pk=budget.pk).update(
-            balance=Money("200.00", "USD"),
-            funded_amount=Money("200.00", "USD"),
-        )
-        # Keep Level 1 clean: available_balance and posted_balance must both
-        # equal budget_sum (200). No pending transactions, so expected_posted
-        # == budget_sum - 0 == 200.
-        account.available_balance = Money("200.00", "USD")
-        account.posted_balance = Money("200.00", "USD")
-        account.save()
+        make_goal_holding_200("Holiday Fund", funded_amount=200)
 
-        out = StringIO()
-        call_command("verify_balances", stdout=out)
-        output = out.getvalue()
-        assert "FAIL" not in output
-        assert "0 goal-invariant failure(s)" in output
+        output = _verify()
+        check.is_not_in("FAIL", output, "no FAIL")
+        check.is_in("0 goal-invariant failure(s)", output, "zero failures")
 
     ####################################################################
     #
     def test_goal_with_broken_funded_amount_fails(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, make_goal_holding_200: Callable[..., Budget]
     ) -> None:
         """
         GIVEN: a Goal budget where funded_amount does not match balance
@@ -186,30 +168,12 @@ class TestVerifyBalancesGoalInvariant:
         WHEN:  verify_balances runs
         THEN:  a goal-invariant failure is reported and CommandError is raised
         """
-        account = bank_account_factory()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Broken Goal",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money("500.00", "USD"),
-            funding_amount=Money("100.00", "USD"),
-        )
-        # Deliberately break the invariant: balance=200 but funded_amount=50.
-        Budget.objects.filter(pk=budget.pk).update(
-            balance=Money("200.00", "USD"),
-            funded_amount=Money("50.00", "USD"),
-        )
-        # Also adjust both account balances so Level 1 stays clean.
-        # No pending transactions, so expected_posted == budget_sum == 200.
-        account.available_balance = Money("200.00", "USD")
-        account.posted_balance = Money("200.00", "USD")
-        account.save()
+        make_goal_holding_200("Broken Goal", funded_amount=50)
 
         out = StringIO()
         with pytest.raises(CommandError) as exc_info:
             call_command("verify_balances", stdout=out)
         output = out.getvalue()
-        assert "FAIL" in output
-        assert "Broken Goal" in output
-        assert "goal-invariant" in str(exc_info.value)
+        check.is_in("FAIL", output, "reports FAIL")
+        check.is_in("Broken Goal", output, "names the goal")
+        check.is_in("goal-invariant", str(exc_info.value), "error says why")

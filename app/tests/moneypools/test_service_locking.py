@@ -102,26 +102,14 @@ def account(bank_account_factory: Callable[..., BankAccount]) -> BankAccount:
 ####################################################################
 #
 @pytest.fixture
-def goal(account: BankAccount, budget_factory: Callable[..., Budget]) -> Budget:
-    """A zero-balance fixed-amount Goal budget on `account`."""
-    return budget_factory(
-        bank_account=account,
-        balance=Money(0, "USD"),
-        budget_type=Budget.BudgetType.GOAL,
-        funding_type=Budget.FundingType.FIXED_AMOUNT,
-        funding_amount=Money(10, "USD"),
-        target_balance=Money(100, "USD"),
-    )
+def budget_rows(unallocated: Budget, goal: Budget) -> list[LockedRow]:
+    """The Unallocated and Goal rows in `id` order.
 
-
-####################################################################
-#
-@pytest.fixture
-def unallocated(account: BankAccount) -> Budget:
-    """The Unallocated budget of `account`."""
-    budget = account.unallocated_budget
-    assert budget is not None
-    return budget
+    Services that touch several budgets lock them in `id` order, so a
+    test expecting both locks compares against this list.
+    """
+    budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
+    return [_row(b) for b in budgets]
 
 
 ########################################################################
@@ -156,8 +144,21 @@ class TestTransactionAllocationLocking:
 
     ####################################################################
     #
-    def test_update_amount_locks_budget_then_allocation(
+    @pytest.mark.parametrize(
+        "change",
+        [
+            pytest.param(
+                lambda alloc: transaction_allocation_svc.update_amount(
+                    alloc, Money(-7, "USD")
+                ),
+                id="update_amount",
+            ),
+            pytest.param(transaction_allocation_svc.delete, id="delete"),
+        ],
+    )
+    def test_change_locks_budget_then_allocation(
         self,
+        change: Callable[[TransactionAllocation], object],
         account: BankAccount,
         unallocated: Budget,
         transaction_factory: Callable[..., Transaction],
@@ -165,39 +166,17 @@ class TestTransactionAllocationLocking:
     ) -> None:
         """
         GIVEN: a transaction whose allocation targets Unallocated
-        WHEN:  the allocation's amount is changed
+        WHEN:  the allocation's amount is changed, or it is deleted
         THEN:  the budget row and then the allocation row are re-read
                under row locks
         """
         tx = transaction_factory(bank_account=account, amount=-5)
         alloc = TransactionAllocation.objects.get(transaction=tx)
-        locked_rows.clear()
-
-        transaction_allocation_svc.update_amount(alloc, Money(-7, "USD"))
-
-        assert locked_rows[:2] == [_row(unallocated), _row(alloc)]
-
-    ####################################################################
-    #
-    def test_delete_locks_budget_then_allocation(
-        self,
-        account: BankAccount,
-        unallocated: Budget,
-        transaction_factory: Callable[..., Transaction],
-        locked_rows: list[LockedRow],
-    ) -> None:
-        """
-        GIVEN: a transaction whose allocation targets Unallocated
-        WHEN:  the allocation is deleted
-        THEN:  the budget row and then the allocation row are re-read
-               under row locks
-        """
-        tx = transaction_factory(bank_account=account, amount=-5)
-        alloc = TransactionAllocation.objects.get(transaction=tx)
+        # Deleting clears `alloc.pk`, so the expected rows are taken first.
         expected = [_row(unallocated), _row(alloc)]
         locked_rows.clear()
 
-        transaction_allocation_svc.delete(alloc)
+        change(alloc)
 
         assert locked_rows[:2] == expected
 
@@ -259,8 +238,8 @@ class TestTransactionLocking:
     def test_delete_split_locks_budgets_in_id_order(
         self,
         account: BankAccount,
-        unallocated: Budget,
         goal: Budget,
+        budget_rows: list[LockedRow],
         transaction_factory: Callable[..., Transaction],
         locked_rows: list[LockedRow],
     ) -> None:
@@ -272,8 +251,7 @@ class TestTransactionLocking:
         """
         tx = transaction_factory(bank_account=account, amount=-10)
         transaction_svc.split(tx, {str(goal.id): Decimal("4")})
-        budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
-        expected = [_row(account), _row(tx)] + [_row(b) for b in budgets]
+        expected = [_row(account), _row(tx), *budget_rows]
         locked_rows.clear()
 
         transaction_svc.delete(tx)
@@ -282,45 +260,38 @@ class TestTransactionLocking:
 
     ####################################################################
     #
-    def test_update_locks_account_then_transaction(
+    @pytest.mark.parametrize(
+        "post",
+        [
+            pytest.param(
+                lambda tx: transaction_svc.update(tx, pending=False),
+                id="update",
+            ),
+            pytest.param(
+                lambda tx: transaction_svc.resolve_pending_to_posted(
+                    tx, new_posted_date=datetime(2026, 3, 2, tzinfo=UTC)
+                ),
+                id="resolve_pending_to_posted",
+            ),
+        ],
+    )
+    def test_posting_locks_account_then_transaction(
         self,
+        post: Callable[[Transaction], object],
         account: BankAccount,
         transaction_factory: Callable[..., Transaction],
         locked_rows: list[LockedRow],
     ) -> None:
         """
         GIVEN: a pending transaction
-        WHEN:  it is updated to posted
+        WHEN:  it is updated to posted, or resolved to posted
         THEN:  the account row and then the transaction row are
                re-read under row locks
         """
         tx = transaction_factory(bank_account=account, amount=-5, pending=True)
         locked_rows.clear()
 
-        transaction_svc.update(tx, pending=False)
-
-        assert locked_rows[:2] == [_row(account), _row(tx)]
-
-    ####################################################################
-    #
-    def test_resolve_pending_locks_account_then_transaction(
-        self,
-        account: BankAccount,
-        transaction_factory: Callable[..., Transaction],
-        locked_rows: list[LockedRow],
-    ) -> None:
-        """
-        GIVEN: a pending transaction
-        WHEN:  it is resolved to posted
-        THEN:  the account row and then the transaction row are
-               re-read under row locks
-        """
-        tx = transaction_factory(bank_account=account, amount=-5, pending=True)
-        locked_rows.clear()
-
-        transaction_svc.resolve_pending_to_posted(
-            tx, new_posted_date=datetime(2026, 3, 2, tzinfo=UTC)
-        )
+        post(tx)
 
         assert locked_rows[:2] == [_row(account), _row(tx)]
 
@@ -329,8 +300,8 @@ class TestTransactionLocking:
     def test_split_locks_transaction_then_budgets_in_id_order(
         self,
         account: BankAccount,
-        unallocated: Budget,
         goal: Budget,
+        budget_rows: list[LockedRow],
         transaction_factory: Callable[..., Transaction],
         locked_rows: list[LockedRow],
     ) -> None:
@@ -345,8 +316,7 @@ class TestTransactionLocking:
 
         transaction_svc.split(tx, {str(goal.id): Decimal("4")})
 
-        budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
-        assert locked_rows[:3] == [_row(tx)] + [_row(b) for b in budgets]
+        assert locked_rows[:3] == [_row(tx), *budget_rows]
 
 
 ########################################################################
@@ -362,6 +332,7 @@ class TestInternalTransactionLocking:
         account: BankAccount,
         unallocated: Budget,
         goal: Budget,
+        budget_rows: list[LockedRow],
         user: User,
         locked_rows: list[LockedRow],
     ) -> None:
@@ -378,8 +349,7 @@ class TestInternalTransactionLocking:
             actor=user,
         )
 
-        budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
-        assert locked_rows == [_row(b) for b in budgets]
+        assert locked_rows == budget_rows
 
     ####################################################################
     #
@@ -388,6 +358,7 @@ class TestInternalTransactionLocking:
         account: BankAccount,
         unallocated: Budget,
         goal: Budget,
+        budget_rows: list[LockedRow],
         user: User,
         locked_rows: list[LockedRow],
     ) -> None:
@@ -404,8 +375,7 @@ class TestInternalTransactionLocking:
             amount=Money(10, "USD"),
             actor=user,
         )
-        budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
-        expected = [_row(b) for b in budgets] + [_row(itx)]
+        expected = [*budget_rows, _row(itx)]
         locked_rows.clear()
 
         internal_transaction_svc.delete(itx)
@@ -436,45 +406,29 @@ class TestBudgetLocking:
 
     ####################################################################
     #
-    def test_archive_locks_budget_and_unallocated(
+    @pytest.mark.parametrize(
+        "remove",
+        [
+            pytest.param(budget_svc.archive, id="archive"),
+            pytest.param(budget_svc.delete, id="delete"),
+        ],
+    )
+    def test_removal_locks_budget_and_unallocated(
         self,
-        account: BankAccount,
-        unallocated: Budget,
+        remove: Callable[..., object],
         goal: Budget,
+        budget_rows: list[LockedRow],
         user: User,
         locked_rows: list[LockedRow],
     ) -> None:
         """
         GIVEN: a Goal budget with no balance
-        WHEN:  it is archived
+        WHEN:  it is archived, or deleted
         THEN:  the Goal and Unallocated rows are locked in `id` order
         """
-        budget_svc.archive(goal, actor=user)
+        remove(goal, actor=user)
 
-        budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
-        assert locked_rows[:2] == [_row(b) for b in budgets]
-
-    ####################################################################
-    #
-    def test_delete_locks_budget_and_unallocated(
-        self,
-        account: BankAccount,
-        unallocated: Budget,
-        goal: Budget,
-        user: User,
-        locked_rows: list[LockedRow],
-    ) -> None:
-        """
-        GIVEN: a Goal budget with no balance
-        WHEN:  it is deleted
-        THEN:  the Goal and Unallocated rows are locked in `id` order
-        """
-        budgets = sorted([unallocated, goal], key=lambda b: str(b.id))
-        expected = [_row(b) for b in budgets]
-
-        budget_svc.delete(goal, actor=user)
-
-        assert locked_rows[:2] == expected
+        assert locked_rows[:2] == budget_rows
 
 
 ########################################################################
@@ -488,6 +442,7 @@ class TestFundingLocking:
     def test_fund_event_locks_source_and_target(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
         system_user: User,
         locked_rows: list[LockedRow],
     ) -> None:
@@ -501,9 +456,8 @@ class TestFundingLocking:
         account = make_account(posted_through=today)
         unallocated = account.unallocated_budget
         assert unallocated is not None
-        goal = budget_svc.create(
-            bank_account=account,
-            name="Sneakers",
+        goal = make_budget(
+            account,
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(300, "USD"),
@@ -512,9 +466,7 @@ class TestFundingLocking:
                 dtstart=datetime(2026, 1, 1),
                 rrules=[recurrence.Rule(recurrence.MONTHLY)],
             ),
-        )
-        Budget.objects.filter(pkid=goal.pkid).update(
-            last_funded_on=date(2026, 2, 28)
+            stored={"last_funded_on": date(2026, 2, 28)},
         )
 
         report = funding_svc.fund_account(account, today, system_user)

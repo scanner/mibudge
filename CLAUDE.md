@@ -227,10 +227,15 @@ def test_something(factory_cls) -> None: ...
   root conftest also pins email and invitation settings
   (`site_email_settings`, `invitation_limits`) for both invitation
   flows; `app/tests/moneypools/conftest.py` provides `account`, a bank
-  account owned by `user`, `make_account(posted_through=, unallocated=)`,
-  and `make_budget(account, stored=, fillup=, **create_kwargs)`, which
+  account owned by `user`, its `unallocated` budget, `goal` and
+  `make_goal()` (zero-balance Goal budgets on `account`),
+  `make_account(posted_through=, unallocated=)`, and
+  `make_budget(account, stored=, fillup=, **create_kwargs)`, which
   creates a budget through the budget service and then writes the
   state a test starts from (pointers, balances, the fill-up goal).
+  A module that needs a different `account` (the concurrency and
+  locking tests start it with $100) overrides it, and `unallocated`,
+  `goal` and `make_goal` follow.
 - **Data**: values a test does not assert on come from the model
   factories or the `faker` fixture (`faker.unique.email()` for
   addresses: `UserFactory` gets-or-creates on email, so a repeat
