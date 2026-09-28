@@ -16,6 +16,7 @@ from io import StringIO
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.core.management import call_command
 from djmoney.money import Money
 
@@ -193,8 +194,12 @@ class TestDeleteBudgetWithFillup:
         budget_svc.delete(recurring, actor=user)
 
         unallocated.refresh_from_db()
-        assert unallocated.balance == before + Money(55, "USD")
-        assert not Budget.objects.filter(id=fillup.id).exists()
+        check.equal(
+            unallocated.balance, before + Money(55, "USD"), "$55 returned"
+        )
+        check.is_false(
+            Budget.objects.filter(id=fillup.id).exists(), "fill-up deleted"
+        )
         _assert_ledger_valid(account)
 
     ####################################################################
@@ -225,10 +230,14 @@ class TestDeleteBudgetWithFillup:
         with pytest.raises(ValueError, match="transaction allocations"):
             budget_svc.delete(recurring, actor=user)
 
-        assert Budget.objects.filter(id=recurring.id).exists()
-        assert Budget.objects.filter(id=fillup.id).exists()
+        check.is_true(
+            Budget.objects.filter(id=recurring.id).exists(), "parent kept"
+        )
+        check.is_true(
+            Budget.objects.filter(id=fillup.id).exists(), "fill-up kept"
+        )
         unallocated.refresh_from_db()
-        assert unallocated.balance == before
+        check.equal(unallocated.balance, before, "no balance change")
         _assert_ledger_valid(account)
 
     ####################################################################
@@ -256,8 +265,16 @@ class TestDeleteBudgetWithFillup:
         budget_svc.delete(recurring, actor=user)
 
         unallocated.refresh_from_db()
-        assert unallocated.balance == before + Money(25, "USD")
-        assert _check_budget_chain(unallocated, Decimal("0")) == []
+        check.equal(
+            unallocated.balance,
+            before + Money(25, "USD"),
+            "gains $40, absorbs the $15 deficit",
+        )
+        check.equal(
+            _check_budget_chain(unallocated, Decimal("0")),
+            [],
+            "running-balance chain valid",
+        )
 
 
 ########################################################################
@@ -296,7 +313,14 @@ class TestDeleteBudgetWithTransfers:
         budget_svc.delete(vacation, actor=user)
 
         groceries.refresh_from_db()
-        assert groceries.balance == Money(40, "USD")
-        assert _check_budget_chain(groceries, Decimal("0")) == []
-        assert _check_goal_invariant(groceries, Decimal("0")) is None
+        check.equal(groceries.balance, Money(40, "USD"), "transfer reversed")
+        check.equal(
+            _check_budget_chain(groceries, Decimal("0")),
+            [],
+            "running-balance chain valid",
+        )
+        check.is_none(
+            _check_goal_invariant(groceries, Decimal("0")),
+            "Goal invariant holds",
+        )
         _assert_ledger_valid(account)

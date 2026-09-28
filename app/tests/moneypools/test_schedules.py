@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 import recurrence
 
 # Project imports
@@ -217,8 +218,8 @@ class TestNormalizeDtstart:
         result = normalize_dtstart(sched, anchor)
 
         assert result is sched
-        assert result.dtstart == expected
-        assert result.include_dtstart is True
+        check.equal(result.dtstart, expected, "anchored on the first real fire")
+        check.is_true(result.include_dtstart, "include_dtstart restored")
 
     ####################################################################
     #
