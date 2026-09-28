@@ -46,14 +46,16 @@ describe("BaseButton", () => {
   // THEN:  filled buttons share one shape and pad by size; link-style
   //        buttons have no padding
   //
-  it.each<[{ variant?: ButtonVariant; size: "sm" | "md" }, string[]]>([
-    [{ size: "md" }, ["rounded-control", "px-4", "py-2.5", "tap-target"]],
-    [{ size: "sm" }, ["rounded-control", "px-3", "py-2"]],
-    [{ variant: "link", size: "sm" }, ["text-meta", "font-medium"]],
-  ])("sizes %o", (props, expected) => {
+  it.each<[{ variant?: ButtonVariant; size: "sm" | "md" }, string[], string[]]>(
+    [
+      [{ size: "md" }, ["rounded-control", "px-4", "py-2.5", "tap-target"], []],
+      [{ size: "sm" }, ["rounded-control", "px-3", "py-2"], []],
+      [{ variant: "link", size: "sm" }, ["text-meta", "font-medium"], ["px-3"]],
+    ],
+  )("sizes %o", (props, expected, absent) => {
     const classes = mount(BaseButton, { props }).classes();
     for (const cls of expected) expect(classes).toContain(cls);
-    if (props.variant === "link") expect(classes).not.toContain("px-3");
+    for (const cls of absent) expect(classes).not.toContain(cls);
   });
 
   // GIVEN: a filled and an outlined variant

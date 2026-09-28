@@ -45,6 +45,7 @@ steps:
       # The generated API types must match docs/openapi.yaml.
       - pnpm gen:api-types && git diff --exit-code src/api/schema.d.ts
       - pnpm fmt:check
+      - pnpm lint
       - pnpm lint:styles
       - pnpm type-check
 

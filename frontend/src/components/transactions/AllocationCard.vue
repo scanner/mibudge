@@ -52,7 +52,7 @@ function startEdit() {
 
 function commitEdit() {
   editingAmount.value = false;
-  const cleaned = amountInput.value.replace(/[^0-9.\-]/g, "");
+  const cleaned = amountInput.value.replace(/[^0-9.-]/g, "");
   const parsed = toDecimal(cleaned);
   if (parsed && !props.allocation.amount.equals(parsed)) {
     emit("update", props.allocation.id, parsed.toFixed(2));

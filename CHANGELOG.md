@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA TypeScript types for the REST API are generated from `docs/openapi.yaml` (`pnpm gen:api-types`, openapi-typescript); the Drone `frontend lint` step fails when `frontend/src/api/schema.d.ts` is out of date
 - SPA "page not found" screen for unknown `/app/...` paths, instead of a blank page
 - SPA design system: semantic design tokens, shared `Base*` components for buttons, fields, cards, rows, banners and sheets, and a `pnpm lint:styles` check (in CI and pre-commit) that rejects hard-coded colours and sizes. See `docs/spa/styling.md`
+- SPA linting with oxlint (correctness rules, Vue, TypeScript and Vitest plugins): `pnpm lint`, run in CI and pre-commit
 - SPA keyboard and touch accessibility: a visible focus outline on every control, focus kept inside open sheets, 44px touch targets, and delete buttons you can reach on a phone
 - SPA screen reference (`docs/spa/screens.md`) replacing the old UI specification
 - SPA architecture documentation in `docs/spa/`: the layers and their import rules (`architecture.md`), the HTTP transport, errors, types and models (`api-and-models.md`), stores and caching (`state.md`), components (`components.md`), and a recipe for adding a page (`adding-a-page.md`); an architecture test enforces the layering on every test run
