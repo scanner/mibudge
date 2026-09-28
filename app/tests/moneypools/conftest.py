@@ -59,6 +59,16 @@ def system_user() -> User:
 ####################################################################
 #
 @pytest.fixture
+def account(
+    bank_account_factory: Callable[..., BankAccount], user: User
+) -> BankAccount:
+    """A bank account owned by the default `user` fixture."""
+    return bank_account_factory(owners=[user])
+
+
+####################################################################
+#
+@pytest.fixture
 def make_account(
     bank_account_factory: Callable[..., BankAccount],
 ) -> Callable[..., BankAccount]:

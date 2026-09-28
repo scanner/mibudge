@@ -13,11 +13,11 @@ The name lists are plain module constants because they feed
 """
 
 # system imports
-import importlib
 from types import ModuleType
 
 # 3rd party imports
 import pytest
+import pytest_check as check
 
 # Project imports
 from moneypools.api.v1 import serializers as v1_serializers
@@ -98,38 +98,31 @@ class TestPublicImportSurface:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "package,names",
+        "module,names",
         [
-            ("moneypools.api.v1.views", VIEW_NAMES),
-            ("moneypools.api.v1.serializers", SERIALIZER_NAMES),
+            pytest.param(v1_views, VIEW_NAMES, id="views"),
+            pytest.param(v1_serializers, SERIALIZER_NAMES, id="serializers"),
         ],
     )
     def test_package_exports_former_module_names(
-        self, package: str, names: list[str]
+        self, module: ModuleType, names: list[str]
     ) -> None:
         """
         GIVEN: the names the former `views.py` and `serializers.py`
                modules defined
-        WHEN:  they are looked up on the v1 `views` and `serializers`
-               packages
-        THEN:  every name resolves on the package
-        AND:   every name is listed in the package's `__all__`
+        WHEN:  the v1 `views` and `serializers` packages are inspected
+        THEN:  every former name is listed in the package's `__all__`
+        AND:   every name in `__all__` resolves on the package, so it
+               lists no stale entry
         """
-        module = importlib.import_module(package)
-        missing = [name for name in names if not hasattr(module, name)]
-        assert missing == []
-        assert set(names) <= set(module.__all__)
-
-    ####################################################################
-    #
-    @pytest.mark.parametrize("module", [v1_views, v1_serializers])
-    def test_all_names_resolve(self, module: ModuleType) -> None:
-        """
-        GIVEN: a v1 API package
-        WHEN:  each name in its `__all__` is looked up on the package
-        THEN:  every name resolves, so `__all__` lists no stale entry
-        """
-        assert [n for n in module.__all__ if not hasattr(module, n)] == []
+        check.equal(
+            sorted(set(names) - set(module.__all__)), [], "names in __all__"
+        )
+        check.equal(
+            [n for n in module.__all__ if not hasattr(module, n)],
+            [],
+            "__all__ resolves",
+        )
 
 
 ########################################################################
@@ -156,21 +149,24 @@ class TestBankAccountViewSetActions:
 
     ####################################################################
     #
-    def test_mixins_in_mro(self) -> None:
+    @pytest.mark.parametrize(
+        "mixin",
+        [
+            BankAccountImportActions,
+            BankAccountFundingActions,
+            BankAccountInvitationActions,
+        ],
+    )
+    def test_mixins_in_mro(self, mixin: type) -> None:
         """
-        GIVEN: the three bank-account action mixins
+        GIVEN: a bank-account action mixin
         WHEN:  `BankAccountViewSet`'s MRO is resolved
-        THEN:  each mixin precedes `ModelViewSet`, so their actions are
+        THEN:  the mixin precedes `ModelViewSet`, so its actions are
                discovered while the viewset's own class attributes win
         """
         mro = BankAccountViewSet.__mro__
         model_viewset = next(c for c in mro if c.__name__ == "ModelViewSet")
-        for mixin in (
-            BankAccountImportActions,
-            BankAccountFundingActions,
-            BankAccountInvitationActions,
-        ):
-            assert mro.index(mixin) < mro.index(model_viewset)
+        assert mro.index(mixin) < mro.index(model_viewset)
 
     ####################################################################
     #
