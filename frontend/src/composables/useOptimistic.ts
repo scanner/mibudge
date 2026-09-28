@@ -17,15 +17,16 @@
 // - When the last request for a key finishes, the pending value is
 //   dropped and `value(key)` is the source again: the server's answer
 //   after a success, the unchanged saved value after a failure.
-// - `error` is the message from a failed last request (an earlier
-//   request's failure is superseded by the change queued after it); the
-//   next `set` clears it.
+// - `error(key)` is the message from the key's failed last request (an
+//   earlier request's failure is superseded by the change queued after
+//   it); the key's next `set` clears it.  Errors are per key, so a view
+//   that moves to another record never shows the previous record's
+//   failure.
 //
 
 // 3rd party imports
 //
-import { computed, reactive, ref } from "vue";
-import type { ComputedRef } from "vue";
+import { reactive } from "vue";
 
 // app imports
 //
@@ -40,7 +41,7 @@ export interface UseOptimisticOptions {
 export interface UseOptimistic<K, V> {
   value: (key: K) => V;
   saving: (key: K) => boolean;
-  error: ComputedRef<string | null>;
+  error: (key: K) => string | null;
   set: (key: K, value: V) => Promise<void>;
 }
 
@@ -56,7 +57,8 @@ export function useOptimistic<K, V>(
   // Per key: the running request, and the latest change waiting for it.
   const running = new Map<K, Promise<void>>();
   const queued = new Map<K, V>();
-  const error = ref<string | null>(null);
+  // The message from each key's failed last request.
+  const errors = reactive(new Map<K, string>()) as Map<K, string>;
 
   async function drain(key: K, first: V): Promise<void> {
     let current = first;
@@ -76,12 +78,12 @@ export function useOptimistic<K, V>(
     }
     running.delete(key);
     pending.delete(key);
-    if (failed) error.value = describeError(failure, options.errorMessage);
+    if (failed) errors.set(key, describeError(failure, options.errorMessage));
   }
 
   function set(key: K, value: V): Promise<void> {
     pending.set(key, value);
-    error.value = null;
+    errors.delete(key);
     const inFlight = running.get(key);
     if (inFlight) {
       queued.set(key, value);
@@ -95,7 +97,7 @@ export function useOptimistic<K, V>(
   return {
     value: (key) => (pending.has(key) ? (pending.get(key) as V) : source(key)),
     saving: (key) => pending.has(key),
-    error: computed(() => error.value),
+    error: (key) => errors.get(key) ?? null,
     set,
   };
 }

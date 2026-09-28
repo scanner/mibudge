@@ -90,7 +90,7 @@ export function useAccountHub() {
     { errorMessage: "Failed to set the default account." },
   );
   const defaultAccountId = computed(() => defaultAccount.value("default"));
-  const defaultAccountError = defaultAccount.error;
+  const defaultAccountError = computed(() => defaultAccount.error("default"));
 
   function setDefaultAccount(accountId: string): Promise<void> {
     return defaultAccount.set("default", accountId);

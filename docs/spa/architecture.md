@@ -155,6 +155,56 @@ and the error shape.
 
 ---
 
+## Router
+
+`router/index.ts` holds the route table and the guard, and
+`router/types.ts` holds the route types.
+
+- **History mode under `/app/`.** `createAppRouter()` uses
+  `createWebHistory("/app/")`. Django serves the SPA shell for every
+  path under `/app/`, so a reload or a pasted link lands on the right
+  view, and URLs have no `#`. Tests pass `createMemoryHistory("/app/")`
+  instead.
+- **Typed route names.** `AppRouteNamedMap` in `router/types.ts` lists
+  every route's name, path and params. It is registered as vue-router's
+  `RouteNamedMap`, so `router.push({ name, params })` and
+  `<RouterLink :to>` are type-checked, and a misspelt name or a missing
+  param fails `vue-tsc`. Navigate by name, never by a path string. A new
+  route goes into both files together.
+- **`meta.access` and the guard.** Every route declares `meta.access`:
+  `"public"` (the login page, the email-change result pages, not-found)
+  or `"authenticated"` (everything else). The `PUBLIC` and
+  `AUTHENTICATED` constants in `router/index.ts` hold the two values.
+  `authGuard` runs before every navigation. It sends a signed-out visitor
+  on an authenticated route to `login` with `?next=<fullPath>`, and it
+  sends a signed-in user on `login` to `overview`. `redirectToLogin`
+  (called when the session ends mid-use) does nothing on a public route.
+- **Cold boot settles the session first.** `main.ts` runs the silent
+  refresh, then loads the user and the account context, and only then
+  calls `app.use(router)`. Installing the router runs the first
+  navigation through the guard, so the guard must see the settled
+  session, or a returning user would land on the login page.
+- **`:id` is a prop that views watch.** Routes with an `:id` set
+  `props: true`, so the view takes `id` as a prop. Moving from one
+  record to another on the same route reuses the view instance, so a
+  view passes a getter (`() => props.id`) to its feature composable and
+  watches the prop for any other per-record state. See
+  [adding-a-page.md](adding-a-page.md#a-page-with-an-id).
+- **Not found.** The last route, `/:pathMatch(.*)*` (`not-found`),
+  catches every unknown path and renders `NotFoundView`. It is public,
+  so a signed-out visitor with a bad link sees the not-found page rather
+  than the login page.
+- **Email-change result pages.** After handling an emailed confirm or
+  revoke link, the backend redirects to
+  `/app/email-change/{confirmed,revoked,error}/`, so those paths must
+  match the backend's `SPA_EMAIL_CHANGE_*` constants.
+
+Every route's component is a lazy `import()`, so each view is its own
+chunk. [adding-a-page.md](adding-a-page.md) has the steps for adding a
+route.
+
+---
+
 ## How sections communicate
 
 Sections never import each other's composables or reach into each
