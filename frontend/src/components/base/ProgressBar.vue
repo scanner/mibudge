@@ -34,31 +34,22 @@ const props = withDefaults(defineProps<Props>(), {
 //
 const clamped = computed(() => Math.max(0, Math.min(100, props.value)));
 
-const toneClass = computed(() => {
-  switch (props.tone) {
-    case "funded":
-      return "bg-progress-funded";
-    case "active":
-      return "bg-progress-active";
-    case "behind":
-      return "bg-progress-behind";
-    case "over":
-      return "bg-progress-over";
-    case "paused":
-      return "bg-progress-paused";
-  }
-});
+const TONES: Record<ProgressTone, string> = {
+  funded: "bg-progress-funded",
+  active: "bg-progress-active",
+  behind: "bg-progress-behind",
+  over: "bg-progress-over",
+  paused: "bg-progress-paused",
+};
 
-const heightClass = computed(() => {
-  switch (props.size) {
-    case "sm":
-      return "h-progress-sm";
-    case "md":
-      return "h-progress-md";
-    case "lg":
-      return "h-progress-lg";
-  }
-});
+const HEIGHTS: Record<NonNullable<Props["size"]>, string> = {
+  sm: "h-progress-sm",
+  md: "h-progress-md",
+  lg: "h-progress-lg",
+};
+
+const toneClass = computed(() => TONES[props.tone]);
+const heightClass = computed(() => HEIGHTS[props.size]);
 </script>
 
 <template>

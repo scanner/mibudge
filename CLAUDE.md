@@ -66,6 +66,7 @@ pnpm dev          # Vite dev server on :5173 (HMR)
 pnpm build        # Production build → frontend/dist/
 pnpm type-check   # vue-tsc (src/ and tests/)
 pnpm fmt          # Format with oxfmt
+pnpm lint         # Lint with oxlint (correctness rules, Vue, TypeScript and Vitest plugins)
 pnpm lint:styles  # Style lint: design tokens only (see docs/spa/styling.md)
 pnpm test         # Run the Vitest suite once
 pnpm test:watch   # Re-run affected tests on file changes
@@ -272,7 +273,7 @@ SPA tests live in `frontend/tests/` (mirroring `frontend/src/`) and run under Vi
 ### Code Quality
 
 - **Python**: ruff (formatter + linter, line-length 80) + mypy. `make lint` runs all three.
-- **Frontend**: oxfmt (formatter, print width 80 via `frontend/.oxfmtrc.json`), vue-tsc (type checking).
+- **Frontend**: oxfmt (formatter, print width 80 via `frontend/.oxfmtrc.json`), oxlint (linter, `frontend/.oxlintrc.json`), vue-tsc (type checking).
 - **Pre-commit hooks**: configured in `.pre-commit-config.yaml`.
 
 The mypy config disables the `django-manager-missing` error due to a `django-money` compatibility issue.

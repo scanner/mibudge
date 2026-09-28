@@ -15,7 +15,7 @@ the REST API (`/api/v1/`) and the JWT endpoints (`/api/token/...`).
 - Native `fetch`, wrapped once in `src/api/http.ts`
 - Types generated from `docs/openapi.yaml` by openapi-typescript
 - `decimal.js` for money arithmetic, Tailwind CSS for styling
-- Vitest + happy-dom + MSW for tests, oxfmt for formatting (80 columns, `.oxfmtrc.json`), vue-tsc for type checking
+- Vitest + happy-dom + MSW for tests, oxfmt for formatting (80 columns, `.oxfmtrc.json`), oxlint for linting (`.oxlintrc.json`), vue-tsc for type checking
 
 ## Source layout
 
@@ -46,6 +46,7 @@ pnpm dev              # Vite dev server on :5173 (assets only; Django serves /ap
 pnpm build            # type-check + production build → dist/
 pnpm type-check       # vue-tsc over src/ and tests/
 pnpm fmt              # format src/ and tests/ (pnpm fmt:check in CI)
+pnpm lint             # oxlint over src/, tests/ and scripts/
 pnpm lint:styles      # style lint: tokens and primitives only (docs/spa/styling.md)
 pnpm test             # run the Vitest suite once (test:watch, test:coverage)
 pnpm gen:api-types    # regenerate src/api/schema.d.ts from docs/openapi.yaml

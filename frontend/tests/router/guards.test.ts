@@ -83,18 +83,27 @@ describe("auth guard", () => {
 describe("route table", () => {
   // GIVEN: the app's route table
   // WHEN:  each route is inspected
-  // THEN:  every route has a name and declares its access level, and
-  //        every route with an `:id` passes it to the view as a prop
+  // THEN:  every route has a name and declares its access level
   //
   it.each(routes.map((r) => [r.name, r] as const))(
     "%s is complete",
     (_name, route) => {
       expect(route.name).toBeTruthy();
       expect(["public", "authenticated"]).toContain(route.meta.access);
-      if (route.path.includes(":id"))
-        expect("props" in route && route.props).toBe(true);
     },
   );
+
+  // GIVEN: the app's routes with an `:id` segment
+  // WHEN:  each is inspected
+  // THEN:  it passes the id to the view as a prop
+  //
+  it.each(
+    routes
+      .filter((r) => r.path.includes(":id"))
+      .map((r) => [r.name, r] as const),
+  )("%s passes :id as a prop", (_name, route) => {
+    expect("props" in route && route.props).toBe(true);
+  });
 
   // GIVEN: a path no route matches
   // WHEN:  a visitor, signed in or not, navigates to it

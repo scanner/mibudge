@@ -35,18 +35,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 ////////////////////////////////////////////////////////////////////////
 //
-const sizeClass = computed(() => {
-  switch (props.size) {
-    case "sm":
-      return "text-amount-sm";
-    case "md":
-      return "text-amount";
-    case "lg":
-      return "text-title-amount";
-    case "hero":
-      return "text-display-amount";
-  }
-});
+const SIZES: Record<NonNullable<Props["size"]>, string> = {
+  sm: "text-amount-sm",
+  md: "text-amount",
+  lg: "text-title-amount",
+  hero: "text-display-amount",
+};
+
+const sizeClass = computed(() => SIZES[props.size]);
 
 ////////////////////////////////////////////////////////////////////////
 //
