@@ -81,8 +81,9 @@ describe("bank and bank account", () => {
   //
   it("maps from the API", () => {
     expect(
-      bankFromDto(makeBank({ name: "BofA", routing_number: null }))
-        .routingNumber,
+      bankFromDto(
+        makeBank({ name: "Summit National Bank", routing_number: null }),
+      ).routingNumber,
     ).toBeNull();
     const account = bankAccountFromDto(
       makeBankAccount({

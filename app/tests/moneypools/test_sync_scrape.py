@@ -15,11 +15,12 @@ the two validation paths (aggregate balance and posting-order chain).
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from djmoney.money import Money
 from pytest_mock import MockerFixture
 
@@ -39,6 +40,8 @@ from notifications.models import (
     NotificationPreference,
 )
 from users.models import User
+
+from .conftest import MerchantPlace
 
 pytestmark = pytest.mark.django_db
 
@@ -88,11 +91,9 @@ def _payload(
 #
 @pytest.fixture
 def empty_account(
-    bank_account_factory: Callable[..., BankAccount],
-    user_factory: Callable[..., User],
+    bank_account_factory: Callable[..., BankAccount], user: User
 ) -> BankAccount:
-    """A BankAccount with zero balance and one owner."""
-    user = user_factory()
+    """A BankAccount with zero balance, owned by the default `user`."""
     return bank_account_factory(
         owners=[user],
         currency="USD",
@@ -104,19 +105,9 @@ def empty_account(
 ########################################################################
 ########################################################################
 #
+@pytest.mark.usefixtures("mock_send_notification_now")
 class TestSyncScrape:
     """End-to-end tests for `sync_scrape`."""
-
-    ####################################################################
-    #
-    @pytest.fixture(autouse=True)
-    def _mock_notifications(self, mock_send_notification_now):
-        """
-        Bring in mock_send_notification_now so notifications don't attempt
-        a real Celery dispatch.  Returned so individual tests can assert on
-        which notifications were sent.
-        """
-        return mock_send_notification_now
 
     ####################################################################
     #
@@ -157,19 +148,30 @@ class TestSyncScrape:
 
         report = sync_scrape_svc.sync_scrape(empty_account, payload)
 
-        assert report.deleted_pending == 0
-        assert report.inserted_posted == 2
-        assert report.skipped_posted == 0
-        assert report.inserted_pending == 1
-        assert report.balance_mismatch is None
-        assert report.last_posted_through is not None
-        assert report.last_posted_through.isoformat() == "2026-05-18"
-        assert len(report.new_transaction_ids) == 3
+        check.equal(
+            (
+                report.deleted_pending,
+                report.inserted_posted,
+                report.skipped_posted,
+                report.inserted_pending,
+            ),
+            (0, 2, 0, 1),
+            "report counts (deleted, posted, skipped, pending)",
+        )
+        check.is_none(report.balance_mismatch, "balances agree")
+        check.equal(
+            report.last_posted_through,
+            date(2026, 5, 18),
+            "last_posted_through is the latest posted date",
+        )
+        check.equal(len(report.new_transaction_ids), 3, "three new ids")
 
         empty_account.refresh_from_db()
-        assert empty_account.available_balance == Money(-85, "USD")
+        check.equal(
+            empty_account.available_balance, Money(-85, "USD"), "available"
+        )
         # posted_balance excludes pending
-        assert empty_account.posted_balance == Money(-75, "USD")
+        check.equal(empty_account.posted_balance, Money(-75, "USD"), "posted")
 
         # Display order `(-transaction_date, -created_at)` must reproduce
         # the scrape's top-to-bottom order, because the service inserts
@@ -180,21 +182,26 @@ class TestSyncScrape:
                 "-transaction_date", "-created_at"
             )
         )
-        assert [r.raw_description for r in rows] == [
-            "PURCHASE PENDING THING",
-            "POSTED THING B",
-            "POSTED THING A",
-        ]
+        check.equal(
+            [r.raw_description for r in rows],
+            ["PURCHASE PENDING THING", "POSTED THING B", "POSTED THING A"],
+            "display order is scrape order",
+        )
         # Snapshots are the running balance after this row, walked
         # newest-first from the current account totals.  Pending tx
         # itself shows the current posted_balance (-75) because it has
         # not yet posted.
-        assert rows[0].bank_account_available_balance == Money(-85, "USD")
-        assert rows[0].bank_account_posted_balance == Money(-75, "USD")
-        assert rows[1].bank_account_available_balance == Money(-75, "USD")
-        assert rows[1].bank_account_posted_balance == Money(-75, "USD")
-        assert rows[2].bank_account_available_balance == Money(-50, "USD")
-        assert rows[2].bank_account_posted_balance == Money(-50, "USD")
+        check.equal(
+            [
+                (
+                    r.bank_account_available_balance.amount,
+                    r.bank_account_posted_balance.amount,
+                )
+                for r in rows
+            ],
+            [(-85, -75), (-75, -75), (-50, -50)],
+            "(available, posted) snapshots",
+        )
 
     ####################################################################
     #
@@ -227,17 +234,30 @@ class TestSyncScrape:
         first = sync_scrape_svc.sync_scrape(empty_account, payload)
         second = sync_scrape_svc.sync_scrape(empty_account, payload)
 
-        assert first.inserted_posted == 1
-        assert first.inserted_pending == 1
-        assert second.inserted_posted == 0
-        assert second.skipped_posted == 1
-        assert second.deleted_pending == 1
-        assert second.inserted_pending == 1
+        check.equal(
+            (first.inserted_posted, first.inserted_pending),
+            (1, 1),
+            "first run inserts both",
+        )
+        check.equal(
+            (
+                second.inserted_posted,
+                second.skipped_posted,
+                second.deleted_pending,
+                second.inserted_pending,
+            ),
+            (0, 1, 1, 1),
+            "second run skips posted, replaces pending",
+        )
 
         empty_account.refresh_from_db()
-        assert empty_account.available_balance == Money(-35, "USD")
-        assert (
-            Transaction.objects.filter(bank_account=empty_account).count() == 2
+        check.equal(
+            empty_account.available_balance, Money(-35, "USD"), "available"
+        )
+        check.equal(
+            Transaction.objects.filter(bank_account=empty_account).count(),
+            2,
+            "no duplicates",
         )
 
     ####################################################################
@@ -277,15 +297,19 @@ class TestSyncScrape:
             ],
         )
         report = sync_scrape_svc.sync_scrape(empty_account, second)
-        assert report.deleted_pending == 1
-        assert report.inserted_pending == 1
-
-        rows = list(
-            Transaction.objects.filter(bank_account=empty_account, pending=True)
+        check.equal(
+            (report.deleted_pending, report.inserted_pending),
+            (1, 1),
+            "pending replaced",
         )
-        assert len(rows) == 1
-        assert rows[0].raw_description == (
-            "PURCHASE Acmecorp Co/bill ZZ ON 03/07"
+        check.equal(
+            list(
+                Transaction.objects.filter(
+                    bank_account=empty_account, pending=True
+                ).values_list("raw_description", flat=True)
+            ),
+            ["PURCHASE Acmecorp Co/bill ZZ ON 03/07"],
+            "one pending row with the new description",
         )
 
     ####################################################################
@@ -329,21 +353,30 @@ class TestSyncScrape:
             ],
         )
         report = sync_scrape_svc.sync_scrape(empty_account, posted_only)
-        assert report.deleted_pending == 1
-        assert report.inserted_posted == 1
-        assert report.inserted_pending == 0
-        assert report.balance_mismatch is None
+        check.equal(
+            (
+                report.deleted_pending,
+                report.inserted_posted,
+                report.inserted_pending,
+            ),
+            (1, 1, 0),
+            "pending wiped, posted inserted",
+        )
+        check.is_none(report.balance_mismatch, "balances agree")
 
-        rows = list(Transaction.objects.filter(bank_account=empty_account))
-        assert len(rows) == 1
-        assert rows[0].pending is False
-        assert rows[0].amount == Money(Decimal("-49.06"), "USD")
+        final = Money(Decimal("-49.06"), "USD")
+        check.equal(
+            [
+                (r.pending, r.amount)
+                for r in Transaction.objects.filter(bank_account=empty_account)
+            ],
+            [(False, final)],
+            "one posted row at the final amount",
+        )
 
         empty_account.refresh_from_db()
-        assert empty_account.available_balance == Money(
-            Decimal("-49.06"), "USD"
-        )
-        assert empty_account.posted_balance == Money(Decimal("-49.06"), "USD")
+        check.equal(empty_account.available_balance, final, "available")
+        check.equal(empty_account.posted_balance, final, "posted")
 
         # Regression guard: the unallocated-budget balance must move in
         # lockstep with `account.available_balance`.  An earlier bug
@@ -352,13 +385,17 @@ class TestSyncScrape:
         # right, but unallocated drifted by the wiped amount.
         assert empty_account.unallocated_budget_id is not None
         unalloc = Budget.objects.get(id=empty_account.unallocated_budget_id)
-        assert unalloc.balance == Money(Decimal("-49.06"), "USD")
-        assert empty_account.available_balance == sum(
-            (
-                b.balance
-                for b in Budget.objects.filter(bank_account=empty_account)
+        check.equal(unalloc.balance, final, "Unallocated follows")
+        check.equal(
+            empty_account.available_balance,
+            sum(
+                (
+                    b.balance
+                    for b in Budget.objects.filter(bank_account=empty_account)
+                ),
+                Money(0, "USD"),
             ),
-            Money(0, "USD"),
+            "account equals sum of budgets",
         )
 
     ####################################################################
@@ -405,13 +442,20 @@ class TestSyncScrape:
             ],
         )
         report = sync_scrape_svc.sync_scrape(empty_account, posted)
-        assert report.deleted_pending == 1
-        assert report.inserted_posted == 1
+        check.equal(
+            (report.deleted_pending, report.inserted_posted),
+            (1, 1),
+            "pending wiped, posted inserted",
+        )
 
         rows = list(Transaction.objects.filter(bank_account=empty_account))
         assert len(rows) == 1
-        assert rows[0].pending is False
-        assert "WIDGETCARD CO DES:PAYMENT" in rows[0].raw_description
+        check.is_false(rows[0].pending, "the row is posted")
+        check.is_in(
+            "WIDGETCARD CO DES:PAYMENT",
+            rows[0].raw_description,
+            "with the settled description",
+        )
 
     ####################################################################
     #
@@ -494,8 +538,12 @@ class TestSyncScrape:
             ],
         )
         report = sync_scrape_svc.sync_scrape(empty_account, second)
-        assert report.skipped_posted == 1  # NEWER already in DB
-        assert report.inserted_posted == 1  # OLDER is new
+        # NEWER is already in the DB; OLDER is new.
+        check.equal(
+            (report.skipped_posted, report.inserted_posted),
+            (1, 1),
+            "newer skipped, older inserted",
+        )
 
         newer = Transaction.objects.get(
             bank_account=empty_account, raw_description="NEWER TX"
@@ -505,15 +553,22 @@ class TestSyncScrape:
         )
         # Display order: newer on top with available=-75 (current total),
         # older below with available=-50 (pre-newer chain position).
-        assert newer.bank_account_available_balance == Money(-75, "USD")
-        assert newer.bank_account_posted_balance == Money(-75, "USD")
-        assert older.bank_account_available_balance == Money(-50, "USD")
-        assert older.bank_account_posted_balance == Money(-50, "USD")
+        check.equal(
+            [
+                (
+                    r.bank_account_available_balance.amount,
+                    r.bank_account_posted_balance.amount,
+                )
+                for r in (newer, older)
+            ],
+            [(-75, -75), (-50, -50)],
+            "(available, posted) snapshots of newer, older",
+        )
 
     ####################################################################
     #
     def test_dedup_window_floor_uses_transaction_date_not_posted_date(
-        self, empty_account: BankAccount
+        self, empty_account: BankAccount, merchant_place: MerchantPlace
     ) -> None:
         """
         GIVEN: an existing posted row with posted_date 01/26 but
@@ -540,7 +595,8 @@ class TestSyncScrape:
                     pending=False,
                     posted_date=datetime(2026, 1, 26, 8, 0, tzinfo=UTC),
                     raw_description=(
-                        "COSTCO WHSE #1 01/24 MOBILE PURCHASE REDWOOD CITY CA"
+                        "COSTCO WHSE #481 01/24 MOBILE PURCHASE "
+                        f"{merchant_place.city.upper()} {merchant_place.region}"
                     ),
                     amount=Decimal("-234.28"),
                 ),
@@ -558,10 +614,15 @@ class TestSyncScrape:
         # set min_date = 2026-01-26 - 1 day = 2026-01-25, excluding the
         # existing transaction_date 2026-01-24 from the dedup map.
         report = sync_scrape_svc.sync_scrape(empty_account, seed)
-        assert report.inserted_posted == 0
-        assert report.skipped_posted == 1
-        assert (
-            Transaction.objects.filter(bank_account=empty_account).count() == 1
+        check.equal(
+            (report.inserted_posted, report.skipped_posted),
+            (0, 1),
+            "skipped as a duplicate",
+        )
+        check.equal(
+            Transaction.objects.filter(bank_account=empty_account).count(),
+            1,
+            "no duplicate row",
         )
 
     ####################################################################
@@ -621,7 +682,6 @@ class TestSyncScrape:
         sync_scrape_svc.sync_scrape(empty_account, after)
 
         empty_account.refresh_from_db()
-        assert empty_account.available_balance == Money(-45, "USD")
         budgets_total = sum(
             (
                 b.balance
@@ -629,10 +689,13 @@ class TestSyncScrape:
             ),
             Money(0, "USD"),
         )
-        assert budgets_total == empty_account.available_balance, (
-            f"invariant broken: account.available_balance="
-            f"{empty_account.available_balance}, "
-            f"sum(budget.balance)={budgets_total}"
+        check.equal(
+            empty_account.available_balance, Money(-45, "USD"), "available"
+        )
+        check.equal(
+            budgets_total,
+            empty_account.available_balance,
+            "account equals sum of budgets",
         )
 
     ####################################################################
@@ -640,6 +703,7 @@ class TestSyncScrape:
     def test_balance_mismatch_reported(
         self,
         empty_account: BankAccount,
+        user: User,
         mock_send_notification_now: MagicMock,
     ) -> None:
         """
@@ -662,23 +726,33 @@ class TestSyncScrape:
             ],
         )
         report = sync_scrape_svc.sync_scrape(empty_account, payload)
-        assert report.balance_mismatch == Decimal("975.00")
-        assert report.inserted_posted == 1
+        check.equal(report.balance_mismatch, Decimal("975.00"), "the diff")
+        check.equal(report.inserted_posted, 1, "the row still commits")
         empty_account.refresh_from_db()
-        assert empty_account.available_balance == Money(-25, "USD")
+        check.equal(
+            empty_account.available_balance, Money(-25, "USD"), "available"
+        )
 
-        owner = empty_account.owners.first()
-        n = Notification.objects.get(user=owner, kind=BALANCE_MISMATCH)
-        for key in (
-            "account_name",
-            "account_id",
-            "computed_balance",
-            "reported_balance",
-            "diff",
-        ):
-            assert key in n.context
-        assert n.context["account_id"] == str(empty_account.id)
-        mock_send_notification_now.delay.assert_any_call(str(n.id))
+        n = Notification.objects.get(user=user, kind=BALANCE_MISMATCH)
+        check.is_true(
+            {
+                "account_name",
+                "account_id",
+                "computed_balance",
+                "reported_balance",
+                "diff",
+            }
+            <= n.context.keys(),
+            "notification context has every key",
+        )
+        check.equal(
+            n.context["account_id"], str(empty_account.id), "names the account"
+        )
+        check.is_in(
+            call(str(n.id)),
+            mock_send_notification_now.delay.call_args_list,
+            "sent now",
+        )
 
     ####################################################################
     #
@@ -729,25 +803,21 @@ class TestSyncScrapeValidation:
     ####################################################################
     #
     def test_missing_unallocated_budget_raises(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-        user_factory: Callable[..., User],
+        self, empty_account: BankAccount
     ) -> None:
         """
         GIVEN: a bank account whose unallocated_budget is None
         WHEN:  sync_scrape is called
         THEN:  ValueError is raised before any mutation happens
         """
-        user = user_factory()
-        account = bank_account_factory(owners=[user], currency="USD")
-        BankAccount.objects.filter(pkid=account.pkid).update(
+        BankAccount.objects.filter(pkid=empty_account.pkid).update(
             unallocated_budget=None
         )
-        account.refresh_from_db()
+        empty_account.refresh_from_db()
 
         with pytest.raises(ValueError, match="unallocated_budget"):
             sync_scrape_svc.sync_scrape(
-                account,
+                empty_account,
                 _payload(
                     ending_balance=Decimal("0"),
                     transactions=[],
@@ -756,18 +826,12 @@ class TestSyncScrapeValidation:
 
     ####################################################################
     #
-    def test_currency_mismatch_raises(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-        user_factory: Callable[..., User],
-    ) -> None:
+    def test_currency_mismatch_raises(self, empty_account: BankAccount) -> None:
         """
         GIVEN: a USD account and a scrape that lists a EUR transaction
         WHEN:  sync_scrape is called
         THEN:  ValueError is raised before any mutation happens
         """
-        user = user_factory()
-        account = bank_account_factory(owners=[user], currency="USD")
         payload = sync_scrape_svc.ScrapeSyncPayload(
             scraped_at=datetime(2026, 5, 19, 12, 0, tzinfo=UTC),
             ending_balance=Money(0, "USD"),
@@ -781,7 +845,7 @@ class TestSyncScrapeValidation:
             ],
         )
         with pytest.raises(ValueError, match="currency"):
-            sync_scrape_svc.sync_scrape(account, payload)
+            sync_scrape_svc.sync_scrape(empty_account, payload)
 
 
 ########################################################################
@@ -814,110 +878,115 @@ _TRUNC_AGENCY_FEE = (
 ########################################################################
 ########################################################################
 #
+def _ach_scrape(
+    rows: list[tuple[str, str, int]],
+) -> sync_scrape_svc.ScrapeSyncPayload:
+    """Build a scrape of posted January 2026 ACH rows.
+
+    Args:
+        rows: `(raw_description, amount, day of month)` per row, in
+            scrape order.  The ending balance is their sum.
+    """
+    return _payload(
+        ending_balance=sum(
+            (Decimal(amount) for _, amount, _ in rows), Decimal(0)
+        ),
+        transactions=[
+            _stx(
+                pending=False,
+                posted_date=datetime(2026, 1, day, tzinfo=UTC),
+                raw_description=desc,
+                amount=Decimal(amount),
+                transaction_type="ach",
+            )
+            for desc, amount, day in rows
+        ],
+    )
+
+
+########################################################################
+########################################################################
+#
 class TestMatchesTruncated:
     """Unit tests for `sync_scrape._matches_truncated`."""
 
     ####################################################################
     #
-    @pytest.fixture(autouse=True)
-    def _mock_notifications(self, mock_send_notification_now):
-        """
-        Bring in mock_send_notification_now so notifications don't attempt
-        a real Celery dispatch.  Returned so individual tests can assert on
-        which notifications were sent.
-        """
-        return mock_send_notification_now
-
-    ####################################################################
-    #
     @pytest.mark.parametrize(
-        "scraped,candidates,expected,reason",
+        "scraped,candidates,expected_match",
         [
             # Exact match always wins.
-            (
+            pytest.param(
                 _FULL_ACH_TRANSFER,
                 [_FULL_ACH_TRANSFER],
-                True,
-                "exact match against full",
-            ),
-            (
-                _TRUNC_ACH_TRANSFER,
-                [_TRUNC_ACH_TRANSFER],
-                True,
-                "exact match against truncated",
+                _FULL_ACH_TRANSFER,
+                id="exact",
             ),
             # The canonical bug scenario: scrape comes in truncated,
             # backup has the full row.
-            (
+            pytest.param(
                 _TRUNC_ACH_TRANSFER,
                 [_FULL_ACH_TRANSFER],
-                True,
-                "scraped truncated, candidate full -- ACH TRANSFER",
-            ),
-            (
-                _TRUNC_AGENCY_FEE,
-                [_FULL_AGENCY_FEE],
-                True,
-                "scraped truncated, candidate full -- agency fee",
+                _FULL_ACH_TRANSFER,
+                id="scraped_truncated_candidate_full",
             ),
             # Reverse direction: a stored row is the truncated one, a
             # later scrape produces the full description.  Symmetric
             # support keeps the dedup right when BofA's truncation
             # policy changes (or when manual CSV imports happen after
             # an earlier scrape).
-            (
+            pytest.param(
                 _FULL_ACH_TRANSFER,
                 [_TRUNC_ACH_TRANSFER],
-                True,
-                "scraped full, candidate truncated",
-            ),
-            # No match cases.
-            (
-                _FULL_ACH_TRANSFER,
-                [_FULL_AGENCY_FEE],
-                False,
-                "different transactions, no prefix relationship",
-            ),
-            (
                 _TRUNC_ACH_TRANSFER,
-                [_FULL_AGENCY_FEE],
-                False,
-                "scraped truncated but no candidate shares the stem",
-            ),
-            (
-                "ANY DESCRIPTION",
-                [],
-                False,
-                "no candidates",
-            ),
-            # Walks the candidates list and returns True on the first hit.
-            (
-                _TRUNC_ACH_TRANSFER,
-                [_FULL_AGENCY_FEE, _FULL_ACH_TRANSFER],
-                True,
-                "matches second candidate",
+                id="scraped_full_candidate_truncated",
             ),
             # Two distinct truncated rows in the same (date, amount)
             # bucket: as long as one is a prefix of the other (after
             # stripping `...`) we treat as match.  This is rare but
             # supports the case where a backup contains a slightly
             # older truncation that's a prefix of a newer truncation.
-            (
+            pytest.param(
                 "PREFIX SAME EXTRA...",
                 ["PREFIX SAME..."],
-                True,
-                "scraped longer truncated, candidate shorter truncated",
+                "PREFIX SAME...",
+                id="both_truncated_candidate_shorter",
             ),
+            # Walks the candidates list and returns the first hit.
+            pytest.param(
+                _TRUNC_ACH_TRANSFER,
+                [_FULL_AGENCY_FEE, _FULL_ACH_TRANSFER],
+                _FULL_ACH_TRANSFER,
+                id="matches_second_candidate",
+            ),
+            pytest.param(
+                _FULL_ACH_TRANSFER,
+                [_FULL_AGENCY_FEE],
+                None,
+                id="no_prefix_relationship",
+            ),
+            pytest.param(
+                _TRUNC_ACH_TRANSFER,
+                [_FULL_AGENCY_FEE],
+                None,
+                id="scraped_truncated_no_candidate_shares_stem",
+            ),
+            pytest.param("ANY DESCRIPTION", [], None, id="no_candidates"),
         ],
     )
     def test_match_table(
         self,
         scraped: str,
         candidates: list[str],
-        expected: bool,
-        reason: str,
+        expected_match: str | None,
     ) -> None:
-        """Parametrised cases for the truncation-rescue rule."""
+        """
+        GIVEN: a scraped description and the stored descriptions in the
+               same (date, amount) bucket
+        WHEN:  _matches_truncated is applied
+        THEN:  it returns the first candidate that equals the scraped
+               description or is its truncated/full sibling, else None
+        """
         # Candidates carry (raw_description, id, has_details) so the
         # details_needed report can reference the matched row; the
         # match itself is still driven purely by the description.
@@ -925,31 +994,17 @@ class TestMatchesTruncated:
             (desc, f"id-{i}", False) for i, desc in enumerate(candidates)
         ]
         actual = sync_scrape_svc._matches_truncated(scraped, candidate_rows)
-        if expected:
-            assert actual is not None, reason
-            assert actual[0] in candidates, reason
-        else:
-            assert actual is None, reason
+        assert (actual[0] if actual else None) == expected_match
 
 
 ########################################################################
 ########################################################################
 #
+@pytest.mark.usefixtures("mock_send_notification_now")
 class TestSyncScrapeTruncatedDedup:
     """End-to-end: truncated scraped descriptions dedup against full
     stored descriptions inside `sync_scrape`.
     """
-
-    ####################################################################
-    #
-    @pytest.fixture(autouse=True)
-    def _mock_notifications(self, mock_send_notification_now):
-        """
-        Bring in mock_send_notification_now so notifications don't attempt
-        a real Celery dispatch.  Returned so individual tests can assert on
-        which notifications were sent.
-        """
-        return mock_send_notification_now
 
     ####################################################################
     #
@@ -970,170 +1025,110 @@ class TestSyncScrapeTruncatedDedup:
         the prefix rescue catches it.
         """
         # Seed the account with the two FULL-description posted rows.
-        seed = _payload(
-            ending_balance=Decimal("-1090.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_FULL_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 3, 26, 0, 0, tzinfo=UTC),
-                    raw_description=_FULL_AGENCY_FEE,
-                    amount=Decimal("-290.00"),
-                    transaction_type="ach",
-                ),
-            ],
+        seed_report = sync_scrape_svc.sync_scrape(
+            empty_account,
+            _ach_scrape(
+                [
+                    (_FULL_ACH_TRANSFER, "-800.00", 27),
+                    (_FULL_AGENCY_FEE, "-290.00", 26),
+                ]
+            ),
         )
-        seed_report = sync_scrape_svc.sync_scrape(empty_account, seed)
         assert seed_report.inserted_posted == 2
         assert seed_report.balance_mismatch is None
 
         # Second sync: SAME two rows, but with truncated descriptions
         # as BofA's web UI renders them.  Should dedup, not duplicate.
-        scrape = _payload(
-            ending_balance=Decimal("-1090.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_TRUNC_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 3, 26, 0, 0, tzinfo=UTC),
-                    raw_description=_TRUNC_AGENCY_FEE,
-                    amount=Decimal("-290.00"),
-                    transaction_type="ach",
-                ),
-            ],
+        report = sync_scrape_svc.sync_scrape(
+            empty_account,
+            _ach_scrape(
+                [
+                    (_TRUNC_ACH_TRANSFER, "-800.00", 27),
+                    (_TRUNC_AGENCY_FEE, "-290.00", 26),
+                ]
+            ),
         )
-        report = sync_scrape_svc.sync_scrape(empty_account, scrape)
 
-        assert report.inserted_posted == 0
-        assert report.skipped_posted == 2
-        assert report.balance_mismatch is None
-
+        check.equal(
+            (report.inserted_posted, report.skipped_posted),
+            (0, 2),
+            "both skipped",
+        )
+        check.is_none(report.balance_mismatch, "balances agree")
         empty_account.refresh_from_db()
-        assert empty_account.available_balance == Money(-1090, "USD")
-        assert (
-            Transaction.objects.filter(bank_account=empty_account).count() == 2
+        check.equal(
+            empty_account.available_balance,
+            Money(-1090, "USD"),
+            "balance unchanged",
+        )
+        check.equal(
+            Transaction.objects.filter(bank_account=empty_account).count(),
+            2,
+            "no duplicate rows",
         )
 
     ####################################################################
     #
-    def test_scraped_full_matches_existing_truncated(
-        self, empty_account: BankAccount
+    @pytest.mark.parametrize(
+        "seeded,scraped,expected_rows",
+        [
+            # The stored row is the truncated one (from a prior scrape);
+            # the new scrape expands it (a CSV/OFX import, or BofA's UI
+            # un-truncating it).  The rescue is symmetric.
+            pytest.param(
+                [(_TRUNC_ACH_TRANSFER, "-800.00", 27)],
+                [(_FULL_ACH_TRANSFER, "-800.00", 27)],
+                1,
+                id="scraped_full_matches_existing_truncated",
+            ),
+            # A DIFFERENT transfer at -$790 with a truncated description:
+            # the (date, amount) bucket keeps the rescue from collapsing
+            # distinct charges to the same merchant.
+            pytest.param(
+                [(_FULL_ACH_TRANSFER, "-800.00", 27)],
+                [
+                    (_FULL_ACH_TRANSFER, "-800.00", 27),
+                    (_TRUNC_ACH_TRANSFER, "-790.00", 28),
+                ],
+                2,
+                id="distinct_amount_not_collapsed",
+            ),
+        ],
+    )
+    def test_stored_sibling_skipped(
+        self,
+        empty_account: BankAccount,
+        seeded: list[tuple[str, str, int]],
+        scraped: list[tuple[str, str, int]],
+        expected_rows: int,
     ) -> None:
         """
-        GIVEN: a posted row already in the DB with a TRUNCATED `...`
-               description (from a prior scrape)
-        WHEN:  a sync_scrape runs with the same row but expanded to
-               its full description (e.g., a subsequent CSV or OFX
-               import or BofA's UI un-truncating it)
-        THEN:  no new row is inserted -- the truncation rescue is
-               symmetric.
-        """
-        seed = _payload(
-            ending_balance=Decimal("-800.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_TRUNC_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-            ],
-        )
-        sync_scrape_svc.sync_scrape(empty_account, seed)
-
-        scrape = _payload(
-            ending_balance=Decimal("-800.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_FULL_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-            ],
-        )
-        report = sync_scrape_svc.sync_scrape(empty_account, scrape)
-
-        assert report.inserted_posted == 0
-        assert report.skipped_posted == 1
-        assert (
-            Transaction.objects.filter(bank_account=empty_account).count() == 1
-        )
-
-    ####################################################################
-    #
-    def test_truncation_rescue_does_not_collapse_distinct_amounts(
-        self, empty_account: BankAccount
-    ) -> None:
-        """
-        GIVEN: an existing posted row at $-800 with the FULL ACH TRANSFER
-               description, and a scrape that brings in a DIFFERENT
-               ACH transfer at $-790 with a TRUNCATED description
+        GIVEN: a stored posted row, and a scrape carrying its
+               truncated/full sibling, or a same-merchant row with a
+               different amount
         WHEN:  sync_scrape runs
-        THEN:  the truncation rescue does NOT fire (amounts differ),
-               so the new $-790 row is inserted as a fresh
-               transaction.  The (date, amount) bucket is the safety
-               rail that keeps the rescue from collapsing distinct
-               charges to the same merchant.
+        THEN:  exactly one scraped row is skipped as a duplicate, every
+               other scraped row is inserted
         """
-        seed = _payload(
-            ending_balance=Decimal("-800.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_FULL_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-            ],
-        )
-        sync_scrape_svc.sync_scrape(empty_account, seed)
+        sync_scrape_svc.sync_scrape(empty_account, _ach_scrape(seeded))
 
-        scrape = _payload(
-            ending_balance=Decimal("-1590.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_FULL_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 28, 0, 0, tzinfo=UTC),
-                    raw_description=_TRUNC_ACH_TRANSFER,
-                    amount=Decimal("-790.00"),
-                    transaction_type="ach",
-                ),
-            ],
+        report = sync_scrape_svc.sync_scrape(
+            empty_account, _ach_scrape(scraped)
         )
-        report = sync_scrape_svc.sync_scrape(empty_account, scrape)
 
-        assert report.inserted_posted == 1
-        assert report.skipped_posted == 1
-        assert (
-            Transaction.objects.filter(bank_account=empty_account).count() == 2
+        check.equal(report.skipped_posted, 1, "one duplicate skipped")
+        check.equal(
+            report.inserted_posted, len(scraped) - 1, "the rest inserted"
+        )
+        check.equal(
+            Transaction.objects.filter(bank_account=empty_account).count(),
+            expected_rows,
+            "rows stored",
         )
 
     ####################################################################
     #
-    def test_in_payload_truncated_does_not_re_match_just_inserted(
+    def test_in_payload_sibling_not_reinserted(
         self, empty_account: BankAccount
     ) -> None:
         """
@@ -1144,104 +1139,50 @@ class TestSyncScrapeTruncatedDedup:
         THEN:  only the first wins; the second is treated as a
                duplicate via in-payload reindex (no two-row insert).
         """
-        scrape = _payload(
-            ending_balance=Decimal("-800.00"),
-            transactions=[
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_FULL_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-                _stx(
-                    pending=False,
-                    posted_date=datetime(2026, 1, 27, 0, 0, tzinfo=UTC),
-                    raw_description=_TRUNC_ACH_TRANSFER,
-                    amount=Decimal("-800.00"),
-                    transaction_type="ach",
-                ),
-            ],
+        report = sync_scrape_svc.sync_scrape(
+            empty_account,
+            _ach_scrape(
+                [
+                    (_FULL_ACH_TRANSFER, "-800.00", 27),
+                    (_TRUNC_ACH_TRANSFER, "-800.00", 27),
+                ]
+            ),
         )
-        report = sync_scrape_svc.sync_scrape(empty_account, scrape)
-        assert report.inserted_posted == 1
-        assert report.skipped_posted == 1
-        assert (
-            Transaction.objects.filter(bank_account=empty_account).count() == 1
+
+        check.equal(
+            (report.inserted_posted, report.skipped_posted),
+            (1, 1),
+            "first inserted, sibling skipped",
+        )
+        check.equal(
+            Transaction.objects.filter(bank_account=empty_account).count(),
+            1,
+            "one row stored",
         )
 
 
 ########################################################################
 ########################################################################
 #
+@pytest.mark.usefixtures("mock_send_notification_now")
 class TestSyncScrapeNotifications:
     """Tests that sync_scrape fires the expected notification kinds."""
 
     ####################################################################
     #
-    @pytest.fixture(autouse=True)
-    def _mock_notifications(self, mock_send_notification_now):
-        """
-        Bring in mock_send_notification_now so notifications don't attempt
-        a real Celery dispatch.  Returned so individual tests can assert on
-        which notifications were sent.
-        """
-        return mock_send_notification_now
+    @pytest.fixture
+    def import_complete_opt_in(self, user: User) -> None:
+        """Opt `user` in to IMPORT_COMPLETE, which is off by default."""
+        NotificationPreference.objects.create(
+            user=user, kind=IMPORT_COMPLETE, delivery_mode=DeliveryMode.DIGEST
+        )
 
     ####################################################################
     #
-    @pytest.mark.parametrize(
-        "kind,required_ctx_keys,needs_opt_in",
-        [
-            pytest.param(
-                IMPORT_COMPLETE,
-                [
-                    "account_name",
-                    "account_id",
-                    "new_count",
-                    "cleared_pending_count",
-                    "date",
-                ],
-                True,
-                id="import_complete",
-            ),
-            pytest.param(
-                TRANSACTION_POSTED,
-                [
-                    "account_name",
-                    "account_id",
-                    "count",
-                    "date",
-                    "transactions",
-                    "truncated",
-                    "remaining_count",
-                ],
-                False,
-                id="transaction_posted",
-            ),
-        ],
-    )
-    def test_notification_context_on_new_posted(
-        self,
-        empty_account: BankAccount,
-        kind: str,
-        required_ctx_keys: list[str],
-        needs_opt_in: bool,
-    ) -> None:
-        """
-        GIVEN: a scrape that inserts one new posted transaction
-        WHEN:  sync_scrape runs
-        THEN:  an IMPORT_COMPLETE (opt-in required) and TRANSACTION_POSTED
-               notification are created with all expected context keys
-        """
-        owner = empty_account.owners.first()
-        assert owner is not None
-        if needs_opt_in:
-            NotificationPreference.objects.create(
-                user=owner, kind=kind, delivery_mode=DeliveryMode.DIGEST
-            )
-
-        payload = _payload(
+    @pytest.fixture
+    def one_posted(self) -> sync_scrape_svc.ScrapeSyncPayload:
+        """A scrape carrying a single new posted -$25 transaction."""
+        return _payload(
             ending_balance=Decimal("-25.00"),
             transactions=[
                 _stx(
@@ -1252,27 +1193,89 @@ class TestSyncScrapeNotifications:
                 ),
             ],
         )
-        sync_scrape_svc.sync_scrape(empty_account, payload)
 
-        n = Notification.objects.get(user=owner, kind=kind)
-        for key in required_ctx_keys:
-            assert key in n.context
-        assert n.context["account_id"] == str(empty_account.id)
-        if kind == TRANSACTION_POSTED:
-            txns = n.context["transactions"]
-            assert len(txns) == 1
-            assert txns[0]["description"] == "POSTED TX"
-            for field in ("date", "amount", "budgets"):
-                assert field in txns[0]
-            assert n.context["truncated"] is False
-            assert n.context["remaining_count"] == 0
+    ####################################################################
+    #
+    @pytest.mark.usefixtures("import_complete_opt_in")
+    def test_import_complete_context_on_new_posted(
+        self,
+        empty_account: BankAccount,
+        user: User,
+        one_posted: sync_scrape_svc.ScrapeSyncPayload,
+    ) -> None:
+        """
+        GIVEN: an owner opted in to IMPORT_COMPLETE, and a scrape that
+               inserts one new posted transaction
+        WHEN:  sync_scrape runs
+        THEN:  an IMPORT_COMPLETE notification is created with every
+               expected context key, naming the account
+        """
+        sync_scrape_svc.sync_scrape(empty_account, one_posted)
+
+        n = Notification.objects.get(user=user, kind=IMPORT_COMPLETE)
+        check.is_true(
+            {
+                "account_name",
+                "account_id",
+                "new_count",
+                "cleared_pending_count",
+                "date",
+            }
+            <= n.context.keys(),
+            "context has every key",
+        )
+        check.equal(
+            n.context["account_id"], str(empty_account.id), "names the account"
+        )
+
+    ####################################################################
+    #
+    def test_transaction_posted_context_on_new_posted(
+        self,
+        empty_account: BankAccount,
+        user: User,
+        one_posted: sync_scrape_svc.ScrapeSyncPayload,
+    ) -> None:
+        """
+        GIVEN: a scrape that inserts one new posted transaction
+        WHEN:  sync_scrape runs
+        THEN:  a TRANSACTION_POSTED notification (on by default) is
+               created listing that transaction, untruncated
+        """
+        sync_scrape_svc.sync_scrape(empty_account, one_posted)
+
+        n = Notification.objects.get(user=user, kind=TRANSACTION_POSTED)
+        check.is_true(
+            {
+                "account_name",
+                "account_id",
+                "count",
+                "date",
+                "transactions",
+                "truncated",
+                "remaining_count",
+            }
+            <= n.context.keys(),
+            "context has every key",
+        )
+        check.equal(
+            n.context["account_id"], str(empty_account.id), "names the account"
+        )
+        txns = n.context["transactions"]
+        check.equal(
+            [t["description"] for t in txns], ["POSTED TX"], "lists the row"
+        )
+        check.is_true(
+            {"date", "amount", "budgets"} <= txns[0].keys(),
+            "row has date, amount and budgets",
+        )
+        check.is_false(n.context["truncated"], "not truncated")
+        check.equal(n.context["remaining_count"], 0, "none remaining")
 
     ####################################################################
     #
     def test_transaction_posted_truncates_at_15(
-        self,
-        empty_account: BankAccount,
-        mock_send_notification_now: MagicMock,
+        self, empty_account: BankAccount, user: User
     ) -> None:
         """
         GIVEN: a scrape that inserts 16 new posted transactions
@@ -1294,121 +1297,82 @@ class TestSyncScrapeNotifications:
         )
         sync_scrape_svc.sync_scrape(empty_account, payload)
 
-        owner = empty_account.owners.first()
-        assert owner is not None
-        n = Notification.objects.get(user=owner, kind=TRANSACTION_POSTED)
-        assert len(n.context["transactions"]) == 15
-        assert n.context["truncated"] is True
-        assert n.context["remaining_count"] == 1
+        n = Notification.objects.get(user=user, kind=TRANSACTION_POSTED)
+        check.equal(len(n.context["transactions"]), 15, "lists 15")
+        check.is_true(n.context["truncated"], "truncated")
+        check.equal(n.context["remaining_count"], 1, "one remaining")
 
     ####################################################################
     #
-    @pytest.mark.parametrize(
-        "scenario,expect_transaction_posted",
-        [
-            pytest.param(
-                "only_pending_deleted", False, id="only_pending_deleted"
-            ),
-            pytest.param("new_posted_inserted", True, id="new_posted_inserted"),
-        ],
-    )
-    def test_transaction_posted_fires_only_on_new_posted(
-        self,
-        empty_account: BankAccount,
-        scenario: str,
-        expect_transaction_posted: bool,
+    @pytest.mark.usefixtures("import_complete_opt_in")
+    def test_only_pending_cleared_fires_import_complete_only(
+        self, empty_account: BankAccount, user: User
     ) -> None:
         """
-        GIVEN: a scrape that either deletes a pending tx or inserts a posted tx
-        WHEN:  sync_scrape runs
-        THEN:  IMPORT_COMPLETE always fires (opted-in); TRANSACTION_POSTED
-               fires only when inserted_posted > 0 or new/changed pending exist
+        GIVEN: an owner opted in to IMPORT_COMPLETE, and an account with
+               one pending transaction from an earlier scrape
+        WHEN:  a scrape with no transactions clears that pending row
+        THEN:  IMPORT_COMPLETE fires counting the cleared row;
+               TRANSACTION_POSTED does not fire
         """
-        owner = empty_account.owners.first()
-        assert owner is not None
-        NotificationPreference.objects.create(
-            user=owner, kind=IMPORT_COMPLETE, delivery_mode=DeliveryMode.DIGEST
+        seed = _payload(
+            ending_balance=Decimal("-10.00"),
+            transactions=[
+                _stx(
+                    pending=True,
+                    posted_date=datetime(2026, 5, 19, 12, 0, tzinfo=UTC),
+                    raw_description="PENDING TX",
+                    amount=Decimal("-10.00"),
+                ),
+            ],
+        )
+        sync_scrape_svc.sync_scrape(empty_account, seed)
+        # The seed fires both kinds for the new pending tx; clear them
+        # so only the second (empty) sync is checked.
+        Notification.objects.filter(user=user).delete()
+
+        sync_scrape_svc.sync_scrape(
+            empty_account,
+            _payload(ending_balance=Decimal("0"), transactions=[]),
         )
 
-        if scenario == "only_pending_deleted":
-            seed = _payload(
-                ending_balance=Decimal("-10.00"),
-                transactions=[
-                    _stx(
-                        pending=True,
-                        posted_date=datetime(2026, 5, 19, 12, 0, tzinfo=UTC),
-                        raw_description="PENDING TX",
-                        amount=Decimal("-10.00"),
-                    ),
-                ],
-            )
-            sync_scrape_svc.sync_scrape(empty_account, seed)
-            # Seed fires TRANSACTION_POSTED for the new pending tx; clear it
-            # so the assertion below only checks the second (empty) sync.
+        n = Notification.objects.get(user=user, kind=IMPORT_COMPLETE)
+        check.equal(n.context["cleared_pending_count"], 1, "counts the clear")
+        check.is_false(
             Notification.objects.filter(
-                user=owner, kind=TRANSACTION_POSTED
-            ).delete()
-            payload = _payload(
-                ending_balance=Decimal("0.00"),
-                transactions=[],
-            )
-        else:
-            payload = _payload(
-                ending_balance=Decimal("-25.00"),
-                transactions=[
-                    _stx(
-                        pending=False,
-                        posted_date=datetime(2026, 5, 18, 0, 0, tzinfo=UTC),
-                        raw_description="POSTED TX",
-                        amount=Decimal("-25.00"),
-                    ),
-                ],
-            )
-
-        sync_scrape_svc.sync_scrape(empty_account, payload)
-
-        assert Notification.objects.filter(
-            user=owner, kind=IMPORT_COMPLETE
-        ).exists()
-        assert (
-            Notification.objects.filter(
-                user=owner, kind=TRANSACTION_POSTED
-            ).exists()
-            == expect_transaction_posted
+                user=user, kind=TRANSACTION_POSTED
+            ).exists(),
+            "no TRANSACTION_POSTED",
         )
 
     ####################################################################
     #
+    @pytest.mark.usefixtures("import_complete_opt_in")
     def test_import_complete_fires_when_nothing_changed(
-        self,
-        empty_account: BankAccount,
+        self, empty_account: BankAccount, user: User
     ) -> None:
         """
-        GIVEN: a scrape that returns no transactions at all
+        GIVEN: an owner opted in to IMPORT_COMPLETE, and a scrape that
+               returns no transactions at all
         WHEN:  sync_scrape runs
-        THEN:  IMPORT_COMPLETE still fires so the user knows an import ran
+        THEN:  IMPORT_COMPLETE still fires so the user knows an import
+               ran, with zero counts
         """
-        owner = empty_account.owners.first()
-        assert owner is not None
-        NotificationPreference.objects.create(
-            user=owner, kind=IMPORT_COMPLETE, delivery_mode=DeliveryMode.DIGEST
+        sync_scrape_svc.sync_scrape(
+            empty_account,
+            _payload(ending_balance=Decimal("0"), transactions=[]),
         )
 
-        payload = _payload(
-            ending_balance=Decimal("0.00"),
-            transactions=[],
-        )
-        sync_scrape_svc.sync_scrape(empty_account, payload)
-
-        n = Notification.objects.get(user=owner, kind=IMPORT_COMPLETE)
-        assert n.context["new_count"] == 0
-        assert n.context["cleared_pending_count"] == 0
+        n = Notification.objects.get(user=user, kind=IMPORT_COMPLETE)
+        check.equal(n.context["new_count"], 0, "no new rows")
+        check.equal(n.context["cleared_pending_count"], 0, "none cleared")
 
     ####################################################################
     #
     def test_import_error_notification(
         self,
         empty_account: BankAccount,
+        user: User,
         mocker: MockerFixture,
     ) -> None:
         """
@@ -1421,36 +1385,28 @@ class TestSyncScrapeNotifications:
             "moneypools.service.sync_scrape._sync_scrape_locked",
             side_effect=RuntimeError("scraper failed"),
         )
-        payload = _payload(
-            ending_balance=Decimal("0.00"),
-            transactions=[],
-        )
 
         with pytest.raises(RuntimeError):
-            sync_scrape_svc.sync_scrape(empty_account, payload)
+            sync_scrape_svc.sync_scrape(
+                empty_account,
+                _payload(ending_balance=Decimal("0"), transactions=[]),
+            )
 
-        owner = empty_account.owners.first()
-        n = Notification.objects.get(user=owner, kind=IMPORT_ERROR)
-        assert n.context["account_id"] == str(empty_account.id)
-        assert "error" in n.context
-        assert n.log_entry is None  # queued for digest, not sent immediately
+        n = Notification.objects.get(user=user, kind=IMPORT_ERROR)
+        check.equal(
+            n.context["account_id"], str(empty_account.id), "names the account"
+        )
+        check.is_in("error", n.context, "carries the error")
+        # Queued for the digest, not sent immediately.
+        check.is_none(n.log_entry, "queued for digest")
 
 
 ########################################################################
 ########################################################################
 #
+@pytest.mark.usefixtures("mock_send_notification_now")
 class TestSyncScrapeDetailsNeeded:
     """Tests for the details_needed report of `sync_scrape`."""
-
-    ####################################################################
-    #
-    @pytest.fixture(autouse=True)
-    def _mock_notifications(self, mock_send_notification_now):
-        """
-        Bring in mock_send_notification_now so notifications don't attempt
-        a real Celery dispatch.
-        """
-        return mock_send_notification_now
 
     ####################################################################
     #
@@ -1490,17 +1446,13 @@ class TestSyncScrapeDetailsNeeded:
 
         report = sync_scrape_svc.sync_scrape(empty_account, payload)
 
-        assert [row.index for row in report.details_needed] == [1, 2]
         by_desc = {
             t.raw_description: str(t.id)
             for t in Transaction.objects.filter(bank_account=empty_account)
         }
-        assert (
-            report.details_needed[0].transaction_id == by_desc["POSTED NEWER"]
-        )
-        assert (
-            report.details_needed[1].transaction_id == by_desc["POSTED OLDER"]
-        )
+        assert [
+            (row.index, row.transaction_id) for row in report.details_needed
+        ] == [(1, by_desc["POSTED NEWER"]), (2, by_desc["POSTED OLDER"])]
 
     ####################################################################
     #
@@ -1543,11 +1495,16 @@ class TestSyncScrapeDetailsNeeded:
 
         report = sync_scrape_svc.sync_scrape(empty_account, payload)
 
-        assert report.inserted_posted == 0
-        assert report.skipped_posted == 2
-        assert [
-            (row.index, row.transaction_id) for row in report.details_needed
-        ] == [(1, str(unenriched.id))]
+        check.equal(
+            (report.inserted_posted, report.skipped_posted),
+            (0, 2),
+            "both skipped",
+        )
+        check.equal(
+            [(row.index, row.transaction_id) for row in report.details_needed],
+            [(1, str(unenriched.id))],
+            "only the unenriched row listed",
+        )
 
     ####################################################################
     #
@@ -1561,14 +1518,7 @@ class TestSyncScrapeDetailsNeeded:
         THEN:  the row dedups via truncation rescue and still appears
                in details_needed with the existing row's id
         """
-        full = (
-            "ACMECORP BRK SVC DES:TRANSFER ID:XXXXX1234 ZN8K3 "
-            "INDN:USER NAME CO ID:XXXXX98765 WEB"
-        )
-        truncated = (
-            "ACMECORP BRK SVC DES:TRANSFER ID:XXXXX1234 ZN8K3 "
-            "INDN:USER NAME CO..."
-        )
+        full, truncated = _FULL_ACH_TRANSFER, _TRUNC_ACH_TRANSFER
         first = _payload(
             ending_balance=Decimal("-10.00"),
             transactions=[
@@ -1598,7 +1548,9 @@ class TestSyncScrapeDetailsNeeded:
         )
         report = sync_scrape_svc.sync_scrape(empty_account, second)
 
-        assert report.skipped_posted == 1
-        assert [
-            (row.index, row.transaction_id) for row in report.details_needed
-        ] == [(0, str(stored.id))]
+        check.equal(report.skipped_posted, 1, "deduped by the rescue")
+        check.equal(
+            [(row.index, row.transaction_id) for row in report.details_needed],
+            [(0, str(stored.id))],
+            "listed with the stored row's id",
+        )

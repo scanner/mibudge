@@ -7,6 +7,7 @@ import pytest
 
 # Project imports
 from moneypools.service import merchant_enrichment as merchant_enrichment_svc
+from moneypools.service.merchant_enrichment import IntermediaryMatch
 
 pytestmark = pytest.mark.django_db
 
@@ -25,92 +26,71 @@ class TestSplitIntermediary:
     ################################################################
     #
     @pytest.mark.parametrize(
-        "raw_description,details_merchant_name,expected_token,"
-        "expected_display,expected_store",
+        "raw_description,details_merchant_name,expected",
         [
             # Square: BofA left the descriptor unresolved -- derive
             # the store from the capture group, noise-stripped.
             (
-                "SQ *ACME COFFEE SHOP 07/11 MOBILE PURCHASE Palo Alto CA",
+                "SQ *ACME COFFEE SHOP 07/11 MOBILE PURCHASE Lake Hollow OR",
                 "SQ *ACME COFFEE SHOP",
-                "square",
-                "Square",
-                "ACME COFFEE SHOP",
+                IntermediaryMatch("square", "Square", "ACME COFFEE SHOP"),
             ),
             # Square: BofA already resolved it -- trust that verbatim
             # rather than re-deriving a (possibly worse) name.
             (
-                "SQ *ACME COFFEE SHOP 07/11 MOBILE PURCHASE Palo Alto CA",
+                "SQ *ACME COFFEE SHOP 07/11 MOBILE PURCHASE Lake Hollow OR",
                 "Acme Coffee Shop",
-                "square",
-                "Square",
-                "Acme Coffee Shop",
+                IntermediaryMatch("square", "Square", "Acme Coffee Shop"),
             ),
             # Toast, no space after the asterisk.
             (
-                "TST*GOTT'S BURGERS - PA 07/05 MOBILE PURCHASE Palo Alto CA",
+                "TST*RUSTY'S BURGERS - LH 07/05 MOBILE PURCHASE Lake Hollow OR",
                 None,
-                "toast",
-                "Toast",
-                "GOTT'S BURGERS - PA",
+                IntermediaryMatch("toast", "Toast", "RUSTY'S BURGERS - LH"),
             ),
             # Toast, WITH a space after the asterisk.
             (
-                "TST* SOUP SHOP F 05/29 MOBILE PURCHASE SAN MATEO CA",
+                "TST* SOUP SHOP F 05/29 MOBILE PURCHASE CEDAR GLEN OR",
                 None,
-                "toast",
-                "Toast",
-                "SOUP SHOP F",
+                IntermediaryMatch("toast", "Toast", "SOUP SHOP F"),
             ),
             # SpotOn.
             (
-                "SPO*SOME CAFE 08/15 PURCHASE 650-000-0000 CA",
+                "SPO*SOME CAFE 08/15 PURCHASE 800-555-0199 OR",
                 None,
-                "spoton",
-                "SpotOn",
-                "SOME CAFE",
+                IntermediaryMatch("spoton", "SpotOn", "SOME CAFE"),
             ),
             # PAR (restaurant POS).
             (
-                "PAR*SOME BISTRO 12/22 PURCHASE SAN JOSE CA",
+                "PAR*SOME BISTRO 12/22 PURCHASE PINE RIDGE OR",
                 None,
-                "par",
-                "PAR",
-                "SOME BISTRO",
+                IntermediaryMatch("par", "PAR", "SOME BISTRO"),
             ),
             # Olo (restaurant ordering platform).
             (
-                "OLO*Some Deli 12/28 MOBILE PURCHASE San Carlos CA",
+                "OLO*Some Deli 12/28 MOBILE PURCHASE Fernwood OR",
                 None,
-                "olo",
-                "Olo",
-                "Some Deli",
+                IntermediaryMatch("olo", "Olo", "Some Deli"),
             ),
             # Grubhub marketplace.
             (
                 "GRUBHUB*TACOSHOP 06/15 PURCHASE GRUBHUB.COM NY",
                 "GRUBHUB*TACOSHOP",
-                "grubhub",
-                "Grubhub",
-                "TACOSHOP",
+                IntermediaryMatch("grubhub", "Grubhub", "TACOSHOP"),
             ),
             # DoorDash -- the store fragment is frequently truncated
             # mid-word by the card network; captured as-is.
             (
                 "DD *DOORDASH SANDWICH 06/26 PURCHASE DOORDASH.COM CA",
                 "DD *DOORDASH SANDWICH",
-                "doordash",
-                "DoorDash",
-                "SANDWICH",
+                IntermediaryMatch("doordash", "DoorDash", "SANDWICH"),
             ),
             # ActBlue: structurally identical to the marketplace
             # patterns, but a donation-recipient front, not a store.
             (
                 "ACTBLUE* SOMECAUSE 10/31 PURCHASE SECURE.ACTBLU MA",
                 None,
-                "actblue",
-                "ActBlue",
-                "SOMECAUSE",
+                IntermediaryMatch("actblue", "ActBlue", "SOMECAUSE"),
             ),
             # Paddle: merchant-of-record for software vendors. BofA's
             # own merchant name keeps the "PADDLE.NET*" prefix, so it is
@@ -119,9 +99,7 @@ class TestSplitIntermediary:
             (
                 "PADDLE.NET* TOWER 06/25 PURCHASE PADDLE.COM NY",
                 "PADDLE.NET* TOWER",
-                "paddle",
-                "Paddle",
-                "TOWER",
+                IntermediaryMatch("paddle", "Paddle", "TOWER"),
             ),
             # No known prefix -- a direct merchant using its own
             # asterisk-soft-descriptor convention (UPS, AT&T, ...);
@@ -130,13 +108,9 @@ class TestSplitIntermediary:
                 "UPS*1Z000000 12/09 PURCHASE 800-000-0000 GA",
                 None,
                 None,
-                None,
-                None,
             ),
             (
                 "ATT* BILL PAYMENT 11/03 PURCHASE 800-000-0000 TX",
-                None,
-                None,
                 None,
                 None,
             ),
@@ -146,9 +120,7 @@ class TestSplitIntermediary:
         self,
         raw_description: str,
         details_merchant_name: str | None,
-        expected_token: str | None,
-        expected_display: str | None,
-        expected_store: str | None,
+        expected: IntermediaryMatch | None,
     ) -> None:
         """
         GIVEN: a raw card descriptor and the provider's own merchant name
@@ -157,16 +129,12 @@ class TestSplitIntermediary:
                preferring an already-resolved provider name over a
                regex-derived one; an unknown prefix returns None
         """
-        result = merchant_enrichment_svc.split_intermediary(
-            details_merchant_name, raw_description
+        assert (
+            merchant_enrichment_svc.split_intermediary(
+                details_merchant_name, raw_description
+            )
+            == expected
         )
-        if expected_token is None:
-            assert result is None
-        else:
-            assert result is not None
-            assert result.token == expected_token
-            assert result.display_name == expected_display
-            assert result.store_name == expected_store
 
 
 ########################################################################
@@ -184,7 +152,7 @@ class TestRefineMerchantName:
             # exceeds the provider's truncated name.
             (
                 "COSTCO",
-                "COSTCO GAS #10 07/14 MOBILE PURCHASE REDWOOD CITY CA",
+                "COSTCO GAS #482 07/14 MOBILE PURCHASE LAKE HOLLOW OR",
                 "COSTCO GAS",
             ),
             # Same store number/date-stripped length as details_name --
@@ -193,7 +161,7 @@ class TestRefineMerchantName:
             # were new information).
             (
                 "COSTCO WHSE",
-                "COSTCO WHSE #123 07/05 PURCHASE Palo Alto CA",
+                "COSTCO WHSE #123 07/05 PURCHASE Lake Hollow OR",
                 "COSTCO WHSE",
             ),
             # Diverges entirely -- never replaces a name the remainder

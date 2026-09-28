@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.db import connection
 from django.db import transaction as db_transaction
 from django.db.transaction import TransactionManagementError
@@ -215,27 +216,6 @@ def account(bank_account_factory: Callable[..., BankAccount]) -> BankAccount:
     )
 
 
-####################################################################
-#
-@pytest.fixture
-def make_goal(
-    account: BankAccount, budget_factory: Callable[..., Budget]
-) -> Callable[[], Budget]:
-    """Return a factory for zero-balance Goal budgets on `account`."""
-
-    def _make() -> Budget:
-        return budget_factory(
-            bank_account=account,
-            balance=Money(0, "USD"),
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            funding_amount=Money(10, "USD"),
-            target_balance=Money(100, "USD"),
-        )
-
-    return _make
-
-
 ########################################################################
 ########################################################################
 #
@@ -247,7 +227,7 @@ class TestConcurrentBalanceUpdates:
     def test_concurrent_allocations_to_one_budget_both_apply(
         self,
         account: BankAccount,
-        make_goal: Callable[[], Budget],
+        goal: Budget,
         transaction_factory: Callable[..., Transaction],
     ) -> None:
         """
@@ -255,7 +235,6 @@ class TestConcurrentBalanceUpdates:
         WHEN:  two requests each allocate $10 to the Goal concurrently
         THEN:  the Goal's balance rises by $20
         """
-        goal = make_goal()
         tx1 = transaction_factory(bank_account=account, amount=10)
         tx2 = transaction_factory(bank_account=account, amount=10)
 
@@ -282,7 +261,7 @@ class TestConcurrentBalanceUpdates:
     ####################################################################
     #
     def test_concurrent_transaction_creates_both_apply_to_account(
-        self, account: BankAccount
+        self, account: BankAccount, unallocated: Budget
     ) -> None:
         """
         GIVEN: a bank account with $100 available
@@ -303,17 +282,17 @@ class TestConcurrentBalanceUpdates:
 
         assert not errors_a and not errors_b, (errors_a, errors_b)
         account.refresh_from_db()
-        assert account.available_balance == Money(80, "USD")
-        assert account.posted_balance == Money(80, "USD")
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        assert unallocated.balance == Money(80, "USD")
+        unallocated.refresh_from_db()
+        check.equal(account.available_balance, Money(80, "USD"), "available")
+        check.equal(account.posted_balance, Money(80, "USD"), "posted")
+        check.equal(unallocated.balance, Money(80, "USD"), "Unallocated")
 
     ####################################################################
     #
     def test_concurrent_transfers_from_one_budget_both_apply(
         self,
         account: BankAccount,
+        unallocated: Budget,
         make_goal: Callable[[], Budget],
         user: User,
     ) -> None:
@@ -324,8 +303,6 @@ class TestConcurrentBalanceUpdates:
         THEN:  Unallocated drops by $20 and each Goal rises by $10
         """
         goals = [make_goal(), make_goal()]
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
 
         def _transfer(dst: Budget) -> Callable[[], object]:
             return lambda: internal_transaction_svc.create(
@@ -340,10 +317,10 @@ class TestConcurrentBalanceUpdates:
 
         assert not errors_a and not errors_b, (errors_a, errors_b)
         unallocated.refresh_from_db()
-        assert unallocated.balance == Money(80, "USD")
+        check.equal(unallocated.balance, Money(80, "USD"), "Unallocated")
         for goal in goals:
             goal.refresh_from_db()
-            assert goal.balance == Money(10, "USD")
+            check.equal(goal.balance, Money(10, "USD"), goal.name)
 
     ####################################################################
     #
@@ -375,10 +352,11 @@ class TestConcurrentBalanceUpdates:
         errors_a, errors_b = _race(_resolve, _resolve)
 
         assert not errors_a, errors_a
-        assert len(errors_b) == 1
-        assert isinstance(errors_b[0], ValueError)
+        check.equal(
+            [type(e) for e in errors_b], [ValueError], "second resolve raises"
+        )
         account.refresh_from_db()
-        assert account.posted_balance == Money(90, "USD")
+        check.equal(account.posted_balance, Money(90, "USD"), "debited once")
 
 
 ########################################################################

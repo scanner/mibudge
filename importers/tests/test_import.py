@@ -274,7 +274,7 @@ class TestImportCmd:
         fake_client.banks[bank_uuid] = {
             "id": bank_uuid,
             "name": "Test Bank",
-            "routing_number": "021000021",
+            "routing_number": "073608374",
             "default_currency": "USD",
         }
 
@@ -626,14 +626,14 @@ class TestImportCmd:
 _SAMPLE_BANKS: list[dict[str, Any]] = [
     {
         "id": "11111111-1111-1111-1111-111111111111",
-        "name": "Chase",
-        "routing_number": "021000021",
+        "name": "Harbor Credit Union",
+        "routing_number": "073608374",
         "default_currency": "USD",
     },
     {
         "id": "22222222-2222-2222-2222-222222222222",
-        "name": "Bank of America",
-        "routing_number": "026009593",
+        "name": "Summit National Bank",
+        "routing_number": "080499961",
         "default_currency": "USD",
     },
     {
@@ -678,17 +678,17 @@ class TestFuzzyBankMatch:
         "query,expected_ids",
         [
             pytest.param(
-                "Chase",
+                "Harbor Credit Union",
                 ["11111111-1111-1111-1111-111111111111"],
                 id="exact-name",
             ),
             pytest.param(
-                "america",
+                "summit",
                 ["22222222-2222-2222-2222-222222222222"],
                 id="case-insensitive-name",
             ),
             pytest.param(
-                "021000021",
+                "073608374",
                 ["11111111-1111-1111-1111-111111111111"],
                 id="routing-number",
             ),

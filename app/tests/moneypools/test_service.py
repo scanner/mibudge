@@ -14,10 +14,12 @@ import threading
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 import recurrence
 from djmoney.money import Money
 from freezegun import freeze_time
@@ -33,11 +35,11 @@ from moneypools.models import (
     BankAccount,
     Budget,
     Transaction,
+    TransactionAllocation,
 )
 from moneypools.service import bank_account as bank_account_svc
 from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
-from moneypools.service import linking as linking_svc
 from moneypools.service import transaction as transaction_svc
 from moneypools.service import (
     transaction_allocation as transaction_allocation_svc,
@@ -58,19 +60,18 @@ class TestBankAccountService:
     def test_create_seeds_unallocated_budget_with_initial_balance(
         self,
         bank_factory: Callable[..., Bank],
-        user_factory: Callable[..., User],
+        user: User,
     ) -> None:
         """
         GIVEN: a bank and an initial available_balance of $500
         WHEN:  BankAccountService.create is called
         THEN:  the account exists, the Unallocated budget is created
-               with balance == available_balance, and unallocated_budget_id
-               is back-linked on the account row
+               with balance == available_balance and belongs to the
+               account, and unallocated_budget_id is back-linked on the
+               account row
         """
-        user = user_factory()
-        bank = bank_factory()
         account = bank_account_svc.create(
-            bank=bank,
+            bank=bank_factory(),
             name="My Checking",
             account_type=BankAccount.BankAccountType.CHECKING,
             owners=[user],
@@ -79,15 +80,17 @@ class TestBankAccountService:
         )
 
         assert account.pk is not None
-        assert account.unallocated_budget is not None
-        assert account.unallocated_budget.name == "Unallocated"
-        assert account.unallocated_budget.balance == Money(500, "USD")
-        assert user in account.owners.all()
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        check.equal(unallocated.name, "Unallocated", "named Unallocated")
+        check.equal(unallocated.balance, Money(500, "USD"), "seeded balance")
+        check.equal(unallocated.bank_account, account, "on the account")
+        check.is_in(user, list(account.owners.all()), "owned by the user")
 
-        # Verify the back-link is persisted to the DB row, not just the
+        # The back-link is persisted to the DB row, not just the
         # in-memory instance.
         account.refresh_from_db()
-        assert account.unallocated_budget_id is not None
+        check.is_not_none(account.unallocated_budget_id, "back-link saved")
 
 
 ########################################################################
@@ -98,17 +101,32 @@ class TestBudgetService:
 
     ####################################################################
     #
-    def test_create_recurring_creates_fillup_child(
+    @pytest.fixture
+    def recurring_budget(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        account: BankAccount,
+        make_budget: Callable[..., Budget],
+    ) -> Budget:
+        """A $200 Recurring budget named 'Groceries', with its fill-up."""
+        return make_budget(
+            account,
+            name="Groceries",
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(200, "USD"),
+        )
+
+    ####################################################################
+    #
+    def test_create_recurring_creates_fillup_child(
+        self, account: BankAccount
     ) -> None:
         """
         GIVEN: a RECURRING budget
         WHEN:  BudgetService.create is called
-        THEN:  an ASSOCIATED_FILLUP_GOAL child is created and linked
-               back via fillup_goal
+        THEN:  the returned budget carries an ASSOCIATED_FILLUP_GOAL
+               child on the same account, linked back via fillup_goal
         """
-        account = bank_account_factory()
         budget = budget_svc.create(
             bank_account=account,
             name="Groceries",
@@ -117,87 +135,64 @@ class TestBudgetService:
             target_balance=Money(200, "USD"),
         )
 
-        assert budget.fillup_goal is not None
-        assert (
-            budget.fillup_goal.budget_type
-            == Budget.BudgetType.ASSOCIATED_FILLUP_GOAL
+        fillup = budget.fillup_goal
+        assert fillup is not None
+        check.equal(
+            fillup.budget_type,
+            Budget.BudgetType.ASSOCIATED_FILLUP_GOAL,
+            "fill-up type",
         )
-        assert budget.fillup_goal.name == "Groceries Fill-up"
-        assert budget.fillup_goal.target_balance == Money(200, "USD")
+        check.equal(fillup.name, "Groceries Fill-up", "named for its parent")
+        check.equal(fillup.target_balance, Money(200, "USD"), "same target")
+        check.equal(fillup.bank_account, account, "same account")
 
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "field,new_value,fillup_attr,expected",
+        "field,new_value,expected",
         [
-            (
-                "target_balance",
-                Money(300, "USD"),
-                "target_balance",
-                Money(300, "USD"),
-            ),
-            (
-                "name",
-                "Rent",
-                "name",
-                "Rent Fill-up",
-            ),
+            ("target_balance", Money(300, "USD"), Money(300, "USD")),
+            ("name", "Rent", "Rent Fill-up"),
         ],
     )
     def test_update_syncs_fillup_goal(
         self,
         field: str,
         new_value: object,
-        fillup_attr: str,
         expected: object,
-        bank_account_factory: Callable[..., BankAccount],
+        recurring_budget: Budget,
     ) -> None:
         """
         GIVEN: a RECURRING budget with an existing fill-up goal
         WHEN:  budget_svc.update() changes target_balance or name
         THEN:  the fill-up goal's corresponding field is updated to match
         """
-        account = bank_account_factory()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Groceries",
-            budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.TARGET_DATE,
-            target_balance=Money(200, "USD"),
-        )
-        assert budget.fillup_goal is not None
+        fillup = recurring_budget.fillup_goal
+        assert fillup is not None
 
-        budget_svc.update(budget, **{field: new_value})
+        budget_svc.update(recurring_budget, **{field: new_value})
 
-        budget.fillup_goal.refresh_from_db()
-        assert getattr(budget.fillup_goal, fillup_attr) == expected
+        fillup.refresh_from_db()
+        assert getattr(fillup, field) == expected
 
     ####################################################################
     #
     def test_update_unrelated_field_does_not_touch_fillup_goal(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, recurring_budget: Budget
     ) -> None:
         """
         GIVEN: a RECURRING budget with an existing fill-up goal
         WHEN:  budget_svc.update() changes a field not in _FILLUP_SYNCED_FIELDS
         THEN:  the fill-up goal is not modified
         """
-        account = bank_account_factory()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Groceries",
-            budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.TARGET_DATE,
-            target_balance=Money(200, "USD"),
-        )
-        assert budget.fillup_goal is not None
-        fillup_before = budget.fillup_goal.modified_at
+        fillup = recurring_budget.fillup_goal
+        assert fillup is not None
+        fillup_before = fillup.modified_at
 
-        budget_svc.update(budget, memo="updated memo")
+        budget_svc.update(recurring_budget, memo="updated memo")
 
-        budget.fillup_goal.refresh_from_db()
-        assert budget.fillup_goal.modified_at == fillup_before
+        fillup.refresh_from_db()
+        assert fillup.modified_at == fillup_before
 
     ####################################################################
     #
@@ -218,7 +213,7 @@ class TestBudgetService:
         self,
         dtstart: datetime | None,
         expected: datetime,
-        bank_account_factory: Callable[..., BankAccount],
+        account: BankAccount,
     ) -> None:
         """
         GIVEN: a new budget whose funding schedule arrives bare or with
@@ -227,7 +222,6 @@ class TestBudgetService:
         THEN:  a bare schedule is anchored on its first real occurrence
                from today; an explicit DTSTART is preserved
         """
-        account = bank_account_factory()
         budget = budget_svc.create(
             bank_account=account,
             name="Trip",
@@ -250,27 +244,31 @@ class TestBudgetService:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "new_bymonthday,new_target_date,expected_dtstart",
+        "new_bymonthday,other_changes,expected_dtstart",
         [
             # Funding dates changed (new pattern, sent bare as the SPA
             # does): re-anchor on the new rule's first occurrence from
             # the edit date (frozen to 2026-07-20).
-            ([1], None, datetime(2026, 8, 1)),
+            ([1], {}, datetime(2026, 8, 1)),
             # Goal date changed, same pattern echoed bare: re-anchor
             # forward from the edit date, keeping the stored anchor as
             # the rule anchor.
-            ([15, -1], date(2027, 1, 1), datetime(2026, 7, 31)),
+            (
+                [15, -1],
+                {"target_date": date(2027, 1, 1)},
+                datetime(2026, 7, 31),
+            ),
             # Nothing schedule-relevant changed; the client just echoed
             # the pattern without its anchor: stored DTSTART preserved.
-            ([15, -1], None, datetime(2026, 6, 15)),
+            ([15, -1], {}, datetime(2026, 6, 15)),
         ],
     )
     def test_update_reanchors_funding_schedule(
         self,
         new_bymonthday: list[int],
-        new_target_date: date | None,
+        other_changes: dict[str, Any],
         expected_dtstart: datetime,
-        bank_account_factory: Callable[..., BankAccount],
+        account: BankAccount,
     ) -> None:
         """
         GIVEN: a Goal budget created 2026-06-01 with a semi-monthly
@@ -282,7 +280,6 @@ class TestBudgetService:
                to the first real occurrence from the edit date) while a
                bare echo keeps the stored anchor
         """
-        account = bank_account_factory()
         with freeze_time("2026-06-01"):
             budget = budget_svc.create(
                 bank_account=account,
@@ -298,21 +295,16 @@ class TestBudgetService:
                 ),
             )
 
-        changes: dict[str, object] = {
-            # SPA full-object updates always send the schedule bare.
-            "funding_schedule": recurrence.Recurrence(
-                rrules=[
-                    recurrence.Rule(
-                        recurrence.MONTHLY, bymonthday=new_bymonthday
-                    )
-                ],
-            ),
-        }
-        if new_target_date is not None:
-            changes["target_date"] = new_target_date
-
+        # SPA full-object updates always send the schedule bare.
+        schedule = recurrence.Recurrence(
+            rrules=[
+                recurrence.Rule(recurrence.MONTHLY, bymonthday=new_bymonthday)
+            ],
+        )
         with freeze_time("2026-07-20"):
-            budget_svc.update(budget, **changes)
+            budget_svc.update(
+                budget, funding_schedule=schedule, **other_changes
+            )
 
         budget.refresh_from_db()
         dtstart = budget.funding_schedule.dtstart
@@ -330,42 +322,36 @@ class TestInternalTransactionService:
     #
     def test_create_adjusts_budget_balances(
         self,
-        bank_account_factory: Callable[..., BankAccount],
-        budget_factory: Callable[..., Budget],
-        user_factory: Callable[..., User],
+        account: BankAccount,
+        unallocated: Budget,
+        goal: Budget,
+        user: User,
     ) -> None:
         """
-        GIVEN: two budgets with known balances
+        GIVEN: $200 in Unallocated and an empty Goal
         WHEN:  InternalTransactionService.create transfers $50 src -> dst
         THEN:  src decreases by $50, dst increases by $50, and the
                snapshot fields on the row reflect post-transfer balances
         """
-        account = bank_account_factory(available_balance=Money(200, "USD"))
-        src = account.unallocated_budget
-        assert src is not None
-        dst = budget_factory(
-            bank_account=account,
-            balance=Money(0, "USD"),
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        Budget.objects.filter(pkid=unallocated.pkid).update(
+            balance=Money(200, "USD")
         )
-        actor = user_factory()
-        initial_src = src.balance
+        unallocated.refresh_from_db()
 
         it = internal_transaction_svc.create(
             bank_account=account,
-            src_budget=src,
-            dst_budget=dst,
+            src_budget=unallocated,
+            dst_budget=goal,
             amount=Money(50, "USD"),
-            actor=actor,
+            actor=user,
         )
 
-        src.refresh_from_db()
-        dst.refresh_from_db()
-        assert src.balance == initial_src - Money(50, "USD")
-        assert dst.balance == Money(50, "USD")
-        assert it.src_budget_balance == src.balance
-        assert it.dst_budget_balance == dst.balance
+        unallocated.refresh_from_db()
+        goal.refresh_from_db()
+        check.equal(unallocated.balance, Money(150, "USD"), "src debited")
+        check.equal(goal.balance, Money(50, "USD"), "dst credited")
+        check.equal(it.src_budget_balance, unallocated.balance, "src snapshot")
+        check.equal(it.dst_budget_balance, goal.balance, "dst snapshot")
 
     ####################################################################
     #
@@ -373,7 +359,7 @@ class TestInternalTransactionService:
         self,
         bank_account_factory: Callable[..., BankAccount],
         budget_factory: Callable[..., Budget],
-        user_factory: Callable[..., User],
+        user: User,
     ) -> None:
         """
         GIVEN: two forward ITxs (A at day1, B at day30) from Unallocated
@@ -388,19 +374,15 @@ class TestInternalTransactionService:
         account = bank_account_factory(available_balance=Money(1200, "USD"))
         unallocated = account.unallocated_budget
         assert unallocated is not None
-        eat = budget_factory(
-            bank_account=account,
-            balance=Money(0, "USD"),
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
+        eat, spend = (
+            budget_factory(
+                bank_account=account,
+                balance=Money(0, "USD"),
+                budget_type=Budget.BudgetType.GOAL,
+                funding_type=Budget.FundingType.FIXED_AMOUNT,
+            )
+            for _ in range(2)
         )
-        spend = budget_factory(
-            bank_account=account,
-            balance=Money(0, "USD"),
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-        )
-        actor = user_factory()
 
         # ITx A: day1, Unallocated -> Eat, $400
         itx_a = internal_transaction_svc.create(
@@ -408,7 +390,7 @@ class TestInternalTransactionService:
             src_budget=unallocated,
             dst_budget=eat,
             amount=Money(400, "USD"),
-            actor=actor,
+            actor=user,
             effective_date=day1,
         )
         assert itx_a.src_budget_balance == Money(800, "USD")
@@ -419,7 +401,7 @@ class TestInternalTransactionService:
             src_budget=unallocated,
             dst_budget=eat,
             amount=Money(400, "USD"),
-            actor=actor,
+            actor=user,
             effective_date=day30,
         )
         assert itx_b.src_budget_balance == Money(400, "USD")
@@ -430,17 +412,17 @@ class TestInternalTransactionService:
             src_budget=unallocated,
             dst_budget=spend,
             amount=Money(200, "USD"),
-            actor=actor,
+            actor=user,
             effective_date=day1,
         )
 
         # C's snapshot: Unallocated was $1200 before A, $800 after A, $600 after C
         itx_c.refresh_from_db()
-        assert itx_c.src_budget_balance == Money(600, "USD")
+        check.equal(itx_c.src_budget_balance, Money(600, "USD"), "C snapshot")
 
         # B's snapshot must be updated: $1200 - $400 (A) - $200 (C) = $600 before B
         itx_b.refresh_from_db()
-        assert itx_b.src_budget_balance == Money(200, "USD")
+        check.equal(itx_b.src_budget_balance, Money(200, "USD"), "B updated")
 
 
 ########################################################################
@@ -451,44 +433,8 @@ class TestTransactionAllocationService:
 
     ####################################################################
     #
-    def test_create_credits_budget_balance(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        budget_factory: Callable[..., Budget],
-    ) -> None:
-        """
-        GIVEN: a transaction and a target budget
-        WHEN:  TransactionAllocationService.create allocates the full amount
-        THEN:  the budget's balance increases by that amount and the
-               allocation row is saved with the correct budget_balance snapshot
-        """
-        account = bank_account_factory(available_balance=Money(100, "USD"))
-        tx = transaction_factory(bank_account=account, amount=Money(100, "USD"))
-        dst = budget_factory(
-            bank_account=account,
-            balance=Money(0, "USD"),
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-        )
-        before = dst.balance
-
-        alloc = transaction_allocation_svc.create(
-            transaction=tx,
-            budget=dst,
-            amount=Money(50, "USD"),
-        )
-
-        dst.refresh_from_db()
-        alloc.refresh_from_db()
-        assert dst.balance == before + Money(50, "USD")
-        assert alloc.budget_balance == dst.balance
-
-    ####################################################################
-    #
     def test_budget_lock_gates_concurrent_callers(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, unallocated: Budget
     ) -> None:
         """
         GIVEN: the Redis lock for a budget key is already held
@@ -500,10 +446,7 @@ class TestTransactionAllocationService:
         TransactionAllocationService operations rely on to prevent
         lost-update races on budget.balance.
         """
-        account = bank_account_factory()
-        budget = account.unallocated_budget
-        assert budget is not None
-        key = budget.lock_key
+        key = unallocated.lock_key
 
         second_started = threading.Event()
         second_acquired = threading.Event()
@@ -534,7 +477,7 @@ class TestTransactionAllocationService:
         self,
         bank_account_factory: Callable[..., BankAccount],
         budget_factory: Callable[..., Budget],
-        user_factory: Callable[..., User],
+        user: User,
     ) -> None:
         """
         GIVEN: three transactions at dt1, dt2, dt4 exist in the system
@@ -577,7 +520,6 @@ class TestTransactionAllocationService:
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
         )
-        actor = user_factory()
 
         # Create all transactions upfront in chronological order.  Transactions
         # are not created out of order; it is the allocation of those
@@ -585,29 +527,16 @@ class TestTransactionAllocationService:
         # Transaction.objects.create is used directly to skip the bank-account
         # balance update in transaction_svc.create, which is not under test.
         #
-        tx_dt1 = Transaction.objects.create(
-            bank_account=account,
-            amount=Money(100, "USD"),  # type: ignore[misc]
-            posted_date=dt1,
-            transaction_date=dt1,
-            raw_description="Grocery budget deposit dt1",
-            transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
-        )
-        tx_dt2 = Transaction.objects.create(
-            bank_account=account,
-            amount=Money(-100, "USD"),  # type: ignore[misc]
-            posted_date=dt2,
-            transaction_date=dt2,
-            raw_description="Grocery purchase dt2",
-            transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
-        )
-        tx_dt4 = Transaction.objects.create(
-            bank_account=account,
-            amount=Money(-200, "USD"),  # type: ignore[misc]
-            posted_date=dt4,
-            transaction_date=dt4,
-            raw_description="Grocery purchase dt4",
-            transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
+        tx_dt1, tx_dt2, tx_dt4 = (
+            Transaction.objects.create(
+                bank_account=account,
+                amount=Money(amount, "USD"),  # type: ignore[misc]
+                posted_date=when,
+                transaction_date=when,
+                raw_description=f"Grocery {when.date()}",
+                transaction_type=Transaction.TransactionType.SIGNATURE_PURCHASE,
+            )
+            for amount, when in ((100, dt1), (-100, dt2), (-200, dt4))
         )
 
         # -- phase 1: allocate dt2 and dt4 transactions to Groceries ----
@@ -633,7 +562,7 @@ class TestTransactionAllocationService:
             src_budget=unallocated,
             dst_budget=groceries,
             amount=Money(100, "USD"),
-            actor=actor,
+            actor=user,
             effective_date=dt3,
         )
 
@@ -673,11 +602,11 @@ class TestTransactionAllocationService:
         alloc_dt2.refresh_from_db()
         itx.refresh_from_db()
         alloc_dt4.refresh_from_db()
-        assert alloc_dt1.budget_balance == Money(500, "USD")
-        assert alloc_dt2.budget_balance == Money(400, "USD")
-        assert itx.dst_budget_balance == Money(500, "USD")
-        assert alloc_dt4.budget_balance == Money(300, "USD")
-        assert itx.src_budget_balance == Money(400, "USD")
+        check.equal(alloc_dt1.budget_balance, Money(500, "USD"), "dt1 alloc")
+        check.equal(alloc_dt2.budget_balance, Money(400, "USD"), "dt2 alloc")
+        check.equal(itx.dst_budget_balance, Money(500, "USD"), "ITx dst")
+        check.equal(alloc_dt4.budget_balance, Money(300, "USD"), "dt4 alloc")
+        check.equal(itx.src_budget_balance, Money(400, "USD"), "ITx src")
 
 
 ########################################################################
@@ -688,9 +617,43 @@ class TestTransactionService:
 
     ####################################################################
     #
+    @pytest.fixture
+    def funded_account(
+        self, bank_account_factory: Callable[..., BankAccount]
+    ) -> BankAccount:
+        """A bank account with $1000 available and posted."""
+        return bank_account_factory(
+            available_balance=Money(1000, "USD"),
+            posted_balance=Money(1000, "USD"),
+        )
+
+    ####################################################################
+    #
+    @pytest.fixture
+    def make_pending(
+        self, funded_account: BankAccount
+    ) -> Callable[..., Transaction]:
+        """Return a factory for pending purchases on `funded_account`.
+
+        Returns:
+            A callable `(amount=-50) -> Transaction`, dated 2026-05-01.
+        """
+
+        def _make(amount: int = -50) -> Transaction:
+            return transaction_svc.create(
+                bank_account=funded_account,
+                amount=Money(amount, "USD"),
+                posted_date=datetime(2026, 5, 1, tzinfo=UTC),
+                raw_description="PENDING PURCHASE",
+                pending=True,
+            )
+
+        return _make
+
+    ####################################################################
+    #
     def test_create_applies_bank_balance_and_seeds_allocation(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, account: BankAccount
     ) -> None:
         """
         GIVEN: a bank account with $0 balance
@@ -698,10 +661,6 @@ class TestTransactionService:
         THEN:  available_balance and posted_balance each increase by $200,
                and one TransactionAllocation pointing at Unallocated is created
         """
-        account = bank_account_factory(
-            available_balance=Money(0, "USD"),
-            posted_balance=Money(0, "USD"),
-        )
         tx = transaction_svc.create(
             bank_account=account,
             amount=Money(200, "USD"),
@@ -710,39 +669,26 @@ class TestTransactionService:
         )
 
         account.refresh_from_db()
-        assert account.available_balance == Money(200, "USD")
-        assert account.posted_balance == Money(200, "USD")
-
-        allocs = list(tx.allocations.all())
-        assert len(allocs) == 1
-        assert allocs[0].budget == account.unallocated_budget
-        assert allocs[0].amount == Money(200, "USD")
+        check.equal(account.available_balance, Money(200, "USD"), "available")
+        check.equal(account.posted_balance, Money(200, "USD"), "posted")
+        check.equal(
+            [(a.budget, a.amount) for a in tx.allocations.all()],
+            [(account.unallocated_budget, Money(200, "USD"))],
+            "one allocation to Unallocated",
+        )
 
     ####################################################################
     #
     def test_split_raises_for_pending_transaction(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, make_pending: Callable[..., Transaction]
     ) -> None:
         """
         GIVEN: a pending transaction
         WHEN:  transaction_svc.split() is called on it
         THEN:  ValueError is raised with a clear message
         """
-        account = bank_account_factory(
-            available_balance=Money(0, "USD"),
-            posted_balance=Money(0, "USD"),
-        )
-        tx = transaction_svc.create(
-            bank_account=account,
-            amount=Money(-50, "USD"),
-            posted_date=datetime.now(UTC),
-            raw_description="PENDING PURCHASE",
-            pending=True,
-        )
-
         with pytest.raises(ValueError, match="Cannot split a pending"):
-            transaction_svc.split(tx, {})
+            transaction_svc.split(make_pending(), {})
 
     ####################################################################
     #
@@ -750,21 +696,17 @@ class TestTransactionService:
         "pending_amount, new_amount, expected_avail_delta, expected_final",
         [
             # Same amount: available_balance unchanged, just clears pending flag.
-            (Money(-75, "USD"), None, Money(0, "USD"), Money(-75, "USD")),
-            # Amount changed: available_balance adjusted by the delta (-100 → -90).
-            (
-                Money(-100, "USD"),
-                Money(-90, "USD"),
-                Money(10, "USD"),
-                Money(-90, "USD"),
-            ),
+            (-75, None, Money(0, "USD"), Money(-75, "USD")),
+            # Amount changed: available_balance adjusted by the delta (-100 -> -90).
+            (-100, Money(-90, "USD"), Money(10, "USD"), Money(-90, "USD")),
         ],
         ids=["same_amount", "amount_changed"],
     )
     def test_resolve_pending_to_posted(
         self,
-        bank_account_factory: Callable[..., BankAccount],
-        pending_amount: Money,
+        funded_account: BankAccount,
+        make_pending: Callable[..., Transaction],
+        pending_amount: int,
         new_amount: Money | None,
         expected_avail_delta: Money,
         expected_final: Money,
@@ -776,25 +718,13 @@ class TestTransactionService:
                available_balance is adjusted by the delta (zero when unchanged),
                and the Unallocated allocation reflects the final amount
         """
-        from moneypools.models import TransactionAllocation
-
-        account = bank_account_factory(
-            available_balance=Money(1000, "USD"),
-            posted_balance=Money(1000, "USD"),
-        )
-        tx = transaction_svc.create(
-            bank_account=account,
-            amount=pending_amount,
-            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
-            raw_description="PENDING PURCHASE",
-            pending=True,
-        )
-        account.refresh_from_db()
-        unalloc = account.unallocated_budget
+        tx = make_pending(pending_amount)
+        funded_account.refresh_from_db()
+        unalloc = funded_account.unallocated_budget
         assert unalloc is not None
 
-        avail_before = account.available_balance
-        posted_before = account.posted_balance
+        avail_before = funded_account.available_balance
+        posted_before = funded_account.posted_balance
 
         resolved = transaction_svc.resolve_pending_to_posted(
             tx,
@@ -802,37 +732,49 @@ class TestTransactionService:
             new_amount=new_amount,
         )
 
-        account.refresh_from_db()
+        funded_account.refresh_from_db()
         unalloc.refresh_from_db()
 
-        assert resolved.pending is False
-        assert resolved.amount == expected_final
-        assert account.available_balance == avail_before + expected_avail_delta
-        assert account.posted_balance == posted_before + expected_final
-        allocs = list(
-            TransactionAllocation.objects.filter(transaction=resolved)
+        check.is_false(resolved.pending, "no longer pending")
+        check.equal(resolved.amount, expected_final, "final amount")
+        check.equal(
+            funded_account.available_balance,
+            avail_before + expected_avail_delta,
+            "available adjusted by the delta",
         )
-        assert len(allocs) == 1
-        assert allocs[0].amount == expected_final
+        check.equal(
+            funded_account.posted_balance,
+            posted_before + expected_final,
+            "posted by the final amount",
+        )
+        check.equal(
+            [
+                a.amount
+                for a in TransactionAllocation.objects.filter(
+                    transaction=resolved
+                )
+            ],
+            [expected_final],
+            "one allocation of the final amount",
+        )
         # Unallocated was seeded with account.available_balance (1000),
         # so its balance after resolution = seed + final allocation.
-        assert unalloc.balance == Money(1000, "USD") + expected_final
+        check.equal(
+            unalloc.balance,
+            Money(1000, "USD") + expected_final,
+            "Unallocated follows",
+        )
 
     ####################################################################
     #
     def test_resolve_pending_raises_if_already_posted(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
+        self, account: BankAccount
     ) -> None:
         """
         GIVEN: a posted (non-pending) transaction
         WHEN:  resolve_pending_to_posted is called
         THEN:  ValueError is raised
         """
-        account = bank_account_factory(
-            available_balance=Money(0, "USD"),
-            posted_balance=Money(0, "USD"),
-        )
         tx = transaction_svc.create(
             bank_account=account,
             amount=Money(-50, "USD"),
@@ -848,7 +790,8 @@ class TestTransactionService:
     #
     def test_resolve_pending_twice_credits_posted_balance_once(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        funded_account: BankAccount,
+        make_pending: Callable[..., Transaction],
     ) -> None:
         """
         GIVEN: a pending -$50 transaction, loaded by two callers
@@ -856,17 +799,7 @@ class TestTransactionService:
         THEN:  posted_balance drops by $50 exactly once
         AND:   the second resolve raises ValueError
         """
-        account = bank_account_factory(
-            available_balance=Money(1000, "USD"),
-            posted_balance=Money(1000, "USD"),
-        )
-        tx = transaction_svc.create(
-            bank_account=account,
-            amount=Money(-50, "USD"),
-            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
-            raw_description="PENDING PURCHASE",
-            pending=True,
-        )
+        tx = make_pending()
         # Both copies are loaded while the row is still pending, as two
         # concurrent requests would load it.
         #
@@ -882,45 +815,37 @@ class TestTransactionService:
                 second_copy, new_posted_date=posted_date
             )
 
-        account.refresh_from_db()
-        assert account.posted_balance == Money(950, "USD")
+        funded_account.refresh_from_db()
+        assert funded_account.posted_balance == Money(950, "USD")
 
     ####################################################################
     #
     def test_update_to_posted_twice_credits_posted_balance_once(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        funded_account: BankAccount,
+        make_pending: Callable[..., Transaction],
     ) -> None:
         """
         GIVEN: a pending -$50 transaction, loaded by two callers
         WHEN:  both callers update it to `pending=False`
         THEN:  posted_balance drops by $50 exactly once
         """
-        account = bank_account_factory(
-            available_balance=Money(1000, "USD"),
-            posted_balance=Money(1000, "USD"),
-        )
-        tx = transaction_svc.create(
-            bank_account=account,
-            amount=Money(-50, "USD"),
-            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
-            raw_description="PENDING PURCHASE",
-            pending=True,
-        )
+        tx = make_pending()
         first_copy = Transaction.objects.get(pk=tx.pk)
         second_copy = Transaction.objects.get(pk=tx.pk)
 
         transaction_svc.update(first_copy, pending=False)
         transaction_svc.update(second_copy, pending=False)
 
-        account.refresh_from_db()
-        assert account.posted_balance == Money(950, "USD")
+        funded_account.refresh_from_db()
+        assert funded_account.posted_balance == Money(950, "USD")
 
     ####################################################################
     #
     def test_resolve_with_new_date_keeps_unallocated_chain_valid(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        funded_account: BankAccount,
+        make_pending: Callable[..., Transaction],
     ) -> None:
         """
         GIVEN: a pending -$10 transaction dated May 1 and a posted -$5
@@ -929,19 +854,9 @@ class TestTransactionService:
                and a May 10 posted date, moving it after the May 5 one
         THEN:  Unallocated's running-balance chain is valid
         """
-        account = bank_account_factory(
-            available_balance=Money(100, "USD"),
-            posted_balance=Money(100, "USD"),
-        )
-        pending_tx = transaction_svc.create(
-            bank_account=account,
-            amount=Money(-10, "USD"),
-            posted_date=datetime(2026, 5, 1, tzinfo=UTC),
-            raw_description="PENDING PURCHASE",
-            pending=True,
-        )
+        pending_tx = make_pending(-10)
         transaction_svc.create(
-            bank_account=account,
+            bank_account=funded_account,
             amount=Money(-5, "USD"),
             posted_date=datetime(2026, 5, 5, tzinfo=UTC),
             raw_description="POSTED PURCHASE",
@@ -951,62 +866,7 @@ class TestTransactionService:
             pending_tx, new_posted_date=datetime(2026, 5, 10, tzinfo=UTC)
         )
 
-        unallocated = account.unallocated_budget
+        unallocated = funded_account.unallocated_budget
         assert unallocated is not None
         unallocated.refresh_from_db()
         assert _check_budget_chain(unallocated, Decimal("0")) == []
-
-
-########################################################################
-########################################################################
-#
-class TestLinkingService:
-    """Tests for service/linking.py."""
-
-    ####################################################################
-    #
-    def test_attempt_link_pairs_matching_transactions(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-        user_factory: Callable[..., User],
-    ) -> None:
-        """
-        GIVEN: two co-owned accounts with counterpart transactions
-        WHEN:  attempt_link runs on the driving transaction
-        THEN:  both rows are linked to each other
-        """
-        user = user_factory()
-        src = bank_account_factory(
-            name="BofA Checking",
-            account_number="000011112222",
-            owners=[user],
-        )
-        dst = bank_account_factory(
-            name="AppleCard",
-            account_number="333344445678",
-            owners=[user],
-        )
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
-        counterpart = transaction_factory(
-            bank_account=dst,
-            amount=Money(100, "USD"),
-            posted_date=when,
-            raw_description="counterpart",
-        )
-        driving = transaction_factory(
-            bank_account=src,
-            amount=Money(-100, "USD"),
-            posted_date=when,
-            raw_description="ACH Transfer to APPLECARD",
-        )
-
-        result = linking_svc.attempt_link(driving)
-
-        assert result is not None
-        assert result.pkid == counterpart.pkid
-        driving.refresh_from_db()
-        counterpart.refresh_from_db()
-        assert driving.linked_transaction_id == counterpart.id
-        assert counterpart.linked_transaction_id == driving.id

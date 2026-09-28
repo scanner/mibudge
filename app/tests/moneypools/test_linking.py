@@ -8,48 +8,48 @@ from datetime import UTC, datetime, timedelta
 # 3rd party imports
 #
 import pytest
-from django.contrib.auth import get_user_model
-
-from moneypools.models import BankAccount, Transaction
+import pytest_check as check
+from djmoney.money import Money
+from faker import Faker
 
 # Project imports
 #
+from moneypools.models import BankAccount, Transaction
 from moneypools.service.linking import attempt_link
-
-# Direct factory imports needed here because @pytest.mark.parametrize
-# arguments are evaluated before pytest fixtures are resolved.
-#
-from tests.users.factories import UserFactory
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 
-User = get_user_model()
+# The driving transaction's date; counterparts are placed relative to it.
+#
+WHEN = datetime(2026, 3, 10, 12, tzinfo=UTC)
 
 
 ####################################################################
 #
-def _make_pair(
-    user,
+@pytest.fixture
+def account_pair(
+    user: User,
     bank_account_factory: Callable[..., BankAccount],
-    *,
-    src_name: str = "Checking",
-    src_number: str = "111122223333",
-    src_aliases: list[str] | None = None,
-    dst_name: str = "Credit Card",
-    dst_number: str = "444455556789",
-    dst_aliases: list[str] | None = None,
+    faker: Faker,
 ) -> tuple[BankAccount, BankAccount]:
-    """Build two bank accounts co-owned by ``user``."""
+    """A (source, destination) pair of accounts owned by `user`.
+
+    The source is a checking account; the destination is a credit card
+    with a link alias.  Names, numbers and the alias are generated, so a
+    test builds its description from the destination account -- its
+    name, the last four digits of its number, or its alias -- to pick
+    which matching rule links the pair.
+    """
     src = bank_account_factory(
-        name=src_name,
-        account_number=src_number,
-        link_aliases=src_aliases or [],
+        name=faker.unique.company(),
+        account_number=faker.bban(),
         owners=[user],
     )
     dst = bank_account_factory(
-        name=dst_name,
-        account_number=dst_number,
-        link_aliases=dst_aliases or [],
+        name=faker.unique.company(),
+        account_number=faker.credit_card_number(),
+        link_aliases=[f"{faker.unique.company().upper()} CREDIT CRD"],
         owners=[user],
     )
     return src, dst
@@ -64,218 +64,138 @@ class TestAttemptLink:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "src_name,src_aliases,dst_name,dst_aliases,description",
+        "describe",
         [
-            # Name substring match (checking -> apple card by name).
-            (
-                "BofA Checking",
-                [],
-                "AppleCard",
-                [],
-                "ACH Transfer to APPLECARD GSBANK PAYMENT -- ACH",
+            pytest.param(
+                lambda dst, faker: (
+                    f"ACH Transfer to {dst.name.upper()} PAYMENT -- ACH"
+                ),
+                id="name_substring",
             ),
-            # Last-4 match via "ENDING IN NNNN".
-            (
-                "Apple Savings",
-                [],
-                "Scanner Savings",
-                [],
-                "ACH DEPOSIT INTERNET TRANSFER FROM ACCOUNT ENDING IN 5540",
+            pytest.param(
+                lambda dst, faker: (
+                    "ACH DEPOSIT INTERNET TRANSFER FROM ACCOUNT ENDING IN "
+                    f"{dst.account_number[-4:]}"
+                ),
+                id="last_4",
             ),
-            # Another last-4 match, different account number.
-            (
-                "Apple Card",
-                [],
-                "Scanner Savings",
-                [],
-                "ACH DEPOSIT INTERNET TRANSFER FROM ACCOUNT ENDING IN 2031",
-            ),
-            # link_aliases match when raw description uses an
-            # unrelated vendor string ('CHASE CREDIT CRD').
-            (
-                "BofA Checking",
-                [],
-                "Chase Visa",
-                ["CHASE CREDIT CRD"],
-                "CHASE CREDIT CRD DES:EPAY ID:XXXXX26700 INDN:ERIC LUCE "
-                "CO ID:XXXXX39224 WEB",
+            # The alias is a vendor string that shares nothing with the
+            # account's name, so only the alias can match it.
+            pytest.param(
+                lambda dst, faker: (
+                    f"{dst.link_aliases[0]} DES:EPAY "
+                    f"ID:{faker.numerify('XXXXX#####')} "
+                    f"INDN:{faker.name().upper()} "
+                    f"CO ID:{faker.numerify('XXXXX#####')} WEB"
+                ),
+                id="link_alias",
             ),
         ],
     )
     def test_happy_path(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        describe: Callable[[BankAccount, Faker], str],
+        account_pair: tuple[BankAccount, BankAccount],
         transaction_factory: Callable[..., Transaction],
-        src_name: str,
-        src_aliases: list[str],
-        dst_name: str,
-        dst_aliases: list[str],
-        description: str,
+        faker: Faker,
     ) -> None:
         """
         GIVEN: two co-owned accounts and a counterpart transaction on
                the destination account
         WHEN:  a driving transaction is saved on the source with a
-               description identifying the destination
+               description identifying the destination by name, by the
+               last four digits of its number, or by a link alias
         THEN:  attempt_link pairs the two rows in both directions
         """
-        user = UserFactory()
-        # Use distinct account_number suffixes so the "ENDING IN NNNN"
-        # tests match the *destination* account specifically.
-        src_number = "000011112222"
-        dst_number = (
-            "999955405540"
-            if "5540" in description
-            else "999920312031"
-            if "2031" in description
-            else "888844445678"
-        )
-        src, dst = _make_pair(
-            user,
-            bank_account_factory,
-            src_name=src_name,
-            src_number=src_number,
-            src_aliases=src_aliases,
-            dst_name=dst_name,
-            dst_number=dst_number,
-            dst_aliases=dst_aliases,
-        )
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
+        src, dst = account_pair
         counterpart = transaction_factory(
             bank_account=dst,
             amount=100,
-            posted_date=when + timedelta(days=1),
+            posted_date=WHEN + timedelta(days=1),
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=-100,
-            posted_date=when,
-            raw_description=description,
+            posted_date=WHEN,
+            raw_description=describe(dst, faker),
         )
 
         linked = attempt_link(driving)
 
         assert linked is not None
-        assert linked.pkid == counterpart.pkid
+        check.equal(linked.pkid, counterpart.pkid, "returns the counterpart")
         driving.refresh_from_db()
         counterpart.refresh_from_db()
-        assert driving.linked_transaction_id == counterpart.id
-        assert counterpart.linked_transaction_id == driving.id
+        check.equal(
+            driving.linked_transaction_id, counterpart.id, "driving -> other"
+        )
+        check.equal(
+            counterpart.linked_transaction_id, driving.id, "other -> driving"
+        )
 
     ####################################################################
     #
-    def test_out_of_window_no_link(
+    @pytest.mark.parametrize(
+        "counterparts",
+        [
+            # Outside the +/- 3 day window.
+            pytest.param(
+                [(Money("100.00", "USD"), timedelta(days=4))],
+                id="out_of_window",
+            ),
+            # Magnitudes must be exactly equal.
+            pytest.param(
+                [(Money("100.01", "USD"), timedelta(0))],
+                id="amount_off_by_a_cent",
+            ),
+            # An ambiguous match is worse than leaving the row orphaned
+            # for the user to resolve.
+            pytest.param(
+                [
+                    (Money("100.00", "USD"), timedelta(0)),
+                    (Money("100.00", "USD"), timedelta(0)),
+                ],
+                id="ambiguous",
+            ),
+        ],
+    )
+    def test_no_link(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        counterparts: list[tuple[Money, timedelta]],
+        account_pair: tuple[BankAccount, BankAccount],
         transaction_factory: Callable[..., Transaction],
     ) -> None:
         """
-        GIVEN: a counterpart four days away from the driving tx
+        GIVEN: candidates on the hinted account that are out of the
+               date window, off by a cent, or more than one
         WHEN:  attempt_link runs
-        THEN:  no link is established (outside the +/- 3 day window)
+        THEN:  no link is established
         """
-        user = UserFactory()
-        src, dst = _make_pair(user, bank_account_factory)
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
-        transaction_factory(
-            bank_account=dst,
-            amount=100,
-            posted_date=when + timedelta(days=4),
-            raw_description="counterpart",
-        )
-        driving = transaction_factory(
-            bank_account=src,
-            amount=-100,
-            posted_date=when,
-            raw_description="Payment to Credit Card",
-        )
-
-        assert attempt_link(driving) is None
-        driving.refresh_from_db()
-        assert driving.linked_transaction_id is None
-
-    ####################################################################
-    #
-    def test_amount_mismatch_no_link(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-    ) -> None:
-        """
-        GIVEN: a candidate whose amount differs by 1 cent
-        WHEN:  attempt_link runs
-        THEN:  no link is established (magnitudes must be exactly equal)
-        """
-        user = UserFactory()
-        src, dst = _make_pair(user, bank_account_factory)
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
-        from djmoney.money import Money
-
-        transaction_factory(
-            bank_account=dst,
-            amount=Money("100.01", "USD"),
-            posted_date=when,
-            raw_description="counterpart",
-        )
+        src, dst = account_pair
+        for amount, offset in counterparts:
+            transaction_factory(
+                bank_account=dst,
+                amount=amount,
+                posted_date=WHEN + offset,
+                raw_description="counterpart",
+            )
         driving = transaction_factory(
             bank_account=src,
             amount=Money("-100.00", "USD"),
-            posted_date=when,
-            raw_description="Payment to Credit Card",
+            posted_date=WHEN,
+            raw_description=f"Payment to {dst.name}",
         )
 
-        assert attempt_link(driving) is None
-
-    ####################################################################
-    #
-    def test_ambiguous_candidates_no_link(
-        self,
-        bank_account_factory: Callable[..., BankAccount],
-        transaction_factory: Callable[..., Transaction],
-    ) -> None:
-        """
-        GIVEN: two unlinked candidates on the same day with the same
-               amount on the hinted account
-        WHEN:  attempt_link runs
-        THEN:  no link is written -- an ambiguous match is worse than
-               leaving the row orphaned for the user to resolve
-        """
-        user = UserFactory()
-        src, dst = _make_pair(user, bank_account_factory)
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
-        transaction_factory(
-            bank_account=dst,
-            amount=100,
-            posted_date=when,
-            raw_description="first",
-        )
-        transaction_factory(
-            bank_account=dst,
-            amount=100,
-            posted_date=when,
-            raw_description="second",
-        )
-        driving = transaction_factory(
-            bank_account=src,
-            amount=-100,
-            posted_date=when,
-            raw_description="Payment to Credit Card",
-        )
-
-        assert attempt_link(driving) is None
+        check.is_none(attempt_link(driving), "returns None")
         driving.refresh_from_db()
-        assert driving.linked_transaction_id is None
+        check.is_none(driving.linked_transaction_id, "nothing written")
 
     ####################################################################
     #
     def test_orphan_then_counterpart_links_both(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        account_pair: tuple[BankAccount, BankAccount],
         transaction_factory: Callable[..., Transaction],
     ) -> None:
         """
@@ -283,17 +203,14 @@ class TestAttemptLink:
         WHEN:  the counterpart is later imported and attempt_link runs
         THEN:  both rows end up paired
         """
-        user = UserFactory()
-        src, dst = _make_pair(user, bank_account_factory)
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
+        src, dst = account_pair
 
         # First side imported alone -- nothing to link to yet.
         first = transaction_factory(
             bank_account=src,
             amount=-100,
-            posted_date=when,
-            raw_description="Payment to Credit Card",
+            posted_date=WHEN,
+            raw_description=f"Payment to {dst.name}",
         )
         first.refresh_from_db()
         assert first.linked_transaction_id is None
@@ -306,21 +223,21 @@ class TestAttemptLink:
         second = transaction_factory(
             bank_account=dst,
             amount=100,
-            posted_date=when,
-            raw_description="Payment from Checking",
+            posted_date=WHEN,
+            raw_description=f"Payment from {src.name}",
         )
         attempt_link(second)
 
         first.refresh_from_db()
         second.refresh_from_db()
-        assert first.linked_transaction_id == second.id
-        assert second.linked_transaction_id == first.id
+        check.equal(first.linked_transaction_id, second.id, "first -> second")
+        check.equal(second.linked_transaction_id, first.id, "second -> first")
 
     ####################################################################
     #
     def test_already_linked_is_noop(
         self,
-        bank_account_factory: Callable[..., BankAccount],
+        account_pair: tuple[BankAccount, BankAccount],
         transaction_factory: Callable[..., Transaction],
     ) -> None:
         """
@@ -328,21 +245,18 @@ class TestAttemptLink:
         WHEN:  attempt_link runs on it again
         THEN:  the existing counterpart is returned and nothing changes
         """
-        user = UserFactory()
-        src, dst = _make_pair(user, bank_account_factory)
-
-        when = datetime(2026, 3, 10, 12, tzinfo=UTC)
+        src, dst = account_pair
         counterpart = transaction_factory(
             bank_account=dst,
             amount=100,
-            posted_date=when,
+            posted_date=WHEN,
             raw_description="counterpart",
         )
         driving = transaction_factory(
             bank_account=src,
             amount=-100,
-            posted_date=when,
-            raw_description="Payment to Credit Card",
+            posted_date=WHEN,
+            raw_description=f"Payment to {dst.name}",
         )
 
         first = attempt_link(driving)

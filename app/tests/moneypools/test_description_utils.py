@@ -31,55 +31,72 @@ class TestParseTransactionDate:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "raw_description,posted,expected",
+        "raw_description,posted,kwargs,expected",
         [
-            # Date present, within window.
-            (
-                "TST*CAFE BORRONE 03/28 MOBILE PURCHASE",
-                date(2026, 3, 31),
-                date(2026, 3, 28),
-            ),
-            # Date at boundary (same day as posted).
-            (
+            # Date at the near edge of the window (same day as posted).
+            pytest.param(
                 "SOME VENDOR 04/01 PURCHASE",
                 date(2026, 4, 1),
+                {},
                 date(2026, 4, 1),
+                id="same_day",
             ),
-            # Date exactly 7 days before (at the edge of the window).
-            (
+            # Date exactly 7 days before (the far edge of the window).
+            pytest.param(
                 "SOME VENDOR 03/25 PURCHASE",
                 date(2026, 4, 1),
+                {},
                 date(2026, 3, 25),
+                id="window_edge",
             ),
             # Date 8 days before -- outside window, falls back to posted.
-            (
+            pytest.param(
                 "SOME VENDOR 03/24 PURCHASE",
                 date(2026, 4, 1),
+                {},
                 date(2026, 4, 1),
+                id="outside_window",
+            ),
+            # A wider window accepts a date 10 days before.
+            pytest.param(
+                "VENDOR 03/22 PURCHASE",
+                date(2026, 4, 1),
+                {"max_days_before": 10},
+                date(2026, 3, 22),
+                id="custom_max_days_before",
             ),
             # No date in description -- falls back to posted.
-            (
+            pytest.param(
                 "ACH DIRECT DEPOSIT PAYROLL",
                 date(2026, 4, 1),
+                {},
                 date(2026, 4, 1),
+                id="no_date",
             ),
-            # January wrap-around: purchase in Dec, posted in Jan.
-            (
+            # January wrap-around: the date would be in the future in
+            # the posted year, so it resolves to the prior year.
+            pytest.param(
                 "VENDOR 12/30 MOBILE PURCHASE",
                 date(2026, 1, 2),
+                {},
                 date(2025, 12, 30),
-            ),
-            # Candidate in same year would be in the future -- resolved to prior year.
-            (
-                "VENDOR 12/31 MOBILE PURCHASE",
-                date(2026, 1, 1),
-                date(2025, 12, 31),
+                id="january_wrap",
             ),
             # Single-digit month and day parsed correctly.
-            (
+            pytest.param(
                 "VENDOR 3/5 PURCHASE",
                 date(2026, 3, 7),
+                {},
                 date(2026, 3, 5),
+                id="single_digit",
+            ),
+            # Not a real date -- falls back to posted.
+            pytest.param(
+                "VENDOR 13/45 PURCHASE",
+                date(2026, 4, 1),
+                {},
+                date(2026, 4, 1),
+                id="invalid_month_day",
             ),
         ],
     )
@@ -87,40 +104,20 @@ class TestParseTransactionDate:
         self,
         raw_description: str,
         posted: date,
+        kwargs: dict[str, int],
         expected: date,
     ) -> None:
         """
-        GIVEN: a raw bank description and a posted date
+        GIVEN: a raw bank description, a posted date and a window (the
+               default 7 days unless the case overrides it)
         WHEN:  parse_transaction_date is called
-        THEN:  the correct purchase date is returned
+        THEN:  the embedded purchase date is returned when it is real
+               and falls within the window, else the posted date
         """
-        assert parse_transaction_date(raw_description, posted) == expected
-
-    ####################################################################
-    #
-    def test_custom_max_days_before(self) -> None:
-        """
-        GIVEN: a description with a date 10 days before posted
-        WHEN:  parse_transaction_date is called with max_days_before=10
-        THEN:  the parsed date is returned instead of the fallback
-        """
-        raw = "VENDOR 03/22 PURCHASE"
-        posted = date(2026, 4, 1)
-        assert parse_transaction_date(raw, posted, max_days_before=10) == date(
-            2026, 3, 22
+        assert (
+            parse_transaction_date(raw_description, posted, **kwargs)
+            == expected
         )
-
-    ####################################################################
-    #
-    def test_invalid_month_day_falls_back(self) -> None:
-        """
-        GIVEN: a description containing an invalid date like 13/45
-        WHEN:  parse_transaction_date is called
-        THEN:  the fallback posted_date is returned
-        """
-        raw = "VENDOR 13/45 PURCHASE"
-        posted = date(2026, 4, 1)
-        assert parse_transaction_date(raw, posted) == posted
 
 
 ########################################################################
