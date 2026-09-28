@@ -1,7 +1,6 @@
 """Tests for the moneypools REST API: serializers, views, and permissions."""
 
 # system imports
-import itertools
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -28,7 +27,6 @@ from moneypools.models import (
     TransactionAllocation,
     get_default_currency,
 )
-from moneypools.service import budget as budget_svc
 from moneypools.service import transaction as transaction_svc
 from tests.moneypools.factories import (
     BankAccountFactory,
@@ -63,23 +61,20 @@ def _splits_url(tx: Transaction) -> str:
 #
 @pytest.fixture
 def make_scheduled_budget(
-    account: BankAccount,
+    account: BankAccount, make_budget: Callable[..., Budget]
 ) -> Callable[..., Budget]:
     """Return a factory for scheduled budgets on `account`.
 
-    Budgets are created through the budget service, so fill-up goals
-    and schedules are set up as in production.  Each call gets a fresh
-    name.
+    A thin layer over `make_budget` with defaults for these tests.
 
     Returns:
         A callable `(last_funded_on=None, last_recurrence_on=None,
         **overrides) -> Budget`.  By default the budget is a $1000
         fixed-amount Goal funded $100 monthly (the $100 applies only to
         fixed-amount budgets).  `overrides` pass through
-        to `budget_svc.create`; the two dates, when given, are written
+        to `make_budget`; the two dates, when given, are written
         after creation to place the funding and recurrence pointers.
     """
-    names = (f"Budget {n}" for n in itertools.count(1))
 
     def _make(
         last_funded_on: date | None = None,
@@ -87,8 +82,6 @@ def make_scheduled_budget(
         **overrides: Any,
     ) -> Budget:
         kwargs: dict[str, Any] = {
-            "bank_account": account,
-            "name": next(names),
             "budget_type": Budget.BudgetType.GOAL,
             "funding_type": Budget.FundingType.FIXED_AMOUNT,
             "target_balance": Money(1000, "USD"),
@@ -97,7 +90,6 @@ def make_scheduled_budget(
         kwargs.update(overrides)
         if kwargs["funding_type"] == Budget.FundingType.FIXED_AMOUNT:
             kwargs.setdefault("funding_amount", Money(100, "USD"))
-        budget = budget_svc.create(**kwargs)
         pointers = {
             name: value
             for name, value in (
@@ -106,10 +98,7 @@ def make_scheduled_budget(
             )
             if value is not None
         }
-        if pointers:
-            Budget.objects.filter(pkid=budget.pkid).update(**pointers)
-            budget.refresh_from_db()
-        return budget
+        return make_budget(account, stored=pointers, **kwargs)
 
     return _make
 

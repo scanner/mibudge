@@ -14,14 +14,13 @@ from decimal import Decimal
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 import recurrence
-from django.contrib.auth import get_user_model
 from djmoney.money import Money
 
 # Project imports
 #
 from moneypools.models import BankAccount, Budget, InternalTransaction
-from moneypools.service import budget as budget_svc
 from moneypools.service import internal_transaction as internal_transaction_svc
 from moneypools.service.funding_strategy import (
     BUDGET_TYPE_TO_STRATEGY,
@@ -31,8 +30,7 @@ from moneypools.service.funding_strategy import (
     RecurringStrategy,
     state_at_start_of_D,
 )
-
-User = get_user_model()
+from users.models import User
 
 pytestmark = pytest.mark.django_db
 
@@ -75,26 +73,22 @@ class TestGoalStrategy:
     def test_fixed_amount_returns_funding_amount(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Goal budget configured to transfer $50 per fund event
         WHEN:  the strategy computes the intended amount for a fund event
         THEN:  returns $50 regardless of the current balance
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Shoes",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(300, "USD"),
             funding_amount=Money(50, "USD"),
             funding_schedule=_MONTHLY,
+            stored={"balance": Money(100, "USD")},
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            balance=Money(100, "USD")
-        )
-        budget.refresh_from_db()
 
         result = GoalStrategy().intended_for_event(
             budget, date(2026, 3, 1), kind=EventKind.FUND
@@ -107,23 +101,21 @@ class TestGoalStrategy:
     def test_fixed_amount_none_returns_zero(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Goal budget with no funding amount configured
         WHEN:  the strategy computes the intended amount
         THEN:  returns $0
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Mystery Goal",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(100, "USD"),
             funding_schedule=_MONTHLY,
+            stored={"funding_amount": None},
         )
-        Budget.objects.filter(pkid=budget.pkid).update(funding_amount=None)
-        budget.refresh_from_db()
 
         result = GoalStrategy().intended_for_event(
             budget, date(2026, 3, 1), kind=EventKind.FUND
@@ -136,6 +128,7 @@ class TestGoalStrategy:
     def test_target_date_spreads_gap_over_remaining_events(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Goal budget with $300 still needed and three monthly fund events
@@ -143,10 +136,8 @@ class TestGoalStrategy:
         WHEN:  the strategy computes the intended amount for the January event
         THEN:  returns $100, spreading the gap evenly across the three events
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Vacation",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(300, "USD"),
@@ -158,7 +149,7 @@ class TestGoalStrategy:
             budget, date(2026, 1, 1), kind=EventKind.FUND
         )
 
-        # 3 occurrences Jan 1, Feb 1, Mar 1 → $300 / 3 = $100
+        # 3 occurrences Jan 1, Feb 1, Mar 1 -> $300 / 3 = $100
         assert result == Money(100, "USD")
 
     ####################################################################
@@ -166,27 +157,25 @@ class TestGoalStrategy:
     def test_target_date_past_deadline_returns_full_gap(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Goal budget whose target date has already passed with $40 funded out of $100
         WHEN:  the strategy computes the intended amount for a fund event after the deadline
         THEN:  returns the full $60 remaining gap (target minus funded_amount) in one event
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Late Vacation",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
             target_date=date(2026, 1, 1),
             funding_schedule=_MONTHLY,
+            stored={
+                "balance": Money(40, "USD"),
+                "funded_amount": Money(40, "USD"),
+            },
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            balance=Money(40, "USD"),
-            funded_amount=Money(40, "USD"),
-        )
-        budget.refresh_from_db()
 
         # Event date after target_date: count_occurrences returns 1 (the floor)
         # so the full remaining gap is returned.
@@ -210,6 +199,7 @@ class TestGoalStrategy:
     def test_target_date_prespent_goal_spreads_remaining_gap(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
         event_date: date,
         funded: Decimal,
         expected: Decimal,
@@ -225,21 +215,18 @@ class TestGoalStrategy:
                spending never widens the gap, and no extra event is
                counted
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Trip Abroad",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(Decimal("6700.00"), "USD"),
             target_date=date(2026, 8, 1),
             funding_schedule=_SEMI_MONTHLY_15_EOM,
+            stored={
+                "balance": Money(funded - Decimal("2053.02"), "USD"),
+                "funded_amount": Money(funded, "USD"),
+            },
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            balance=Money(funded - Decimal("2053.02"), "USD"),
-            funded_amount=Money(funded, "USD"),
-        )
-        budget.refresh_from_db()
 
         result = GoalStrategy().intended_for_event(
             budget, event_date, kind=EventKind.FUND
@@ -249,35 +236,29 @@ class TestGoalStrategy:
 
     ####################################################################
     #
-    @pytest.mark.parametrize(
-        "complete,expected",
-        [(True, True), (False, False)],
-    )
+    @pytest.mark.parametrize("complete", [True, False])
     def test_is_complete_mirrors_complete_flag(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
         complete: bool,
-        expected: bool,
     ) -> None:
         """
         GIVEN: a Goal budget whose complete flag is True or False (parametrized)
         WHEN:  is_complete is called
         THEN:  returns exactly the value of the complete flag
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Gadget",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(100, "USD"),
             funding_amount=Money(25, "USD"),
             funding_schedule=_MONTHLY,
+            stored={"complete": complete},
         )
-        Budget.objects.filter(pkid=budget.pkid).update(complete=complete)
-        budget.refresh_from_db()
 
-        assert GoalStrategy().is_complete(budget) is expected
+        assert GoalStrategy().is_complete(budget) is complete
 
 
 ########################################################################
@@ -291,7 +272,8 @@ class TestGoalCompletionLatch:
     def test_latch_fires_at_threshold_and_stays_set(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
+        make_budget: Callable[..., Budget],
+        system_user: User,
     ) -> None:
         """
         GIVEN: a Goal budget with target $100 and an Unallocated source budget
@@ -300,18 +282,11 @@ class TestGoalCompletionLatch:
                and funded_amount continues to grow; deleting the first credit
                reverses funded_amount but leaves complete=True (high-water mark)
         """
-        account = make_account()
-        unallocated = Budget.objects.get(
-            bank_account=account, name="Unallocated"
-        )
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(300, "USD")
-        )
-        unallocated.refresh_from_db()
-
-        goal = budget_svc.create(
-            bank_account=account,
-            name="Laptop",
+        account = make_account(unallocated=300)
+        unallocated = account.unallocated_budget
+        assert unallocated is not None
+        goal = make_budget(
+            account,
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(100, "USD"),
@@ -319,48 +294,36 @@ class TestGoalCompletionLatch:
             funding_schedule=_MONTHLY,
         )
 
-        # First credit: $60 -- below threshold, latch should NOT fire.
-        internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=unallocated,
-            dst_budget=goal,
-            amount=Money(60, "USD"),
-            actor=system_user,
-        )
-        goal.refresh_from_db()
-        assert goal.funded_amount == Money(60, "USD")
-        assert goal.complete is False
+        def credit(amount: int) -> InternalTransaction:
+            itx = internal_transaction_svc.create(
+                bank_account=account,
+                src_budget=unallocated,
+                dst_budget=goal,
+                amount=Money(amount, "USD"),
+                actor=system_user,
+            )
+            goal.refresh_from_db()
+            return itx
 
-        # Second credit: $40 -- brings funded_amount to exactly $100 (threshold).
-        itx2 = internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=unallocated,
-            dst_budget=goal,
-            amount=Money(40, "USD"),
-            actor=system_user,
-        )
-        goal.refresh_from_db()
-        assert goal.funded_amount == Money(100, "USD")
-        assert goal.complete is True
+        # $60 -- below threshold, the latch does not fire.
+        credit(60)
+        assert (goal.funded_amount, goal.complete) == (Money(60, "USD"), False)
 
-        # Third credit: $10 -- funded_amount rises above target; complete stays True.
-        internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=unallocated,
-            dst_budget=goal,
-            amount=Money(10, "USD"),
-            actor=system_user,
-        )
-        goal.refresh_from_db()
-        assert goal.funded_amount == Money(110, "USD")
-        assert goal.complete is True
+        # $40 -- funded_amount reaches exactly $100 (the threshold).
+        threshold_itx = credit(40)
+        assert (goal.funded_amount, goal.complete) == (Money(100, "USD"), True)
 
-        # Delete the threshold-crossing credit (itx2); funded_amount drops back.
-        # complete must NOT be cleared -- it is a high-water mark.
-        internal_transaction_svc.delete(itx2)
+        # $10 -- funded_amount rises above target; complete stays True.
+        credit(10)
+        assert (goal.funded_amount, goal.complete) == (Money(110, "USD"), True)
+
+        # Deleting the threshold-crossing credit lowers funded_amount but
+        # does not clear complete -- it is a high-water mark.
+        internal_transaction_svc.delete(threshold_itx)
         goal.refresh_from_db()
-        assert goal.funded_amount == Money(70, "USD")
-        assert goal.complete is True
+
+        check.equal(goal.funded_amount, Money(70, "USD"), "credit reversed")
+        check.is_true(goal.complete, "latch stays set")
 
 
 ########################################################################
@@ -372,41 +335,39 @@ class TestCappedStrategy:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "balance,funding_amount,target,expected",
+        "balance,expected",
         [
-            # Normal: funding_amount < gap → return funding_amount
-            (Decimal("10"), Decimal("20"), Decimal("50"), Decimal("20")),
-            # Cap: funding_amount > gap → return gap
-            (Decimal("40"), Decimal("20"), Decimal("50"), Decimal("10")),
+            # funding_amount < gap -> funding_amount
+            pytest.param(10, 20, id="below_gap"),
+            # funding_amount > gap -> the gap
+            pytest.param(40, 10, id="capped_by_gap"),
+            # already at the $50 target -> nothing
+            pytest.param(50, 0, id="at_target"),
         ],
     )
     def test_returns_min_of_funding_amount_and_gap(
         self,
         make_account: Callable[..., BankAccount],
-        balance: Decimal,
-        funding_amount: Decimal,
-        target: Decimal,
-        expected: Decimal,
+        make_budget: Callable[..., Budget],
+        balance: int,
+        expected: int,
     ) -> None:
         """
-        GIVEN: a Capped budget at a given balance with a fixed funding amount (parametrized)
+        GIVEN: a Capped budget funded $20 toward a $50 target, at a
+               given balance (parametrized)
         WHEN:  the strategy computes the intended amount
-        THEN:  returns whichever is smaller -- the configured funding amount or the remaining gap to target
+        THEN:  returns whichever is smaller -- the configured funding
+               amount or the remaining gap to target (zero at target)
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Emergency Fund",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.CAPPED,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(target, "USD"),
-            funding_amount=Money(funding_amount, "USD"),
+            target_balance=Money(50, "USD"),
+            funding_amount=Money(20, "USD"),
             funding_schedule=_MONTHLY,
+            stored={"balance": Money(balance, "USD")},
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            balance=Money(balance, "USD")
-        )
-        budget.refresh_from_db()
 
         result = CappedStrategy().intended_for_event(
             budget, date(2026, 3, 1), kind=EventKind.FUND
@@ -416,59 +377,25 @@ class TestCappedStrategy:
 
     ####################################################################
     #
-    def test_returns_zero_when_at_or_above_target(
-        self,
-        make_account: Callable[..., BankAccount],
-    ) -> None:
-        """
-        GIVEN: a Capped budget whose balance already equals its target
-        WHEN:  the strategy computes the intended amount
-        THEN:  returns $0 because the budget is already full
-        """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Topped-Up Fund",
-            budget_type=Budget.BudgetType.CAPPED,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(50, "USD"),
-            funding_amount=Money(20, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-        Budget.objects.filter(pkid=budget.pkid).update(balance=Money(50, "USD"))
-        budget.refresh_from_db()
-
-        result = CappedStrategy().intended_for_event(
-            budget, date(2026, 3, 1), kind=EventKind.FUND
-        )
-
-        assert result == Money(0, "USD")
-
-    ####################################################################
-    #
     def test_is_complete_always_false(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Capped budget at full balance
         WHEN:  is_complete is called
         THEN:  returns False because Capped budgets are never marked complete
         """
-        account = make_account()
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Always On",
+        budget = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.CAPPED,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(100, "USD"),
             funding_amount=Money(20, "USD"),
             funding_schedule=_MONTHLY,
+            stored={"balance": Money(100, "USD")},
         )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            balance=Money(100, "USD")
-        )
-        budget.refresh_from_db()
 
         assert CappedStrategy().is_complete(budget) is False
 
@@ -484,6 +411,7 @@ class TestRecurringStrategy:
     def test_fund_event_prorates_fillup_gap(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Recurring budget whose fill-up has $80 still needed,
@@ -491,30 +419,22 @@ class TestRecurringStrategy:
         WHEN:  the strategy computes the intended fund-event amount for Feb 10
         THEN:  returns $40, splitting the fill-up gap evenly across the two remaining events
         """
-        today = date(2026, 2, 10)
-        account = make_account()
-        recurring = budget_svc.create(
-            bank_account=account,
-            name="Monthly Bills",
+        # The fill-up starts at 0, so the full $80 is the gap.
+        recurring = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.RECURRING,
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(80, "USD"),
             funding_schedule=_TWICE_MONTHLY,
             recurrence_schedule=_MONTHLY_FIRST,
+            stored={
+                "last_funded_on": date(2026, 2, 9),
+                "last_recurrence_on": date(2026, 2, 1),
+            },
         )
-        recurring.refresh_from_db()
-        fillup = recurring.fillup_goal
-        assert fillup is not None
-        # Fill-up starts at 0 (full gap = $80)
-        Budget.objects.filter(pkid=recurring.pkid).update(
-            last_funded_on=date(2026, 2, 9),
-            last_recurrence_on=date(2026, 2, 1),
-        )
-        recurring.refresh_from_db()
-        fillup.refresh_from_db()
 
         result = RecurringStrategy().intended_for_event(
-            recurring, today, kind=EventKind.FUND
+            recurring, date(2026, 2, 10), kind=EventKind.FUND
         )
 
         # 2 fund events in the cycle (Feb 10, Feb 20): $80 / 2 = $40
@@ -522,83 +442,56 @@ class TestRecurringStrategy:
 
     ####################################################################
     #
+    @pytest.mark.parametrize(
+        "balance,expected",
+        [
+            # The engine caps this against the fill-up balance.
+            pytest.param(30, 70, id="gap"),
+            pytest.param(100, 0, id="at_target"),
+        ],
+    )
     def test_recur_event_returns_gap(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
+        balance: int,
+        expected: int,
     ) -> None:
         """
-        GIVEN: a Recurring budget with a $30 balance against a $100 target
+        GIVEN: a $100 Recurring budget at a given balance (parametrized)
         WHEN:  the strategy computes the intended recur-event amount
-        THEN:  returns $70, the full gap; the engine will cap this against the fill-up balance
+        THEN:  returns the full gap to target -- zero when already there
         """
-        account = make_account()
-        recurring = budget_svc.create(
-            bank_account=account,
-            name="Monthly Bills",
+        recurring = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.RECURRING,
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
             funding_schedule=_MONTHLY,
             recurrence_schedule=_MONTHLY,
+            stored={"balance": Money(balance, "USD")},
         )
-        Budget.objects.filter(pkid=recurring.pkid).update(
-            balance=Money(30, "USD")
-        )
-        recurring.refresh_from_db()
 
         result = RecurringStrategy().intended_for_event(
             recurring, date(2026, 3, 1), kind=EventKind.RECUR
         )
 
-        assert result == Money(70, "USD")
-
-    ####################################################################
-    #
-    def test_recur_event_returns_zero_when_at_target(
-        self,
-        make_account: Callable[..., BankAccount],
-    ) -> None:
-        """
-        GIVEN: a Recurring budget whose balance already equals its target
-        WHEN:  the strategy computes the intended recur-event amount
-        THEN:  returns $0 because there is no gap to fill
-        """
-        account = make_account()
-        recurring = budget_svc.create(
-            bank_account=account,
-            name="Monthly Bills",
-            budget_type=Budget.BudgetType.RECURRING,
-            funding_type=Budget.FundingType.TARGET_DATE,
-            target_balance=Money(100, "USD"),
-            funding_schedule=_MONTHLY,
-            recurrence_schedule=_MONTHLY,
-        )
-        Budget.objects.filter(pkid=recurring.pkid).update(
-            balance=Money(100, "USD")
-        )
-        recurring.refresh_from_db()
-
-        result = RecurringStrategy().intended_for_event(
-            recurring, date(2026, 3, 1), kind=EventKind.RECUR
-        )
-
-        assert result == Money(0, "USD")
+        assert result == Money(expected, "USD")
 
     ####################################################################
     #
     def test_is_complete_always_false(
         self,
         make_account: Callable[..., BankAccount],
+        make_budget: Callable[..., Budget],
     ) -> None:
         """
         GIVEN: a Recurring budget
         WHEN:  is_complete is called
         THEN:  returns False because the Recurring strategy never reports completion
         """
-        account = make_account()
-        recurring = budget_svc.create(
-            bank_account=account,
-            name="Monthly Bills",
+        recurring = make_budget(
+            make_account(),
             budget_type=Budget.BudgetType.RECURRING,
             funding_type=Budget.FundingType.TARGET_DATE,
             target_balance=Money(100, "USD"),
@@ -658,207 +551,97 @@ class TestBudgetTypeToStrategyRegistry:
 class TestStateAtStartOfD:
     """Regression tests for state_at_start_of_D rollback arithmetic."""
 
-    ####################################################################
-    #
-    def test_no_system_itxs_returns_current_state(
-        self,
-        make_account: Callable[..., BankAccount],
-    ) -> None:
-        """
-        GIVEN: a budget with a $100 balance and no system-issued transfers on or after the query date
-        WHEN:  state_at_start_of_D is called
-        THEN:  returns the current balance unchanged because there is nothing to roll back
-        """
-        today = date(2026, 3, 1)
-        account = make_account(posted_through=today)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Test Goal",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(200, "USD"),
-            funding_amount=Money(50, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-        Budget.objects.filter(pkid=budget.pkid).update(
-            balance=Money(100, "USD")
-        )
-        budget.refresh_from_db()
-
-        balance_0, _ = state_at_start_of_D(budget, today)
-
-        assert balance_0 == Money(100, "USD")
+    D = date(2026, 3, 1)
 
     ####################################################################
     #
-    def test_rolls_back_credit_on_date_D(
+    @pytest.fixture
+    def credited_budget(
         self,
         make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
-    ) -> None:
-        """
-        GIVEN: a budget that received a $20 system-issued credit on March 1, leaving a current balance of $20
-        WHEN:  state_at_start_of_D is called for March 1
-        THEN:  returns $0 because the credit on that date is rolled back
-        """
-        today = date(2026, 3, 1)
-        account = make_account(posted_through=today)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Test Goal",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(200, "USD"),
-            funding_amount=Money(20, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-
-        # Simulate a system ITX that credited $20 to budget on D.
-        effective_dt = datetime(today.year, today.month, today.day, tzinfo=UTC)
-        itx = internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=unallocated,
-            dst_budget=budget,
-            amount=Money(20, "USD"),
-            actor=system_user,
-            effective_date=effective_dt,
-        )
-        InternalTransaction.objects.filter(pk=itx.pk).update(
-            system_event_date=today
-        )
-
-        budget.refresh_from_db()
-        assert budget.balance == Money(20, "USD")
-
-        balance_0, _ = state_at_start_of_D(budget, today)
-
-        assert balance_0 == Money(0, "USD")
-
-    ####################################################################
-    #
-    def test_does_not_roll_back_itx_before_D(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
-    ) -> None:
-        """
-        GIVEN: a budget that received a $20 system-issued credit on February 28, leaving a current balance of $20,
-               and the query date is March 1
-        WHEN:  state_at_start_of_D is called for March 1
-        THEN:  returns $20 unchanged because credits dated before the query date are not rolled back
-        """
-        D = date(2026, 3, 1)
-        account = make_account(posted_through=D)
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(200, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Test Goal",
-            budget_type=Budget.BudgetType.GOAL,
-            funding_type=Budget.FundingType.FIXED_AMOUNT,
-            target_balance=Money(200, "USD"),
-            funding_amount=Money(20, "USD"),
-            funding_schedule=_MONTHLY,
-        )
-
-        effective_dt = datetime(
-            (D - timedelta(days=1)).year,
-            (D - timedelta(days=1)).month,
-            (D - timedelta(days=1)).day,
-            tzinfo=UTC,
-        )
-        itx = internal_transaction_svc.create(
-            bank_account=account,
-            src_budget=unallocated,
-            dst_budget=budget,
-            amount=Money(20, "USD"),
-            actor=system_user,
-            effective_date=effective_dt,
-        )
-        InternalTransaction.objects.filter(pk=itx.pk).update(
-            system_event_date=D - timedelta(days=1)
-        )
-
-        budget.refresh_from_db()
-        assert budget.balance == Money(20, "USD")
-
-        balance_0, _ = state_at_start_of_D(budget, D)
-
-        # D-1 ITX is not rolled back; balance_0 equals current balance.
-        assert balance_0 == Money(20, "USD")
-
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "query_date,expected_balance",
-        [
-            # Query at D: both D and D+1 ITXs rolled back (>= D) -> $40 - $40 = $0
-            (date(2026, 3, 1), Decimal("0")),
-            # Query at D+1: only D+1 ITX rolled back -> $40 - $20 = $20
-            (date(2026, 3, 2), Decimal("20")),
-        ],
-    )
-    def test_consecutive_days_rollback_arithmetic(
-        self,
-        make_account: Callable[..., BankAccount],
-        system_user: User,  # type: ignore[valid-type]
-        query_date: date,
-        expected_balance: Decimal,
-    ) -> None:
-        """
-        GIVEN: two system-issued ITXs each crediting $20 to a budget --
-               one dated March 1, one dated March 2 -- so current balance is $40
-        WHEN:  state_at_start_of_D is called with a query date (parametrized)
-        THEN:  every system ITX whose date is on or after the query date is rolled
-               back, so querying March 1 yields $0 (both undone) while querying
-               March 2 yields $20 (only the March 2 ITX undone)
-        """
-        D = date(2026, 3, 1)
-        account = make_account(posted_through=D + timedelta(days=1))
-        unallocated = account.unallocated_budget
-        assert unallocated is not None
-        Budget.objects.filter(pkid=unallocated.pkid).update(
-            balance=Money(500, "USD")
-        )
-        budget = budget_svc.create(
-            bank_account=account,
-            name="Test Goal",
+        make_budget: Callable[..., Budget],
+    ) -> Budget:
+        """A Goal holding $100, on an account with $500 in Unallocated."""
+        return make_budget(
+            make_account(
+                posted_through=self.D + timedelta(days=1), unallocated=500
+            ),
             budget_type=Budget.BudgetType.GOAL,
             funding_type=Budget.FundingType.FIXED_AMOUNT,
             target_balance=Money(500, "USD"),
             funding_amount=Money(20, "USD"),
             funding_schedule=_MONTHLY,
+            stored={"balance": Money(100, "USD")},
         )
 
-        for event_date in (D, D + timedelta(days=1)):
-            eff = datetime(
-                event_date.year, event_date.month, event_date.day, tzinfo=UTC
-            )
+    ####################################################################
+    #
+    @pytest.fixture
+    def make_system_credit(
+        self, system_user: User
+    ) -> Callable[[Budget, date], InternalTransaction]:
+        """Return a factory for $20 system credits from Unallocated.
+
+        Returns:
+            A callable `(budget, on) -> InternalTransaction` crediting
+            `budget` $20 with an effective date of midnight UTC on `on`,
+            stamped as a system event on that date.
+        """
+
+        def _make(budget: Budget, on: date) -> InternalTransaction:
+            unallocated = budget.bank_account.unallocated_budget
+            assert unallocated is not None
             itx = internal_transaction_svc.create(
-                bank_account=account,
+                bank_account=budget.bank_account,
                 src_budget=unallocated,
                 dst_budget=budget,
                 amount=Money(20, "USD"),
                 actor=system_user,
-                effective_date=eff,
+                effective_date=datetime(on.year, on.month, on.day, tzinfo=UTC),
             )
             InternalTransaction.objects.filter(pk=itx.pk).update(
-                system_event_date=event_date
+                system_event_date=on
             )
+            return itx
 
-        budget.refresh_from_db()
-        assert budget.balance == Money(40, "USD")
+        return _make
 
-        balance_0, _ = state_at_start_of_D(budget, query_date)
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "credit_offsets,query_offset,expected",
+        [
+            # Nothing on or after D: the current $100 is returned.
+            pytest.param([], 0, 100, id="no_system_credits"),
+            # Querying D rolls back every credit dated on or after D
+            # (D and D+1): $140 - $40.
+            pytest.param([0, 1], 0, 100, id="rolls_back_on_and_after_D"),
+            # Querying D+1 rolls back only the D+1 credit; the D credit
+            # is before the query date and stays: $140 - $20.
+            pytest.param([0, 1], 1, 120, id="keeps_credits_before_D"),
+        ],
+    )
+    def test_rolls_back_system_credits_on_or_after_query_date(
+        self,
+        credited_budget: Budget,
+        make_system_credit: Callable[[Budget, date], InternalTransaction],
+        credit_offsets: list[int],
+        query_offset: int,
+        expected: int,
+    ) -> None:
+        """
+        GIVEN: a Goal holding $100 plus $20 system credits dated D and/or
+               D+1 (parametrized)
+        WHEN:  state_at_start_of_D is called for D or D+1
+        THEN:  every system credit dated on or after the query date is
+               rolled back; earlier credits and the base balance remain
+        """
+        for offset in credit_offsets:
+            make_system_credit(credited_budget, self.D + timedelta(days=offset))
+        credited_budget.refresh_from_db()
 
-        assert balance_0 == Money(expected_balance, "USD")
+        balance_0, _ = state_at_start_of_D(
+            credited_budget, self.D + timedelta(days=query_offset)
+        )
+
+        assert balance_0 == Money(expected, "USD")

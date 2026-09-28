@@ -227,7 +227,10 @@ def test_something(factory_cls) -> None: ...
   root conftest also pins email and invitation settings
   (`site_email_settings`, `invitation_limits`) for both invitation
   flows; `app/tests/moneypools/conftest.py` provides `account`, a bank
-  account owned by `user`.
+  account owned by `user`, `make_account(posted_through=, unallocated=)`,
+  and `make_budget(account, stored=, fillup=, **create_kwargs)`, which
+  creates a budget through the budget service and then writes the
+  state a test starts from (pointers, balances, the fill-up goal).
 - **Data**: values a test does not assert on come from the model
   factories or the `faker` fixture (`faker.unique.email()` for
   addresses: `UserFactory` gets-or-creates on email, so a repeat
