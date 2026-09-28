@@ -2,12 +2,17 @@
 #
 """Tests for notifications.channels.email."""
 
+# system imports
 from collections.abc import Callable
-from unittest.mock import patch
 
+# 3rd party imports
 import pytest
+import pytest_check as check
+from django.core.mail import EmailMessage
 from django.template import TemplateDoesNotExist
+from pytest_mock import MockerFixture
 
+# Project imports
 from notifications.channels.email import (
     EmailChannel,
     _kind_template_dir,
@@ -19,8 +24,31 @@ from notifications.models import (
     NotificationLog,
     NotificationStatus,
 )
+from users.models import User
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.usefixtures("default_locale"),
+]
+
+
+####################################################################
+#
+@pytest.fixture
+def default_locale(settings) -> None:
+    """Pin the fallback locale the templates are looked up under."""
+    settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
+
+
+####################################################################
+#
+@pytest.fixture
+def failing_smtp(mocker: MockerFixture) -> None:
+    """Make every outgoing email fail as a refused SMTP connection would."""
+    mocker.patch(
+        "notifications.channels.email.EmailMultiAlternatives.send",
+        side_effect=OSError("SMTP connection refused"),
+    )
 
 
 ########################################################################
@@ -65,15 +93,12 @@ class TestLocaleHelpers:
             ),  # different: preferred locale first, then default
         ],
     )
-    def test_locale_candidates(
-        self, locale: str, expected: list[str], settings
-    ) -> None:
+    def test_locale_candidates(self, locale: str, expected: list[str]) -> None:
         """
         GIVEN: a locale that is the same as or different from NOTIFICATIONS_DEFAULT_LOCALE
         WHEN:  _locale_candidates() is called
         THEN:  returns the appropriate candidate list
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
         assert _locale_candidates(locale) == expected
 
 
@@ -85,13 +110,12 @@ class TestRenderWithFallback:
 
     ####################################################################
     #
-    def test_falls_back_to_default_locale(self, settings) -> None:
+    def test_falls_back_to_default_locale(self) -> None:
         """
         GIVEN: no template for 'fr-ca' but one exists for the default 'en-us'
         WHEN:  _render_with_fallback() is called with locale='fr-ca'
         THEN:  the en-us template is rendered without error
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
         result = _render_with_fallback(
             "moneypools.funding_complete", "email_body", "fr-ca", {}
         )
@@ -99,25 +123,23 @@ class TestRenderWithFallback:
 
     ####################################################################
     #
-    def test_raises_when_no_template_exists(self, settings) -> None:
+    def test_raises_when_no_template_exists(self) -> None:
         """
         GIVEN: a kind with no templates for either the requested or the default locale
         WHEN:  _render_with_fallback() is called
         THEN:  TemplateDoesNotExist is raised
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
         with pytest.raises(TemplateDoesNotExist):
             _render_with_fallback("nonexistent.kind", "email_body", "en-us", {})
 
     ####################################################################
     #
-    def test_html_falls_back_to_default_locale(self, settings) -> None:
+    def test_html_falls_back_to_default_locale(self) -> None:
         """
         GIVEN: no HTML template for 'fr-ca' but one exists for the default 'en-us'
         WHEN:  _render_html_with_fallback() is called
         THEN:  the en-us HTML template is rendered as fallback
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
         result = _render_html_with_fallback(
             "moneypools.funding_complete", "fr-ca", {}
         )
@@ -135,8 +157,7 @@ class TestEmailChannelSend:
     def test_send_creates_log_and_links_notification(
         self,
         notification_factory: Callable,
-        mailoutbox,
-        settings,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: a pending Notification
@@ -144,57 +165,54 @@ class TestEmailChannelSend:
         THEN:  one email is sent, a SENT NotificationLog row is created,
                and the notification's log_entry points to it
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
         notification = notification_factory(log_entry=None)
 
         EmailChannel().send(notification)
 
-        assert len(mailoutbox) == 1
-        assert mailoutbox[0].to == [notification.user.email]
-
         log = NotificationLog.objects.get(user=notification.user)
-        assert log.status == NotificationStatus.SENT
-        assert log.sent_at is not None
-
         notification.refresh_from_db()
-        assert notification.log_entry == log
+        check.equal(
+            [m.to for m in mailoutbox],
+            [[notification.user.email]],
+            "one email, to the user",
+        )
+        check.equal(log.status, NotificationStatus.SENT, "logged as sent")
+        check.is_not_none(log.sent_at, "with a send time")
+        check.equal(notification.log_entry, log, "notification linked")
 
     ####################################################################
     #
     def test_send_batch_sends_one_digest_email(
         self,
         notification_factory: Callable,
-        user_factory: Callable,
-        mailoutbox,
-        settings,
+        user: User,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: two pending Notifications for the same user
         WHEN:  EmailChannel.send_batch() is called
         THEN:  exactly one digest email is sent and both notifications are linked to the log
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
-        user = user_factory()
         n1 = notification_factory(user=user, log_entry=None)
         n2 = notification_factory(user=user, log_entry=None)
 
         EmailChannel().send_batch([n1, n2])
 
-        assert len(mailoutbox) == 1
-        assert mailoutbox[0].to == [user.email]
-
         log = NotificationLog.objects.get(user=user)
         n1.refresh_from_db()
         n2.refresh_from_db()
-        assert n1.log_entry == log
-        assert n2.log_entry == log
+        check.equal(
+            [m.to for m in mailoutbox], [[user.email]], "one digest email"
+        )
+        check.equal(n1.log_entry, log, "first notification linked")
+        check.equal(n2.log_entry, log, "second notification linked")
 
     ####################################################################
     #
     def test_send_failure_marks_log_failed(
         self,
         notification_factory: Callable,
-        settings,
+        failing_smtp: None,
     ) -> None:
         """
         GIVEN: a pending Notification and an SMTP layer that raises
@@ -202,21 +220,15 @@ class TestEmailChannelSend:
         THEN:  the NotificationLog row is marked FAILED with error_detail set,
                the notification is NOT linked to the log, and the exception propagates
         """
-        settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
         notification = notification_factory(log_entry=None)
 
-        with (
-            patch(
-                "notifications.channels.email.EmailMultiAlternatives.send",
-                side_effect=OSError("SMTP connection refused"),
-            ),
-            pytest.raises(OSError, match="SMTP connection refused"),
-        ):
+        with pytest.raises(OSError, match="SMTP connection refused"):
             EmailChannel().send(notification)
 
         log = NotificationLog.objects.get(user=notification.user)
-        assert log.status == NotificationStatus.FAILED
-        assert "SMTP connection refused" in log.error_detail
-
         notification.refresh_from_db()
-        assert notification.log_entry is None
+        check.equal(log.status, NotificationStatus.FAILED, "logged as failed")
+        check.is_in(
+            "SMTP connection refused", log.error_detail, "with the error"
+        )
+        check.is_none(notification.log_entry, "notification not linked")

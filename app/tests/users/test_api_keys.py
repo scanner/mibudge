@@ -13,6 +13,7 @@ from datetime import timedelta
 
 # 3rd party imports
 import pytest
+import pytest_check as check
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -30,16 +31,16 @@ API_KEYS_URL = reverse("api_v1:api-key-list")
 
 ####################################################################
 #
-def key_client(plaintext: str) -> APIClient:
-    """Return an APIClient sending the given plaintext API key.
+def header_client(authorization: str) -> APIClient:
+    """Return an APIClient sending the given `Authorization` header.
 
     A plain helper rather than the root `make_api_key_client` fixture:
     its callers send malformed, revoked or expired keys, or need the
     `APIKey` row that `APIKey.make` returns, so they mint the key
-    themselves and pass only the plaintext here.
+    themselves and pass the header here.
     """
     client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
+    client.credentials(HTTP_AUTHORIZATION=authorization)
     return client
 
 
@@ -60,12 +61,24 @@ class TestApiKeyAuthentication:
         """
         api_key, plaintext = APIKey.make(user, "test key")
 
-        assert plaintext.startswith(APIKey.KEY_PREFIX)
-        assert api_key.hashed_key == APIKey.hash_key(plaintext)
-        assert plaintext not in [api_key.hashed_key, api_key.prefix]
-        assert api_key.prefix == plaintext[: APIKey.PREFIX_DISPLAY_LENGTH]
-        assert api_key.expires_at is None
-        assert api_key.is_active
+        check.is_true(
+            plaintext.startswith(APIKey.KEY_PREFIX), "plaintext is prefixed"
+        )
+        check.equal(
+            api_key.hashed_key, APIKey.hash_key(plaintext), "hash is stored"
+        )
+        check.is_not_in(
+            plaintext,
+            [api_key.hashed_key, api_key.prefix],
+            "plaintext is not stored",
+        )
+        check.equal(
+            api_key.prefix,
+            plaintext[: APIKey.PREFIX_DISPLAY_LENGTH],
+            "prefix is displayable",
+        )
+        check.is_none(api_key.expires_at, "never expires by default")
+        check.is_true(api_key.is_active, "starts active")
 
     ####################################################################
     #
@@ -102,9 +115,7 @@ class TestApiKeyAuthentication:
             case "malformed":
                 header = "Api-Key"
 
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=header)
-        assert client.get(BANKS_URL).status_code == 401
+        assert header_client(header).get(BANKS_URL).status_code == 401
 
     ####################################################################
     #
@@ -115,7 +126,7 @@ class TestApiKeyAuthentication:
         THEN:  last_used_at is not written again; outside it, it is
         """
         api_key, plaintext = APIKey.make(user, "importer")
-        client = key_client(plaintext)
+        client = header_client(f"Api-Key {plaintext}")
 
         client.get(BANKS_URL)
         api_key.refresh_from_db()
@@ -143,41 +154,39 @@ class TestAPIKeyManagementAPI:
 
     ####################################################################
     #
-    def test_create_returns_plaintext_once(self, user: User):
+    def test_create_returns_plaintext_once(self, auth_client: APIClient):
         """
         GIVEN: an interactively authenticated user
         WHEN:  a key is created via POST
         THEN:  the response includes the plaintext exactly once and the
                list endpoint never exposes it again
         """
-        client = APIClient()
-        client.force_authenticate(user=user)
-
-        response = client.post(API_KEYS_URL, {"name": "my importer"})
+        response = auth_client.post(API_KEYS_URL, {"name": "my importer"})
         assert response.status_code == 201
-        assert response.data["key"].startswith(APIKey.KEY_PREFIX)
-        assert response.data["name"] == "my importer"
-        assert response.data["expires_at"] is None
+        check.is_true(
+            response.data["key"].startswith(APIKey.KEY_PREFIX),
+            "plaintext returned on create",
+        )
+        check.equal(response.data["name"], "my importer", "name echoed")
+        check.is_none(response.data["expires_at"], "no expiry by default")
 
-        listing = client.get(API_KEYS_URL)
+        listing = auth_client.get(API_KEYS_URL)
         assert listing.status_code == 200
         results = listing.data["results"]
         assert len(results) == 1
-        assert "key" not in results[0]
-        assert "hashed_key" not in results[0]
+        check.is_not_in("key", results[0], "listing hides the plaintext")
+        check.is_not_in("hashed_key", results[0], "listing hides the hash")
 
     ####################################################################
     #
-    def test_create_with_expiry_days(self, user: User):
+    def test_create_with_expiry_days(self, auth_client: APIClient):
         """
         GIVEN: an interactively authenticated user
         WHEN:  a key is created with expiry_days set
         THEN:  expires_at lands that many days in the future
         """
-        client = APIClient()
-        client.force_authenticate(user=user)
         before = timezone.now() + timedelta(days=17)
-        response = client.post(
+        response = auth_client.post(
             API_KEYS_URL, {"name": "expiring", "expiry_days": 17}
         )
         after = timezone.now() + timedelta(days=17)
@@ -190,7 +199,10 @@ class TestAPIKeyManagementAPI:
     ####################################################################
     #
     def test_scoped_to_own_keys(
-        self, user: User, user_factory: Callable[..., User]
+        self,
+        user: User,
+        auth_client: APIClient,
+        user_factory: Callable[..., User],
     ):
         """
         GIVEN: keys belonging to two different users
@@ -201,39 +213,37 @@ class TestAPIKeyManagementAPI:
         APIKey.make(user, "mine")
         theirs, _ = APIKey.make(other, "theirs")
 
-        client = APIClient()
-        client.force_authenticate(user=user)
-
-        response = client.get(API_KEYS_URL)
-        assert response.status_code == 200
-        assert [k["name"] for k in response.data["results"]] == ["mine"]
-
-        response = client.post(
+        listing = auth_client.get(API_KEYS_URL)
+        revoke = auth_client.post(
             reverse("api_v1:api-key-revoke", kwargs={"uuid": theirs.uuid})
         )
-        assert response.status_code == 404
+
+        check.equal(
+            [k["name"] for k in listing.data["results"]],
+            ["mine"],
+            "lists only own keys",
+        )
+        check.equal(revoke.status_code, 404, "foreign key is not found")
 
     ####################################################################
     #
-    def test_revoke(self, user: User):
+    def test_revoke(self, user: User, auth_client: APIClient):
         """
         GIVEN: an active key
         WHEN:  POST .../{uuid}/revoke/ is called, twice
         THEN:  the first call revokes it, the second returns 400
         """
         api_key, _ = APIKey.make(user, "doomed")
-        client = APIClient()
-        client.force_authenticate(user=user)
         revoke_url = reverse(
             "api_v1:api-key-revoke", kwargs={"uuid": api_key.uuid}
         )
 
-        response = client.post(revoke_url)
-        assert response.status_code == 200
-        assert response.data["revoked_at"] is not None
+        first = auth_client.post(revoke_url)
+        second = auth_client.post(revoke_url)
 
-        response = client.post(revoke_url)
-        assert response.status_code == 400
+        check.equal(first.status_code, 200, "first revoke succeeds")
+        check.is_not_none(first.data["revoked_at"], "and records when")
+        check.equal(second.status_code, 400, "second revoke is refused")
 
 
 ########################################################################
@@ -293,5 +303,5 @@ class TestRequiresInteractiveAuth:
         client = make_api_key_client(user, "importer")
         response = client.get(reverse("api_v1:user-me"))
         assert response.status_code == 200
-        assert response.data["username"] == user.username
-        assert response.data["timezone"] == user.timezone
+        check.equal(response.data["username"], user.username, "own profile")
+        check.equal(response.data["timezone"], user.timezone, "with timezone")

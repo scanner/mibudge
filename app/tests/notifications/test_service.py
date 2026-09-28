@@ -2,11 +2,16 @@
 #
 """Tests for notifications.service."""
 
+# system imports
 from collections.abc import Callable
-from unittest.mock import MagicMock, patch  # patch used for registry isolation
+from unittest.mock import MagicMock, call
 
+# 3rd party imports
 import pytest
+import pytest_check as check
+from pytest_mock import MockerFixture
 
+# Project imports
 from notifications.models import (
     Channel,
     DeliveryMode,
@@ -21,6 +26,19 @@ from users.models import User
 pytestmark = pytest.mark.django_db
 
 
+####################################################################
+#
+@pytest.fixture
+def fresh_registry(mocker: MockerFixture) -> NotificationRegistry:
+    """Swap the service's global registry for an empty one.
+
+    Registrations a test makes stay out of every other test.
+    """
+    fresh = NotificationRegistry()
+    mocker.patch("notifications.service.registry", fresh)
+    return fresh
+
+
 ########################################################################
 ########################################################################
 #
@@ -30,42 +48,36 @@ class TestNotify:
     ####################################################################
     #
     @pytest.fixture(autouse=True)
-    def isolated_registry(self):
-        """
-        Replace the global registry with a fresh one for each test so
-        registrations in one test don't bleed into others.
-        """
-        fresh = NotificationRegistry()
-        with patch("notifications.service.registry", fresh):
-            fresh.register(
-                kind="test.normal",
-                display_name="Normal test",
-                default_priority=NotificationPriority.NORMAL,
-                can_suppress=True,
-                default_delivery_mode=DeliveryMode.DIGEST,
-            )
-            fresh.register(
-                kind="test.critical",
-                display_name="Critical test",
-                default_priority=NotificationPriority.CRITICAL,
-                can_suppress=False,
-                default_delivery_mode=DeliveryMode.IMMEDIATE,
-            )
-            fresh.register(
-                kind="test.default_off",
-                display_name="Default-off test",
-                default_priority=NotificationPriority.LOW,
-                can_suppress=True,
-                default_delivery_mode=DeliveryMode.OFF,
-            )
-            fresh.register(
-                kind="test.default_immediate",
-                display_name="Default-immediate test",
-                default_priority=NotificationPriority.NORMAL,
-                can_suppress=True,
-                default_delivery_mode=DeliveryMode.IMMEDIATE,
-            )
-            yield fresh
+    def kinds(self, fresh_registry: NotificationRegistry) -> None:
+        """Register one kind per delivery-mode / priority combination."""
+        fresh_registry.register(
+            kind="test.normal",
+            display_name="Normal test",
+            default_priority=NotificationPriority.NORMAL,
+            can_suppress=True,
+            default_delivery_mode=DeliveryMode.DIGEST,
+        )
+        fresh_registry.register(
+            kind="test.critical",
+            display_name="Critical test",
+            default_priority=NotificationPriority.CRITICAL,
+            can_suppress=False,
+            default_delivery_mode=DeliveryMode.IMMEDIATE,
+        )
+        fresh_registry.register(
+            kind="test.default_off",
+            display_name="Default-off test",
+            default_priority=NotificationPriority.LOW,
+            can_suppress=True,
+            default_delivery_mode=DeliveryMode.OFF,
+        )
+        fresh_registry.register(
+            kind="test.default_immediate",
+            display_name="Default-immediate test",
+            default_priority=NotificationPriority.NORMAL,
+            can_suppress=True,
+            default_delivery_mode=DeliveryMode.IMMEDIATE,
+        )
 
     ####################################################################
     #
@@ -78,12 +90,14 @@ class TestNotify:
         result = notify(user, "test.normal", {"key": "val"})
 
         assert result is not None
-        assert result.user == user
-        assert result.kind == "test.normal"
-        assert result.priority == NotificationPriority.NORMAL
-        assert result.context == {"key": "val"}
-        assert result.channel == Channel.EMAIL
-        assert result.log_entry is None
+        check.equal(result.user, user, "for the user")
+        check.equal(result.kind, "test.normal", "of the kind")
+        check.equal(
+            result.priority, NotificationPriority.NORMAL, "kind's priority"
+        )
+        check.equal(result.context, {"key": "val"}, "with the context")
+        check.equal(result.channel, Channel.EMAIL, "on the email channel")
+        check.is_none(result.log_entry, "not yet sent")
 
     ####################################################################
     #
@@ -118,6 +132,7 @@ class TestNotify:
     def test_delivery_mode_gate(
         self,
         user: User,
+        notification_preference_factory: Callable[..., NotificationPreference],
         kind: str,
         stored_mode: str | None,
         expected_created: bool,
@@ -129,37 +144,18 @@ class TestNotify:
         THEN:  a Notification is created iff the effective delivery mode is not 'off'
         """
         if stored_mode is not None:
-            NotificationPreference.objects.create(
+            notification_preference_factory(
                 user=user, kind=kind, delivery_mode=stored_mode
             )
 
         result = notify(user, kind, {})
 
-        if expected_created:
-            assert result is not None
-            assert Notification.objects.filter(user=user, kind=kind).exists()
-        else:
-            assert result is None
-            assert not Notification.objects.filter(
-                user=user, kind=kind
-            ).exists()
-
-    ####################################################################
-    #
-    def test_non_suppressible_always_sent(
-        self,
-        user: User,
-        mock_send_notification_now: MagicMock,
-    ):
-        """
-        GIVEN: a kind with can_suppress=False
-        WHEN:  notify() is called (with no preference row -- none can exist)
-        THEN:  a Notification is always created and sent immediately
-        """
-        result = notify(user, "test.critical", {})
-
-        assert result is not None
-        mock_send_notification_now.delay.assert_called_once_with(str(result.id))
+        check.equal(result is not None, expected_created, "returned")
+        check.equal(
+            Notification.objects.filter(user=user, kind=kind).exists(),
+            expected_created,
+            "stored",
+        )
 
     ####################################################################
     #
@@ -201,6 +197,7 @@ class TestNotify:
     def test_dispatch_and_priority(
         self,
         user: User,
+        notification_preference_factory: Callable[..., NotificationPreference],
         kind: str,
         stored_mode: str | None,
         priority_override: int | None,
@@ -215,21 +212,19 @@ class TestNotify:
                only when the delivery mode is 'immediate' or priority is CRITICAL
         """
         if stored_mode is not None:
-            NotificationPreference.objects.create(
+            notification_preference_factory(
                 user=user, kind=kind, delivery_mode=stored_mode
             )
 
         result = notify(user, kind, {}, priority=priority_override)
 
         assert result is not None
-        assert result.priority == expected_priority
-
-        if expect_immediate:
-            mock_send_notification_now.delay.assert_called_once_with(
-                str(result.id)
-            )
-        else:
-            mock_send_notification_now.delay.assert_not_called()
+        check.equal(result.priority, expected_priority, "priority stored")
+        check.equal(
+            mock_send_notification_now.delay.call_args_list,
+            [call(str(result.id))] if expect_immediate else [],
+            "sent immediately or left for the digest",
+        )
 
 
 ########################################################################
@@ -241,71 +236,81 @@ class TestNotifyFor:
     ####################################################################
     #
     @pytest.fixture(autouse=True)
-    def isolated_registry(self, user_factory: Callable):
-        fresh = NotificationRegistry()
-        with patch("notifications.service.registry", fresh):
-            self._owner_a = user_factory()
-            self._owner_b = user_factory()
-            fresh.register(
-                kind="test.event",
-                display_name="Test event",
-                default_priority=NotificationPriority.NORMAL,
-                can_suppress=True,
-                default_delivery_mode=DeliveryMode.DIGEST,
-                recipients=lambda obj: obj.owners.all(),
-            )
-            fresh.register(
-                kind="test.no_recipients",
-                display_name="No recipients kind",
-                default_priority=NotificationPriority.NORMAL,
-                can_suppress=True,
-                default_delivery_mode=DeliveryMode.DIGEST,
-            )
-            yield fresh
+    def kinds(self, fresh_registry: NotificationRegistry) -> None:
+        """Register a kind with a recipients callable and one without."""
+        fresh_registry.register(
+            kind="test.event",
+            display_name="Test event",
+            default_priority=NotificationPriority.NORMAL,
+            can_suppress=True,
+            default_delivery_mode=DeliveryMode.DIGEST,
+            recipients=lambda obj: obj.owners.all(),
+        )
+        fresh_registry.register(
+            kind="test.no_recipients",
+            display_name="No recipients kind",
+            default_priority=NotificationPriority.NORMAL,
+            can_suppress=True,
+            default_delivery_mode=DeliveryMode.DIGEST,
+        )
 
     ####################################################################
     #
-    def test_notifies_all_recipients(self):
+    @pytest.fixture
+    def owners(self, user_factory: Callable[..., User]) -> list[User]:
+        """Two users who both own the account notified about."""
+        return [user_factory(), user_factory()]
+
+    ####################################################################
+    #
+    @pytest.fixture
+    def account(self, owners: list[User]) -> MagicMock:
+        """A stand-in account whose `owners` are the `owners` fixture."""
+        account = MagicMock()
+        account.owners.all.return_value = owners
+        return account
+
+    ####################################################################
+    #
+    def test_notifies_all_recipients(
+        self, account: MagicMock, owners: list[User]
+    ) -> None:
         """
         GIVEN: a kind with a recipients callable returning two users
         WHEN:  notify_for() is called
         THEN:  one Notification is created per recipient
         """
-        account = MagicMock()
-        account.owners.all.return_value = [self._owner_a, self._owner_b]
-
         results = notify_for(account, "test.event", {"x": 1})
 
-        assert len(results) == 2
-        assert {n.user_id for n in results} == {
-            self._owner_a.pk,
-            self._owner_b.pk,
-        }
+        assert sorted(n.user_id for n in results) == sorted(
+            o.pk for o in owners
+        )
 
     ####################################################################
     #
-    def test_respects_individual_opt_outs(self):
+    def test_respects_individual_opt_outs(
+        self,
+        account: MagicMock,
+        owners: list[User],
+        notification_preference_factory: Callable[..., NotificationPreference],
+    ) -> None:
         """
         GIVEN: a recipients callable returning two users, one set to 'off'
         WHEN:  notify_for() is called
         THEN:  only the non-suppressed recipient receives a Notification
         """
-        account = MagicMock()
-        account.owners.all.return_value = [self._owner_a, self._owner_b]
-        NotificationPreference.objects.create(
-            user=self._owner_b,
-            kind="test.event",
-            delivery_mode=DeliveryMode.OFF,
+        opted_in, opted_out = owners
+        notification_preference_factory(
+            user=opted_out, kind="test.event", delivery_mode=DeliveryMode.OFF
         )
 
         results = notify_for(account, "test.event", {})
 
-        assert len(results) == 1
-        assert results[0].user == self._owner_a
+        assert [n.user for n in results] == [opted_in]
 
     ####################################################################
     #
-    def test_missing_recipients_raises(self):
+    def test_missing_recipients_raises(self) -> None:
         """
         GIVEN: a kind registered without a recipients callable
         WHEN:  notify_for() is called

@@ -14,12 +14,15 @@ Covers:
 #
 from collections.abc import Callable
 from datetime import timedelta
+from unittest.mock import call
 
 # 3rd party imports
 #
 import pytest
-from django.core import mail
+import pytest_check as check
+from django.core.mail import EmailMessage
 from django.utils import timezone
+from faker import Faker
 from freezegun import freeze_time
 from pytest_mock import MockerFixture
 
@@ -42,20 +45,17 @@ from users.invitation import (
 )
 from users.models import User, UserInvitation
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.usefixtures("site_email_settings", "invitation_limits"),
+]
 
 
-########################################################################
-# Shared fixtures
-########################################################################
-
-
-@pytest.fixture(autouse=True)
-def invitation_settings(settings) -> None:
-    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-    settings.SITE_URL = "http://testserver"
-    settings.SITE_DISPLAY_NAME = "MiBudge [test]"
-    settings.SUPPORT_EMAIL = "support@test.example.com"
+####################################################################
+#
+@pytest.fixture
+def invitation_limits(settings) -> None:
+    """Pin the limits the boundary tests below are written against."""
     settings.NOTIFICATIONS_DEFAULT_LOCALE = "en-us"
     settings.INVITATION_EXPIRY_DAYS = 7
     settings.INVITATION_MAX_RESENDS = 3
@@ -64,9 +64,20 @@ def invitation_settings(settings) -> None:
     settings.INVITATION_WINDOW_DAYS = 30
 
 
+####################################################################
+#
 @pytest.fixture
-def admin_user(user_factory: Callable[..., User]) -> User:
-    return user_factory(email="admin@example.com")
+def inviter(user_factory: Callable[..., User]) -> User:
+    """The ordinary user who sends the invitations."""
+    return user_factory()
+
+
+####################################################################
+#
+@pytest.fixture
+def invitee_email(faker: Faker) -> str:
+    """An address not yet known to the system."""
+    return faker.unique.email()
 
 
 ########################################################################
@@ -79,7 +90,9 @@ class TestCreateUserInvitation:
     #
     def test_new_address_creates_inactive_user_and_sends_email(
         self,
-        admin_user: User,
+        inviter: User,
+        invitee_email: str,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: an email not yet in the system
@@ -87,70 +100,77 @@ class TestCreateUserInvitation:
         THEN:  a pending UserInvitation is created; an inactive User is
                created for the invitee; one invitation email is sent
         """
-        inv = create_user_invitation(admin_user, "newperson@example.com")
+        inv = create_user_invitation(inviter, invitee_email)
 
-        assert inv.status == UserInvitation.Status.PENDING
-        assert inv.invitee_email == "newperson@example.com"
+        check.equal(inv.status, UserInvitation.Status.PENDING, "pending")
+        check.equal(inv.invitee_email, invitee_email, "for the invitee")
+        check.equal(inv.send_count, 1, "sent once")
+        check.equal(
+            [m.to for m in mailoutbox], [[invitee_email]], "one email sent"
+        )
         assert inv.invitee_user is not None
-        assert not inv.invitee_user.is_active
-        assert not inv.invitee_user.has_usable_password()
-        assert inv.send_count == 1
-        assert len(mail.outbox) == 1
-        assert mail.outbox[0].to == ["newperson@example.com"]
+        check.is_false(inv.invitee_user.is_active, "invitee user inactive")
+        check.is_false(
+            inv.invitee_user.has_usable_password(), "with no password"
+        )
 
     ####################################################################
     #
     def test_rejects_already_registered_active_user(
         self,
-        admin_user: User,
+        inviter: User,
         user_factory: Callable[..., User],
+        invitee_email: str,
     ) -> None:
         """
         GIVEN: an email that belongs to an existing active account
         WHEN:  create_user_invitation() is called
         THEN:  InviteeAlreadyRegisteredError raised; no invitation created
         """
-        user_factory(email="existing@example.com")
+        user_factory(email=invitee_email)
 
         with pytest.raises(InviteeAlreadyRegisteredError):
-            create_user_invitation(admin_user, "existing@example.com")
+            create_user_invitation(inviter, invitee_email)
 
         assert UserInvitation.objects.count() == 0
 
     ####################################################################
     #
-    def test_rejects_duplicate_pending(self, admin_user: User) -> None:
+    def test_rejects_duplicate_pending(
+        self, inviter: User, invitee_email: str
+    ) -> None:
         """
         GIVEN: a pending invitation already exists for an email
         WHEN:  create_user_invitation() targets the same email
         THEN:  InvitationAlreadyPendingError raised
         """
-        create_user_invitation(admin_user, "dup@example.com")
-        mail.outbox.clear()
+        create_user_invitation(inviter, invitee_email)
 
         with pytest.raises(InvitationAlreadyPendingError):
-            create_user_invitation(admin_user, "dup@example.com")
+            create_user_invitation(inviter, invitee_email)
 
     ####################################################################
     #
-    def test_allows_new_invitation_after_expiry(self, admin_user: User) -> None:
+    def test_allows_new_invitation_after_expiry(
+        self, inviter: User, invitee_email: str
+    ) -> None:
         """
         GIVEN: a previous invitation for an email that has now expired
         WHEN:  create_user_invitation() targets the same email
         THEN:  a new invitation is created without error
         """
         with freeze_time(timezone.now() - timedelta(days=8)):
-            create_user_invitation(admin_user, "retry@example.com")
-        mail.outbox.clear()
+            create_user_invitation(inviter, invitee_email)
 
-        inv2 = create_user_invitation(admin_user, "retry@example.com")
+        inv2 = create_user_invitation(inviter, invitee_email)
         assert inv2.status == UserInvitation.Status.PENDING
 
     ####################################################################
     #
     def test_rejects_when_rolling_window_exceeded(
         self,
-        admin_user: User,
+        inviter: User,
+        invitee_email: str,
         user_invitation_factory: Callable[..., UserInvitation],
     ) -> None:
         """
@@ -158,15 +178,14 @@ class TestCreateUserInvitation:
         WHEN:  create_user_invitation() targets the same email
         THEN:  InvitationWindowExceededError raised
         """
-        email = "flooded@example.com"
         for _ in range(5):
             user_invitation_factory(
-                invitee_email=email,
+                invitee_email=invitee_email,
                 status=UserInvitation.Status.CANCELLED,
             )
 
         with pytest.raises(InvitationWindowExceededError):
-            create_user_invitation(admin_user, email)
+            create_user_invitation(inviter, invitee_email)
 
 
 ########################################################################
@@ -180,44 +199,18 @@ class TestCancelUserInvitation:
     def test_cancels_pending_invitation(
         self,
         user_invitation_factory: Callable[..., UserInvitation],
-        admin_user: User,
     ) -> None:
         """
         GIVEN: a pending invitation
         WHEN:  cancel_user_invitation() is called
         THEN:  status becomes cancelled; cancelled_at is set
         """
-        inv = user_invitation_factory(invited_by=admin_user)
+        inv = user_invitation_factory()
         cancel_user_invitation(inv)
 
         inv.refresh_from_db()
-        assert inv.status == UserInvitation.Status.CANCELLED
-        assert inv.cancelled_at is not None
-
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "terminal_status,exc_class",
-        [
-            (UserInvitation.Status.ACCEPTED, TokenAlreadyAcceptedError),
-            (UserInvitation.Status.CANCELLED, TokenAlreadyCancelledError),
-            (UserInvitation.Status.EXPIRED, TokenExpiredError),
-        ],
-    )
-    def test_raises_on_terminal_status(
-        self,
-        terminal_status: str,
-        exc_class: type,
-        user_invitation_factory: Callable[..., UserInvitation],
-    ) -> None:
-        """
-        GIVEN: an invitation already in a terminal state
-        WHEN:  cancel_user_invitation() is called
-        THEN:  the appropriate error is raised
-        """
-        inv = user_invitation_factory(status=terminal_status)
-        with pytest.raises(exc_class):
-            cancel_user_invitation(inv)
+        check.equal(inv.status, UserInvitation.Status.CANCELLED, "cancelled")
+        check.is_not_none(inv.cancelled_at, "and records when")
 
 
 ########################################################################
@@ -231,30 +224,33 @@ class TestResendUserInvitation:
     def test_resend_increments_send_count_and_sends_email(
         self,
         user_invitation_factory: Callable[..., UserInvitation],
-        admin_user: User,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: a pending invitation with send_count=1 and last_sent_at > 1 hour ago
         WHEN:  resend_user_invitation() is called
-        THEN:  send_count becomes 2; last_sent_at updated; email sent
+        THEN:  send_count becomes 2; email sent to the invitee
         """
         inv = user_invitation_factory(
-            invited_by=admin_user,
             last_sent_at=timezone.now() - timedelta(hours=2),
         )
 
         resend_user_invitation(inv)
 
         inv.refresh_from_db()
-        assert inv.send_count == 2
-        assert len(mail.outbox) == 1
-        assert mail.outbox[0].to == [inv.invitee_email]
+        check.equal(inv.send_count, 2, "send count incremented")
+        check.equal(
+            [m.to for m in mailoutbox],
+            [[inv.invitee_email]],
+            "email sent to the invitee",
+        )
 
     ####################################################################
     #
     def test_boundary_third_resend_is_allowed(
         self,
         user_invitation_factory: Callable[..., UserInvitation],
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: send_count=3 (3 resends already used, exactly at max)
@@ -270,8 +266,8 @@ class TestResendUserInvitation:
         resend_user_invitation(inv)
 
         inv.refresh_from_db()
-        assert inv.send_count == 4
-        assert len(mail.outbox) == 1
+        check.equal(inv.send_count, 4, "send count incremented")
+        check.equal(len(mailoutbox), 1, "email sent")
 
     ####################################################################
     #
@@ -290,6 +286,7 @@ class TestResendUserInvitation:
         last_sent_minutes_ago: int,
         exc_class: type,
         user_invitation_factory: Callable[..., UserInvitation],
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: a pending invitation that violates a rate-limit rule
@@ -305,39 +302,7 @@ class TestResendUserInvitation:
         with pytest.raises(exc_class):
             resend_user_invitation(inv)
 
-        assert len(mail.outbox) == 0
-
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "terminal_status,exc_class",
-        [
-            (UserInvitation.Status.ACCEPTED, TokenAlreadyAcceptedError),
-            (UserInvitation.Status.CANCELLED, TokenAlreadyCancelledError),
-            (UserInvitation.Status.EXPIRED, TokenExpiredError),
-        ],
-    )
-    def test_raises_on_terminal_status(
-        self,
-        terminal_status: str,
-        exc_class: type,
-        user_invitation_factory: Callable[..., UserInvitation],
-    ) -> None:
-        """
-        GIVEN: an invitation in a terminal state
-        WHEN:  resend_user_invitation() is called
-        THEN:  the appropriate error is raised; no email sent
-
-        This also pins the ordering guarantee: _validate_pending() fires
-        before check_resend(), so terminal-status short-circuits before
-        any rate-limit evaluation (the factory default leaves last_sent_at
-        within the cooldown window, so a wrong ordering would produce
-        ResendCooldownActiveError instead).
-        """
-        inv = user_invitation_factory(status=terminal_status)
-        with pytest.raises(exc_class):
-            resend_user_invitation(inv)
-        assert len(mail.outbox) == 0
+        assert len(mailoutbox) == 0
 
 
 ########################################################################
@@ -352,7 +317,6 @@ class TestAcceptUserInvitation:
         self,
         user_invitation_factory: Callable[..., UserInvitation],
         user_factory: Callable[..., User],
-        admin_user: User,
         mocker: MockerFixture,
     ) -> None:
         """
@@ -361,26 +325,26 @@ class TestAcceptUserInvitation:
         THEN:  user activated; status = accepted; accepted_at set;
                password-reset email dispatched
         """
-        invitee = user_factory(email="newbie@example.com")
-        invitee.is_active = False
+        invitee = user_factory(is_active=False)
         invitee.set_unusable_password()
         invitee.save()
-
         inv = user_invitation_factory(
-            invited_by=admin_user,
-            invitee_email=invitee.email,
-            invitee_user=invitee,
+            invitee_email=invitee.email, invitee_user=invitee
         )
-
         mock_reset = mocker.patch("users.invitation.trigger_password_reset")
+
         accept_user_invitation(inv.token)
 
-        mock_reset.assert_called_once_with(invitee, request=None)
         inv.refresh_from_db()
-        assert inv.status == UserInvitation.Status.ACCEPTED
-        assert inv.accepted_at is not None
         invitee.refresh_from_db()
-        assert invitee.is_active
+        check.equal(
+            mock_reset.call_args_list,
+            [call(invitee, request=None)],
+            "password reset triggered for the invitee",
+        )
+        check.equal(inv.status, UserInvitation.Status.ACCEPTED, "accepted")
+        check.is_not_none(inv.accepted_at, "and records when")
+        check.is_true(invitee.is_active, "invitee activated")
 
     ####################################################################
     #
@@ -418,27 +382,59 @@ class TestAcceptUserInvitation:
         with pytest.raises(TokenNotFoundError):
             accept_user_invitation("does-not-exist")
 
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "terminal_status,exc_class",
-        [
-            (UserInvitation.Status.ACCEPTED, TokenAlreadyAcceptedError),
-            (UserInvitation.Status.CANCELLED, TokenAlreadyCancelledError),
-            (UserInvitation.Status.EXPIRED, TokenExpiredError),
-        ],
-    )
-    def test_raises_on_terminal_status(
-        self,
-        terminal_status: str,
-        exc_class: type,
-        user_invitation_factory: Callable[..., UserInvitation],
-    ) -> None:
-        """
-        GIVEN: an invitation already in a terminal state
-        WHEN:  accept_user_invitation() is called
-        THEN:  the appropriate error is raised
-        """
-        inv = user_invitation_factory(status=terminal_status)
-        with pytest.raises(exc_class):
-            accept_user_invitation(inv.token)
+
+########################################################################
+########################################################################
+#
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param(cancel_user_invitation, id="cancel"),
+        pytest.param(resend_user_invitation, id="resend"),
+        pytest.param(
+            lambda inv: accept_user_invitation(inv.token), id="accept"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "terminal_status,exc_class",
+    [
+        pytest.param(
+            UserInvitation.Status.ACCEPTED,
+            TokenAlreadyAcceptedError,
+            id="accepted",
+        ),
+        pytest.param(
+            UserInvitation.Status.CANCELLED,
+            TokenAlreadyCancelledError,
+            id="cancelled",
+        ),
+        pytest.param(
+            UserInvitation.Status.EXPIRED, TokenExpiredError, id="expired"
+        ),
+    ],
+)
+def test_terminal_status_is_rejected(
+    user_invitation_factory: Callable[..., UserInvitation],
+    mailoutbox: list[EmailMessage],
+    operation: Callable[[UserInvitation], object],
+    terminal_status: str,
+    exc_class: type,
+) -> None:
+    """
+    GIVEN: an invitation already in a terminal state
+    WHEN:  it is cancelled, resent or accepted
+    THEN:  the error for that state is raised; no email is sent
+
+    For resend this also pins the ordering guarantee: _validate_pending()
+    fires before check_resend(), so terminal-status short-circuits before
+    any rate-limit evaluation (the factory default leaves last_sent_at
+    within the cooldown window, so a wrong ordering would produce
+    ResendCooldownActiveError instead).
+    """
+    inv = user_invitation_factory(status=terminal_status)
+
+    with pytest.raises(exc_class):
+        operation(inv)
+
+    assert len(mailoutbox) == 0

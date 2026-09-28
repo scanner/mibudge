@@ -1,3 +1,4 @@
+import secrets
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -47,9 +48,7 @@ class UserInvitationFactory(DjangoModelFactory):
     invited_by = factory.SubFactory(UserFactory)
     invitee_email = factory.Sequence(lambda n: f"invitee{n}@example.com")
     invitee_user = factory.SubFactory(UserFactory)
-    token = factory.LazyFunction(
-        lambda: __import__("secrets").token_urlsafe(48)
-    )
+    token = factory.LazyFunction(lambda: secrets.token_urlsafe(48))
     status = UserInvitation.Status.PENDING
     expires_at = factory.LazyFunction(
         lambda: datetime.now(UTC) + timedelta(days=7)

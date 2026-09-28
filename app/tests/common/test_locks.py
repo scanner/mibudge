@@ -2,6 +2,8 @@
 #
 """Tests for common.locks.acquire_lock."""
 
+# system imports
+#
 import logging
 import threading
 import time
@@ -10,12 +12,12 @@ from contextlib import ExitStack
 # 3rd party imports
 #
 import pytest
+import redis
 
 # Project imports
 #
 from common import locks
 from common.locks import acquire_lock
-from common.redis import redis_client
 
 # Upper bound for every wait, so a regression fails the test instead of
 # hanging the run.
@@ -54,7 +56,7 @@ class TestAcquireLock:
     ####################################################################
     #
     def test_key_exists_while_held_and_gone_after(
-        self, use_fakeredis: object
+        self, use_fakeredis: redis.StrictRedis
     ) -> None:
         """
         GIVEN: a Redis key string
@@ -62,7 +64,7 @@ class TestAcquireLock:
         THEN:  the key exists in Redis inside the block and is gone after
         """
         key = "test:lock:acquire_lock"
-        r = redis_client()
+        r = use_fakeredis
 
         assert r.exists(key) == 0
         with acquire_lock(key):
@@ -71,14 +73,16 @@ class TestAcquireLock:
 
     ####################################################################
     #
-    def test_lock_released_on_exception(self, use_fakeredis: object) -> None:
+    def test_lock_released_on_exception(
+        self, use_fakeredis: redis.StrictRedis
+    ) -> None:
         """
         GIVEN: a Redis key string
         WHEN:  an exception is raised inside acquire_lock
         THEN:  the lock is released and the exception propagates
         """
         key = "test:lock:exception"
-        r = redis_client()
+        r = use_fakeredis
 
         with pytest.raises(RuntimeError, match="boom"):
             with acquire_lock(key):
@@ -88,7 +92,9 @@ class TestAcquireLock:
 
     ####################################################################
     #
-    def test_multiple_locks_via_exitstack(self, use_fakeredis: object) -> None:
+    def test_multiple_locks_via_exitstack(
+        self, use_fakeredis: redis.StrictRedis
+    ) -> None:
         """
         GIVEN: two distinct keys
         WHEN:  both are acquired via ExitStack
@@ -96,7 +102,7 @@ class TestAcquireLock:
         """
 
         keys = ["test:lock:a", "test:lock:b"]
-        r = redis_client()
+        r = use_fakeredis
 
         with ExitStack() as stack:
             for k in keys:
@@ -109,7 +115,9 @@ class TestAcquireLock:
 
     ####################################################################
     #
-    def test_reentrant_within_one_thread(self, use_fakeredis: object) -> None:
+    def test_reentrant_within_one_thread(
+        self, use_fakeredis: redis.StrictRedis
+    ) -> None:
         """
         GIVEN: a thread that holds a lock
         WHEN:  the same thread acquires the same key again
@@ -117,7 +125,7 @@ class TestAcquireLock:
                stays held until the outermost block exits
         """
         key = "test:lock:reentrant"
-        r = redis_client()
+        r = use_fakeredis
 
         with acquire_lock(key) as outer:
             with acquire_lock(key, blocking=False) as inner:
@@ -128,7 +136,9 @@ class TestAcquireLock:
 
     ####################################################################
     #
-    def test_other_threads_still_excluded(self, use_fakeredis: object) -> None:
+    def test_other_threads_still_excluded(
+        self, use_fakeredis: redis.StrictRedis
+    ) -> None:
         """
         GIVEN: a thread that holds a lock
         WHEN:  another thread tries a non-blocking acquire of that key
@@ -158,7 +168,7 @@ class TestLockRenewal:
     ####################################################################
     #
     def test_lock_outlives_its_ttl_while_held(
-        self, use_fakeredis: object, short_ttl: float
+        self, use_fakeredis: redis.StrictRedis, short_ttl: float
     ) -> None:
         """
         GIVEN: a lock with a 0.6 second TTL
@@ -167,7 +177,7 @@ class TestLockRenewal:
         AND:   it is released when the block exits
         """
         key = "test:lock:renewed"
-        r = redis_client()
+        r = use_fakeredis
 
         with acquire_lock(key):
             # Real time has to pass for the TTL to lapse; fakeredis
@@ -181,7 +191,7 @@ class TestLockRenewal:
     ####################################################################
     #
     def test_renewal_thread_stops_when_block_exits(
-        self, use_fakeredis: object
+        self, use_fakeredis: redis.StrictRedis
     ) -> None:
         """
         GIVEN: a lock acquired and held by a nested acquire of the same
@@ -200,7 +210,7 @@ class TestLockRenewal:
     ####################################################################
     #
     def test_failed_acquire_starts_no_renewal(
-        self, use_fakeredis: object
+        self, use_fakeredis: redis.StrictRedis
     ) -> None:
         """
         GIVEN: a lock held by another thread
@@ -226,7 +236,7 @@ class TestLockRenewal:
     #
     def test_lost_lock_is_logged_not_raised(
         self,
-        use_fakeredis: object,
+        use_fakeredis: redis.StrictRedis,
         short_ttl: float,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -238,7 +248,7 @@ class TestLockRenewal:
         AND:   exiting the block does not raise
         """
         key = "test:lock:lost"
-        r = redis_client()
+        r = use_fakeredis
 
         with caplog.at_level(logging.ERROR, logger="common.locks"):
             with acquire_lock(key):

@@ -1,18 +1,10 @@
 """Tests for the users DRF API URL configuration."""
 
-# system imports
-#
-
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.urls import resolve, reverse
-
-# app imports
-#
-from users.models import User
-
-pytestmark = pytest.mark.django_db
 
 
 ########################################################################
@@ -21,38 +13,29 @@ pytestmark = pytest.mark.django_db
 class TestUserAPIURLs:
     """Tests that users API URL names resolve to correct paths and view names."""
 
-    def test_user_detail(self, user: User):
-        """
-        GIVEN: an existing user
-        WHEN:  the api_v1:user-detail URL name is reversed and the resulting path
-               is resolved
-        THEN:  the path matches /api/v1/users/<username>/ and resolves to
-               api_v1:user-detail
-        """
-        assert (
-            reverse("api_v1:user-detail", kwargs={"username": user.username})
-            == f"/api/v1/users/{user.username}/"
-        )
-        assert (
-            resolve(f"/api/v1/users/{user.username}/").view_name
-            == "api_v1:user-detail"
-        )
-
+    ####################################################################
+    #
     @pytest.mark.parametrize(
-        "url_name,expected_path",
+        "url_name,kwargs,expected_path",
         [
-            pytest.param("api_v1:user-list", "/api/v1/users/", id="list"),
-            pytest.param("api_v1:user-me", "/api/v1/users/me/", id="me"),
+            pytest.param(
+                "api_v1:user-detail",
+                {"username": "alice"},
+                "/api/v1/users/alice/",
+                id="detail",
+            ),
+            pytest.param("api_v1:user-list", {}, "/api/v1/users/", id="list"),
+            pytest.param("api_v1:user-me", {}, "/api/v1/users/me/", id="me"),
         ],
     )
-    def test_static_url_resolution(
-        self, url_name: str, expected_path: str
+    def test_url_resolution(
+        self, url_name: str, kwargs: dict[str, str], expected_path: str
     ) -> None:
         """
-        GIVEN: an API URL name with a fixed (non-user-specific) path
-        WHEN:  the name is reversed and the path is resolved
+        GIVEN: a users API URL name with optional kwargs
+        WHEN:  the name is reversed and the resulting path is resolved
         THEN:  the path matches the expected value and resolves back to the
                same URL name
         """
-        assert reverse(url_name) == expected_path
-        assert resolve(expected_path).view_name == url_name
+        check.equal(reverse(url_name, kwargs=kwargs), expected_path, "reverses")
+        check.equal(resolve(expected_path).view_name, url_name, "resolves back")

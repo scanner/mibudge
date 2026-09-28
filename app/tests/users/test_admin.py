@@ -6,8 +6,10 @@
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.test import Client
 from django.urls import reverse
+from faker import Faker
 
 # app imports
 #
@@ -41,7 +43,7 @@ class TestUserAdmin:
         response = admin_client.get(url, data=query_params)
         assert response.status_code == 200
 
-    def test_add(self, admin_client: Client) -> None:
+    def test_add(self, admin_client: Client, faker: Faker) -> None:
         """
         GIVEN: an admin-authenticated client
         WHEN:  the add-user page is fetched (GET) and then a new user is
@@ -50,28 +52,34 @@ class TestUserAdmin:
                exists in the database
         """
         url = reverse("admin:users_user_add")
-        response = admin_client.get(url)
-        assert response.status_code == 200
+        username = faker.unique.user_name()
+        password = faker.password(length=20)
 
+        form = admin_client.get(url)
         response = admin_client.post(
             url,
             data={
-                "username": "test",
-                "email": "test@example.com",
-                "password1": "My_R@ndom-P@ssw0rd",
-                "password2": "My_R@ndom-P@ssw0rd",
+                "username": username,
+                "email": faker.unique.email(),
+                "password1": password,
+                "password2": password,
             },
         )
-        assert response.status_code == 302
-        assert User.objects.filter(username="test").exists()
 
-    def test_view_user(self, admin_client: Client) -> None:
+        check.equal(form.status_code, 200, "add page renders")
+        check.equal(response.status_code, 302, "submit redirects")
+        check.is_true(
+            User.objects.filter(username=username).exists(), "user created"
+        )
+
+    def test_view_user(self, admin_client: Client, admin_user: User) -> None:
         """
         GIVEN: an admin-authenticated client and the built-in admin user
         WHEN:  the change page for that user is requested
         THEN:  a 200 response is returned
         """
-        user = User.objects.get(username="admin")
-        url = reverse("admin:users_user_change", kwargs={"object_id": user.pk})
+        url = reverse(
+            "admin:users_user_change", kwargs={"object_id": admin_user.pk}
+        )
         response = admin_client.get(url)
         assert response.status_code == 200

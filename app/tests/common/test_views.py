@@ -11,6 +11,7 @@ from typing import Any
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.db import connection
 from django.db import transaction as db_transaction
 from django.urls import URLPattern, URLResolver, get_resolver, include, path
@@ -26,7 +27,6 @@ from rest_framework.test import APIClient
 #
 from common.views import AtomicWritesMixin
 from moneypools.models import Bank
-from users.models import User
 
 # Apps whose API views must follow the read/write transaction rule.
 # Third-party views (drf-spectacular's schema views) are left alone.
@@ -164,8 +164,8 @@ class TestAtomicWritesMixin:
         """
         response = api_client.get("/probe/")
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data == {"in_atomic": False}
+        check.equal(response.status_code, status.HTTP_200_OK, "served")
+        check.equal(response.data, {"in_atomic": False}, "no transaction")
 
     ####################################################################
     #
@@ -178,9 +178,11 @@ class TestAtomicWritesMixin:
         """
         response = api_client.post("/probe/", {"name": "Committed Bank"})
 
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data == {"in_atomic": True}
-        assert Bank.objects.filter(name="Committed Bank").exists()
+        check.equal(response.status_code, status.HTTP_201_CREATED, "created")
+        check.equal(response.data, {"in_atomic": True}, "in a transaction")
+        check.is_true(
+            Bank.objects.filter(name="Committed Bank").exists(), "committed"
+        )
 
     ####################################################################
     #
@@ -196,8 +198,10 @@ class TestAtomicWritesMixin:
             "/probe/", {"name": "Rejected Bank", "fail": "validation"}
         )
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert not Bank.objects.filter(name="Rejected Bank").exists()
+        check.equal(response.status_code, status.HTTP_400_BAD_REQUEST, "400")
+        check.is_false(
+            Bank.objects.filter(name="Rejected Bank").exists(), "rolled back"
+        )
 
     ####################################################################
     #
@@ -226,7 +230,7 @@ class TestReadsDuringWrites:
     ####################################################################
     #
     def test_get_completes_while_a_writer_holds_its_transaction(
-        self, user: User
+        self, auth_client: APIClient
     ) -> None:
         """
         GIVEN: a request that has written a row and not yet committed
@@ -258,18 +262,16 @@ class TestReadsDuringWrites:
                 written.set()
                 connection.close()
 
-        client = APIClient()
-        client.force_authenticate(user=user)
         writer = threading.Thread(target=_writer, daemon=True)
         writer.start()
         try:
             assert written.wait(_TIMEOUT), "writer did not write"
             assert not errors, errors
-            response = client.get("/api/v1/banks/")
+            response = auth_client.get("/api/v1/banks/")
         finally:
             release.set()
             writer.join(_TIMEOUT)
 
-        assert response.status_code == status.HTTP_200_OK
-        assert not writer.is_alive()
-        assert not errors, errors
+        check.equal(response.status_code, status.HTTP_200_OK, "read served")
+        check.is_false(writer.is_alive(), "writer finished")
+        check.equal(errors, [], "writer raised nothing")

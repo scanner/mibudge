@@ -2,10 +2,13 @@
 
 # system imports
 #
+from collections.abc import Callable
+from typing import Any
 
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.models import AnonymousUser
@@ -17,7 +20,6 @@ from pytest_mock import MockerFixture
 
 # app imports
 #
-from tests.users.factories import UserFactory
 from users.forms import UserChangeForm
 from users.models import User
 from users.views import (
@@ -38,46 +40,27 @@ class TestUserUpdateView:
     def dummy_get_response(self, request: HttpRequest) -> HttpResponse:
         return HttpResponse()
 
-    def test_get_success_url(self, user: User, rf: RequestFactory):
-        """
-        GIVEN: an authenticated user and a UserUpdateView
-        WHEN:  get_success_url() is called
-        THEN:  the URL resolves to the user's detail page
-        """
-        view = UserUpdateView()
-        request = rf.get("/fake-url/")
-        request.user = user
-        view.request = request
-
-        assert view.get_success_url() == f"/users/{user.username}/"
-
-    def test_get_object(self, user: User, rf: RequestFactory):
+    def test_get_object(
+        self, user: User, make_view: Callable[..., Any]
+    ) -> None:
         """
         GIVEN: an authenticated user and a UserUpdateView
         WHEN:  get_object() is called
         THEN:  the view returns the authenticated user, not a queryset lookup
         """
-        view = UserUpdateView()
-        request = rf.get("/fake-url/")
-        request.user = user
-        view.request = request
-
-        assert view.get_object() == user
+        assert make_view(UserUpdateView, user).get_object() == user
 
     def test_form_valid(
-        self, user: User, rf: RequestFactory, mocker: MockerFixture
-    ):
+        self, user: User, make_view: Callable[..., Any], mocker: MockerFixture
+    ) -> None:
         """
         GIVEN: an authenticated user submitting a valid profile update
         WHEN:  form_valid() is called
         THEN:  a success flash message is added to the request
         """
-        view = UserUpdateView()
-        request = rf.get("/fake-url/")
-        SessionMiddleware(self.dummy_get_response).process_request(request)
-        MessageMiddleware(self.dummy_get_response).process_request(request)
-        request.user = user
-        view.request = request
+        view = make_view(UserUpdateView, user)
+        SessionMiddleware(self.dummy_get_response).process_request(view.request)
+        MessageMiddleware(self.dummy_get_response).process_request(view.request)
 
         form = UserChangeForm()
         form.cleaned_data = {}
@@ -87,28 +70,31 @@ class TestUserUpdateView:
         mocker.patch.object(form, "save", return_value=user)
         view.form_valid(form)
 
-        messages_sent = [m.message for m in messages.get_messages(request)]
+        messages_sent = [m.message for m in messages.get_messages(view.request)]
         assert messages_sent == ["Information successfully updated"]
 
 
 ########################################################################
 ########################################################################
 #
-class TestUserRedirectView:
-    """Tests for UserRedirectView -- redirects the user to their detail page."""
+@pytest.mark.parametrize(
+    "view_cls,method",
+    [
+        pytest.param(UserUpdateView, "get_success_url", id="update-success"),
+        pytest.param(UserRedirectView, "get_redirect_url", id="redirect"),
+    ],
+)
+def test_view_sends_user_to_own_detail_page(
+    user: User, make_view: Callable[..., Any], view_cls: type, method: str
+) -> None:
+    """
+    GIVEN: an authenticated user and a view that redirects on completion
+    WHEN:  the view computes its redirect target
+    THEN:  the target is the user's own detail page
+    """
+    view = make_view(view_cls, user)
 
-    def test_get_redirect_url(self, user: User, rf: RequestFactory):
-        """
-        GIVEN: an authenticated user and a UserRedirectView
-        WHEN:  get_redirect_url() is called
-        THEN:  the URL resolves to the user's detail page
-        """
-        view = UserRedirectView()
-        request = rf.get("/fake-url")
-        request.user = user
-        view.request = request
-
-        assert view.get_redirect_url() == f"/users/{user.username}/"
+    assert getattr(view, method)() == f"/users/{user.username}/"
 
 
 ########################################################################
@@ -117,21 +103,25 @@ class TestUserRedirectView:
 class TestUserDetailView:
     """Tests for the user_detail_view -- displays a user's public profile."""
 
-    def test_authenticated(self, user: User, rf: RequestFactory):
+    def test_authenticated(
+        self,
+        user: User,
+        user_factory: Callable[..., User],
+        rf: RequestFactory,
+    ) -> None:
         """
         GIVEN: an authenticated user requesting another user's detail page
         WHEN:  the view is called
         THEN:  a 200 response is returned
         """
         request = rf.get("/fake-url/")
-        # factory-boy stubs don't express that UserFactory() returns a User instance -- revisit if factory-boy stubs improve
-        request.user = UserFactory()  # type: ignore[assignment]
+        request.user = user_factory()
 
         response = user_detail_view(request, username=user.username)
 
         assert response.status_code == 200
 
-    def test_not_authenticated(self, user: User, rf: RequestFactory):
+    def test_not_authenticated(self, user: User, rf: RequestFactory) -> None:
         """
         GIVEN: an anonymous (unauthenticated) user requesting a detail page
         WHEN:  the view is called
@@ -142,8 +132,12 @@ class TestUserDetailView:
 
         response = user_detail_view(request, username=user.username)
 
-        assert response.status_code == 302
+        check.equal(response.status_code, 302, "redirected")
         # LOGIN_URL is a path ("/app/login/"), not a URL name, so no reverse().
         # user_detail_view returns HttpResponseRedirect which has .url, but the
         # type is declared as HttpResponseBase which doesn't -- revisit if django-stubs improve
-        assert response.url == f"{settings.LOGIN_URL}?next=/fake-url/"  # type: ignore[attr-defined]
+        check.equal(
+            response.url,  # type: ignore[attr-defined]
+            f"{settings.LOGIN_URL}?next=/fake-url/",
+            "to the login page, returning here after",
+        )

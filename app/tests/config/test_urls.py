@@ -6,9 +6,8 @@
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.urls import resolve, reverse
-
-pytestmark = pytest.mark.django_db
 
 
 ########################################################################
@@ -58,5 +57,7 @@ class TestRootURLs:
         THEN:  the path matches the expected value and resolves back to the
                same view name
         """
-        assert reverse(url_name, kwargs=kwargs) == expected_path
-        assert resolve(expected_path).view_name == expected_view
+        check.equal(reverse(url_name, kwargs=kwargs), expected_path, "reverses")
+        check.equal(
+            resolve(expected_path).view_name, expected_view, "resolves back"
+        )

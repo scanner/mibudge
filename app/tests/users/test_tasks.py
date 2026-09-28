@@ -2,12 +2,13 @@
 
 # system imports
 #
-
+from collections.abc import Callable
 from datetime import timedelta
 
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from celery.result import EagerResult
 from django.conf import LazySettings
 from django.utils import timezone
@@ -16,7 +17,6 @@ from freezegun import freeze_time
 # app imports
 #
 from notifications.models import Notification
-from tests.users.factories import UserFactory
 from users.models import APIKey, User
 from users.notification_kinds import API_KEY_EXPIRING
 from users.tasks import get_users_count, notify_expiring_api_keys
@@ -30,21 +30,23 @@ pytestmark = pytest.mark.django_db
 class TestGetUsersCountTask:
     """Tests for the get_users_count Celery task."""
 
-    def test_returns_correct_count(self, settings: LazySettings) -> None:
+    def test_returns_correct_count(
+        self, user_factory: Callable[..., User], settings: LazySettings
+    ) -> None:
         """
         GIVEN: three users created via the factory
         WHEN:  the get_users_count task is executed eagerly
         THEN:  the task returns an EagerResult whose value matches the
                database count of User objects
         """
-        UserFactory.create_batch(3)
-        num_user_objects = User.objects.count()
+        for _ in range(3):
+            user_factory()
         settings.CELERY_TASK_ALWAYS_EAGER = True
 
         task_result = get_users_count.delay()
 
-        assert isinstance(task_result, EagerResult)
-        assert task_result.result == num_user_objects
+        check.is_instance(task_result, EagerResult, "ran eagerly")
+        check.equal(task_result.result, User.objects.count(), "counts users")
 
 
 ########################################################################
@@ -106,13 +108,15 @@ class TestNotifyExpiringApiKeys:
         assert notices.exists() == expect_notice, scenario
         if expect_notice:
             api_key.refresh_from_db()
-            assert api_key.expiry_notified_at is not None
             notice = notices.get()
-            assert notice.user == user
-            assert notice.context["key_name"] == "importer"
-            assert notice.context["key_prefix"] == api_key.prefix
-            assert notice.context["days_left"] == expires_in_days
-            assert notice.context["expires_at"]
+            check.is_not_none(api_key.expiry_notified_at, "send recorded")
+            check.equal(notice.user, user, "owner notified")
+            check.equal(notice.context["key_name"], "importer", "key name")
+            check.equal(notice.context["key_prefix"], api_key.prefix, "prefix")
+            check.equal(
+                notice.context["days_left"], expires_in_days, "days left"
+            )
+            check.is_true(notice.context["expires_at"], "expiry date")
 
     ################################################################
     #

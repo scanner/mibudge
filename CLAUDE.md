@@ -218,11 +218,41 @@ def test_something(factory_cls) -> None: ...
   every module that uses it; a module-local fixture is fine while only
   that module needs it. Never copy a fixture into a second module --
   move it up. App-agnostic fixtures live in `app/tests/conftest.py`:
-  `api_client`, `auth_client`, `make_api_key_client`, and
-  `any_auth_client` (parametrized: runs a test once with a JWT session
-  and once with an API key; use it for endpoints machine credentials
-  can reach). A module may override a shared fixture (e.g.
-  `auth_client` for a different user) when its tests need that.
+  `api_client`, `auth_client`, `make_auth_client` (a force-authenticated
+  client for any user), `make_api_key_client`, and `any_auth_client`
+  (parametrized: runs a test once with a JWT session and once with an
+  API key; use it for endpoints machine credentials can reach). Never
+  build an `APIClient()` in a test. A module whose tests all act as one
+  particular user overrides `user`, so `auth_client` follows it.
+- **Data**: values a test does not assert on come from the model
+  factories or the `faker` fixture (`faker.unique.email()` for
+  addresses: `UserFactory` gets-or-creates on email, so a repeat
+  silently returns the existing user). Both generators are seeded from
+  `MIBUDGE_TEST_SEED` (default in `app/tests/conftest.py`); set it to
+  shake out a test that depends on a particular generated value.
+
+#### pytest-check
+
+When one test sets up once and then has several independent outcomes
+worth knowing about, check them with
+[pytest-check](https://github.com/okken/pytest-check) so a run reports
+every failed outcome, not just the first:
+
+```python
+import pytest_check as check
+
+check.equal(inv.status, UserInvitation.Status.CANCELLED, "cancelled")
+check.is_not_none(inv.cancelled_at, "and records when")
+```
+
+- Use the helper-call form (`check.equal`, `check.is_true`, ...) with a
+  message naming the THEN-clause outcome; not `with check:`.
+- Keep plain `assert` for a test with a single outcome, and for
+  preconditions a later line depends on (a status code before reading
+  the body, `exists()` before `.get()`, a step in a multi-step flow).
+- Mock assertion methods (`assert_called_once_with`, ...) raise at once,
+  so compare call lists instead:
+  `check.equal(m.delay.call_args_list, [call(str(n.id))], "sent now")`.
 
 #### Test databases and concurrency tests
 
