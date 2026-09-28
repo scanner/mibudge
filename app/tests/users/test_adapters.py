@@ -5,6 +5,7 @@
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from django.test import RequestFactory
 
 # Project imports
@@ -30,6 +31,7 @@ class TestSiteUrlRebasedUrls:
     def test_password_reset_url_uses_site_url_origin(
         self,
         settings,
+        rf: RequestFactory,
     ) -> None:
         """
         GIVEN: a request whose Host header is an internal deployment
@@ -40,11 +42,13 @@ class TestSiteUrlRebasedUrls:
         """
         settings.SITE_URL = "https://public.mibudge.test"
         settings.ALLOWED_HOSTS = ["internal.mibudge.test"]
-        request = RequestFactory().get("/", HTTP_HOST="internal.mibudge.test")
+        request = rf.get("/", HTTP_HOST="internal.mibudge.test")
 
         url = AccountAdapter(request).get_reset_password_from_key_url(
             "36u-abc123key"
         )
 
-        assert url.startswith("https://public.mibudge.test/")
-        assert "internal.mibudge.test" not in url
+        check.is_true(
+            url.startswith("https://public.mibudge.test/"), "SITE_URL origin"
+        )
+        check.is_not_in("internal.mibudge.test", url, "no internal host")

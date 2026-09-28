@@ -3,12 +3,13 @@
 # system imports
 #
 from collections.abc import Callable
+from typing import Any
 from unittest.mock import MagicMock
 
 # 3rd party imports
 #
 import pytest
-from django.test import RequestFactory
+import pytest_check as check
 from rest_framework.test import APIClient
 
 # app imports
@@ -27,56 +28,51 @@ class TestUserViewSet:
 
     ####################################################################
     #
-    def test_get_queryset_staff_sees_all(self, user: User, rf: RequestFactory):
+    def test_get_queryset_staff_sees_all(
+        self, user_factory: Callable[..., User], make_view: Callable[..., Any]
+    ) -> None:
         """
         GIVEN: a staff user and a UserViewSet
         WHEN:  get_queryset() is called
         THEN:  all users are returned
         """
-        user.is_staff = True
-        user.save()
-        view = UserViewSet()
-        request = rf.get("/fake-url/")
-        request.user = user
-        view.request = request
-        view.action = "list"
+        user_factory()
+        user_factory()
+        staff = user_factory(is_staff=True)
+        view = make_view(UserViewSet, staff, action="list")
 
         assert view.get_queryset().count() == User.objects.count()
 
     ####################################################################
     #
     def test_get_queryset_non_staff_sees_only_self(
-        self, user: User, rf: RequestFactory
-    ):
+        self,
+        user: User,
+        user_factory: Callable[..., User],
+        make_view: Callable[..., Any],
+    ) -> None:
         """
         GIVEN: a non-staff authenticated user and a UserViewSet
         WHEN:  get_queryset() is called
         THEN:  only the authenticated user appears in the returned queryset
         """
-        view = UserViewSet()
-        request = rf.get("/fake-url/")
-        request.user = user
-        view.request = request
-        view.action = "me"
+        user_factory()
+        view = make_view(UserViewSet, user, action="me")
 
-        qs = view.get_queryset()
-        assert list(qs) == [user]
+        assert list(view.get_queryset()) == [user]
 
     ####################################################################
     #
-    def test_me(self, user: User, rf: RequestFactory):
+    def test_me(self, user: User, make_view: Callable[..., Any]) -> None:
         """
         GIVEN: an authenticated user and a UserViewSet
         WHEN:  the me() action is called
         THEN:  the response contains the authenticated user's username,
                name, and absolute API URL
         """
-        view = UserViewSet()
-        request = rf.get("/fake-url/")
-        request.user = user
-        view.request = request
+        view = make_view(UserViewSet, user)
 
-        response = view.me(request)
+        response = view.me(view.request)
 
         assert response.data == {
             "username": user.username,
@@ -98,79 +94,79 @@ class TestUserAPIPermissions:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "method,url_suffix",
+        "is_staff,method,url_suffix,expected_status",
         [
-            pytest.param("get", "", id="list"),
-            pytest.param("get", "{username}/", id="retrieve"),
-            pytest.param("patch", "{username}/", id="update"),
+            pytest.param(False, "get", "", 403, id="non-staff-list"),
+            pytest.param(False, "get", "{username}/", 403, id="non-staff-get"),
+            pytest.param(
+                False, "patch", "{username}/", 403, id="non-staff-update"
+            ),
+            pytest.param(False, "get", "me/", 200, id="non-staff-me"),
+            pytest.param(True, "get", "", 200, id="staff-list"),
+            pytest.param(True, "get", "{username}/", 200, id="staff-get"),
         ],
     )
-    def test_non_staff_denied(self, user: User, method: str, url_suffix: str):
+    def test_access_by_staff_status(
+        self,
+        user: User,
+        auth_client: APIClient,
+        is_staff: bool,
+        method: str,
+        url_suffix: str,
+        expected_status: int,
+    ) -> None:
         """
-        GIVEN: a non-staff authenticated user
-        WHEN:  list, retrieve, or update is attempted on the users API
-        THEN:  the request is denied with 403
+        GIVEN: an authenticated user who is or is not staff
+        WHEN:  list, retrieve, update or /me/ is requested
+        THEN:  non-staff are denied everything but /me/; staff may list
+               and retrieve
         """
-        client = APIClient()
-        client.force_authenticate(user=user)
+        user.is_staff = is_staff
+        user.save()
         url = "/api/v1/users/" + url_suffix.format(username=user.username)
-        response = getattr(client, method)(url)
-        assert response.status_code == 403
+
+        response = getattr(auth_client, method)(url)
+
+        assert response.status_code == expected_status
 
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "method,url_suffix",
+        "method,url",
         [
-            pytest.param("get", "", id="list"),
-            pytest.param("get", "{username}/", id="retrieve"),
+            pytest.param("get", "/api/v1/users/me/", id="me"),
+            pytest.param(
+                "post", "/api/v1/users/me/change-password/", id="change-pw"
+            ),
         ],
     )
-    def test_staff_allowed(self, user: User, method: str, url_suffix: str):
-        """
-        GIVEN: a staff user
-        WHEN:  list or retrieve is attempted on the users API
-        THEN:  the request succeeds with 200
-        """
-        user.is_staff = True
-        user.save()
-        client = APIClient()
-        client.force_authenticate(user=user)
-        url = "/api/v1/users/" + url_suffix.format(username=user.username)
-        response = getattr(client, method)(url)
-        assert response.status_code == 200
-
-    ####################################################################
-    #
-    def test_me_available_to_non_staff(self, user: User):
-        """
-        GIVEN: a non-staff authenticated user
-        WHEN:  the /api/users/me/ endpoint is accessed
-        THEN:  the request succeeds with 200
-        """
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.get("/api/v1/users/me/")
-        assert response.status_code == 200
-        assert response.data["username"] == user.username
-
-    ####################################################################
-    #
-    def test_me_requires_auth(self):
+    def test_requires_auth(
+        self, api_client: APIClient, method: str, url: str
+    ) -> None:
         """
         GIVEN: an unauthenticated client
-        WHEN:  the /api/users/me/ endpoint is accessed
+        WHEN:  a /me/ endpoint is requested
         THEN:  the request is denied with 401
         """
-        client = APIClient()
-        response = client.get("/api/v1/users/me/")
-        assert response.status_code == 401
+        assert getattr(api_client, method)(url).status_code == 401
 
 
 # Module-level constants so they can be referenced in @pytest.mark.parametrize
 # args, which are evaluated before the class body is complete.
 _CURRENT_PW = "OldP@ssword!SufficientlyStr0ng"
 _STRONG_PW = "correct-horse-battery-staple-42!"
+
+
+####################################################################
+#
+def _change_pw_payload(**overrides: str) -> dict[str, str]:
+    """Return a valid change-password payload with `overrides` applied."""
+    return {
+        "current_password": _CURRENT_PW,
+        "new_password": _STRONG_PW,
+        "confirm_password": _STRONG_PW,
+        **overrides,
+    }
 
 
 ########################################################################
@@ -183,9 +179,17 @@ class TestPasswordChange:
 
     ####################################################################
     #
+    @pytest.fixture
+    def user(self, user_factory: Callable[..., User]) -> User:
+        """The default `user`, with a known current password."""
+        return user_factory(password=_CURRENT_PW)
+
+    ####################################################################
+    #
     def test_change_password_success(
         self,
-        user_factory: Callable[..., User],
+        user: User,
+        auth_client: APIClient,
         mock_send_notification_now: MagicMock,
     ) -> None:
         """
@@ -194,23 +198,16 @@ class TestPasswordChange:
         THEN:  204 is returned, the password is updated, and a notification
                was dispatched
         """
-        user = user_factory(password=_CURRENT_PW)
-        client = APIClient()
-        client.force_authenticate(user=user)
+        response = auth_client.post(self.URL, _change_pw_payload())
 
-        response = client.post(
-            self.URL,
-            {
-                "current_password": _CURRENT_PW,
-                "new_password": _STRONG_PW,
-                "confirm_password": _STRONG_PW,
-            },
-        )
-
-        assert response.status_code == 204
         user.refresh_from_db()
-        assert user.check_password(_STRONG_PW)
-        mock_send_notification_now.delay.assert_called_once()
+        check.equal(response.status_code, 204, "succeeds with no body")
+        check.is_true(user.check_password(_STRONG_PW), "password updated")
+        check.equal(
+            len(mock_send_notification_now.delay.call_args_list),
+            1,
+            "notification dispatched",
+        )
 
     ####################################################################
     #
@@ -236,8 +233,8 @@ class TestPasswordChange:
     )
     def test_invalid_payload_rejected(
         self,
-        user_factory: Callable[..., User],
-        payload_overrides: dict,
+        auth_client: APIClient,
+        payload_overrides: dict[str, str],
         expected_error_field: str,
     ) -> None:
         """
@@ -245,57 +242,29 @@ class TestPasswordChange:
         WHEN:  change-password is called with an invalid payload
         THEN:  400 is returned with an error on the relevant field
         """
-        user = user_factory(password=_CURRENT_PW)
-        client = APIClient()
-        client.force_authenticate(user=user)
+        response = auth_client.post(
+            self.URL, _change_pw_payload(**payload_overrides)
+        )
 
-        payload = {
-            "current_password": _CURRENT_PW,
-            "new_password": _STRONG_PW,
-            "confirm_password": _STRONG_PW,
-            **payload_overrides,
-        }
-        response = client.post(self.URL, payload)
-
-        assert response.status_code == 400
-        assert expected_error_field in response.data
+        check.equal(response.status_code, 400, "rejected")
+        check.is_in(expected_error_field, response.data, "names the field")
 
     ####################################################################
     #
     def test_no_usable_password_rejected(
-        self, user_factory: Callable[..., User]
+        self, user: User, auth_client: APIClient
     ) -> None:
         """
         GIVEN: a user with no usable password (e.g. invitation flow)
         WHEN:  change-password is called
         THEN:  400 is returned with a 'detail' message
         """
-        user = user_factory()
         user.set_unusable_password()
         user.save()
-        client = APIClient()
-        client.force_authenticate(user=user)
 
-        response = client.post(
-            self.URL,
-            {
-                "current_password": "irrelevant",
-                "new_password": _STRONG_PW,
-                "confirm_password": _STRONG_PW,
-            },
+        response = auth_client.post(
+            self.URL, _change_pw_payload(current_password="irrelevant")
         )
 
-        assert response.status_code == 400
-        assert "detail" in response.data
-
-    ####################################################################
-    #
-    def test_requires_auth(self) -> None:
-        """
-        GIVEN: an unauthenticated client
-        WHEN:  change-password is called
-        THEN:  401 is returned
-        """
-        client = APIClient()
-        response = client.post(self.URL, {})
-        assert response.status_code == 401
+        check.equal(response.status_code, 400, "rejected")
+        check.is_in("detail", response.data, "explains why")

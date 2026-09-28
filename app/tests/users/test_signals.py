@@ -2,17 +2,23 @@
 #
 """Tests for users.signals."""
 
-from collections.abc import Callable
-from unittest.mock import MagicMock
+# system imports
+from unittest.mock import MagicMock, call
 
+# 3rd party imports
 import pytest
+import pytest_check as check
 from allauth.account.signals import (
     email_changed,
     password_changed,
     password_reset,
 )
+from django.dispatch import Signal
+from faker import Faker
 
+# Project imports
 from notifications.models import Notification, NotificationPriority
+from users.models import User
 from users.notification_kinds import EMAIL_CHANGED, PASSWORD_CHANGED
 
 pytestmark = pytest.mark.django_db
@@ -22,56 +28,43 @@ pytestmark = pytest.mark.django_db
 ########################################################################
 #
 class TestPasswordChangedSignal:
-    """Tests for the password_changed signal handler."""
+    """Tests for the password_changed and password_reset signal handlers."""
 
     ####################################################################
     #
+    @pytest.mark.parametrize(
+        "signal",
+        [
+            pytest.param(password_changed, id="password-changed"),
+            pytest.param(password_reset, id="password-reset"),
+        ],
+    )
     def test_fires_critical_notification(
         self,
-        user_factory: Callable,
+        user: User,
         mock_send_notification_now: MagicMock,
-    ):
+        signal: Signal,
+    ) -> None:
         """
-        GIVEN: the password_changed allauth signal is sent
+        GIVEN: the password_changed allauth signal, or password_reset
+               (forgot-password flow), is sent
         WHEN:  the handler runs
         THEN:  a CRITICAL Notification row is created for the user and
                the immediate send task is enqueued
         """
-        user = user_factory()
-
-        password_changed.send(sender=user.__class__, request=None, user=user)
+        signal.send(sender=user.__class__, request=None, user=user)
 
         notification = Notification.objects.get(
             user=user, kind=PASSWORD_CHANGED
         )
-        assert notification.priority == NotificationPriority.CRITICAL
-        assert notification.context == {}
-        mock_send_notification_now.delay.assert_called_once_with(
-            str(notification.id)
+        check.equal(
+            notification.priority, NotificationPriority.CRITICAL, "critical"
         )
-
-    ####################################################################
-    #
-    def test_password_reset_fires_notification(
-        self,
-        user_factory: Callable,
-        mock_send_notification_now: MagicMock,
-    ):
-        """
-        GIVEN: the password_reset allauth signal is sent (forgot-password flow)
-        WHEN:  the handler runs
-        THEN:  a CRITICAL Notification row is created for the user
-        """
-        user = user_factory()
-
-        password_reset.send(sender=user.__class__, request=None, user=user)
-
-        notification = Notification.objects.get(
-            user=user, kind=PASSWORD_CHANGED
-        )
-        assert notification.priority == NotificationPriority.CRITICAL
-        mock_send_notification_now.delay.assert_called_once_with(
-            str(notification.id)
+        check.equal(notification.context, {}, "with no context")
+        check.equal(
+            mock_send_notification_now.delay.call_args_list,
+            [call(str(notification.id))],
+            "sent immediately",
         )
 
 
@@ -85,8 +78,9 @@ class TestEmailChangedSignal:
     #
     def test_fires_critical_notification(
         self,
-        user_factory: Callable,
+        user: User,
         mock_send_notification_now: MagicMock,
+        faker: Faker,
     ) -> None:
         """
         GIVEN: the email_changed allauth signal is sent
@@ -95,11 +89,8 @@ class TestEmailChangedSignal:
                from_email and to_email in context, and the immediate
                send task is enqueued
         """
-        user = user_factory()
-        from_addr = MagicMock()
-        from_addr.email = "old@example.com"
-        to_addr = MagicMock()
-        to_addr.email = "new@example.com"
+        from_addr = MagicMock(email=faker.unique.email())
+        to_addr = MagicMock(email=faker.unique.email())
 
         email_changed.send(
             sender=user.__class__,
@@ -110,10 +101,16 @@ class TestEmailChangedSignal:
         )
 
         notification = Notification.objects.get(user=user, kind=EMAIL_CHANGED)
-        assert notification.priority == NotificationPriority.CRITICAL
-        assert notification.context["from_email"] == "old@example.com"
-        assert notification.context["to_email"] == "new@example.com"
-        assert "changed_at" not in notification.context
-        mock_send_notification_now.delay.assert_called_once_with(
-            str(notification.id)
+        check.equal(
+            notification.priority, NotificationPriority.CRITICAL, "critical"
+        )
+        check.equal(
+            notification.context,
+            {"from_email": from_addr.email, "to_email": to_addr.email},
+            "context carries both addresses and nothing else",
+        )
+        check.equal(
+            mock_send_notification_now.delay.call_args_list,
+            [call(str(notification.id))],
+            "sent immediately",
         )

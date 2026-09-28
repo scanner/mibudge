@@ -7,6 +7,7 @@ from collections.abc import Callable
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
 from rest_framework.test import APIClient
 
 # app imports
@@ -39,13 +40,13 @@ _LOCKED_KIND = "users.password_changed"
         pytest.param("/api/v1/channel-preferences/", id="channel-preferences"),
     ],
 )
-def test_endpoints_require_auth(url: str) -> None:
+def test_endpoints_require_auth(api_client: APIClient, url: str) -> None:
     """
     GIVEN: an unauthenticated client
     WHEN:  a list endpoint is accessed
     THEN:  401 is returned
     """
-    assert APIClient().get(url).status_code == 401
+    assert api_client.get(url).status_code == 401
 
 
 ########################################################################
@@ -84,6 +85,7 @@ def test_endpoints_require_auth(url: str) -> None:
 )
 def test_list_user_isolation(
     user_factory: Callable[..., User],
+    auth_client: APIClient,
     list_url: str,
     create_pref: Callable,
     lookup_key: str,
@@ -92,16 +94,13 @@ def test_list_user_isolation(
     expected_default: object,
 ) -> None:
     """
-    GIVEN: user A has a stored preference; user B has none
-    WHEN:  user B fetches the list
-    THEN:  the item shows the default, not user A's stored value
+    GIVEN: another user has a stored preference; this user has none
+    WHEN:  this user fetches the list
+    THEN:  the item shows the default, not the other user's stored value
     """
-    user_a = user_factory()
-    user_b = user_factory()
-    create_pref(user_a)
-    client = APIClient()
-    client.force_authenticate(user=user_b)
-    response = client.get(list_url)
+    create_pref(user_factory())
+
+    response = auth_client.get(list_url)
 
     item = next(p for p in response.data if p[lookup_key] == lookup_val)
     assert item[value_field] == expected_default
@@ -150,7 +149,8 @@ class TestNotificationPreferenceAPI:
     )
     def test_list_delivery_mode(
         self,
-        user_factory: Callable[..., User],
+        user: User,
+        auth_client: APIClient,
         notification_preference_factory: Callable[..., NotificationPreference],
         kind: str,
         stored_mode: str | None,
@@ -162,14 +162,11 @@ class TestNotificationPreferenceAPI:
         THEN:  the kind's delivery_mode matches the stored value or the
                registry default_delivery_mode when no row exists
         """
-        user = user_factory()
         if stored_mode is not None:
             notification_preference_factory(
                 user=user, kind=kind, delivery_mode=stored_mode
             )
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.get(self.LIST_URL)
+        response = auth_client.get(self.LIST_URL)
 
         assert response.status_code == 200
         pref = next(p for p in response.data if p["kind"] == kind)
@@ -187,7 +184,8 @@ class TestNotificationPreferenceAPI:
     )
     def test_patch_suppressible_kind(
         self,
-        user_factory: Callable[..., User],
+        user: User,
+        auth_client: APIClient,
         delivery_mode: str,
     ) -> None:
         """
@@ -196,23 +194,22 @@ class TestNotificationPreferenceAPI:
         THEN:  200 is returned, the DB row is upserted, and the response
                reflects the new value
         """
-        user = user_factory()
-        client = APIClient()
-        client.force_authenticate(user=user)
-
-        response = client.patch(
+        response = auth_client.patch(
             f"{self.LIST_URL}{_SUPPRESSIBLE_KIND}/",
             {"delivery_mode": delivery_mode},
             format="json",
         )
 
-        assert response.status_code == 200
-        assert response.data["delivery_mode"] == delivery_mode
-        assert (
+        check.equal(response.status_code, 200, "accepted")
+        check.equal(
+            response.data["delivery_mode"], delivery_mode, "response updated"
+        )
+        check.equal(
             NotificationPreference.objects.get(
                 user=user, kind=_SUPPRESSIBLE_KIND
-            ).delivery_mode
-            == delivery_mode
+            ).delivery_mode,
+            delivery_mode,
+            "row upserted",
         )
 
     ####################################################################
@@ -228,7 +225,7 @@ class TestNotificationPreferenceAPI:
     )
     def test_patch_invalid(
         self,
-        user_factory: Callable[..., User],
+        auth_client: APIClient,
         kind: str,
         expected_status: int,
         expected_key: str | None,
@@ -238,10 +235,7 @@ class TestNotificationPreferenceAPI:
         WHEN:  a PATCH targets an unknown or non-suppressible kind
         THEN:  the expected error status is returned
         """
-        user = user_factory()
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.patch(
+        response = auth_client.patch(
             f"{self.LIST_URL}{kind}/",
             {"delivery_mode": DeliveryMode.OFF},
             format="json",
@@ -262,18 +256,13 @@ class TestChannelPreferenceAPI:
 
     ####################################################################
     #
-    def test_list_returns_all_channels(
-        self, user_factory: Callable[..., User]
-    ) -> None:
+    def test_list_returns_all_channels(self, auth_client: APIClient) -> None:
         """
         GIVEN: an authenticated user
         WHEN:  the list endpoint is called
         THEN:  all Channel values appear in the response
         """
-        user = user_factory()
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.get(self.LIST_URL)
+        response = auth_client.get(self.LIST_URL)
 
         assert response.status_code == 200
         assert {"email", "push"} <= {p["channel"] for p in response.data}
@@ -297,7 +286,8 @@ class TestChannelPreferenceAPI:
     )
     def test_list_email_frequency(
         self,
-        user_factory: Callable[..., User],
+        user: User,
+        auth_client: APIClient,
         channel_preference_factory: Callable[..., ChannelPreference],
         stored_frequency: str | None,
         expected_frequency: str,
@@ -308,14 +298,11 @@ class TestChannelPreferenceAPI:
         THEN:  the email channel shows the stored frequency or DAILY_MORNING
                when no row exists
         """
-        user = user_factory()
         if stored_frequency is not None:
             channel_preference_factory(
                 user=user, channel="email", digest_frequency=stored_frequency
             )
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.get(self.LIST_URL)
+        response = auth_client.get(self.LIST_URL)
 
         email_pref = next(p for p in response.data if p["channel"] == "email")
         assert email_pref["digest_frequency"] == expected_frequency
@@ -323,7 +310,7 @@ class TestChannelPreferenceAPI:
     ####################################################################
     #
     def test_patch_updates_digest_frequency(
-        self, user_factory: Callable[..., User]
+        self, user: User, auth_client: APIClient
     ) -> None:
         """
         GIVEN: an authenticated user
@@ -331,23 +318,24 @@ class TestChannelPreferenceAPI:
         THEN:  200 is returned, the DB row is upserted, and the response
                reflects the new value
         """
-        user = user_factory()
-        client = APIClient()
-        client.force_authenticate(user=user)
-
-        response = client.patch(
+        response = auth_client.patch(
             f"{self.LIST_URL}email/",
             {"digest_frequency": DigestFrequency.TWICE_DAILY},
             format="json",
         )
 
-        assert response.status_code == 200
-        assert response.data["digest_frequency"] == DigestFrequency.TWICE_DAILY
-        assert (
+        check.equal(response.status_code, 200, "accepted")
+        check.equal(
+            response.data["digest_frequency"],
+            DigestFrequency.TWICE_DAILY,
+            "response updated",
+        )
+        check.equal(
             ChannelPreference.objects.get(
                 user=user, channel="email"
-            ).digest_frequency
-            == DigestFrequency.TWICE_DAILY
+            ).digest_frequency,
+            DigestFrequency.TWICE_DAILY,
+            "row upserted",
         )
 
     ####################################################################
@@ -373,7 +361,7 @@ class TestChannelPreferenceAPI:
     )
     def test_patch_invalid(
         self,
-        user_factory: Callable[..., User],
+        auth_client: APIClient,
         channel: str,
         payload: dict,
         expected_status: int,
@@ -384,10 +372,7 @@ class TestChannelPreferenceAPI:
         WHEN:  a PATCH targets an unknown channel or supplies an invalid frequency
         THEN:  the expected error status is returned
         """
-        user = user_factory()
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.patch(
+        response = auth_client.patch(
             f"{self.LIST_URL}{channel}/", payload, format="json"
         )
 

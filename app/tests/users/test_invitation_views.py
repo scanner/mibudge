@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 # 3rd party imports
 #
 import pytest
+import pytest_check as check
+from django.test import Client
 from django.urls import reverse
 
 # Project imports
@@ -21,6 +23,8 @@ pytestmark = pytest.mark.django_db
 _PAST = datetime(2020, 1, 1, tzinfo=UTC)
 
 
+####################################################################
+#
 def _invitation_url(token: str) -> str:
     return reverse("invitations:user-invitation", kwargs={"token": token})
 
@@ -48,32 +52,39 @@ class TestUserInvitationAcceptancePage:
             ({"status": UserInvitation.Status.ACCEPTED}, "accepted"),
             ({"status": UserInvitation.Status.CANCELLED}, "cancelled"),
             ({"status": UserInvitation.Status.EXPIRED}, "expired"),
-            # Token does not exist in the database
-            (None, "not_found"),
         ],
     )
     def test_get_invitation_page(
         self,
         user_invitation_factory: Callable[..., UserInvitation],
-        client,
-        factory_kwargs: dict | None,
+        client: Client,
+        factory_kwargs: dict[str, object],
         expected_error: str | None,
     ) -> None:
         """
-        GIVEN: an invitation in various states (or no invitation at all)
+        GIVEN: an invitation in various states
         WHEN:  GET /invitations/user/{token}/
         THEN:  200; error context matches expected state
         """
-        if factory_kwargs is not None:
-            inv = user_invitation_factory(**factory_kwargs)
-            token = inv.token
-        else:
-            token = "no-such-token"
+        inv = user_invitation_factory(**factory_kwargs)
 
-        response = client.get(_invitation_url(token))
+        response = client.get(_invitation_url(inv.token))
 
-        assert response.status_code == 200
-        assert response.context.get("error") == expected_error
+        check.equal(response.status_code, 200, "page renders")
+        check.equal(response.context.get("error"), expected_error, "state")
+
+    ####################################################################
+    #
+    def test_get_unknown_token(self, client: Client) -> None:
+        """
+        GIVEN: a token that matches no invitation
+        WHEN:  GET /invitations/user/{token}/
+        THEN:  200; the page reports the invitation as not found
+        """
+        response = client.get(_invitation_url("no-such-token"))
+
+        check.equal(response.status_code, 200, "page renders")
+        check.equal(response.context.get("error"), "not_found", "state")
 
     ####################################################################
     #
@@ -87,7 +98,7 @@ class TestUserInvitationAcceptancePage:
     def test_post_invitation_page(
         self,
         user_invitation_factory: Callable[..., UserInvitation],
-        client,
+        client: Client,
         action: str,
         expected_result: str,
     ) -> None:
@@ -102,5 +113,5 @@ class TestUserInvitationAcceptancePage:
 
         response = client.post(_invitation_url(inv.token), {"action": action})
 
-        assert response.status_code == 200
-        assert response.context["result"] == expected_result
+        check.equal(response.status_code, 200, "page renders")
+        check.equal(response.context["result"], expected_result, "outcome")

@@ -6,6 +6,7 @@ from collections.abc import Callable, Generator
 from unittest.mock import MagicMock
 
 # 3rd party imports
+import factory.random
 import py
 import pytest
 import redis
@@ -23,6 +24,13 @@ from tests.users.factories import UserFactory
 from users.models import APIKey, User
 
 register(UserFactory)  # UserFactory -> user_factory fixture
+
+# One seed behind every generated value in the suite.  Override it to
+# shake out a test that has quietly come to depend on a particular value:
+#
+#     MIBUDGE_TEST_SEED=12345 make test
+#
+TEST_SEED = int(os.environ.get("MIBUDGE_TEST_SEED", "20260928"))
 
 
 # When set, tests run against this Postgres database instead of the
@@ -58,6 +66,33 @@ def pytest_collection_modifyitems(
     for item in items:
         if "postgres" in item.keywords:
             item.add_marker(skip)
+
+
+####################################################################
+#
+@pytest.fixture(scope="session")
+def faker_seed() -> int:
+    """
+    Seed the `faker` fixture.
+
+    Faker's pytest plugin looks up this fixture name, and only when it is
+    in the active fixture closure -- which is why `_seed_random_data`
+    depends on it rather than reading `TEST_SEED` directly.
+    """
+    return TEST_SEED
+
+
+####################################################################
+#
+@pytest.fixture(scope="session", autouse=True)
+def _seed_random_data(faker_seed: int) -> None:
+    """
+    Seed factory_boy's generator once for the whole session.
+
+    `factory.Faker` draws from factory_boy's own generator, not the one
+    the `faker` fixture holds, so both are pinned to the same value here.
+    """
+    factory.random.reseed_random(faker_seed)
 
 
 ####################################################################
@@ -248,11 +283,33 @@ def api_client() -> APIClient:
 ####################################################################
 #
 @pytest.fixture
-def auth_client(user: User) -> APIClient:
+def make_auth_client() -> Callable[[User], APIClient]:
+    """Return a factory for clients force-authenticated as a given user.
+
+    Force authentication stands in for an interactive (JWT session)
+    login.  Use it when a test needs a client for a user other than the
+    default `user`, or for several users at once.
+
+    Returns:
+        A callable `(user) -> APIClient`.
+    """
+
+    def _make(user: User) -> APIClient:
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+    return _make
+
+
+####################################################################
+#
+@pytest.fixture
+def auth_client(
+    user: User, make_auth_client: Callable[[User], APIClient]
+) -> APIClient:
     """A DRF test client authenticated as the default `user` fixture."""
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
+    return make_auth_client(user)
 
 
 ####################################################################
@@ -284,6 +341,7 @@ def make_api_key_client() -> Callable[..., APIClient]:
 def any_auth_client(
     request: pytest.FixtureRequest,
     user: User,
+    make_auth_client: Callable[[User], APIClient],
     make_api_key_client: Callable[..., APIClient],
 ) -> APIClient:
     """A client for the default `user`, once per authentication method.
@@ -296,6 +354,7 @@ def any_auth_client(
     Args:
         request: The pytest request; `request.param` names the method.
         user: The default `user` fixture the client acts as.
+        make_auth_client: Factory for force-authenticated clients.
         make_api_key_client: Factory for API-key clients.
 
     Returns:
@@ -307,6 +366,4 @@ def any_auth_client(
     #
     if request.param == "api_key":
         return make_api_key_client(user)
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
+    return make_auth_client(user)

@@ -6,16 +6,16 @@ Tests for the self-service email-address change feature.
 Two primary flows are covered, each with sub-cases and edge cases:
 
 Flow A -- email change accepted
-  1. Initiate: POST change-email → request created, emails sent
-  2. Confirm:  POST confirm/     → address updated, revocation window open
-  3. Lockout:  POST change-email within window → 409
-  4. Unlock:   POST change-email after window closes → 201
+  1. Initiate: POST change-email -> request created, emails sent
+  2. Confirm:  POST confirm/     -> address updated, revocation window open
+  3. Lockout:  POST change-email within window -> 409
+  4. Unlock:   POST change-email after window closes -> 201
 
 Flow B -- 'this wasn't me' revocation
   B1. Pre-confirmation: revoke before new address confirms
-      → email unchanged, sessions unaffected
+      -> email unchanged, sessions unaffected
   B2. Post-confirmation: revoke after new address confirms
-      → email reverted, all sessions killed
+      -> email reverted, all sessions killed
 
 Session invalidation is verified by checking whether outstanding
 refresh tokens still produce a 200 from the token-refresh endpoint
@@ -30,9 +30,11 @@ from datetime import timedelta
 # 3rd party imports
 #
 import pytest
-from django.core import mail
+import pytest_check as check
+from django.core.mail import EmailMessage
 from django.test import Client
 from django.urls import reverse
+from faker import Faker
 from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -48,83 +50,129 @@ from users.notification_kinds import (
 )
 from users.views import REFRESH_COOKIE_NAME
 
-pytestmark = pytest.mark.django_db
+# Every flow here queues notifications, which need the Celery send
+# patched out.
+#
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.usefixtures(
+        "site_email_settings", "mock_send_notification_now"
+    ),
+]
 
-########################################################################
-# URL helpers -- use reverse() so a URL restructure surfaces here
-# as a NoReverseMatch rather than a silent wrong-path assertion.
-########################################################################
+# reverse() so a URL restructure surfaces here as a NoReverseMatch rather
+# than a silent wrong-path assertion.
+#
+CHANGE_EMAIL_URL = reverse("api_v1:user-change-email")
+TOKEN_OBTAIN_URL = reverse("token-obtain")
+TOKEN_REFRESH_URL = reverse("token-refresh")
 
 
-def _change_email_url() -> str:
-    return reverse("api_v1:user-change-email")
-
-
+####################################################################
+#
 def _confirm_url(token: str) -> str:
     return reverse("api_v1:user-change-email-confirm", kwargs={"token": token})
 
 
+####################################################################
+#
 def _revoke_url(token: str) -> str:
     return reverse("api_v1:user-change-email-revoke", kwargs={"token": token})
 
 
-def _token_obtain_url() -> str:
-    return reverse("token-obtain")
+####################################################################
+#
+def _session_valid(refresh: RefreshToken) -> bool:
+    """True if the refresh token still produces an access token."""
+    client = Client()
+    client.cookies[REFRESH_COOKIE_NAME] = str(refresh)
+    return client.post(TOKEN_REFRESH_URL).status_code == status.HTTP_200_OK
 
 
-def _token_refresh_url() -> str:
-    return reverse("token-refresh")
+####################################################################
+#
+def _sent_to(outbox: list[EmailMessage], address: str) -> bool:
+    """True if any message in `outbox` was addressed to `address`."""
+    return any(address in m.to for m in outbox)
 
 
-########################################################################
-# Shared fixtures
-########################################################################
-
-
-@pytest.fixture(autouse=True)
-def email_change_settings(settings) -> None:
-    """Override settings required by the email-change service in tests."""
-    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-    settings.SITE_URL = "http://testserver"
-    settings.SITE_DISPLAY_NAME = "MiBudge [test]"
-    settings.SUPPORT_EMAIL = "support@test.example.com"
-
-
+####################################################################
+#
 @pytest.fixture
 def known_password() -> str:
     return "CorrectHorseBatteryStaple1!"
 
 
+####################################################################
+#
 @pytest.fixture
-def alice(user_factory: Callable[..., User], known_password: str) -> User:
+def old_email(faker: Faker) -> str:
+    """Alice's address before any change."""
+    return faker.unique.email()
+
+
+####################################################################
+#
+@pytest.fixture
+def new_email(faker: Faker) -> str:
+    """The address a change request asks for."""
+    return faker.unique.email()
+
+
+####################################################################
+#
+@pytest.fixture
+def alice(
+    user_factory: Callable[..., User], known_password: str, old_email: str
+) -> User:
     """A user with a known email and a usable password."""
-    return user_factory(email="alice@example.com", password=known_password)
+    return user_factory(email=old_email, password=known_password)
 
 
+####################################################################
+#
 @pytest.fixture
-def auth_client(alice: User) -> APIClient:
-    client = APIClient()
-    client.force_authenticate(user=alice)
-    return client
+def user(alice: User) -> User:
+    """Make alice the default user, so `auth_client` acts as her."""
+    return alice
 
 
-def _refresh_client(refresh: RefreshToken) -> Client:
-    """Return a Django test Client pre-loaded with the given refresh cookie."""
-    c = Client()
-    c.cookies[REFRESH_COOKIE_NAME] = str(refresh)
-    return c
+####################################################################
+#
+@pytest.fixture
+def pending_ecr(
+    alice: User,
+    auth_client: APIClient,
+    new_email: str,
+    mailoutbox: list[EmailMessage],
+) -> EmailChangeRequest:
+    """
+    An unconfirmed change request from alice to `new_email`.
+
+    The outbox is cleared afterwards, so a test sees only the email its
+    own action sends.
+    """
+    response = auth_client.post(CHANGE_EMAIL_URL, {"new_email": new_email})
+    assert response.status_code == status.HTTP_201_CREATED
+    mailoutbox.clear()
+    return EmailChangeRequest.objects.get(user=alice)
 
 
-def _session_valid(refresh: RefreshToken) -> bool:
-    """True if the refresh token still produces an access token."""
-    return (
-        _refresh_client(refresh).post(_token_refresh_url()).status_code
-        == status.HTTP_200_OK
-    )
-
-
-def _get_ecr(user: User) -> EmailChangeRequest:
-    return EmailChangeRequest.objects.get(user=user)
+####################################################################
+#
+@pytest.fixture
+def confirmed_ecr(
+    pending_ecr: EmailChangeRequest,
+    auth_client: APIClient,
+    mailoutbox: list[EmailMessage],
+) -> EmailChangeRequest:
+    """`pending_ecr`, confirmed: the revocation window is now open."""
+    response = auth_client.post(_confirm_url(pending_ecr.token))
+    assert response.status_code == status.HTTP_200_OK
+    mailoutbox.clear()
+    pending_ecr.refresh_from_db()
+    assert pending_ecr.revocable_until is not None
+    return pending_ecr
 
 
 ########################################################################
@@ -139,7 +187,9 @@ class TestFlowA:
         self,
         alice: User,
         auth_client: APIClient,
-        mock_send_notification_now,
+        old_email: str,
+        new_email: str,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: a user with a usable password; refresh token RT-A held
@@ -151,34 +201,31 @@ class TestFlowA:
         """
         rt_a = RefreshToken.for_user(alice)
 
-        response = auth_client.post(
-            _change_email_url(), {"new_email": "new@example.com"}
-        )
+        response = auth_client.post(CHANGE_EMAIL_URL, {"new_email": new_email})
 
         assert response.status_code == status.HTTP_201_CREATED
-
-        ecr = _get_ecr(alice)
-        assert ecr.old_email == "alice@example.com"
-        assert ecr.new_email == "new@example.com"
-        assert ecr.confirmed_at is None
-        assert ecr.revoked_at is None
-        assert ecr.revocable_until is None
-        assert not ecr.is_expired
+        ecr = EmailChangeRequest.objects.get(user=alice)
+        check.equal(ecr.old_email, old_email, "records the old address")
+        check.equal(ecr.new_email, new_email, "records the new address")
+        check.is_none(ecr.confirmed_at, "not confirmed")
+        check.is_none(ecr.revoked_at, "not revoked")
+        check.is_none(ecr.revocable_until, "no revocation window yet")
+        check.is_false(ecr.is_expired, "not expired")
 
         alice.refresh_from_db()
-        assert alice.email == "alice@example.com"  # unchanged
-
-        # Verification email goes directly to new address
-        assert len(mail.outbox) == 1
-        assert mail.outbox[0].to == ["new@example.com"]
-
-        # Notification queued for old address via notification system
-        assert Notification.objects.filter(
-            user=alice, kind=EMAIL_CHANGE_REQUESTED
-        ).exists()
-
-        # Existing session unaffected
-        assert _session_valid(rt_a)
+        check.equal(alice.email, old_email, "address unchanged")
+        check.equal(
+            [m.to for m in mailoutbox],
+            [[new_email]],
+            "one verification email, to the new address",
+        )
+        check.is_true(
+            Notification.objects.filter(
+                user=alice, kind=EMAIL_CHANGE_REQUESTED
+            ).exists(),
+            "old address notified via the notification system",
+        )
+        check.is_true(_session_valid(rt_a), "existing session unaffected")
 
     ####################################################################
     #
@@ -186,7 +233,9 @@ class TestFlowA:
         self,
         alice: User,
         auth_client: APIClient,
-        mock_send_notification_now,
+        pending_ecr: EmailChangeRequest,
+        new_email: str,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: a pending EmailChangeRequest; RT-A held
@@ -195,26 +244,24 @@ class TestFlowA:
                no additional emails; RT-A still valid (confirmation does not
                invalidate sessions -- only revocation does)
         """
-        auth_client.post(_change_email_url(), {"new_email": "new@example.com"})
-        ecr = _get_ecr(alice)
         rt_a = RefreshToken.for_user(alice)
-        mail.outbox.clear()
 
-        response = auth_client.post(_confirm_url(ecr.token))
+        response = auth_client.post(_confirm_url(pending_ecr.token))
 
         assert response.status_code == status.HTTP_200_OK
-
         alice.refresh_from_db()
-        assert alice.email == "new@example.com"
-        assert alice.username == "new@example.com"
-
-        ecr.refresh_from_db()
-        assert ecr.confirmed_at is not None
-        assert ecr.revocable_until is not None
-        assert ecr.revocable_until > ecr.confirmed_at
-
-        assert len(mail.outbox) == 0  # confirmation itself sends no email
-        assert _session_valid(rt_a)
+        pending_ecr.refresh_from_db()
+        check.equal(alice.email, new_email, "address changed")
+        check.equal(alice.username, new_email, "username follows it")
+        assert pending_ecr.confirmed_at is not None
+        assert pending_ecr.revocable_until is not None
+        check.greater(
+            pending_ecr.revocable_until,
+            pending_ecr.confirmed_at,
+            "revocation window opens",
+        )
+        check.equal(len(mailoutbox), 0, "confirmation itself sends no email")
+        check.is_true(_session_valid(rt_a), "existing session unaffected")
 
     ####################################################################
     #
@@ -222,52 +269,47 @@ class TestFlowA:
         self,
         alice: User,
         auth_client: APIClient,
-        mock_send_notification_now,
+        confirmed_ecr: EmailChangeRequest,
+        faker: Faker,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: a confirmed EmailChangeRequest within its revocation window
         WHEN:  POST change-email again
         THEN:  409; no second request created; no emails sent
         """
-        auth_client.post(_change_email_url(), {"new_email": "new@example.com"})
-        ecr = _get_ecr(alice)
-        auth_client.post(_confirm_url(ecr.token))
-        mail.outbox.clear()
-
         response = auth_client.post(
-            _change_email_url(), {"new_email": "another@example.com"}
+            CHANGE_EMAIL_URL, {"new_email": faker.unique.email()}
         )
 
-        assert response.status_code == status.HTTP_409_CONFLICT
-        assert EmailChangeRequest.objects.filter(user=alice).count() == 1
-        assert len(mail.outbox) == 0
+        check.equal(response.status_code, status.HTTP_409_CONFLICT, "refused")
+        check.equal(
+            EmailChangeRequest.objects.filter(user=alice).count(),
+            1,
+            "no second request",
+        )
+        check.equal(len(mailoutbox), 0, "no email sent")
 
     ####################################################################
     #
     def test_step4_new_request_allowed_after_window_closes(
         self,
         alice: User,
-        auth_client: APIClient,
-        mock_send_notification_now,
+        confirmed_ecr: EmailChangeRequest,
+        make_auth_client: Callable[[User], APIClient],
+        faker: Faker,
     ) -> None:
         """
         GIVEN: a confirmed EmailChangeRequest past its revocation window
         WHEN:  POST change-email
         THEN:  201 (lockout lifted)
         """
-        auth_client.post(_change_email_url(), {"new_email": "new@example.com"})
-        ecr = _get_ecr(alice)
-        auth_client.post(_confirm_url(ecr.token))
-        ecr.refresh_from_db()
-
-        assert ecr.revocable_until is not None
-        past_window = ecr.revocable_until + timedelta(seconds=1)
+        assert confirmed_ecr.revocable_until is not None
+        past_window = confirmed_ecr.revocable_until + timedelta(seconds=1)
         with freeze_time(past_window):
             alice.refresh_from_db()
-            fresh = APIClient()
-            fresh.force_authenticate(user=alice)
-            response = fresh.post(
-                _change_email_url(), {"new_email": "another@example.com"}
+            response = make_auth_client(alice).post(
+                CHANGE_EMAIL_URL, {"new_email": faker.unique.email()}
             )
 
         assert response.status_code == status.HTTP_201_CREATED
@@ -279,7 +321,7 @@ class TestFlowA:
     ####################################################################
     #
     def test_no_usable_password_returns_403(
-        self, alice: User, auth_client: APIClient
+        self, alice: User, auth_client: APIClient, new_email: str
     ) -> None:
         """
         GIVEN: a user with no usable password set
@@ -289,9 +331,7 @@ class TestFlowA:
         alice.set_unusable_password()
         alice.save()
 
-        response = auth_client.post(
-            _change_email_url(), {"new_email": "new@example.com"}
-        )
+        response = auth_client.post(CHANGE_EMAIL_URL, {"new_email": new_email})
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -302,22 +342,24 @@ class TestFlowA:
         alice: User,
         auth_client: APIClient,
         user_factory: Callable[..., User],
-        mock_send_notification_now,
+        new_email: str,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
         GIVEN: new_email already belongs to another account
         WHEN:  POST change-email
         THEN:  409; no request created; no email sent
         """
-        user_factory(email="taken@example.com")
+        user_factory(email=new_email)
 
-        response = auth_client.post(
-            _change_email_url(), {"new_email": "taken@example.com"}
+        response = auth_client.post(CHANGE_EMAIL_URL, {"new_email": new_email})
+
+        check.equal(response.status_code, status.HTTP_409_CONFLICT, "refused")
+        check.is_false(
+            EmailChangeRequest.objects.filter(user=alice).exists(),
+            "no request created",
         )
-
-        assert response.status_code == status.HTTP_409_CONFLICT
-        assert not EmailChangeRequest.objects.filter(user=alice).exists()
-        assert len(mail.outbox) == 0
+        check.equal(len(mailoutbox), 0, "no email sent")
 
     ####################################################################
     #
@@ -325,42 +367,35 @@ class TestFlowA:
         self,
         alice: User,
         auth_client: APIClient,
-        mock_send_notification_now,
+        pending_ecr: EmailChangeRequest,
+        old_email: str,
     ) -> None:
         """
         GIVEN: a verification token that has passed its 24-hour expiry
         WHEN:  POST confirm/
         THEN:  400; User.email unchanged
         """
-        auth_client.post(_change_email_url(), {"new_email": "new@example.com"})
-        ecr = _get_ecr(alice)
-
-        past_expiry = ecr.expires_at + timedelta(seconds=1)
+        past_expiry = pending_ecr.expires_at + timedelta(seconds=1)
         with freeze_time(past_expiry):
-            response = auth_client.post(_confirm_url(ecr.token))
+            response = auth_client.post(_confirm_url(pending_ecr.token))
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
         alice.refresh_from_db()
-        assert alice.email == "alice@example.com"
+        check.equal(
+            response.status_code, status.HTTP_400_BAD_REQUEST, "refused"
+        )
+        check.equal(alice.email, old_email, "address unchanged")
 
     ####################################################################
     #
     def test_already_confirmed_token_returns_400(
-        self,
-        alice: User,
-        auth_client: APIClient,
-        mock_send_notification_now,
+        self, auth_client: APIClient, confirmed_ecr: EmailChangeRequest
     ) -> None:
         """
         GIVEN: a token that has already been confirmed
         WHEN:  POST confirm/ a second time
         THEN:  400
         """
-        auth_client.post(_change_email_url(), {"new_email": "new@example.com"})
-        ecr = _get_ecr(alice)
-        auth_client.post(_confirm_url(ecr.token))
-
-        response = auth_client.post(_confirm_url(ecr.token))
+        response = auth_client.post(_confirm_url(confirmed_ecr.token))
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -370,51 +405,37 @@ class TestFlowA:
         self,
         alice: User,
         auth_client: APIClient,
+        pending_ecr: EmailChangeRequest,
         user_factory: Callable[..., User],
-        mock_send_notification_now,
+        old_email: str,
     ) -> None:
         """
         GIVEN: new_email claimed by another account between request and confirm
         WHEN:  POST confirm/
         THEN:  409; User.email unchanged (race condition is caught at confirm time)
         """
-        auth_client.post(
-            _change_email_url(), {"new_email": "raced@example.com"}
-        )
-        ecr = _get_ecr(alice)
+        user_factory(email=pending_ecr.new_email)  # registers it first
 
-        user_factory(
-            email="raced@example.com"
-        )  # another user registers it first
+        response = auth_client.post(_confirm_url(pending_ecr.token))
 
-        response = auth_client.post(_confirm_url(ecr.token))
-
-        assert response.status_code == status.HTTP_409_CONFLICT
         alice.refresh_from_db()
-        assert alice.email == "alice@example.com"
+        check.equal(response.status_code, status.HTTP_409_CONFLICT, "refused")
+        check.equal(alice.email, old_email, "address unchanged")
 
     ####################################################################
     #
     def test_revoke_after_window_closed_returns_400(
-        self,
-        alice: User,
-        auth_client: APIClient,
-        mock_send_notification_now,
+        self, auth_client: APIClient, confirmed_ecr: EmailChangeRequest
     ) -> None:
         """
         GIVEN: a confirmed EmailChangeRequest past its revocation window
         WHEN:  POST revoke/
         THEN:  400 (the change is now permanent)
         """
-        auth_client.post(_change_email_url(), {"new_email": "new@example.com"})
-        ecr = _get_ecr(alice)
-        auth_client.post(_confirm_url(ecr.token))
-        ecr.refresh_from_db()
-
-        assert ecr.revocable_until is not None
-        past_window = ecr.revocable_until + timedelta(seconds=1)
+        assert confirmed_ecr.revocable_until is not None
+        past_window = confirmed_ecr.revocable_until + timedelta(seconds=1)
         with freeze_time(past_window):
-            response = auth_client.post(_revoke_url(ecr.token))
+            response = auth_client.post(_revoke_url(confirmed_ecr.token))
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -435,54 +456,57 @@ class TestFlowB1:
         self,
         alice: User,
         auth_client: APIClient,
-        mock_send_notification_now,
+        old_email: str,
+        new_email: str,
+        faker: Faker,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
-        GIVEN: a pending (unconfirmed) EmailChangeRequest; RT-A and RT-B held
+        GIVEN: a pending (unconfirmed) EmailChangeRequest to an attacker's
+               address; RT-A and RT-B held
         WHEN:  POST revoke/
         THEN:  200; User.email unchanged; RT-A and RT-B still valid;
                security alert sent to both old and new addresses;
                a new change request is immediately allowed
         """
+        # Sessions are minted before the request, so `pending_ecr` is
+        # not used here.
+        #
         rt_a = RefreshToken.for_user(alice)
         rt_b = RefreshToken.for_user(alice)
-
-        auth_client.post(
-            _change_email_url(), {"new_email": "attacker@evil.com"}
-        )
-        ecr = _get_ecr(alice)
-        assert ecr.confirmed_at is None
-        mail.outbox.clear()
+        auth_client.post(CHANGE_EMAIL_URL, {"new_email": new_email})
+        ecr = EmailChangeRequest.objects.get(user=alice)
+        mailoutbox.clear()
 
         response = auth_client.post(_revoke_url(ecr.token))
 
         assert response.status_code == status.HTTP_200_OK
-
         ecr.refresh_from_db()
-        assert ecr.revoked_at is not None
-        assert ecr.confirmed_at is None
-
         alice.refresh_from_db()
-        assert alice.email == "alice@example.com"  # unchanged
-
+        check.is_not_none(ecr.revoked_at, "request revoked")
+        check.is_none(ecr.confirmed_at, "and never confirmed")
+        check.equal(alice.email, old_email, "address unchanged")
         # No session invalidation -- the email never changed
-        assert _session_valid(rt_a)
-        assert _session_valid(rt_b)
-
-        # Security alert to attacker's address (direct email)
-        assert any("attacker@evil.com" in m.to for m in mail.outbox)
-
-        # Security alert notification queued for alice's address
-        assert Notification.objects.filter(
-            user=alice, kind=EMAIL_CHANGE_SECURITY_ALERT
-        ).exists()
-
-        # No lockout: revocable_until was never set, so a new request is allowed
-        mail.outbox.clear()
-        response2 = auth_client.post(
-            _change_email_url(), {"new_email": "legit@example.com"}
+        check.is_true(_session_valid(rt_a), "session A still valid")
+        check.is_true(_session_valid(rt_b), "session B still valid")
+        check.is_true(
+            _sent_to(mailoutbox, new_email),
+            "security alert emailed to the attacker's address",
         )
-        assert response2.status_code == status.HTTP_201_CREATED
+        check.is_true(
+            Notification.objects.filter(
+                user=alice, kind=EMAIL_CHANGE_SECURITY_ALERT
+            ).exists(),
+            "security alert queued for alice's address",
+        )
+
+        # No lockout: revocable_until was never set.
+        again = auth_client.post(
+            CHANGE_EMAIL_URL, {"new_email": faker.unique.email()}
+        )
+        check.equal(
+            again.status_code, status.HTTP_201_CREATED, "new request allowed"
+        )
 
 
 ########################################################################
@@ -501,29 +525,32 @@ class TestFlowB2:
         self,
         alice: User,
         auth_client: APIClient,
-        mock_send_notification_now,
+        old_email: str,
+        new_email: str,
+        faker: Faker,
+        mailoutbox: list[EmailMessage],
     ) -> None:
         """
-        GIVEN: a confirmed EmailChangeRequest within its revocation window;
-               RT-A (alice) and RT-B (attacker) both held
+        GIVEN: a confirmed EmailChangeRequest to an attacker's address,
+               within its revocation window; RT-A (alice) and RT-B
+               (attacker) both held
         WHEN:  POST revoke/ at confirmed_at + 3 days
         THEN:  200; User.email reverted; RT-A and RT-B both invalid;
                security alert sent to both addresses;
                second revoke returns 400;
                new request immediately allowed
         """
+        # Sessions are minted before the request, so `confirmed_ecr` is
+        # not used here.
+        #
         rt_a = RefreshToken.for_user(alice)
         rt_b = RefreshToken.for_user(alice)
-
-        auth_client.post(
-            _change_email_url(), {"new_email": "attacker@evil.com"}
-        )
-        ecr = _get_ecr(alice)
-
+        auth_client.post(CHANGE_EMAIL_URL, {"new_email": new_email})
+        ecr = EmailChangeRequest.objects.get(user=alice)
         auth_client.post(_confirm_url(ecr.token))
-        alice.refresh_from_db()
-        assert alice.email == "attacker@evil.com"
 
+        alice.refresh_from_db()
+        assert alice.email == new_email
         # Both sessions remain valid immediately after confirmation
         assert _session_valid(rt_a)
         assert _session_valid(rt_b)
@@ -531,73 +558,64 @@ class TestFlowB2:
         ecr.refresh_from_db()
         assert ecr.confirmed_at is not None
         three_days_later = ecr.confirmed_at + timedelta(days=3)
-        mail.outbox.clear()
+        mailoutbox.clear()
 
         with freeze_time(three_days_later):
             response = auth_client.post(_revoke_url(ecr.token))
 
         assert response.status_code == status.HTTP_200_OK
-
         alice.refresh_from_db()
-        assert alice.email == "alice@example.com"  # reverted
-        assert alice.username == "alice@example.com"
-
         ecr.refresh_from_db()
-        assert ecr.revoked_at is not None
-
-        # Both sessions now dead
-        assert not _session_valid(rt_a)
-        assert not _session_valid(rt_b)
-
-        # Security alert to attacker's address
-        assert any("attacker@evil.com" in m.to for m in mail.outbox)
-
-        # Security alert notification queued for alice's restored address
-        assert Notification.objects.filter(
-            user=alice, kind=EMAIL_CHANGE_SECURITY_ALERT
-        ).exists()
-
-        # Revoking again is rejected
-        assert (
-            auth_client.post(_revoke_url(ecr.token)).status_code
-            == status.HTTP_400_BAD_REQUEST
+        check.equal(alice.email, old_email, "address reverted")
+        check.equal(alice.username, old_email, "username reverted")
+        check.is_not_none(ecr.revoked_at, "request revoked")
+        check.is_false(_session_valid(rt_a), "session A killed")
+        check.is_false(_session_valid(rt_b), "session B killed")
+        check.is_true(
+            _sent_to(mailoutbox, new_email),
+            "security alert emailed to the attacker's address",
         )
-
-        # New request is immediately allowed (revoked_at is set; lockout cleared)
-        assert (
+        check.is_true(
+            Notification.objects.filter(
+                user=alice, kind=EMAIL_CHANGE_SECURITY_ALERT
+            ).exists(),
+            "security alert queued for alice's restored address",
+        )
+        check.equal(
+            auth_client.post(_revoke_url(ecr.token)).status_code,
+            status.HTTP_400_BAD_REQUEST,
+            "revoking again is refused",
+        )
+        check.equal(
             auth_client.post(
-                _change_email_url(), {"new_email": "fresh@example.com"}
-            ).status_code
-            == status.HTTP_201_CREATED
+                CHANGE_EMAIL_URL, {"new_email": faker.unique.email()}
+            ).status_code,
+            status.HTTP_201_CREATED,
+            "a new request is allowed at once",
         )
 
     ####################################################################
     #
     def test_login_with_old_credentials_succeeds_after_revocation(
         self,
-        alice: User,
-        known_password: str,
         auth_client: APIClient,
-        mock_send_notification_now,
+        confirmed_ecr: EmailChangeRequest,
+        client: Client,
+        old_email: str,
+        known_password: str,
     ) -> None:
         """
         GIVEN: a revoked post-confirmation email change
         WHEN:  login attempt with alice's original email and password
         THEN:  200 with access token (account fully usable under restored address)
         """
-        auth_client.post(
-            _change_email_url(), {"new_email": "attacker@evil.com"}
-        )
-        ecr = _get_ecr(alice)
-        auth_client.post(_confirm_url(ecr.token))
-        auth_client.post(_revoke_url(ecr.token))
+        auth_client.post(_revoke_url(confirmed_ecr.token))
 
-        unauthenticated = Client()
-        response = unauthenticated.post(
-            _token_obtain_url(),
-            {"email": "alice@example.com", "password": known_password},
+        response = client.post(
+            TOKEN_OBTAIN_URL,
+            {"email": old_email, "password": known_password},
             content_type="application/json",
         )
 
-        assert response.status_code == status.HTTP_200_OK
-        assert "access" in response.json()
+        check.equal(response.status_code, status.HTTP_200_OK, "login works")
+        check.is_in("access", response.json(), "and issues an access token")
