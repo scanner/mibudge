@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BudgetCard — list-row card for a single budget.  (UI_SPEC §4.2)
+// BudgetCard — list-row card for a single budget.
 //
 // Layout:
 //   [ Name                    ] [ $balance  ]

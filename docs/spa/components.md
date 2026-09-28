@@ -103,13 +103,18 @@ teleports to the body, draws the scrim and transition, and calls
 - Escape closes only the topmost modal;
 - focus returns to where it was when the modal closes.
 
+It also traps focus inside the sheet while it is the topmost modal.
 A sheet component supplies the title and content and listens for
 `close`. Don't add `@keydown.esc` handlers to sheet markup.
 
 ## Styling
 
-Components use Tailwind utility classes directly in their templates, as
-described in `docs/UI_SPEC.md` §2–3. When you move markup between
+Components are built from the `Base*` primitives in `components/base/`
+and style everything else with the semantic token utilities
+(`text-fg-muted`, `bg-surface`, `rounded-card`). A component never uses
+a raw colour, an arbitrary value or a `<style>` block; `pnpm
+lint:styles` enforces this. [styling.md](styling.md) has the tokens,
+the primitives and how to change a style. When you move markup between
 components, move it verbatim, classes included. A refactor never
 restyles.
 
@@ -120,7 +125,8 @@ restyles.
 | What                                  | Where                                          | Name                                  |
 |---------------------------------------|------------------------------------------------|---------------------------------------|
 | Presentational, one section           | `components/<section>/`                        | `<Thing>.vue`, e.g. `BudgetCard.vue`  |
-| Presentational, used across sections  | `components/shared/`                           | `MoneyAmount.vue`, `ConfirmSheet.vue` |
+| Design-system primitive               | `components/base/`                             | `Base<Thing>.vue`, e.g. `BaseButton.vue`; also `MoneyAmount.vue`, `ProgressBar.vue` |
+| Presentational, used across sections  | `components/shared/`                           | `ConfirmSheet.vue`, `AccountSwitcher.vue` |
 | App chrome                            | `components/layout/`                           | `TopBar.vue`, `SideNav.vue`           |
 | Feature component                     | `features/<section>/`                          | `<Thing>Section.vue`, `<Thing>Sheet.vue`, `<Thing>Form.vue` |
 | Its logic                             | `features/<section>/`, next to it              | `use<Thing>.ts`                       |

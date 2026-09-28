@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // AccountView — user profile hub + bank accounts list + settings.
-// (UI_SPEC §4.7)  Route shell over `useAccountHub`.
+// Route shell over `useAccountHub`.
 //
 // Three sections:
 //   1. Profile card — avatar initials, name, username → profile page

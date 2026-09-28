@@ -2,7 +2,7 @@
 //
 // BankAccountDetailView — one bank account: balances, details, owners
 // and co-owner invitations, budgets link, funding, and delete.
-// (UI_SPEC §4.8)  Route shell over `useBankAccountDetail`,
+// Route shell over `useBankAccountDetail`,
 // `useInviteFlow` and `useFundingRun`; the sections are presentational
 // components in `components/bankAccounts/`.
 //

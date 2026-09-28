@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// TransactionRow — list-row card for a single transaction.  (UI_SPEC §4.5)
+// TransactionRow — list-row card for a single transaction.
 //
 // Layout (non-split):
 //   [ Party name               ] [ $amount ]

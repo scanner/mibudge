@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // TransactionDetailView — detail page for a single transaction.
-// (UI_SPEC §4.6)  Route shell over `useTransactionDetail`.
+// Route shell over `useTransactionDetail`.
 //
 // Transactions are read-only imports.  Mutable fields: description,
 // memo, image, document (autosaved / uploaded).  Allocations are

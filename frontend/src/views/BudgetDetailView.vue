@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // BudgetDetailView — full detail screen for a single budget.
-// (UI_SPEC §4.3)  Route shell: reads the `id` param and composes the
+// Route shell: reads the `id` param and composes the
 // budget feature sections.
 //
 // Sections:

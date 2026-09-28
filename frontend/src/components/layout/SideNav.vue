@@ -2,7 +2,7 @@
 //
 // SideNav — vertical navigation for ≥md breakpoints.  Shown alongside
 // the main content; collapses to icon-only on tablet (md..lg) and
-// expands to icon + label on desktop (≥lg).  (UI_SPEC §3.3)
+// expands to icon + label on desktop (≥lg).
 //
 
 // 3rd party imports

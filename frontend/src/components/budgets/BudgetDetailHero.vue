@@ -1,7 +1,6 @@
 <script setup lang="ts">
 //
 // BudgetDetailHero — the top "hero" block on BudgetDetailView.
-// (UI_SPEC §4.3)
 //
 // [ Budget name        ] [ type chip ]
 // [ account · date/cycle meta        ]

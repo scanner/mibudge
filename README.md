@@ -324,13 +324,13 @@ The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backen
 | Doc                                                          | Contents                                                                   |
 |--------------------------------------------------------------|----------------------------------------------------------------------------|
 | [`docs/api.md`](docs/api.md)                                 | REST API reference (generated from OpenAPI schema)                         |
+| [`docs/spa/`](docs/spa/README.md)                            | The Vue SPA: architecture, state, screens, styling and testing             |
 | [`docs/authentication.md`](docs/authentication.md)          | Authentication: JWT two-token pattern, API keys, machine-credential policy |
 | [`docs/invitations.md`](docs/invitations.md)                 | Co-owner and admin invitations: mechanism, rate limiting, protections      |
 | [`docs/email-change.md`](docs/email-change.md)               | Self-service email change: flow, revocation window, security policy       |
 | [`docs/funding.md`](docs/funding.md)                         | Budget funding engine: rules, invariants, test scenarios                   |
 | [`docs/importers.md`](docs/importers.md)                     | Bank statement import tools                                                |
 | [`docs/management-commands.md`](docs/management-commands.md) | Django management commands                                                 |
-| [`docs/UI_SPEC.md`](docs/UI_SPEC.md)                         | Frontend screen inventory and component breakdown                          |
 | [`app/notifications/README.md`](app/notifications/README.md) | Notification service: kind registration, digest mechanics, adding channels |
 
 ## License

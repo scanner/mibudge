@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BudgetForm — create and edit form for budgets.  (UI_SPEC §4.3, §4.4)
+// BudgetForm — create and edit form for budgets.
 // Feature component (budgets); state and saving live in
 // `useBudgetForm`.
 //

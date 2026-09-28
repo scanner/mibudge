@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // TransactionsView — transaction list with filter chips, date-grouped
-// rows, infinite scroll, and search.  (UI_SPEC §4.5)  Route shell over
+// rows, infinite scroll, and search.  Route shell over
 // `useTransactionList`; Cmd/Ctrl-F opens the search.
 //
 

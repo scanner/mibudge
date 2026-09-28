@@ -1,7 +1,8 @@
 <script setup lang="ts">
 //
-// StatusChip — small pill for budget/transaction status.  Colour pairs
-// mirror the semantic mapping in UI_SPEC.md §2.2.
+// StatusChip -- small pill for a budget's status.  Presentational
+// (base).  Each status uses its status token pair (`success-bg` /
+// `success-fg`, ...); paused uses `surface-muted` / `fg-muted`.
 //
 
 // 3rd party imports

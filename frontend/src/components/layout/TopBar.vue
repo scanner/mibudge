@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// TopBar — three-zone persistent header (UI_SPEC §3.2).  Presentational:
+// TopBar — three-zone persistent header.  Presentational:
 // the shell passes the active account and its Unallocated budget in,
 // and handles the `back` and `switch-account` events.
 //

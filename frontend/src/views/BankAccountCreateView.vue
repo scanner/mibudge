@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // BankAccountCreateView — create a new bank account.
-// (UI_SPEC §4.9)  Route shell over `useBankAccountCreate`.
+// Route shell over `useBankAccountCreate`.
 //
 // Fields: account type grid, name, bank picker, account number,
 // currency, posted balance, available balance.

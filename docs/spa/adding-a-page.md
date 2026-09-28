@@ -99,6 +99,9 @@ export function useCategoryList() {
 
 ### Presentational component
 
+It is built from the `Base*` primitives and token utilities; see
+[styling.md](styling.md) for which to use.
+
 ```vue
 <!-- src/components/categories/CategoryGroup.vue -->
 <script setup lang="ts">
@@ -109,6 +112,9 @@ export function useCategoryList() {
 
 // app imports
 //
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
 import type { TransactionCategory } from "@/models/transactionCategory";
 
 ////////////////////////////////////////////////////////////////////////
@@ -119,19 +125,19 @@ const emit = defineEmits<{ (e: "select", id: string): void }>();
 
 <template>
   <section>
-    <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-      {{ group }}
-    </h2>
-    <ul class="divide-y divide-neutral-100 rounded-card border border-neutral-200 bg-white">
-      <li
+    <BaseSectionHeader :title="group" class="mb-2" />
+    <BaseCard>
+      <BaseListRow
         v-for="c in categories"
         :key="c.id"
-        class="cursor-pointer px-4 py-3 text-[14px] hover:bg-neutral-50"
+        as="button"
+        chevron
+        class="text-body text-fg"
         @click="emit('select', c.id)"
       >
-        {{ c.name }}
-      </li>
-    </ul>
+        <span class="flex-1">{{ c.name }}</span>
+      </BaseListRow>
+    </BaseCard>
   </section>
 </template>
 ```
@@ -148,6 +154,8 @@ const emit = defineEmits<{ (e: "select", id: string): void }>();
 
 // app imports
 //
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 import CategoryGroup from "@/components/categories/CategoryGroup.vue";
 import { useCategoryList } from "@/features/categories/useCategoryList";
 import AppShell from "@/features/shell/AppShell.vue";
@@ -159,11 +167,9 @@ const { groups, loading, error } = useCategoryList();
 
 <template>
   <AppShell>
-    <div class="space-y-5 py-2">
-      <div v-if="loading" class="h-16 animate-pulse rounded-card bg-neutral-100" />
-      <div v-else-if="error" class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600" role="alert">
-        {{ error }}
-      </div>
+    <div class="space-y-section py-2">
+      <BaseSkeleton v-if="loading" class="h-16" />
+      <BaseBanner v-else-if="error" tone="danger">{{ error }}</BaseBanner>
       <CategoryGroup
         v-for="g in groups"
         v-else

@@ -20,6 +20,12 @@ integration.
 | [State](state.md)                     | Each Pinia store, caching and invalidation, the sign-out reset, store vs composable vs local state |
 | [Adding a page](adding-a-page.md)     | Recipe and worked example for a new route; rewriting an existing view incrementally        |
 | [Components](components.md)           | Presentational vs feature components, props / emits / `defineModel`, naming                |
+| [Styling](styling.md)                 | The design system: tokens, type roles, the `Base*` primitives, the style lint, and how to change a style |
+| [Screens](screens.md)                 | What each screen shows and does, the app shell and navigation, and the conventions every screen shares |
 | [Testing](testing.md)                 | Running and writing SPA tests: Vitest, the MSW mock REST API, fixtures, coverage, CI       |
 
 Later SPA documents add their own row to this table.
+
+These documents move with `frontend/` if the SPA becomes its own
+repository, so they link only to each other, into `frontend/`, and to
+the REST API contract (`docs/openapi.yaml` and `docs/api.md`).

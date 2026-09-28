@@ -1,7 +1,6 @@
 <script setup lang="ts">
 //
 // SchedulePicker — RRULE producer/consumer for budget forms.
-// (UI_SPEC §5.1)
 //
 // Accepts a RRULE string via v-model and emits an updated string when
 // any selector changes.  Three frequency modes: Weekly, Monthly,

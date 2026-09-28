@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // UserProfileView — edit the current user's name and timezone, and
-// request an email change.  (UI_SPEC §4.7)  Route shell over
+// request an email change.  Route shell over
 // `useProfileForm`.
 //
 

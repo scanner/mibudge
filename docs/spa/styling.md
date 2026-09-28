@@ -52,6 +52,8 @@ palette (private)         semantic token (public)    Tailwind utility    primiti
 | `src/styles/tokens.css`  | Palette ramps (`--palette-*`) and semantic tokens (`--color-*`, sizes, radii, shadows, motion) under `:root`. Colours are RGB channels (`55 138 221`) so Tailwind's `/<alpha>` modifier works. It is the only file that contains colour literals. |
 | `src/styles/forms.css`   | Base styles for inputs, selects and textareas, written with semantic tokens (see below).                                                                                                                              |
 | `src/styles/motion.css`  | The shared `fade` and `slide-up` `<Transition>` classes.                                                                                                                                                               |
+| `src/styles/interaction.css` | The global `:focus-visible` outline and the `.tap-target` hit area (section 3.15). |
+| `scripts/lint-styles.mjs` | `pnpm lint:styles`: rejects colour literals, arbitrary values, palette classes, static styles, stray `<style>` blocks and `!important`; runs in CI and pre-commit. |
 | `tailwind.config.ts`     | Defines Tailwind's colours, font sizes, radii, shadows, z-index and motion as the semantic names below, each pointing at a `var(--...)`. Tailwind's numeric spacing scale is kept, with named aliases added.            |
 | `src/components/base/`   | The `Base*` primitives, plus `MoneyAmount`, `StatusChip`, `ProgressBar` and `EmptyState`.                                                                                                                              |
 
@@ -140,6 +142,13 @@ fainter divider inside an info-tinted band.
 | `warning` | amber-50 | amber-600 (6.2:1)      | amber-400 / 40% | amber-600                                |
 | `danger`  | coral-50 | coral-600 (6.1:1)      | coral-400 / 40% | coral-600 (7.1:1); `danger-solid-hover` coral-800, also the hover of `danger-fg` text buttons |
 | `info`    | ocean-50 | ocean-600 (5.9:1)      | ocean-400 / 40% | ocean-600                                |
+
+The classes, written out: `bg-success-bg`, `text-success-fg`,
+`border-success-border`, `bg-success-solid`; `bg-warning-bg`,
+`text-warning-fg`, `border-warning-border`, `bg-warning-solid`;
+`bg-danger-bg`, `text-danger-fg`, `border-danger-border`,
+`bg-danger-solid`, `hover:bg-danger-solid-hover`; `bg-info-bg`,
+`text-info-fg`, `border-info-border`, `bg-info-solid`.
 
 ### 3.6 Colour: domain
 
@@ -331,7 +340,7 @@ planned accessibility work.
 | `w-sheet`                       | 480px       | Sheet and dialog width from `md`.                       |
 | `max-h-sheet`                   | 80vh        | The tallest a sheet or dialog grows before it scrolls.  |
 | `border-l-rule`                 | 3px         | The coloured left rule on a transaction row.            |
-| `h-progress-sm` / `-md` / `-lg` | 3 / 5 / 8px | Progress bars: the fill-up band, budget card, detail hero. |
+| `h-progress-sm` / `h-progress-md` / `h-progress-lg` | 3 / 5 / 8px | Progress bars: the fill-up band, budget card, detail hero (`ProgressBar size`). |
 
 Icons are Tabler (`@tabler/icons-vue`), sized with `size-icon-*`.
 
@@ -378,21 +387,239 @@ Icons are Tabler (`@tabler/icons-vue`), sized with `size-icon-*`.
 
 ## 5. Purpose -> token / primitive lookup
 
+Find what you are styling in the left column; use what the right column
+names. When nothing fits, add a token (section 9) or a primitive variant
+(section 10) rather than writing a one-off class.
+
+| Purpose                                                        | Use                                                                                         |
+|----------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| Primary content: names, values, body copy                      | `text-fg`                                                                                   |
+| Secondary text: metadata, running balances, hints              | `text-fg-muted`                                                                             |
+| Tertiary text: placeholders, the "--" for a missing value      | `text-fg-subtle`                                                                            |
+| Text of a disabled control                                     | `text-fg-disabled` (a disabled `BaseButton` does this itself)                               |
+| Text or an icon on a filled button                             | `text-fg-on-accent`                                                                         |
+| An inline link or a text button                                | `BaseButton variant="link"` (`text-fg-link`)                                                |
+| A decorative icon (row chevron, swipe hint)                    | `text-icon-muted`                                                                           |
+| Accent-coloured text or icon (active tab, CTA label)           | `text-accent-fg`                                                                            |
+| The app background                                             | `bg-canvas`                                                                                 |
+| A card                                                         | `BaseCard` (`bg-surface`, `border-border`, `rounded-card`)                                  |
+| A padded block inside a card                                   | `BaseCardSection`                                                                           |
+| A row in a list inside a card                                  | `BaseListRow` (`as="button"` + `chevron` when it opens something)                           |
+| A read-only field or an inset row                              | `bg-surface-sunken`                                                                         |
+| A skeleton block, an unselected pill, an icon-button hover     | `bg-surface-muted`                                                                          |
+| Hover on a `surface-muted` element, empty meter segments       | `bg-surface-strong`                                                                         |
+| The overlay behind a sheet                                     | `BaseSheet` (`bg-scrim/40`)                                                                 |
+| A divider between rows                                         | `BaseListRow` / `BaseCardSection` draw it (`border-border-subtle`)                          |
+| A card outline or a divider between sections                   | `border-border`                                                                             |
+| A hovered selectable card or chip; a neutral badge outline     | `border-border-emphasis`                                                                    |
+| An input, select or textarea                                   | `BaseInput`, `BaseSelect`, `BaseTextarea` (`border-border-strong`)                          |
+| A label, control, hint and error together                      | `BaseFormField`                                                                             |
+| A form validation message                                      | `BaseFormField` `error` prop (`text-danger-fg`, `role="alert"`)                             |
+| An on/off switch                                               | `BaseToggle` inside a `<label>`                                                             |
+| The primary action                                             | `BaseButton` (default `variant="primary"`, `bg-accent`)                                     |
+| A secondary action, Cancel                                     | `BaseButton variant="secondary"`                                                            |
+| A destructive confirm button                                   | `BaseButton variant="danger"`                                                               |
+| A destructive trigger that opens a confirmation                | `BaseButton variant="danger-secondary"`                                                     |
+| A tinted text action ("Edit")                                  | `BaseButton variant="ghost"`                                                                |
+| A destructive text action ("Revoke", "Cancel invitation")      | `BaseButton variant="link-danger" size="sm"`                                                |
+| A button with only an icon                                     | `BaseIconButton` with a `label` (`tone="danger"` to delete, `pressed` to toggle)            |
+| A selected segment or tab                                      | `bg-accent` + `text-fg-on-accent`, or `border-accent-border` + `text-accent-fg`             |
+| A tinted call-to-action card, a selected row                   | `bg-accent-subtle`                                                                          |
+| An error, success, info or warning message                     | `BaseBanner tone="..."`                                                                     |
+| A status tag on a row ("PENDING", "SPLIT")                     | `BaseBadge tone="warning"` / `"neutral"`                                                    |
+| A budget's status                                              | `StatusChip`                                                                                |
+| A budget's progress                                            | `ProgressBar` with `progressTone(status)` and `size`                                        |
+| A monetary value                                               | `MoneyAmount` (`size`, `coloured` for `money-positive` / `money-negative`)                  |
+| Any other figure read digit by digit                           | an amount role + `font-mono`                                                                |
+| A date or time                                                 | a `DateForm` via the formatters in `domain/dates.ts`                                        |
+| A page's title                                                 | `BasePageHeader`                                                                            |
+| The heading above a group of cards                             | `BaseSectionHeader`                                                                         |
+| The header strip across a card                                 | `BaseSectionHeader card`                                                                    |
+| A sheet's or dialog's title                                    | `BaseSheet` `title` (`text-title`)                                                          |
+| A card or row name                                             | `text-item-title`                                                                           |
+| Copy inside a card, a button label                             | `text-body-sm` / `text-label`                                                               |
+| Standalone prose (empty states, auth pages)                    | `text-body`                                                                                 |
+| A secondary line under a title                                 | `text-meta`                                                                                 |
+| A loading placeholder                                          | `BaseSkeleton`                                                                              |
+| An empty list                                                  | `EmptyState`                                                                                |
+| A modal, bottom sheet or dialog                                | `BaseSheet` (`layer="dialog"` over another sheet)                                           |
+| A confirmation before a destructive action                     | `ConfirmSheet`                                                                              |
+| Page padding                                                   | `px-page-x`                                                                                 |
+| Card and row padding                                           | `px-card-x` / `py-card-y` (the primitives use them)                                         |
+| Gap between cards; between page sections                       | `space-y-stack-md`; `section`                                                               |
+| An icon                                                        | a Tabler icon with `size-icon-xs` / `-sm` / `-md` / `-lg`                                   |
+| A small control that needs a 44px hit area                     | `.tap-target` (`BaseButton` and `BaseIconButton` have it)                                   |
+| Content revealed on hover                                      | `can-hover:opacity-0 can-hover:group-hover:opacity-100 can-hover:focus-visible:opacity-100` |
+| A sticky in-content header / the nav bars / a sheet / a dialog | `z-sticky` / `z-nav` / `z-sheet` / `z-dialog`                                               |
+| A standalone card that floats (auth pages)                     | `shadow-raised`                                                                             |
+| An enter / leave transition                                    | `ease-enter` / `ease-exit` with `duration-fast` / `duration-base`; sheets use `motion.css`  |
+
 ## 6. Primitive catalogue
+
+Every primitive is in `src/components/base/`, has a header comment and a
+test in `tests/components/base/`. A caller passes props for everything
+the primitive styles and adds only classes for properties it does not
+set (section 1).
+
+**`BaseButton`** -- the one button.
+- Props: `variant` (`primary` | `secondary` | `danger` | `danger-secondary` |
+  `ghost` | `link` | `link-danger`, default `primary`), `size` (`sm` | `md`),
+  `block`, `loading`, `disabled`, `as` (`a`, `"RouterLink"`), `type`.
+- `loading` disables it and sets `aria-busy`. A disabled filled button
+  turns grey; the others fade. It carries `.tap-target`.
+```vue
+<BaseButton variant="secondary" class="flex-1" @click="cancel">Cancel</BaseButton>
+<BaseButton type="submit" :loading="saving">Save</BaseButton>
+<BaseButton as="RouterLink" :to="{ name: 'overview' }" block>Go to overview</BaseButton>
+```
+
+**`BaseIconButton`** -- a round button whose only content is an icon.
+- Props: `label` (required; the `aria-label`), `size` (`sm` 28px | `md`
+  40px), `tone` (`default` | `danger`), `pressed` (a toggle; sets
+  `aria-pressed`).
+- Its hit area is 44px; keep neighbours 44px apart centre to centre.
+```vue
+<BaseIconButton label="Search transactions" @click="toggleSearch">
+  <IconSearch class="size-icon-md" />
+</BaseIconButton>
+```
+
+**`BaseInput`, `BaseSelect`, `BaseTextarea`** -- form fields.
+- Every attribute and listener lands on the native element; `v-model`
+  binds the value; `focus()` is exposed.
+- Props: `invalid` (danger border, `aria-invalid`), `mono` (input only),
+  `size` (`sm` | `md`, input and select), `inline` (leave the width to the
+  caller).
+- Inputs use `text-input`: 16px on phones, so iOS does not zoom.
+
+**`BaseFormField`** -- label, control, hint and error, wired together.
+- Props: `label`, `id` (generated if omitted), `hint`, `error`, `optional`.
+- The default slot receives `{ id, describedBy, invalid }`.
+```vue
+<BaseFormField label="New password" :error="fieldError('new_password')">
+  <template #default="{ id, describedBy, invalid }">
+    <BaseInput :id="id" v-model="password" type="password"
+      :aria-describedby="describedBy" :invalid="invalid" />
+  </template>
+</BaseFormField>
+```
+
+**`BaseToggle`** -- an on/off switch. `v-model` binds a boolean. Place it
+inside a `<label>` that names it; the hidden checkbox has `role="switch"`
+and the track shows the focus outline.
+
+**`BaseCard`** -- props `padded`, `as`. **`BaseCardSection`** -- a padded
+block with a divider below. **`BaseListRow`** -- props `as`, `chevron`,
+`align` (`center` | `start`); interactive when `as` is a button or link.
+
+**`BaseSectionHeader`** -- props `title`, `as` (default `h2`), `card`
+(header strip); slot `actions`. **`BasePageHeader`** -- prop `title` (the
+page's `h1`); slot `actions`.
+
+**`BaseBanner`** -- prop `tone` (`danger` | `success` | `info` | `warning`).
+A danger banner has `role="alert"`, the others `role="status"`.
+
+**`BaseBadge`** -- props `tone` (`warning` | `neutral`), `variant`
+(`outline` | `soft`).
+
+**`BaseSkeleton`** -- prop `shape` (`card` | `line`); size it with classes.
+Hidden from screen readers.
+
+**`BaseSheet`** -- every sheet and dialog.
+- Props: `open`, `title` or `label`, `layer` (`sheet` | `dialog`), `align`
+  (`center` | `top`), `fullscreen`. Emits `close`.
+- Slots: default (the body), `header-actions`, `footer`.
+- Teleports to `body`, locks scroll, closes on Escape and the scrim,
+  traps focus while topmost, and returns focus on close.
+```vue
+<BaseSheet :open="open" title="Move money" @close="emit('close')">
+  ...form...
+</BaseSheet>
+```
+
+**`MoneyAmount`** -- props `amount` (`Money`), `size` (`sm` | `md` | `lg` |
+`hero`), `coloured`, `showSign`; Plex Mono, with the raw value as its
+`aria-label`. **`ProgressBar`** -- props `value` (0-100), `tone`
+(`ProgressTone`), `size` (`sm` | `md` | `lg`). **`StatusChip`** -- props
+`status`, `label`. **`EmptyState`** -- props `title`, `message`,
+`actionLabel`; the icon goes in the slot; emits `action`.
 
 ## 7. Layout conventions
 
-- `AppShell` holds the app chrome.
-- Navigation is the BottomNav below `md` and the SideNav from `md`; the
-  SideNav shows labels from `lg`.
-- Form pages are `max-w-lg`.
-- Sheets are full width on phones, and a centred `w-sheet` card from
-  `md`.
+- `AppShell` holds the app chrome: the TopBar, the BottomNav below
+  `md`, and the SideNav from `md` (icons, with labels from `lg`). Pages
+  render in its main area with `px-page-x`.
+- The breakpoints in use are `md` (768px) and `lg` (1024px).
+- Form pages are `max-w-lg`, centred.
+- Sheets are full width at the bottom on phones and a centred `w-sheet`
+  card from `md`; a full-screen sheet slides up over the canvas.
+- A strip that runs edge to edge inside the page padding (a search bar,
+  tabs, a sticky date header) uses `-mx-page-x px-page-x`.
 
 ## 8. How to change an existing style
 
+Each recipe names the one place to edit and what else changes with it.
+
+- **Change the accent colour.** Edit `--color-accent` (and
+  `--color-accent-hover`, `--color-accent-fg`) in `tokens.css`, pointing
+  at another palette step, or add a step to the palette first. Every
+  primary button, selected segment, active tab and link follows. Check
+  white text on `accent` stays at least 4.5:1.
+- **Make section labels bigger.** Edit `--text-overline` (and
+  `--leading-overline`) in `tokens.css`. Every `BaseSectionHeader` follows.
+- **Tighten card padding.** Edit `--space-card-x` / `--space-card-y`.
+  Every `BaseCard padded`, `BaseCardSection`, `BaseListRow` and banner
+  follows.
+- **Restyle every primary button.** Edit the `primary` entry in
+  `BaseButton.vue`'s `VARIANTS`, or the shape in its `classes`. Every
+  primary button follows; secondary and danger keep their own entries.
+- **Make one specific label bigger.** Use a different existing role for
+  that element (`text-item-title` instead of `text-label`), or add a
+  variant to the primitive that renders it. Either way the change is
+  named, so say which, and check the role's other users: a local-looking
+  change may be global.
+- **Change the muted text shade.** Edit `--color-fg-muted` in
+  `tokens.css`. All secondary text follows; check it stays at least 4.5:1
+  on `surface`, `canvas` and `surface-muted`.
+- **Change the sheet animation.** Edit `styles/motion.css` (the `fade` and
+  `slide-up` classes) or the `--duration-*` / `--ease-*` tokens it reads.
+  Every sheet follows.
+- **Change how dates or times read.** Edit `DISPLAY_FORMAT` in
+  `domain/displayFormat.ts`. Every rendered date, time and amount follows.
+
 ## 9. How to add a token
+
+1. Add the value to `tokens.css`: a palette step if the colour is new,
+   then the semantic token referencing it
+   (`--color-row-flagged: var(--palette-amber-400);`).
+2. Map it in `tailwind.config.ts` (`row: { flagged: token("row-flagged") }`).
+3. Add a row to the matching table in section 3 (value, class, use for,
+   not for) and to the lookup table in section 5.
+4. Run `pnpm lint:styles`, `pnpm type-check` and `pnpm test`, and check
+   contrast for any colour that carries text or meaning.
 
 ## 10. How to add a primitive or variant
 
+- A primitive lives in `src/components/base/Base<Name>.vue`, named with
+  the `Base` prefix. It is presentational: typed props, typed emits, no
+  API or store imports, and a header comment saying what it is and what
+  each prop does.
+- Style comes only from tokens; every property the primitive sets is
+  controlled by a prop, so callers never override it.
+- A variant is a new value of an existing prop (`variant`, `size`,
+  `tone`), with its classes written out literally so Tailwind generates
+  them.
+- Add a test in `tests/components/base/`: a parametrized case per
+  variant asserting its token classes, and one that attributes and
+  listeners reach the element.
+- Add it to the catalogue (section 6) and the lookup table (section 5).
+
 ## 11. Keeping this document current
+
+- A new token or primitive lands in section 3 or 6 and in the lookup
+  table in the same change that adds it.
+- `frontend/CLAUDE.md` holds the short rules Claude Code follows in the
+  SPA; when a rule here changes (the caller-class rule, the lint rules,
+  a new primitive family), update it in the same change.
+- `docs/spa/screens.md` describes what each screen shows and does; this
+  document describes how everything looks.

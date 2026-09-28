@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BottomNav — mobile tab bar (UI_SPEC §3.3).  Renders only at <md
+// BottomNav — mobile tab bar.  Renders only at <md
 // breakpoints; AppShell swaps to SideNav above that.
 //
 

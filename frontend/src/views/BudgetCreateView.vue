@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BudgetCreateView — type selector + BudgetForm.  (UI_SPEC §4.4)
+// BudgetCreateView — type selector + BudgetForm.
 // Route shell; the form saves through the budgets store.
 //
 // On success navigates to the new budget's detail view.

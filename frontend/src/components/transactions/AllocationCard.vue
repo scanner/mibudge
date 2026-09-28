@@ -2,7 +2,8 @@
 //
 // AllocationCard — renders a single allocation within a transaction
 // detail view.  Shows budget name, editable amount, and category.
-// Swipe-to-delete on mobile, hover × on desktop.  (UI_SPEC §4.6)
+// Its delete button is always visible on touch screens, and appears on
+// hover or keyboard focus with a pointer.
 //
 
 // 3rd party imports

@@ -145,6 +145,7 @@ Periodic tasks that should be defined in code (not created ad-hoc via the admin)
 - **Vue 3 + TypeScript (strict)**, Vite, Pinia, Vue Router
 - **Layers** in `frontend/src/`: `domain/` → `api/` + `models/` → `stores/` + `composables/` → `features/` → `components/` + `views/`. Each layer imports only from the layers below it, and `tests/architecture.test.ts` enforces this. Views never import `@/api`, components are presentational (props in, events out), and `api/http.ts` holds the only `fetch`. Read [docs/spa/architecture.md](docs/spa/architecture.md) before changing the SPA's structure.
 - API types are generated from `docs/openapi.yaml` (`pnpm gen:api-types`); CI fails when `frontend/src/api/schema.d.ts` is stale.
+- Styling rules: see `frontend/CLAUDE.md` and `docs/spa/styling.md`.
 - In development, Vite runs at `:5173` and `django-vite` proxies asset requests. In production, Vite outputs `frontend/dist/` with a `manifest.json`; `collectstatic` picks it up and `django-vite` injects hashed filenames into Django templates.
 
 ### Tests (`app/tests/`)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // BudgetsView — budget list with filter tabs and section grouping.
-// (UI_SPEC §4.2)  Route shell over `useBudgetList`.
+// Route shell over `useBudgetList`.
 //
 // Filter tabs: All | Recurring | Capped | Goals | Paused
 // "All" tab shows three sections: Recurring, Capped, then Goals.

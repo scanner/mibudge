@@ -2,7 +2,7 @@
 //
 // FillUpBand — attached to the bottom of a recurring BudgetCard or the
 // detail hero when with_fillup_goal=true.  Shows the associated fill-up
-// budget's progress.  (UI_SPEC §4.2)
+// budget's progress.
 //
 // Blue-tinted background, 3px progress bar.
 //
