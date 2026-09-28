@@ -66,6 +66,7 @@ pnpm dev          # Vite dev server on :5173 (HMR)
 pnpm build        # Production build → frontend/dist/
 pnpm type-check   # vue-tsc (src/ and tests/)
 pnpm fmt          # Format with oxfmt
+pnpm lint:styles  # Style lint: design tokens only (see docs/spa/styling.md)
 pnpm test         # Run the Vitest suite once
 pnpm test:watch   # Re-run affected tests on file changes
 pnpm test:coverage  # Run with v8 coverage and per-directory thresholds

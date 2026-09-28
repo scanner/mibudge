@@ -37,6 +37,13 @@ repos:
         pass_filenames: false
         files: ^frontend/(src|tests)/
 
+      - id: lint-styles
+        name: lint:styles (frontend)
+        entry: sh -c 'cd frontend && pnpm lint:styles'
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/
+
       - id: vue-tsc
         name: vue-tsc (frontend)
         entry: sh -c 'cd frontend && pnpm type-check'
