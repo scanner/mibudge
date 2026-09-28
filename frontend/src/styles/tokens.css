@@ -52,7 +52,7 @@
   /* Text and icons */
   --color-fg: var(--palette-neutral-900);
   --color-fg-muted: var(--palette-neutral-600);
-  --color-fg-subtle: var(--palette-neutral-400);
+  --color-fg-subtle: var(--palette-neutral-550);
   --color-fg-disabled: var(--palette-neutral-400);
   --color-fg-on-accent: var(--palette-white);
   --color-fg-link: var(--palette-ocean-600);
@@ -70,12 +70,12 @@
   --color-border: var(--palette-neutral-200);
   --color-border-subtle: var(--palette-neutral-100);
   --color-border-emphasis: var(--palette-neutral-300);
-  --color-border-strong: var(--palette-neutral-300);
+  --color-border-strong: var(--palette-neutral-500);
   --color-border-focus: var(--palette-ocean-400);
 
   /* Accent */
-  --color-accent: var(--palette-ocean-400);
-  --color-accent-hover: var(--palette-ocean-600);
+  --color-accent: var(--palette-ocean-600);
+  --color-accent-hover: var(--palette-ocean-800);
   --color-accent-subtle: var(--palette-ocean-50);
   --color-accent-fg: var(--palette-ocean-600);
   --color-accent-border: var(--palette-ocean-400);
@@ -96,8 +96,8 @@
   --color-danger-bg: var(--palette-coral-50);
   --color-danger-fg: var(--palette-coral-600);
   --color-danger-border: var(--palette-coral-400);
-  --color-danger-solid: var(--palette-coral-400);
-  --color-danger-solid-hover: var(--palette-coral-600);
+  --color-danger-solid: var(--palette-coral-600);
+  --color-danger-solid-hover: var(--palette-coral-800);
 
   --color-info-bg: var(--palette-ocean-50);
   --color-info-fg: var(--palette-ocean-600);
@@ -108,11 +108,11 @@
   --color-money-positive: var(--palette-mint-600);
   --color-money-negative: var(--palette-coral-600);
 
-  --color-progress-funded: var(--palette-mint-400);
+  --color-progress-funded: var(--palette-mint-500);
   --color-progress-active: var(--palette-ocean-400);
-  --color-progress-behind: var(--palette-amber-400);
+  --color-progress-behind: var(--palette-amber-500);
   --color-progress-over: var(--palette-coral-400);
-  --color-progress-paused: var(--palette-neutral-400);
+  --color-progress-paused: var(--palette-neutral-500);
   --color-progress-track: var(--palette-neutral-100);
 
   --color-row-pending: var(--palette-amber-400);
@@ -180,6 +180,10 @@
   --size-progress-md: 5px;
   --size-progress-lg: 8px;
   --width-rule: 3px;
+
+  /* Focus: the outline every focused control draws for keyboard users */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
 
   /* Radius */
   --radius-xs: 4px;

@@ -59,7 +59,7 @@ function openTransaction(id: string) {
   <section class="mt-2">
     <div class="mb-2 flex items-center justify-between">
       <BaseSectionHeader title="Transactions" />
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-4">
         <BaseIconButton
           :label="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
           size="sm"

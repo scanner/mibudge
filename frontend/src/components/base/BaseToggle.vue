@@ -6,7 +6,8 @@
 // surrounding `<label>` names it and a click anywhere on that label
 // flips it.  `v-model` binds the boolean; other attributes and
 // listeners land on the checkbox.  The track is the accent when on and
-// `border-strong` when off.
+// `border-strong` when off, and draws the focus outline while the
+// checkbox has keyboard focus.
 //
 
 ////////////////////////////////////////////////////////////////////////
@@ -28,7 +29,7 @@ const model = defineModel<boolean>({ default: false });
     <span
       aria-hidden="true"
       :class="[
-        'h-6 w-10 rounded-pill transition-colors duration-base',
+        'h-6 w-10 rounded-pill transition-colors duration-base peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-border-focus',
         model ? 'bg-accent' : 'bg-border-strong',
       ]"
     />

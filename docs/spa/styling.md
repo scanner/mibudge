@@ -335,6 +335,27 @@ planned accessibility work.
 
 Icons are Tabler (`@tabler/icons-vue`), sized with `size-icon-*`.
 
+### 3.15 Focus and touch
+
+- **Keyboard focus.** Every element focused from the keyboard draws a
+  `--focus-ring-width` (2px) outline in `border-focus`, offset by
+  `--focus-ring-offset` (2px) so it reads against any fill, and following
+  the element's radius (`styles/interaction.css`). Form fields draw
+  their own ring instead; a `BaseToggle` draws it on its track.
+- **Touch targets.** `.tap-target` gives a control a hit area of at
+  least `tap-min` (44px) with an invisible pseudo-element, so a 28px
+  icon button keeps its look and is still easy to tap. `BaseButton` and
+  `BaseIconButton` carry it; neighbours sit 44px apart centre to centre
+  so their hit areas do not overlap.
+- **Hover reveals.** `can-hover:` applies only on a device with a
+  hovering pointer. A control revealed on hover (a row's remove button)
+  is written `can-hover:opacity-0 can-hover:group-hover:opacity-100
+  can-hover:focus-visible:opacity-100`, so it is always visible on a
+  touch screen and appears for keyboard focus.
+- **Sheets.** `BaseSheet` moves focus into the sheet when it opens and
+  keeps Tab inside it while it is the topmost modal
+  (`useFocusTrap`); Escape closes it and focus returns to where it was.
+
 ## 4. Design choices
 
 | Choice                                                       | Reason                                                                                                         |

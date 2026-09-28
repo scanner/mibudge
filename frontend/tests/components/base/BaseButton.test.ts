@@ -47,7 +47,7 @@ describe("BaseButton", () => {
   //        buttons have no padding
   //
   it.each<[{ variant?: ButtonVariant; size: "sm" | "md" }, string[]]>([
-    [{ size: "md" }, ["rounded-control", "px-4", "py-2.5", "text-label"]],
+    [{ size: "md" }, ["rounded-control", "px-4", "py-2.5", "tap-target"]],
     [{ size: "sm" }, ["rounded-control", "px-3", "py-2"]],
     [{ variant: "link", size: "sm" }, ["text-meta", "font-medium"]],
   ])("sizes %o", (props, expected) => {
@@ -129,7 +129,7 @@ describe("BaseIconButton", () => {
   };
   it.each<[IconProps, string[]]>([
     [{ size: "md" }, ["h-10", "w-10", "text-fg-muted"]],
-    [{ size: "sm" }, ["h-7", "w-7"]],
+    [{ size: "sm" }, ["h-7", "w-7", "tap-target"]],
     [{ tone: "danger" }, ["hover:bg-danger-bg", "hover:text-danger-fg"]],
     [{ pressed: true }, ["bg-accent", "text-fg-on-accent"]],
   ])("renders %o", (props, expected) => {

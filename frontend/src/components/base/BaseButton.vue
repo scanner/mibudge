@@ -8,7 +8,9 @@
 // `link` and `link-danger` (text only, no padding).  `size` is `sm` or
 // `md`.  `as` renders the same styles on an `a` or a `RouterLink`;
 // every other attribute and listener lands on the rendered element.
-// `loading` disables the button and marks it busy.
+// `loading` disables the button and marks it busy.  A disabled filled
+// button (`primary`, `danger`) turns grey; the others fade.  Its hit
+// area is at least `tap-min` (`.tap-target`).
 //
 
 // 3rd party imports
@@ -127,7 +129,7 @@ const classes = computed(() => {
         props.size === "sm" ? "px-3 py-2" : "px-4 py-2.5",
       ];
   return [
-    "inline-flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed",
+    "tap-target inline-flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed",
     shape,
     v.base,
     hover,

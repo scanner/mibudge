@@ -153,7 +153,7 @@ const allocInfo = computed<{
               label="Remove from budget"
               size="sm"
               tone="danger"
-              class="opacity-0 group-hover/row:opacity-100"
+              class="can-hover:opacity-0 can-hover:focus-visible:opacity-100 can-hover:group-hover/row:opacity-100"
               @click.stop="emit('remove', transaction.id)"
             >
               <IconX class="size-icon-xs" />

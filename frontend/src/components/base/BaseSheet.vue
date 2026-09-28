@@ -5,10 +5,11 @@
 //
 // Below `md` it is a bottom sheet; from `md` it is a centred card
 // `w-sheet` wide (`align="top"` places it near the top instead, for a
-// menu-like sheet).  It teleports to `body`, fades in over the scrim,
-// and calls `useModal` for the scroll lock, Escape and focus return;
-// clicking the scrim emits `close`.  `fullscreen` instead slides a
-// full-page sheet up over the canvas.
+// menu-like sheet).  It teleports to `body` and fades in over the
+// scrim.  It calls `useModal` for the scroll lock, Escape and focus
+// return, and `useFocusTrap` to move focus in and keep Tab inside while
+// it is the topmost modal; clicking the scrim emits `close`.
+// `fullscreen` instead slides a full-page sheet up over the canvas.
 //
 // `title` renders the heading the dialog is labelled by; without one,
 // pass `label` for the dialog's accessible name.  Slots: the default
@@ -19,10 +20,11 @@
 
 // 3rd party imports
 //
-import { computed, useId, useSlots } from "vue";
+import { computed, ref, useId, useSlots } from "vue";
 
 // app imports
 //
+import { useFocusTrap } from "@/composables/useFocusTrap";
 import { useModal } from "@/composables/useModal";
 
 ////////////////////////////////////////////////////////////////////////
@@ -46,10 +48,13 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
-useModal(
+const { isTopmost } = useModal(
   () => props.open,
   () => emit("close"),
 );
+
+const panel = ref<HTMLElement | null>(null);
+useFocusTrap(panel, () => props.open && isTopmost.value);
 
 const slots = useSlots();
 const titleId = useId();
@@ -65,7 +70,12 @@ const divided = computed(() => !!slots.footer);
     <Transition v-if="fullscreen" name="slide-up">
       <div
         v-if="open"
-        :class="['fixed inset-0 overflow-y-auto bg-canvas', layerClass]"
+        ref="panel"
+        tabindex="-1"
+        :class="[
+          'fixed inset-0 overflow-y-auto bg-canvas focus-visible:outline-none',
+          layerClass,
+        ]"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="title ? titleId : undefined"
@@ -97,7 +107,9 @@ const divided = computed(() => !!slots.footer);
       >
         <div class="absolute inset-0 bg-scrim/40" @click="emit('close')" />
         <div
-          class="relative flex max-h-sheet w-full flex-col rounded-t-card bg-surface shadow-overlay md:w-sheet md:rounded-card"
+          ref="panel"
+          tabindex="-1"
+          class="relative flex max-h-sheet w-full flex-col rounded-t-card bg-surface shadow-overlay focus-visible:outline-none md:w-sheet md:rounded-card"
           role="dialog"
           aria-modal="true"
           :aria-labelledby="title ? titleId : undefined"

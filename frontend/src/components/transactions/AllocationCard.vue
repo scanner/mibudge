@@ -72,7 +72,7 @@ const budgetId = computed(() => props.allocation.budgetId);
       label="Remove allocation"
       size="sm"
       tone="danger"
-      class="absolute right-2 top-2 opacity-0 group-hover:opacity-100"
+      class="absolute right-2 top-2 can-hover:opacity-0 can-hover:focus-visible:opacity-100 can-hover:group-hover:opacity-100"
       @click="emit('remove', allocation.id)"
     >
       <IconTrash class="size-icon-xs" />

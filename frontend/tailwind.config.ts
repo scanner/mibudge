@@ -11,6 +11,7 @@
 
 import type { Config } from "tailwindcss";
 import forms from "@tailwindcss/forms";
+import plugin from "tailwindcss/plugin";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -220,7 +221,14 @@ const config: Config = {
       },
     },
   },
-  plugins: [forms],
+  plugins: [
+    forms,
+    // `can-hover:` applies only on a device with a hovering pointer, so
+    // content revealed on hover stays visible on touch screens.
+    plugin(({ addVariant }) => {
+      addVariant("can-hover", "@media (hover: hover)");
+    }),
+  ],
 };
 
 export default config;
