@@ -46,6 +46,7 @@ pnpm dev              # Vite dev server on :5173 (assets only; Django serves /ap
 pnpm build            # type-check + production build → dist/
 pnpm type-check       # vue-tsc over src/ and tests/
 pnpm fmt              # format src/ and tests/ (pnpm fmt:check in CI)
+pnpm lint:styles      # style lint: tokens and primitives only (docs/spa/styling.md)
 pnpm test             # run the Vitest suite once (test:watch, test:coverage)
 pnpm gen:api-types    # regenerate src/api/schema.d.ts from docs/openapi.yaml
 ```

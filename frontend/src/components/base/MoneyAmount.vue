@@ -38,13 +38,13 @@ const props = withDefaults(defineProps<Props>(), {
 const sizeClass = computed(() => {
   switch (props.size) {
     case "sm":
-      return "text-xs";
+      return "text-amount-sm";
     case "md":
-      return "text-[15px] font-medium";
+      return "text-amount";
     case "lg":
-      return "text-[22px] font-medium";
+      return "text-title-amount";
     case "hero":
-      return "text-[36px] font-medium leading-tight";
+      return "text-display-amount";
   }
 });
 
@@ -56,8 +56,8 @@ const money = computed(() => props.amount);
 //
 const colourClass = computed(() => {
   if (!props.coloured) return "";
-  if (money.value.isNegative()) return "text-coral-600";
-  if (money.value.isPositive()) return "text-mint-600";
+  if (money.value.isNegative()) return "text-money-negative";
+  if (money.value.isPositive()) return "text-money-positive";
   return "";
 });
 

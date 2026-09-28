@@ -1,7 +1,8 @@
 <script setup lang="ts">
 //
-// StatusChip — small pill for budget/transaction status.  Colour pairs
-// mirror the semantic mapping in UI_SPEC.md §2.2.
+// StatusChip -- small pill for a budget's status.  Presentational
+// (base).  Each status uses its status token pair (`success-bg` /
+// `success-fg`, ...); paused uses `surface-muted` / `fg-muted`.
 //
 
 // 3rd party imports
@@ -28,11 +29,11 @@ const palette: Record<
   BudgetStatus,
   { bg: string; text: string; label: string }
 > = {
-  funded: { bg: "bg-mint-50", text: "text-mint-600", label: "Funded" },
-  progress: { bg: "bg-ocean-50", text: "text-ocean-600", label: "In progress" },
-  warn: { bg: "bg-amber-50", text: "text-amber-600", label: "Behind pace" },
-  over: { bg: "bg-coral-50", text: "text-coral-600", label: "Overspent" },
-  paused: { bg: "bg-neutral-100", text: "text-neutral-600", label: "Paused" },
+  funded: { bg: "bg-success-bg", text: "text-success-fg", label: "Funded" },
+  progress: { bg: "bg-info-bg", text: "text-info-fg", label: "In progress" },
+  warn: { bg: "bg-warning-bg", text: "text-warning-fg", label: "Behind pace" },
+  over: { bg: "bg-danger-bg", text: "text-danger-fg", label: "Overspent" },
+  paused: { bg: "bg-surface-muted", text: "text-fg-muted", label: "Paused" },
 };
 
 const entry = computed(() => palette[props.status]);
@@ -41,7 +42,7 @@ const text = computed(() => props.label ?? entry.value.label);
 
 <template>
   <span
-    class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+    class="inline-flex items-center rounded-pill px-2 py-0.5 text-badge font-medium"
     :class="[entry.bg, entry.text]"
   >
     {{ text }}

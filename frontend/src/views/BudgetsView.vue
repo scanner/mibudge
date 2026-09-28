@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // BudgetsView — budget list with filter tabs and section grouping.
-// (UI_SPEC §4.2)  Route shell over `useBudgetList`.
+// Route shell over `useBudgetList`.
 //
 // Filter tabs: All | Recurring | Capped | Goals | Paused
 // "All" tab shows three sections: Recurring, Capped, then Goals.
@@ -19,14 +19,19 @@ import { useRouter } from "vue-router";
 // app imports
 //
 import BudgetCard from "@/components/budgets/BudgetCard.vue";
-import EmptyState from "@/components/shared/EmptyState.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import EmptyState from "@/components/base/EmptyState.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { useFindShortcut } from "@/composables/useFindShortcut";
 import { useFuzzySearch } from "@/composables/useFuzzySearch";
 import { formatLocalDate } from "@/domain/dates";
 import { useBudgetList } from "@/features/budgets/useBudgetList";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -114,48 +119,40 @@ function openBudget(id: string) {
   <AppShell>
     <template #action>
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-          aria-label="Search budgets"
-          @click="toggleSearch"
-        >
-          <IconSearch v-if="!searchOpen" class="h-5 w-5" />
-          <IconX v-else class="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-          aria-label="Create budget"
+        <BaseIconButton label="Search budgets" @click="toggleSearch">
+          <IconSearch v-if="!searchOpen" class="size-icon-md" />
+          <IconX v-else class="size-icon-md" />
+        </BaseIconButton>
+        <BaseIconButton
+          label="Create budget"
           @click="router.push({ name: 'budget-create' })"
         >
-          <IconPlus class="h-5 w-5" />
-        </button>
+          <IconPlus class="size-icon-md" />
+        </BaseIconButton>
       </div>
     </template>
 
     <!-- Search bar -->
     <Transition
-      enter-active-class="transition-all duration-200 ease-out"
+      enter-active-class="transition-all duration-base ease-enter"
       enter-from-class="max-h-0 opacity-0"
       enter-to-class="max-h-12 opacity-100"
-      leave-active-class="transition-all duration-150 ease-in"
+      leave-active-class="transition-all duration-fast ease-exit"
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
-      <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
-        <input
+      <div v-if="searchOpen" class="-mx-page-x overflow-hidden px-page-x pb-3">
+        <BaseInput
           ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search budgets…"
-          class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
         />
       </div>
     </Transition>
 
     <!-- Filter tabs -->
-    <div class="-mx-4 mb-4 flex border-b border-neutral-200 px-4 pt-3">
+    <div class="-mx-page-x mb-4 flex border-b border-border px-page-x pt-3">
       <button
         v-for="tab in [
           'all',
@@ -166,11 +163,11 @@ function openBudget(id: string) {
         ] as Tab[]"
         :key="tab"
         type="button"
-        class="mr-4 pb-2 text-sm font-medium capitalize transition-colors"
+        class="mr-4 pb-2 text-label capitalize transition-colors"
         :class="
           activeTab === tab
-            ? 'border-b-2 border-ocean-400 text-ocean-600'
-            : 'text-neutral-500 hover:text-neutral-700'
+            ? 'border-b-2 border-accent-border text-accent-fg'
+            : 'text-fg-muted hover:text-fg'
         "
         @click="activeTab = tab"
       >
@@ -189,52 +186,37 @@ function openBudget(id: string) {
     </div>
 
     <!-- Funding summary banner -->
-    <div
+    <BaseBanner
       v-if="summary && !summary.total.isZero()"
-      class="mb-4 rounded-card border border-ocean-200 bg-ocean-50 px-4 py-2.5 text-[13px] text-ocean-700"
+      tone="info"
+      class="mb-4"
     >
       Funded automatically:
       <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
       <template v-if="summary.schedules[0]?.nextDate">
         on
-        {{
-          formatLocalDate(summary.schedules[0].nextDate, {
-            month: "short",
-            day: "numeric",
-          })
-        }}
+        {{ formatLocalDate(summary.schedules[0].nextDate, "month-day") }}
       </template>
       <template v-if="summary.schedules.length > 1">
         across {{ summary.schedules.length }} schedules
       </template>
-    </div>
+    </BaseBanner>
 
     <!-- Loading skeletons -->
     <div v-if="loading" class="space-y-3">
-      <div
-        v-for="i in 4"
-        :key="i"
-        class="h-24 animate-pulse rounded-card bg-neutral-100"
-      />
+      <BaseSkeleton v-for="i in 4" :key="i" class="h-24" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error"
-      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
-    >
+    <BaseBanner v-else-if="error" tone="danger">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <!-- "All" tab: two sections -->
     <template v-else-if="activeTab === 'all'">
       <!-- Recurring section -->
       <section v-if="recurringBudgets.length > 0">
-        <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-        >
-          Recurring
-        </h2>
+        <BaseSectionHeader title="Recurring" class="mb-2" />
         <div class="space-y-3">
           <BudgetCard
             v-for="b in recurringBudgets"
@@ -251,11 +233,7 @@ function openBudget(id: string) {
         v-if="cappedBudgets.length > 0"
         :class="recurringBudgets.length > 0 ? 'mt-6' : ''"
       >
-        <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-        >
-          Capped
-        </h2>
+        <BaseSectionHeader title="Capped" class="mb-2" />
         <div class="space-y-3">
           <BudgetCard
             v-for="b in cappedBudgets"
@@ -273,11 +251,7 @@ function openBudget(id: string) {
           recurringBudgets.length > 0 || cappedBudgets.length > 0 ? 'mt-6' : ''
         "
       >
-        <h2
-          class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-        >
-          Goals
-        </h2>
+        <BaseSectionHeader title="Goals" class="mb-2" />
         <div class="space-y-3">
           <BudgetCard
             v-for="b in goalBudgets"

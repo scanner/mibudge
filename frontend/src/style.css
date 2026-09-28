@@ -1,12 +1,9 @@
 /*
  * Global styles.
  *
- * Tailwind is the primary styling mechanism; this file loads its layers
- * and applies the base typography tokens from UI_SPEC.md §2.1.
- *
- * IBM Plex Sans provides a slashed zero by default.  IBM Plex Mono is
- * used for every monetary amount — applied via the `font-mono` utility
- * or the <MoneyAmount> component.
+ * Tailwind is the primary styling mechanism.  This file loads the fonts,
+ * the design tokens and Tailwind's layers, and sets the base typography.
+ * See `docs/spa/styling.md`.
  */
 
 @import "@fontsource/ibm-plex-sans/400.css";
@@ -14,41 +11,28 @@
 @import "@fontsource/ibm-plex-sans/600.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
+@import "./styles/tokens.css";
+@import "./styles/forms.css";
+@import "./styles/motion.css";
+@import "./styles/interaction.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Semantic text-color utilities.
- *
- * Use these instead of raw neutral shades so contrast can be tuned in
- * one place for all secondary / tertiary content.
- *
- *   text-body      -- default body copy (neutral-900, set on <html>)
- *   text-secondary -- supporting labels, metadata, type chips, running
- *                     balances -- anything a step below primary content
- *   text-hint      -- placeholder-like text, "—" dashes, icon-only button
- *                     tints; the lowest contrast level used on readable text
- */
-@layer utilities {
-  .text-secondary {
-    @apply text-neutral-600;
-  }
-  .text-hint {
-    @apply text-neutral-500;
-  }
-}
-
 @layer base {
+  /*
+   * The root font size is the browser default (16px, scaled by the
+   * user's text-size setting); every size in the app is rem.  Body text
+   * takes the `text-body` role.
+   */
   html,
   body {
-    @apply font-sans text-neutral-900 bg-white antialiased;
-    font-size: 14px;
-    line-height: 1.5;
+    @apply font-sans text-fg bg-surface antialiased;
   }
 
   body {
+    @apply text-body;
     margin: 0;
   }
 

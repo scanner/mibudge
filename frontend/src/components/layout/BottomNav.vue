@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BottomNav — mobile tab bar (UI_SPEC §3.3).  Renders only at <md
+// BottomNav — mobile tab bar.  Renders only at <md
 // breakpoints; AppShell swaps to SideNav above that.
 //
 
@@ -36,15 +36,15 @@ const tabs: TabDef[] = [
 
 <template>
   <nav
-    class="sticky bottom-0 z-20 flex h-16 items-stretch justify-around border-t border-neutral-200 bg-white md:hidden"
+    class="sticky bottom-0 z-nav flex h-bottomnav items-stretch justify-around border-t border-border bg-surface md:hidden"
     aria-label="Primary"
   >
     <router-link
       v-for="tab in tabs"
       :key="tab.label"
       :to="tab.to"
-      class="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-secondary"
-      active-class="text-ocean-400"
+      class="flex flex-1 flex-col items-center justify-center gap-1 text-meta text-fg-muted"
+      active-class="text-accent-fg"
     >
       <component :is="tab.icon" class="h-5 w-5" />
       {{ tab.label }}

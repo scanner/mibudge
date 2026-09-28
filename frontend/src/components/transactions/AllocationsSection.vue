@@ -14,8 +14,9 @@ import { computed } from "vue";
 // app imports
 //
 import AllocationCard from "./AllocationCard.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import type { Allocation, AllocationCoverage } from "@/models/allocation";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -37,9 +38,13 @@ const emit = defineEmits<{
 ////////////////////////////////////////////////////////////////////////
 //
 const STATUS = {
-  full: { label: "Fully allocated", bg: "bg-mint-50", text: "text-mint-600" },
-  remaining: { label: "Unassigned", bg: "bg-ocean-50", text: "text-ocean-600" },
-  over: { label: "Over by", bg: "bg-coral-50", text: "text-coral-600" },
+  full: {
+    label: "Fully allocated",
+    bg: "bg-success-bg",
+    text: "text-success-fg",
+  },
+  remaining: { label: "Unassigned", bg: "bg-info-bg", text: "text-info-fg" },
+  over: { label: "Over by", bg: "bg-danger-bg", text: "text-danger-fg" },
 } as const;
 
 const allocationStatus = computed(() =>
@@ -51,11 +56,7 @@ const allocationStatus = computed(() =>
 
 <template>
   <section class="mt-6">
-    <h2
-      class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-    >
-      Allocations
-    </h2>
+    <BaseSectionHeader title="Allocations" class="mb-2" />
 
     <div v-if="allocations.length > 0" class="space-y-2">
       <AllocationCard
@@ -73,7 +74,7 @@ const allocationStatus = computed(() =>
     <!-- Allocation status indicator (only when real allocations exist) -->
     <div
       v-if="allocations.length > 0 && allocationStatus"
-      class="mt-3 flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium"
+      class="mt-3 flex items-center justify-between rounded-control px-3 py-2 text-label"
       :class="[allocationStatus.bg, allocationStatus.text]"
     >
       <span>{{ allocationStatus.label }}</span>
@@ -89,13 +90,13 @@ const allocationStatus = computed(() =>
     <button
       v-if="!pending"
       type="button"
-      class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ocean-300 px-3 py-2 text-sm font-medium text-ocean-600 transition-colors hover:border-ocean-400 hover:bg-ocean-50"
+      class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-info-border px-3 py-2 text-label text-info-fg transition-colors hover:border-accent-border hover:bg-accent-subtle"
       @click="emit('assign')"
     >
-      <IconPlus class="h-4 w-4" />
+      <IconPlus class="size-icon-sm" />
       {{ allocations.length > 0 ? "Add split" : "Assign to budget" }}
     </button>
-    <p v-else class="mt-3 px-3 py-2 text-center text-sm text-neutral-500">
+    <p v-else class="mt-3 px-3 py-2 text-center text-body-sm text-fg-muted">
       Pending transactions can't be assigned to a budget. The allocation becomes
       editable once the bank posts this transaction.
     </p>

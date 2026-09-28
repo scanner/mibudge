@@ -10,6 +10,9 @@
 //
 import { formatInstantDate } from "@/domain/dates";
 import type { Invitation } from "@/models/invitation";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -23,11 +26,7 @@ defineProps<{
 const emit = defineEmits<{ (e: "cancel", inv: Invitation): void }>();
 
 function fmtDate(iso: string): string {
-  return formatInstantDate(iso, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatInstantDate(iso, "date");
 }
 </script>
 
@@ -41,40 +40,37 @@ function fmtDate(iso: string): string {
        disappears automatically. -->
   <section
     v-if="invitations.length > 0 || error"
-    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
+    class="overflow-hidden rounded-card border border-border bg-surface"
   >
-    <h2
-      class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-    >
-      Pending invitations
-    </h2>
-    <ul class="divide-y divide-neutral-100">
-      <li
+    <BaseSectionHeader title="Pending invitations" card />
+    <ul>
+      <BaseListRow
         v-for="inv in invitations"
+        as="li"
+        class="justify-between"
         :key="inv.id"
-        class="flex items-center justify-between px-4 py-3"
       >
         <div>
-          <p class="text-sm text-neutral-900">{{ inv.inviteeEmail }}</p>
-          <p class="mt-0.5 text-xs text-secondary">
+          <p class="text-body-sm text-fg">{{ inv.inviteeEmail }}</p>
+          <p class="mt-0.5 text-meta text-fg-muted">
             Expires {{ fmtDate(inv.expiresAt) }}
           </p>
         </div>
         <!-- Only show Cancel for invitations sent by the current user.
              The backend enforces the same rule (403 if not the sender),
              but hiding the button for others avoids a confusing error. -->
-        <button
+        <BaseButton
           v-if="canCancel(inv)"
-          type="button"
-          :disabled="cancellingId === inv.id"
-          class="text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+          variant="link-danger"
+          size="sm"
+          :loading="cancellingId === inv.id"
           @click="emit('cancel', inv)"
         >
           {{ cancellingId === inv.id ? "Cancelling…" : "Cancel" }}
-        </button>
-      </li>
+        </BaseButton>
+      </BaseListRow>
     </ul>
-    <p v-if="error" class="px-4 pb-3 text-xs text-coral-600" role="alert">
+    <p v-if="error" class="px-4 pb-3 text-meta text-danger-fg" role="alert">
       {{ error }}
     </p>
   </section>

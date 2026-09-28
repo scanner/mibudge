@@ -14,6 +14,12 @@ import {
   DIGEST_OPTIONS,
   useNotificationPrefs,
 } from "./useNotificationPrefs";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
+import BaseCardSection from "@/components/base/BaseCardSection.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -31,53 +37,47 @@ const {
 
 <template>
   <!-- ── Notifications ────────────────────────────────────────── -->
-  <h1 class="mb-5 mt-10 text-[22px] font-medium text-neutral-900">
-    Notifications
-  </h1>
+  <BasePageHeader title="Notifications" class="mt-10" />
 
   <section>
     <!-- Error banner -->
-    <div
-      v-if="error"
-      class="mb-3 rounded-subcard bg-coral-50 px-4 py-3 text-sm text-coral-600"
-      role="alert"
-    >
+    <BaseBanner v-if="error" tone="danger" class="mb-3">
       {{ error }}
-    </div>
+    </BaseBanner>
 
-    <div class="rounded-card border border-neutral-200 bg-white">
+    <BaseCard>
       <!-- Loading skeleton -->
-      <div v-if="loading" class="px-4 py-6 text-center text-sm text-secondary">
+      <div
+        v-if="loading"
+        class="px-4 py-6 text-center text-body-sm text-fg-muted"
+      >
         Loading…
       </div>
 
       <template v-else>
         <!-- Notification destination (email only for now) -->
-        <div class="border-b border-neutral-100 px-4 py-3">
-          <p class="text-xs text-secondary">Notifications are sent to</p>
-          <p class="mt-0.5 text-sm font-medium text-neutral-900">
+        <BaseCardSection>
+          <p class="text-meta text-fg-muted">Notifications are sent to</p>
+          <p class="mt-0.5 text-label text-fg">
             {{ session.user?.email }}
           </p>
-        </div>
+        </BaseCardSection>
 
         <!-- Email digest frequency (only email channel is active) -->
         <div
-          class="flex items-center justify-between border-b border-neutral-100 px-4 py-4"
+          class="flex items-center justify-between border-b border-border-subtle px-4 py-4"
         >
           <div>
-            <p class="text-sm font-medium text-neutral-900">Email digest</p>
-            <p class="mt-0.5 text-xs text-secondary">
+            <p class="text-label text-fg">Email digest</p>
+            <p class="mt-0.5 text-meta text-fg-muted">
               How often to receive email digests
             </p>
           </div>
-          <select
-            :value="emailDigestFrequency"
-            class="rounded-subcard border border-neutral-200 bg-white py-1.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-            @change="
-              setEmailDigest(
-                ($event.target as HTMLSelectElement).value as DigestFrequency,
-              )
-            "
+          <BaseSelect
+            :model-value="emailDigestFrequency"
+            @update:model-value="setEmailDigest($event as DigestFrequency)"
+            size="sm"
+            inline
           >
             <option
               v-for="opt in DIGEST_OPTIONS"
@@ -86,28 +86,24 @@ const {
             >
               {{ opt.label }}
             </option>
-          </select>
+          </BaseSelect>
         </div>
 
         <!-- Per-kind toggles -->
-        <div
+        <BaseListRow
           v-for="pref in prefs"
+          class="justify-between"
           :key="pref.kind"
-          class="flex items-center justify-between border-b border-neutral-100 px-4 py-3 last:border-b-0"
         >
-          <span class="text-sm text-neutral-700">{{ pref.displayName }}</span>
+          <span class="text-body-sm text-fg">{{ pref.displayName }}</span>
 
           <!-- Suppressible: 3-way delivery mode selector -->
-          <select
+          <BaseSelect
             v-if="pref.canSuppress"
-            :value="deliveryModeOf(pref)"
-            class="rounded-subcard border border-neutral-200 bg-white py-1.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-            @change="
-              setDeliveryMode(
-                pref,
-                ($event.target as HTMLSelectElement).value as DeliveryMode,
-              )
-            "
+            :model-value="deliveryModeOf(pref)"
+            @update:model-value="setDeliveryMode(pref, $event as DeliveryMode)"
+            size="sm"
+            inline
           >
             <option
               v-for="opt in DELIVERY_MODE_OPTIONS"
@@ -116,12 +112,12 @@ const {
             >
               {{ opt.label }}
             </option>
-          </select>
+          </BaseSelect>
 
           <!-- Non-suppressible: locked indicator -->
-          <span v-else class="text-xs text-secondary">Always on</span>
-        </div>
+          <span v-else class="text-meta text-fg-muted">Always on</span>
+        </BaseListRow>
       </template>
-    </div>
+    </BaseCard>
   </section>
 </template>

@@ -2,9 +2,8 @@
 //
 // MoveMoneySheet — the "Move money" form: transfer between this budget
 // (or its fill-up goal) and another budget of the account.  Feature
-// component (budgets); state and the transfer live in `useMoveMoney`,
-// and `useModal` provides the scroll lock, Escape-to-close and focus
-// return.  Emits `close` when dismissed or after a transfer.
+// component (budgets) in a BaseSheet; state and the transfer live in
+// `useMoveMoney`.  Emits `close` when dismissed or after a transfer.
 //
 
 // 3rd party imports
@@ -13,9 +12,12 @@ import { nextTick, ref, watch } from "vue";
 
 // app imports
 //
-import { useModal } from "@/composables/useModal";
+import BaseSheet from "@/components/base/BaseSheet.vue";
 import type { Budget } from "@/models/budget";
 import { useMoveMoney } from "./useMoveMoney";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -45,12 +47,7 @@ const {
   () => props.fillupBudget,
 );
 
-const moveAmountInput = ref<HTMLInputElement | null>(null);
-
-useModal(
-  () => props.open,
-  () => emit("close"),
-);
+const moveAmountInput = ref<{ focus(): void } | null>(null);
 
 watch(
   () => props.open,
@@ -71,164 +68,105 @@ async function submitMove() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div
-        v-if="open"
-        class="fixed inset-0 z-40 flex items-end justify-center md:items-center"
-      >
-        <div
-          class="absolute inset-0 bg-neutral-900/40"
-          @click="emit('close')"
-        />
-        <div
-          class="relative w-full rounded-t-2xl bg-white p-5 shadow-xl md:w-[480px] md:rounded-card"
-        >
-          <h2 class="mb-4 text-[18px] font-medium text-neutral-900">
-            Move money
-          </h2>
-
-          <div class="space-y-3">
-            <div>
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700"
-                >Direction</label
-              >
-              <div class="flex rounded-subcard border border-neutral-200">
-                <button
-                  type="button"
-                  class="flex-1 rounded-l-subcard py-2.5 text-sm font-medium transition-colors"
-                  :class="
-                    moveDirection === 'outof'
-                      ? 'bg-ocean-400 text-white'
-                      : 'text-secondary hover:bg-neutral-50'
-                  "
-                  @click="moveDirection = 'outof'"
-                >
-                  Out of this budget
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 rounded-r-subcard py-2.5 text-sm font-medium transition-colors"
-                  :class="
-                    moveDirection === 'into'
-                      ? 'bg-ocean-400 text-white'
-                      : 'text-secondary hover:bg-neutral-50'
-                  "
-                  @click="moveDirection = 'into'"
-                >
-                  Into this budget
-                </button>
-              </div>
-            </div>
-
-            <div v-if="fillupBudget">
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700"
-                >This budget</label
-              >
-              <div class="flex rounded-subcard border border-neutral-200">
-                <button
-                  type="button"
-                  class="flex-1 rounded-l-subcard py-2.5 text-sm font-medium transition-colors"
-                  :class="
-                    !moveTargetFillup
-                      ? 'bg-ocean-400 text-white'
-                      : 'text-secondary hover:bg-neutral-50'
-                  "
-                  @click="setMoveTarget(false)"
-                >
-                  {{ budget?.name }}
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 rounded-r-subcard py-2.5 text-sm font-medium transition-colors"
-                  :class="
-                    moveTargetFillup
-                      ? 'bg-ocean-400 text-white'
-                      : 'text-secondary hover:bg-neutral-50'
-                  "
-                  @click="setMoveTarget(true)"
-                >
-                  {{ fillupBudget.name }} (fill-up)
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label
-                class="mb-1 block text-[13px] font-medium text-neutral-700"
-              >
-                {{ moveDirection === "outof" ? "To" : "From" }}
-              </label>
-              <select
-                v-model="moveOtherId"
-                class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900"
-              >
-                <option
-                  v-for="b in movePickerBudgets"
-                  :key="b.id"
-                  :value="b.id"
-                >
-                  {{ budgetPickerLabel(b) }}
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label class="mb-1 block text-[13px] font-medium text-neutral-700"
-                >Amount</label
-              >
-              <input
-                ref="moveAmountInput"
-                v-model="moveAmount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="0.00"
-                class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
-                @keydown.enter="canSubmit && submitMove()"
-              />
-            </div>
-
-            <p v-if="moveError" class="text-sm text-coral-600">
-              {{ moveError }}
-            </p>
-
-            <div class="flex gap-2 pt-1">
-              <button
-                type="button"
-                class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-                @click="emit('close')"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                :disabled="!canSubmit"
-                class="flex-1 rounded-full py-3 text-sm font-medium text-white transition-colors"
-                :class="
-                  canSubmit
-                    ? 'bg-ocean-400 hover:bg-ocean-600'
-                    : 'cursor-not-allowed bg-neutral-300'
-                "
-                @click="submitMove"
-              >
-                {{ moveSaving ? "Transferring…" : "Transfer" }}
-              </button>
-            </div>
-          </div>
+  <BaseSheet :open="open" title="Move money" @close="emit('close')">
+    <div class="space-y-3">
+      <div>
+        <label class="mb-1 block text-label text-fg">Direction</label>
+        <div class="flex rounded-control border border-border">
+          <button
+            type="button"
+            class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
+            :class="
+              moveDirection === 'outof'
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="moveDirection = 'outof'"
+          >
+            Out of this budget
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
+            :class="
+              moveDirection === 'into'
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="moveDirection = 'into'"
+          >
+            Into this budget
+          </button>
         </div>
       </div>
-    </Transition>
-  </Teleport>
-</template>
 
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 120ms ease-out;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>
+      <div v-if="fillupBudget">
+        <label class="mb-1 block text-label text-fg">This budget</label>
+        <div class="flex rounded-control border border-border">
+          <button
+            type="button"
+            class="flex-1 rounded-l-control py-2.5 text-label transition-colors"
+            :class="
+              !moveTargetFillup
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="setMoveTarget(false)"
+          >
+            {{ budget?.name }}
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-r-control py-2.5 text-label transition-colors"
+            :class="
+              moveTargetFillup
+                ? 'bg-accent text-fg-on-accent'
+                : 'text-fg-muted hover:bg-surface-sunken'
+            "
+            @click="setMoveTarget(true)"
+          >
+            {{ fillupBudget.name }} (fill-up)
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-label text-fg">
+          {{ moveDirection === "outof" ? "To" : "From" }}
+        </label>
+        <BaseSelect v-model="moveOtherId">
+          <option v-for="b in movePickerBudgets" :key="b.id" :value="b.id">
+            {{ budgetPickerLabel(b) }}
+          </option>
+        </BaseSelect>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-label text-fg">Amount</label>
+        <BaseInput
+          ref="moveAmountInput"
+          v-model="moveAmount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          placeholder="0.00"
+          @keydown.enter="canSubmit && submitMove()"
+          mono
+        />
+      </div>
+
+      <p v-if="moveError" class="text-body-sm text-danger-fg">
+        {{ moveError }}
+      </p>
+
+      <div class="flex gap-2 pt-1">
+        <BaseButton variant="secondary" class="flex-1" @click="emit('close')">
+          Cancel
+        </BaseButton>
+        <BaseButton :disabled="!canSubmit" class="flex-1" @click="submitMove">
+          {{ moveSaving ? "Transferring…" : "Transfer" }}
+        </BaseButton>
+      </div>
+    </div>
+  </BaseSheet>
+</template>

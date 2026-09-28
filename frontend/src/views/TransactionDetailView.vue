@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // TransactionDetailView — detail page for a single transaction.
-// (UI_SPEC §4.6)  Route shell over `useTransactionDetail`.
+// Route shell over `useTransactionDetail`.
 //
 // Transactions are read-only imports.  Mutable fields: description,
 // memo, image, document (autosaved / uploaded).  Allocations are
@@ -24,7 +24,7 @@ import { useRouter } from "vue-router";
 import AllocationsSection from "@/components/transactions/AllocationsSection.vue";
 import SplitEditorDialog from "@/components/transactions/SplitEditorDialog.vue";
 import TransactionHero from "@/components/transactions/TransactionHero.vue";
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { isModalOpen } from "@/composables/useModal";
 import { formatTxDateLong } from "@/domain/dates";
 import { transactionTypeLabel } from "@/domain/labels";
@@ -33,6 +33,11 @@ import type { AttachmentField } from "@/features/transactions/useTransactionDeta
 import { useTransactionDetail } from "@/features/transactions/useTransactionDetail";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseTextarea from "@/components/base/BaseTextarea.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -147,49 +152,37 @@ function onAttach(field: AttachmentField) {
   <AppShell>
     <template #action>
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-          aria-label="Back"
-          @click="router.back()"
-        >
-          <IconArrowLeft class="h-5 w-5" />
-        </button>
-        <button
+        <BaseIconButton label="Back" @click="router.back()">
+          <IconArrowLeft class="size-icon-md" />
+        </BaseIconButton>
+        <BaseIconButton
           v-if="prevTxId"
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-          aria-label="Previous transaction"
+          label="Previous transaction"
           @click="goToPrev"
         >
-          <IconChevronUp class="h-5 w-5" />
-        </button>
-        <button
+          <IconChevronUp class="size-icon-md" />
+        </BaseIconButton>
+        <BaseIconButton
           v-if="nextTxId"
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-          aria-label="Next transaction"
+          label="Next transaction"
           @click="goToNext"
         >
-          <IconChevronDown class="h-5 w-5" />
-        </button>
+          <IconChevronDown class="size-icon-md" />
+        </BaseIconButton>
       </div>
     </template>
 
     <!-- Loading -->
     <div v-if="loading" class="space-y-4 pt-6">
-      <div class="h-8 w-48 animate-pulse rounded bg-neutral-100" />
-      <div class="h-12 w-32 animate-pulse rounded bg-neutral-100" />
-      <div class="h-4 w-64 animate-pulse rounded bg-neutral-100" />
+      <BaseSkeleton shape="line" class="h-8 w-48" />
+      <BaseSkeleton shape="line" class="h-12 w-32" />
+      <BaseSkeleton shape="line" class="h-4 w-64" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error"
-      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
-    >
+    <BaseBanner v-else-if="error" tone="danger">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <template v-else-if="transaction">
       <!-- Hero block -->
@@ -202,23 +195,19 @@ function onAttach(field: AttachmentField) {
       />
 
       <!-- Metadata section -->
-      <section class="space-y-3 border-t border-neutral-200 pt-4">
+      <section class="space-y-3 border-t border-border pt-4">
         <div>
-          <label
-            class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-          >
-            Description
-          </label>
+          <BaseSectionHeader title="Description" as="label" />
           <input
             v-model="description"
             type="text"
-            class="mt-0.5 block w-full border-b border-transparent bg-transparent text-sm text-neutral-900 outline-none transition-colors focus:border-ocean-400"
+            class="mt-0.5 block w-full border-b border-transparent bg-transparent text-input text-fg outline-none transition-colors focus:border-border-focus"
             @input="onDescriptionInput"
             @blur="onDescriptionBlur"
           />
           <p
             v-if="descriptionError"
-            class="mt-1 text-xs text-coral-600"
+            class="mt-1 text-meta text-danger-fg"
             role="alert"
           >
             {{ descriptionError }}
@@ -226,39 +215,25 @@ function onAttach(field: AttachmentField) {
         </div>
 
         <div v-if="transaction.rawDescription !== transaction.description">
-          <label
-            class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-          >
-            Raw description
-          </label>
-          <p class="mt-0.5 text-sm text-neutral-600">
+          <BaseSectionHeader title="Raw description" as="label" />
+          <p class="mt-0.5 text-body-sm text-fg-muted">
             {{ transaction.rawDescription }}
           </p>
         </div>
 
         <div v-if="typeLabel" class="flex items-center gap-2">
-          <label
-            class="flex-none text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-          >
-            Type
-          </label>
-          <span
-            class="min-w-0 flex-1 border-b border-dotted border-neutral-200"
-          />
-          <span class="flex-none text-sm text-neutral-700">{{
-            typeLabel
-          }}</span>
+          <BaseSectionHeader title="Type" as="label" class="flex-none" />
+          <span class="min-w-0 flex-1 border-b border-dotted border-border" />
+          <span class="flex-none text-body-sm text-fg">{{ typeLabel }}</span>
         </div>
 
         <div class="flex items-center gap-2">
-          <label
-            class="flex-none text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-          >
-            {{ accountName }} balance after
-          </label>
-          <span
-            class="min-w-0 flex-1 border-b border-dotted border-neutral-200"
+          <BaseSectionHeader
+            :title="`${accountName} balance after`"
+            as="label"
+            class="flex-none"
           />
+          <span class="min-w-0 flex-1 border-b border-dotted border-border" />
           <MoneyAmount
             class="flex-none"
             :amount="transaction.accountPostedBalance"
@@ -278,7 +253,11 @@ function onAttach(field: AttachmentField) {
         @assign="pickerOpen = true"
         @navigate-budget="navigateBudget"
       />
-      <p v-if="splitError" class="mt-2 text-sm text-coral-600" role="alert">
+      <p
+        v-if="splitError"
+        class="mt-2 text-body-sm text-danger-fg"
+        role="alert"
+      >
         {{ splitError }}
       </p>
 
@@ -289,20 +268,20 @@ function onAttach(field: AttachmentField) {
       <template v-if="!transaction.pending">
         <!-- Memo -->
         <section class="mt-6">
-          <label
-            class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-          >
-            Memo
-          </label>
-          <textarea
+          <BaseSectionHeader title="Memo" as="label" />
+          <BaseTextarea
             v-model="memo"
             rows="2"
             placeholder="Add a memo…"
-            class="mt-1 block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400"
+            class="mt-1"
             @input="onMemoInput"
             @blur="onMemoBlur"
           />
-          <p v-if="memoError" class="mt-1 text-xs text-coral-600" role="alert">
+          <p
+            v-if="memoError"
+            class="mt-1 text-meta text-danger-fg"
+            role="alert"
+          >
             {{ memoError }}
           </p>
         </section>
@@ -311,14 +290,14 @@ function onAttach(field: AttachmentField) {
         <section class="mt-6 flex gap-3">
           <button
             type="button"
-            class="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-center text-sm text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+            class="flex-1 rounded-control border border-border px-3 py-2 text-center text-body-sm text-fg-muted transition-colors hover:border-border-emphasis hover:bg-surface-sunken"
             @click="onAttach('image')"
           >
             {{ transaction.image ? "Replace photo" : "Attach photo" }}
           </button>
           <button
             type="button"
-            class="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-center text-sm text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+            class="flex-1 rounded-control border border-border px-3 py-2 text-center text-body-sm text-fg-muted transition-colors hover:border-border-emphasis hover:bg-surface-sunken"
             @click="onAttach('document')"
           >
             {{ transaction.document ? "Replace document" : "Attach document" }}
@@ -326,7 +305,7 @@ function onAttach(field: AttachmentField) {
         </section>
         <p
           v-if="attachmentError"
-          class="mt-2 text-sm text-coral-600"
+          class="mt-2 text-body-sm text-danger-fg"
           role="alert"
         >
           {{ attachmentError }}
@@ -334,7 +313,7 @@ function onAttach(field: AttachmentField) {
       </template>
 
       <!-- Footer -->
-      <p class="mt-8 pb-4 text-center text-xs text-neutral-400">
+      <p class="mt-8 pb-4 text-center text-meta text-fg-subtle">
         Transactions are imported from bank statements and cannot be created or
         deleted.
       </p>

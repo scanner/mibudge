@@ -8,9 +8,16 @@
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
+import { formatLocalDate } from "@/domain/dates";
 import type { LocalDate } from "@/domain/dates";
 import type { FundingRunResult, FundingSummary } from "@/models/bankAccount";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseToggle from "@/components/base/BaseToggle.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseCardSection from "@/components/base/BaseCardSection.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -34,87 +41,65 @@ const emit = defineEmits<{
 
 <template>
   <!-- Funding -->
-  <section
-    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
-  >
-    <h2
-      class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-    >
-      Funding
-    </h2>
-    <div class="px-4 py-3 space-y-3">
-      <div class="flex items-center justify-between text-sm">
-        <span class="text-secondary">Data current through</span>
-        <span class="font-mono text-neutral-900">
-          {{ lastPostedThrough ?? "—" }}
+  <BaseCard as="section">
+    <BaseSectionHeader title="Funding" card />
+    <BaseCardSection class="space-y-3">
+      <div class="flex items-center justify-between text-body-sm">
+        <span class="text-fg-muted">Data current through</span>
+        <span class="text-fg">
+          {{
+            lastPostedThrough ? formatLocalDate(lastPostedThrough, "date") : "—"
+          }}
         </span>
       </div>
-      <p class="text-xs text-secondary">
+      <p class="text-meta text-fg-muted">
         After importing transactions and finishing allocations, run the funding
         engine to move money into budgets based on their schedules.
       </p>
-      <div
-        v-if="summary && !summary.total.isZero()"
-        class="rounded-subcard border border-ocean-200 bg-ocean-50 px-3 py-2 text-xs text-ocean-700"
-      >
+      <BaseBanner v-if="summary && !summary.total.isZero()" tone="info">
         Next event:
-        <MoneyAmount :amount="summary.total" size="sm" class="font-medium" />
+        <MoneyAmount :amount="summary.total" size="sm" />
         <template v-if="summary.schedules[0]?.nextDate">
-          on {{ summary.schedules[0].nextDate }}
+          on {{ formatLocalDate(summary.schedules[0].nextDate, "date") }}
         </template>
         <template v-if="summary.schedules.length > 1">
           across {{ summary.schedules.length }} schedules
         </template>
-      </div>
+      </BaseBanner>
       <!-- Automatic funding toggle -->
       <label class="flex cursor-pointer items-center justify-between">
         <div>
-          <p class="text-sm text-neutral-900">Automatic funding</p>
-          <p class="mt-0.5 text-xs text-secondary">
+          <p class="text-body-sm text-fg">Automatic funding</p>
+          <p class="mt-0.5 text-meta text-fg-muted">
             Run funding events on a schedule. Disable to fund manually only.
           </p>
         </div>
-        <div class="relative ml-4 flex-none">
-          <input
-            type="checkbox"
-            class="sr-only"
-            :checked="autoFundingEnabled"
-            @change="emit('toggle-auto-funding')"
-          />
-          <div
-            class="h-6 w-10 rounded-full transition-colors"
-            :class="autoFundingEnabled ? 'bg-ocean-400' : 'bg-neutral-300'"
-          />
-          <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-            :class="autoFundingEnabled ? 'translate-x-4' : 'translate-x-0.5'"
+        <div class="ml-4 flex-none">
+          <BaseToggle
+            :model-value="autoFundingEnabled"
+            @update:model-value="emit('toggle-auto-funding')"
           />
         </div>
       </label>
 
-      <button
-        type="button"
-        :disabled="running"
-        class="w-full rounded-subcard bg-ocean-400 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
-        @click="emit('run')"
-      >
+      <BaseButton block :loading="running" @click="emit('run')">
         {{ running ? "Running…" : "Run funding now" }}
-      </button>
+      </BaseButton>
 
       <!-- Result -->
       <div
         v-if="result"
-        class="rounded-subcard border px-3 py-2.5 text-sm"
+        class="rounded-control border px-3 py-2.5 text-body-sm"
         :class="
           nothingDue
-            ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
-            : 'border-mint-200 bg-mint-50 text-mint-700'
+            ? 'border-border bg-surface-sunken text-fg-muted'
+            : 'border-success-border bg-success-bg text-success-fg'
         "
       >
         <template v-if="nothingDue">
           Nothing currently due.
-          <span v-if="nextDate" class="text-neutral-500">
-            Next funding event: {{ nextDate }}.
+          <span v-if="nextDate" class="text-fg-muted">
+            Next funding event: {{ formatLocalDate(nextDate, "date") }}.
           </span>
         </template>
         <template v-else>
@@ -123,25 +108,22 @@ const emit = defineEmits<{
         </template>
         <ul
           v-if="result.warnings.length"
-          class="mt-1.5 space-y-0.5 text-xs text-amber-600"
+          class="mt-1.5 space-y-0.5 text-meta text-warning-fg"
         >
           <li v-for="w in result.warnings" :key="w">{{ w }}</li>
         </ul>
         <div v-if="result.skippedBudgets.length" class="mt-1.5">
-          <span class="text-xs font-medium">Skipped (paused):</span>
-          <ul class="mt-0.5 space-y-0.5 text-xs opacity-80">
+          <span class="text-meta font-medium">Skipped (paused):</span>
+          <ul class="mt-0.5 space-y-0.5 text-meta opacity-80">
             <li v-for="name in result.skippedBudgets" :key="name">
               {{ name }}
             </li>
           </ul>
         </div>
       </div>
-      <div
-        v-if="error"
-        class="rounded-subcard border border-coral-200 bg-coral-50 px-3 py-2.5 text-sm text-coral-600"
-      >
+      <BaseBanner v-if="error" tone="danger">
         {{ error }}
-      </div>
-    </div>
-  </section>
+      </BaseBanner>
+    </BaseCardSection>
+  </BaseCard>
 </template>

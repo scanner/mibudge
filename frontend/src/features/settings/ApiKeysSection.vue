@@ -11,6 +11,14 @@
 import ConfirmSheet from "@/components/shared/ConfirmSheet.vue";
 import { formatInstantDate } from "@/domain/dates";
 import { EXPIRY_PRESETS, useApiKeys } from "./useApiKeys";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -34,57 +42,49 @@ const {
 } = useApiKeys();
 
 function mediumDate(iso: string): string {
-  return formatInstantDate(iso, { dateStyle: "medium" });
+  return formatInstantDate(iso, "date");
 }
 </script>
 
 <template>
   <!-- ── API keys ─────────────────────────────────────────────── -->
-  <h2
-    class="mb-2 mt-10 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-  >
-    API keys
-  </h2>
+  <BaseSectionHeader title="API keys" class="mb-2 mt-10 px-1" />
 
   <section>
-    <p class="mb-3 px-1 text-xs text-secondary">
+    <p class="mb-3 px-1 text-meta text-fg-muted">
       Long-lived credentials for importers and other 3rd-party services to
       access your account without your password. Keys get the same access a
       logged-in session has, except for account security actions.
       <a
         href="/docs/authentication.md"
-        class="text-ocean-600 hover:underline"
+        class="text-fg-link hover:underline"
         target="_blank"
         >Learn more</a
       >.
     </p>
 
     <!-- Error banner -->
-    <div
-      v-if="error"
-      class="mb-3 rounded-subcard bg-coral-50 px-4 py-3 text-sm text-coral-600"
-      role="alert"
-    >
+    <BaseBanner v-if="error" tone="danger" class="mb-3">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <!-- One-time plaintext display -->
     <div
       v-if="justCreated"
-      class="mb-3 rounded-card border border-mint-200 bg-mint-50 px-4 py-4"
+      class="mb-3 rounded-card border border-success-border bg-success-bg px-4 py-4"
       role="alert"
     >
-      <p class="text-sm font-medium text-mint-700">
+      <p class="text-label text-success-fg">
         Key created — copy it now, it won't be shown again.
       </p>
       <div class="mt-2 flex items-center gap-2">
         <code
-          class="flex-1 overflow-x-auto rounded-subcard border border-mint-200 bg-white px-3 py-2 text-xs text-neutral-900"
+          class="flex-1 overflow-x-auto rounded-control border border-success-border bg-surface px-3 py-2 text-meta text-fg"
           >{{ justCreated.plaintext }}</code
         >
         <button
           type="button"
-          class="flex-none rounded-subcard border border-mint-300 px-3 py-2 text-xs font-medium text-mint-700 hover:bg-mint-100"
+          class="flex-none rounded-control border border-success-border px-3 py-2 text-meta font-medium text-success-fg hover:bg-success-bg"
           @click="copyNewKey"
         >
           {{ copied ? "Copied!" : "Copy" }}
@@ -92,7 +92,7 @@ function mediumDate(iso: string): string {
       </div>
       <button
         type="button"
-        class="mt-3 text-xs font-medium text-neutral-600 hover:text-neutral-800"
+        class="mt-3 text-meta font-medium text-fg-muted hover:text-fg"
         @click="dismissNewKey"
       >
         Done
@@ -100,96 +100,96 @@ function mediumDate(iso: string): string {
     </div>
 
     <!-- Create key form -->
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-4">
+    <BaseCard padded>
       <form class="flex flex-wrap items-end gap-3" @submit.prevent="create">
-        <div class="min-w-[10rem] flex-1">
-          <label
-            class="mb-1.5 block text-sm font-medium text-neutral-700"
-            for="new-key-name"
-          >
-            Name
-          </label>
-          <input
-            id="new-key-name"
-            v-model="newKeyName"
-            type="text"
-            required
-            placeholder="e.g. Bank of America importer"
-            class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-          />
+        <div class="min-w-40 flex-1">
+          <BaseFormField id="new-key-name" label="Name">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="newKeyName"
+                type="text"
+                required
+                placeholder="e.g. Bank of America importer"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
         <div>
-          <label
-            class="mb-1.5 block text-sm font-medium text-neutral-700"
-            for="new-key-expiry"
-          >
-            Expires
-          </label>
-          <select
-            id="new-key-expiry"
-            v-model="newKeyExpiryPreset"
-            class="rounded-subcard border border-neutral-200 bg-white py-2.5 pl-2.5 pr-7 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-          >
-            <option
-              v-for="opt in EXPIRY_PRESETS"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </option>
-          </select>
+          <BaseFormField id="new-key-expiry" label="Expires">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseSelect
+                :id="id"
+                v-model="newKeyExpiryPreset"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+                inline
+              >
+                <option
+                  v-for="opt in EXPIRY_PRESETS"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </BaseSelect>
+            </template>
+          </BaseFormField>
         </div>
         <div v-if="newKeyExpiryPreset === 'custom'" class="w-24">
-          <label
-            class="mb-1.5 block text-sm font-medium text-neutral-700"
-            for="new-key-days"
-          >
-            Days
-          </label>
-          <input
-            id="new-key-days"
-            v-model="newKeyCustomDays"
-            type="number"
-            min="1"
-            class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-          />
+          <BaseFormField id="new-key-days" label="Days">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="newKeyCustomDays"
+                type="number"
+                min="1"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
-        <button
+        <BaseButton
           type="submit"
-          :disabled="creating || !newKeyName.trim()"
-          class="rounded-subcard bg-ocean-400 px-4 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+          :disabled="!newKeyName.trim()"
+          :loading="creating"
         >
           {{ creating ? "Creating…" : "Create key" }}
-        </button>
+        </BaseButton>
       </form>
-      <p v-if="createError" class="mt-2 text-xs text-coral-600">
+      <p v-if="createError" class="mt-2 text-meta text-danger-fg">
         {{ createError }}
       </p>
-    </div>
+    </BaseCard>
 
     <!-- Existing keys -->
     <div
       v-if="loading"
-      class="mt-3 px-4 py-6 text-center text-sm text-secondary"
+      class="mt-3 px-4 py-6 text-center text-body-sm text-fg-muted"
     >
       Loading…
     </div>
     <div
       v-else-if="keys.length > 0"
-      class="mt-3 rounded-card border border-neutral-200 bg-white"
+      class="mt-3 rounded-card border border-border bg-surface"
     >
-      <ul class="divide-y divide-neutral-100">
-        <li
+      <ul>
+        <BaseListRow
           v-for="key in keys"
+          as="li"
+          align="start"
+          class="justify-between"
           :key="key.id"
-          class="flex items-start justify-between px-4 py-3"
         >
           <div>
-            <p class="text-sm font-medium text-neutral-900">{{ key.name }}</p>
-            <p class="mt-0.5 font-mono text-xs text-secondary">
+            <p class="text-label text-fg">{{ key.name }}</p>
+            <p class="mt-0.5 font-mono text-amount-sm text-fg-muted">
               {{ key.prefix }}…
             </p>
-            <p class="mt-0.5 text-xs text-secondary">
+            <p class="mt-0.5 text-meta text-fg-muted">
               Created
               {{ mediumDate(key.createdAt) }}
               <template v-if="key.expiresAt">
@@ -203,20 +203,21 @@ function mediumDate(iso: string): string {
           </div>
           <span
             v-if="key.revokedAt"
-            class="mt-0.5 flex-none text-xs text-secondary"
+            class="mt-0.5 flex-none text-meta text-fg-muted"
           >
             Revoked
           </span>
-          <button
+          <BaseButton
             v-else
-            type="button"
-            :disabled="revokingId === key.id"
-            class="mt-0.5 flex-none text-xs font-medium text-coral-600 hover:text-coral-700 disabled:opacity-50"
+            variant="link-danger"
+            size="sm"
+            :loading="revokingId === key.id"
+            class="mt-0.5 flex-none"
             @click="revokeTarget = key"
           >
             {{ revokingId === key.id ? "Revoking…" : "Revoke" }}
-          </button>
-        </li>
+          </BaseButton>
+        </BaseListRow>
       </ul>
     </div>
   </section>
@@ -226,7 +227,6 @@ function mediumDate(iso: string): string {
     title="Revoke this API key?"
     :message="`Any service using '${revokeTarget?.name}' will immediately lose access. This cannot be undone.`"
     confirm-label="Revoke"
-    tone="coral"
     @cancel="revokeTarget = null"
     @confirm="revokeTarget && revoke(revokeTarget)"
   />

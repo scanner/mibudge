@@ -21,13 +21,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/composables`, `src/domain`, `src/models`, `src/stores`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
 - SPA TypeScript types for the REST API are generated from `docs/openapi.yaml` (`pnpm gen:api-types`, openapi-typescript); the Drone `frontend lint` step fails when `frontend/src/api/schema.d.ts` is out of date
 - SPA "page not found" screen for unknown `/app/...` paths, instead of a blank page
+- SPA design system: semantic design tokens, shared `Base*` components for buttons, fields, cards, rows, banners and sheets, and a `pnpm lint:styles` check (in CI and pre-commit) that rejects hard-coded colours and sizes. See `docs/spa/styling.md`
+- SPA keyboard and touch accessibility: a visible focus outline on every control, focus kept inside open sheets, 44px touch targets, and delete buttons you can reach on a phone
+- SPA screen reference (`docs/spa/screens.md`) replacing the old UI specification
 - SPA architecture documentation in `docs/spa/`: the layers and their import rules (`architecture.md`), the HTTP transport, errors, types and models (`api-and-models.md`), stores and caching (`state.md`), components (`components.md`), and a recipe for adding a page (`adding-a-page.md`); an architecture test enforces the layering on every test run
 
 ### Changed
 
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
+- SPA look: text and controls meet WCAG AA contrast (darker primary and destructive buttons, stronger input borders and muted text), one button shape, and consistent sizes, spacing and padding throughout; text honours the browser's text-size setting, and phone inputs no longer zoom the page when focused
+- SPA dates display in one consistent format everywhere, set in a single place so it can become a user preference
 - `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
 - Internal: split moneypools API views and serializers into per-domain modules
+
+### Removed
+
+- The SPA's "Last 30 days" transaction filter; the list already starts at today and loads older transactions as you scroll
 - Internal: the SPA is restructured into layers -- pure domain rules (money, dates, schedules, budget status), an HTTP transport and per-resource API modules, domain models mapped from the API's wire format, Pinia entity caches, shared composables, and per-section feature modules -- and the five largest views are split into route shells of under 300 lines. No visual changes except the date fix below
 - Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
 - When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on

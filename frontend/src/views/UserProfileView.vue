@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // UserProfileView — edit the current user's name and timezone, and
-// request an email change.  (UI_SPEC §4.7)  Route shell over
+// request an email change.  Route shell over
 // `useProfileForm`.
 //
 
@@ -17,6 +17,14 @@ import {
 } from "@/features/settings/useProfileForm";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -44,41 +52,36 @@ async function save() {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
-      <h1 class="mb-5 text-[22px] font-medium text-neutral-900">Profile</h1>
+      <BasePageHeader title="Profile" />
 
-      <div
-        v-if="error"
-        class="mb-4 rounded-subcard bg-coral-50 px-4 py-3 text-sm text-coral-600"
-        role="alert"
-      >
+      <BaseBanner v-if="error" tone="danger" class="mb-4">
         {{ error }}
-      </div>
+      </BaseBanner>
 
       <!-- Profile form: name + timezone only -->
       <form class="space-y-4" @submit.prevent="save">
         <!-- Name -->
         <div>
-          <label
-            class="mb-1.5 block text-sm font-medium text-neutral-700"
-            for="profile-name"
-          >
-            Name
-          </label>
-          <input
-            id="profile-name"
-            v-model="name"
-            type="text"
-            autocomplete="name"
-            class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-            placeholder="Your full name"
-          />
+          <BaseFormField id="profile-name" label="Name">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="name"
+                type="text"
+                autocomplete="name"
+                placeholder="Your full name"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
 
         <!-- Email — read-only -->
         <div>
-          <div class="mb-1.5 text-sm font-medium text-neutral-700">Email</div>
+          <div class="mb-1.5 text-label text-fg">Email</div>
           <div
-            class="rounded-subcard border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-500"
+            class="rounded-control border border-border bg-surface-sunken px-3 py-2.5 text-body-sm text-fg-muted"
           >
             {{ auth.user?.email }}
           </div>
@@ -86,67 +89,59 @@ async function save() {
 
         <!-- Timezone -->
         <div>
-          <label
-            class="mb-1.5 block text-sm font-medium text-neutral-700"
-            for="profile-timezone"
-          >
-            Timezone
-          </label>
-          <select
+          <BaseFormField
             id="profile-timezone"
-            v-model="timezone"
-            class="w-full rounded-subcard border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+            label="Timezone"
+            hint="Used to display transaction dates in your local time."
           >
-            <option
-              v-for="opt in TIMEZONE_OPTIONS"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </option>
-          </select>
-          <p class="mt-1 text-xs text-neutral-500">
-            Used to display transaction dates in your local time.
-          </p>
+            <template #default="{ id, describedBy, invalid }">
+              <BaseSelect
+                :id="id"
+                v-model="timezone"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              >
+                <option
+                  v-for="opt in TIMEZONE_OPTIONS"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </BaseSelect>
+            </template>
+          </BaseFormField>
         </div>
 
         <!-- Actions -->
         <div class="flex gap-3 pt-2">
-          <button
-            type="submit"
-            :disabled="saving"
-            class="flex-1 rounded-subcard bg-ocean-400 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
-          >
+          <BaseButton type="submit" :loading="saving" class="flex-1">
             {{ saving ? "Saving…" : "Save" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-subcard border border-neutral-200 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            class="flex-1"
             @click="router.push({ name: 'account' })"
           >
             Cancel
-          </button>
+          </BaseButton>
         </div>
       </form>
 
       <!-- Change email — separate section, never nested inside the profile form -->
       <section class="mt-8">
-        <h2
-          class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-        >
-          Change email
-        </h2>
+        <BaseSectionHeader title="Change email" class="mb-2 px-1" />
 
-        <div class="rounded-card border border-neutral-200 bg-white px-4 py-4">
+        <BaseCard padded>
           <!-- No usable password -->
           <div
             v-if="!auth.user?.hasUsablePassword"
-            class="text-sm text-neutral-500"
+            class="text-body-sm text-fg-muted"
           >
             Your account doesn't have a password set yet.
             <a
               href="/accounts/password/reset/"
-              class="ml-1 text-ocean-600 underline hover:text-ocean-800"
+              class="ml-1 text-fg-link underline hover:text-accent-hover"
             >
               Set a password via email
             </a>
@@ -155,50 +150,43 @@ async function save() {
 
           <template v-else>
             <!-- Success -->
-            <div
-              v-if="emailSuccess"
-              class="rounded-subcard bg-mint-50 px-3 py-3 text-sm text-mint-600"
-              role="alert"
-            >
+            <BaseBanner v-if="emailSuccess" tone="success">
               Check your new address for a verification link, and your current
               address for a security notice.
-            </div>
+            </BaseBanner>
 
             <template v-else>
               <!-- Error -->
-              <div
-                v-if="emailError"
-                class="mb-3 rounded-subcard bg-coral-50 px-3 py-3 text-sm text-coral-600"
-                role="alert"
-              >
+              <BaseBanner v-if="emailError" tone="danger" class="mb-3">
                 {{ emailError }}
-              </div>
+              </BaseBanner>
 
               <form class="flex gap-2" @submit.prevent="submitEmailChange">
-                <input
+                <BaseInput
                   v-model="newEmail"
                   type="email"
                   autocomplete="email"
                   placeholder="New email address"
                   required
-                  class="min-w-0 flex-1 rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
+                  class="min-w-0 flex-1"
+                  inline
                 />
-                <button
+                <BaseButton
                   type="submit"
-                  :disabled="emailSaving || !newEmail"
-                  class="rounded-subcard bg-ocean-400 px-4 py-2.5 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
+                  :disabled="!newEmail"
+                  :loading="emailSaving"
                 >
                   {{ emailSaving ? "Sending…" : "Send link" }}
-                </button>
+                </BaseButton>
               </form>
-              <p class="mt-1.5 text-xs text-neutral-500">
+              <p class="mt-1.5 text-meta text-fg-muted">
                 A verification link will be sent to the new address. Your
                 current address will receive a security notice with a link to
                 cancel the change for 7 days after confirmation.
               </p>
             </template>
           </template>
-        </div>
+        </BaseCard>
       </section>
     </div>
   </AppShell>

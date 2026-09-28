@@ -15,6 +15,7 @@ import type { DateGroup } from "@/composables/useDateGroupedRows";
 import type { Allocation } from "@/models/allocation";
 import type { TransactionListRow } from "@/models/listRow";
 import { rowKey } from "@/models/listRow";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -40,12 +41,11 @@ const emit = defineEmits<{
 <template>
   <div class="space-y-4">
     <section v-for="group in groups" :key="group.date">
-      <component
-        :is="headingTag"
-        class="sticky top-0 z-10 -mx-4 bg-neutral-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-secondary backdrop-blur-sm"
-      >
-        {{ group.label }}
-      </component>
+      <BaseSectionHeader
+        :as="headingTag"
+        :title="group.label"
+        class="sticky top-0 z-sticky -mx-page-x bg-canvas/95 px-page-x py-1.5 backdrop-blur-sm"
+      />
       <div class="space-y-2">
         <template v-for="row in group.rows" :key="rowKey(row)">
           <TransactionRow

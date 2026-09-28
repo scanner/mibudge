@@ -16,13 +16,14 @@ import NotificationsSection from "@/features/settings/NotificationsSection.vue";
 import OutgoingInvitationsSection from "@/features/settings/OutgoingInvitationsSection.vue";
 import PasswordSection from "@/features/settings/PasswordSection.vue";
 import AppShell from "@/features/shell/AppShell.vue";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
 </script>
 
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg py-4">
       <!-- ── Security ─────────────────────────────────────────────── -->
-      <h1 class="mb-5 text-[22px] font-medium text-neutral-900">Security</h1>
+      <BasePageHeader title="Security" />
 
       <PasswordSection />
 

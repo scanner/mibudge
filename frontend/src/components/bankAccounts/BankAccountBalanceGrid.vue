@@ -6,9 +6,11 @@
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import type { Money } from "@/domain/money";
 import type { BankAccount } from "@/models/bankAccount";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -22,47 +24,29 @@ defineProps<{
 <template>
   <!-- Hero balance grid (2×2) -->
   <section class="grid grid-cols-2 gap-3">
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-      >
-        Posted balance
-      </div>
+    <BaseCard padded>
+      <BaseSectionHeader title="Posted balance" as="div" class="mb-0.5" />
       <MoneyAmount :amount="account.postedBalance" size="md" />
-    </div>
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-      >
-        Available balance
-      </div>
+    </BaseCard>
+    <BaseCard padded>
+      <BaseSectionHeader title="Available balance" as="div" class="mb-0.5" />
       <MoneyAmount :amount="account.availableBalance" size="md" />
-    </div>
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-      >
-        Unallocated
-      </div>
+    </BaseCard>
+    <BaseCard padded>
+      <BaseSectionHeader title="Unallocated" as="div" class="mb-0.5" />
       <MoneyAmount
         v-if="unallocated"
         :amount="unallocated"
         size="md"
         :coloured="false"
       />
-      <span v-else class="font-mono text-[15px] font-medium text-secondary"
-        >—</span
-      >
-    </div>
-    <div class="rounded-card border border-neutral-200 bg-white px-4 py-3">
-      <div
-        class="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-      >
-        Currency
-      </div>
-      <span class="font-mono text-[15px] font-medium text-neutral-900">
+      <span v-else class="font-mono text-amount text-fg-muted">—</span>
+    </BaseCard>
+    <BaseCard padded>
+      <BaseSectionHeader title="Currency" as="div" class="mb-0.5" />
+      <span class="font-mono text-amount text-fg">
         {{ account.currency }}
       </span>
-    </div>
+    </BaseCard>
   </section>
 </template>

@@ -16,6 +16,10 @@
 //
 import Decimal from "decimal.js";
 
+// app imports
+//
+import { DISPLAY_FORMAT } from "@/domain/displayFormat";
+
 ////////////////////////////////////////////////////////////////////////
 //
 export const DEFAULT_CURRENCY = "USD";
@@ -162,7 +166,7 @@ export function sumMoney(
 ////////////////////////////////////////////////////////////////////////
 //
 export interface FormatMoneyOptions {
-  // BCP 47 locale; `undefined` uses the browser's default locale.
+  // BCP 47 locale; defaults to `DISPLAY_FORMAT.locale`.
   locale?: string;
   // `"always"` prefixes a `+` on positive amounts.
   signDisplay?: "auto" | "always";
@@ -179,7 +183,7 @@ export function formatMoney(
   money: Money,
   options: FormatMoneyOptions = {},
 ): string {
-  return new Intl.NumberFormat(options.locale, {
+  return new Intl.NumberFormat(options.locale ?? DISPLAY_FORMAT.locale, {
     style: "currency",
     currency: money.currency || DEFAULT_CURRENCY,
     signDisplay: options.signDisplay ?? "auto",

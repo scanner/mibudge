@@ -24,6 +24,8 @@ import {
   txDateStr,
 } from "@/domain/dates";
 import type { LocalDate } from "@/domain/dates";
+import { DISPLAY_FORMAT } from "@/domain/displayFormat";
+import type { DateForm, DisplayFormat } from "@/domain/displayFormat";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -138,12 +140,29 @@ describe("formatLocalDate", () => {
     "in %s",
     (tz) => {
       vi.stubEnv("TZ", tz);
-      const opts = { month: "short", day: "numeric", year: "numeric" } as const;
-      expect(formatLocalDate("2026-08-01" as LocalDate, opts)).toBe(
+      expect(formatLocalDate("2026-08-01" as LocalDate, "date")).toBe(
         "Aug 1, 2026",
       );
     },
   );
+
+  // GIVEN: a calendar date and each date form
+  // WHEN:  it is formatted with dates in words and with ISO dates
+  // THEN:  words give the form's shape; ISO gives the full date, or the
+  //        year and month for `month-year`
+  //
+  it.each<[DateForm, string, string]>([
+    ["month-day", "Aug 1", "2026-08-01"],
+    ["date", "Aug 1, 2026", "2026-08-01"],
+    ["month-year", "Aug 2026", "2026-08"],
+    ["full", "Saturday, August 1, 2026", "2026-08-01"],
+  ])("renders the %s form", (form, words, iso) => {
+    const d = "2026-08-01" as LocalDate;
+    expect(formatLocalDate(d, form)).toBe(words);
+    expect(formatLocalDate(d, form, { ...DISPLAY_FORMAT, dates: "iso" })).toBe(
+      iso,
+    );
+  });
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -155,9 +174,8 @@ describe("formatInstantDate", () => {
   //
   it("formats in the browser zone or the given zone", () => {
     const iso = "2026-08-02T02:00:00Z";
-    const opts = { month: "short", day: "numeric" } as const;
-    expect(formatInstantDate(iso, opts)).toBe("Aug 1");
-    expect(formatInstantDate(iso, opts, "Asia/Tokyo")).toBe("Aug 2");
+    expect(formatInstantDate(iso, "month-day")).toBe("Aug 1");
+    expect(formatInstantDate(iso, "month-day", "Asia/Tokyo")).toBe("Aug 2");
   });
 });
 
@@ -220,6 +238,21 @@ describe("formatDateHeader", () => {
   it("passes through a malformed date", () => {
     expect(formatDateHeader("not-a-date", "2026-09-24")).toBe("not-a-date");
   });
+
+  // GIVEN: ISO dates in the display format
+  // WHEN:  headers are rendered for this year and an earlier year
+  // THEN:  both show the full ISO date; "Today" is unchanged
+  //
+  it("shows ISO dates in full", () => {
+    const fmt = { ...DISPLAY_FORMAT, dates: "iso" } as const;
+    expect(formatDateHeader("2026-07-04", "2026-09-24", fmt)).toBe(
+      "2026-07-04",
+    );
+    expect(formatDateHeader("2025-12-25", "2026-09-24", fmt)).toBe(
+      "2025-12-25",
+    );
+    expect(formatDateHeader("2026-09-24", "2026-09-24", fmt)).toBe("Today");
+  });
 });
 
 ////////////////////////////////////////////////////////////////////////
@@ -256,7 +289,38 @@ describe("formatTxDateLong", () => {
     ["fr-FR", "mardi 15 octobre 2024 à 14:34"],
   ])("joins date and time in the %s locale", (locale, expected) => {
     expect(
-      formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles", locale),
+      formatTxDateLong("2024-10-15T21:34:00Z", "America/Los_Angeles", {
+        ...DISPLAY_FORMAT,
+        locale,
+      }),
     ).toBe(expected);
   });
+
+  // GIVEN: a display format choosing the date style and the clock
+  // WHEN:  a mid-afternoon and a midnight timestamp are rendered
+  // THEN:  the date and time follow the chosen style and clock, and
+  //        midnight still shows the date alone
+  //
+  it.each<[DisplayFormat["dates"], DisplayFormat["clock"], string, string]>([
+    [
+      "words",
+      "24h",
+      "Tuesday, October 15, 2024 at 14:34",
+      "Tuesday, October 15, 2024",
+    ],
+    ["iso", "24h", "2024-10-15 14:34", "2024-10-15"],
+    ["iso", "12h", "2024-10-15 2:34 PM", "2024-10-15"],
+  ])(
+    "renders %s dates with a %s clock",
+    (dates, clock, afternoon, midnight) => {
+      const fmt = { ...DISPLAY_FORMAT, dates, clock };
+      const zone = "America/Los_Angeles";
+      expect(formatTxDateLong("2024-10-15T21:34:00Z", zone, fmt)).toBe(
+        afternoon,
+      );
+      expect(formatTxDateLong("2024-10-15T07:00:00Z", zone, fmt)).toBe(
+        midnight,
+      );
+    },
+  );
 });

@@ -555,7 +555,7 @@ A violation fails with the file and the import:
 ```
 × components/ are presentational
   - Expected: []
-  + Received: ["components/shared/EmptyState.vue imports @/api"]
+  + Received: ["components/budgets/BudgetCard.vue imports @/api"]
 ```
 
 Fix it by moving the call up a layer, not by adding an exception. The

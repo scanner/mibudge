@@ -11,6 +11,8 @@
 //
 import type { LocalDate } from "@/domain/dates";
 import { formatLocalDate } from "@/domain/dates";
+import { DISPLAY_FORMAT } from "@/domain/displayFormat";
+import type { DisplayFormat } from "@/domain/displayFormat";
 import type { BudgetType, FundingPace } from "@/domain/labels";
 import type { Money } from "@/domain/money";
 import { rruleHuman } from "@/domain/rrule";
@@ -19,7 +21,7 @@ import { rruleHuman } from "@/domain/rrule";
 //
 export type BudgetStatus = "funded" | "progress" | "warn" | "over" | "paused";
 
-export type ProgressTone = "mint" | "ocean" | "amber" | "coral" | "neutral";
+export type ProgressTone = "funded" | "active" | "behind" | "over" | "paused";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -81,15 +83,15 @@ export function budgetStatus(
 export function progressTone(status: BudgetStatus): ProgressTone {
   switch (status) {
     case "funded":
-      return "mint";
+      return "funded";
     case "warn":
-      return "amber";
+      return "behind";
     case "over":
-      return "coral";
+      return "over";
     case "paused":
-      return "neutral";
+      return "paused";
     default:
-      return "ocean";
+      return "active";
   }
 }
 
@@ -99,14 +101,13 @@ export function progressTone(status: BudgetStatus): ProgressTone {
 // `"Goal · by Aug 2026"` or
 // `"Recurring · refreshes Every month on the 1st · next refresh Oct 1, 2026"`.
 //
-export function budgetMeta(budget: BudgetFigures, locale?: string): string {
+export function budgetMeta(
+  budget: BudgetFigures,
+  fmt: DisplayFormat = DISPLAY_FORMAT,
+): string {
   if (budget.budgetType === "G") {
     if (budget.targetDate) {
-      const label = formatLocalDate(
-        budget.targetDate,
-        { month: "short", year: "numeric" },
-        locale,
-      );
+      const label = formatLocalDate(budget.targetDate, "month-year", fmt);
       return `Goal · by ${label}`;
     }
     return "Goal";
@@ -117,11 +118,7 @@ export function budgetMeta(budget: BudgetFigures, locale?: string): string {
   if (budget.recurrenceSchedule) {
     let meta = `Recurring · refreshes ${rruleHuman(budget.recurrenceSchedule)}`;
     if (budget.nextRecurrence) {
-      const label = formatLocalDate(
-        budget.nextRecurrence,
-        { month: "short", day: "numeric", year: "numeric" },
-        locale,
-      );
+      const label = formatLocalDate(budget.nextRecurrence, "date", fmt);
       meta += ` · next refresh ${label}`;
     }
     return meta;

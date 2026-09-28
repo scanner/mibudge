@@ -1,7 +1,6 @@
 <script setup lang="ts">
 //
 // SchedulePicker — RRULE producer/consumer for budget forms.
-// (UI_SPEC §5.1)
 //
 // Accepts a RRULE string via v-model and emits an updated string when
 // any selector changes.  Three frequency modes: Weekly, Monthly,
@@ -29,6 +28,9 @@ import type {
   RruleYearly,
   Weekday,
 } from "@/domain/rrule";
+import BaseSelect from "@/components/base/BaseSelect.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -182,27 +184,23 @@ function yearlyDayLabel(n: number): string {
 </script>
 
 <template>
-  <div class="rounded-card border border-neutral-200 bg-white">
+  <BaseCard>
     <!-- Label -->
     <div class="px-4 pt-3">
-      <p
-        class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
-      >
-        {{ label }}
-      </p>
+      <BaseSectionHeader :title="label" as="div" />
     </div>
 
     <!-- Frequency tabs -->
-    <div class="mt-2 flex gap-1 border-b border-neutral-100 px-4 pb-0">
+    <div class="mt-2 flex gap-1 border-b border-border-subtle px-4 pb-0">
       <button
         v-for="f in ['WEEKLY', 'MONTHLY', 'YEARLY'] as Freq[]"
         :key="f"
         type="button"
-        class="rounded-t-md px-3 py-1.5 text-sm font-medium transition-colors"
+        class="rounded-t-xs px-3 py-1.5 text-label transition-colors"
         :class="
           freq === f
-            ? 'border-b-2 border-ocean-400 text-ocean-600'
-            : 'text-neutral-500 hover:text-neutral-700'
+            ? 'border-b-2 border-accent-border text-accent-fg'
+            : 'text-fg-muted hover:text-fg'
         "
         @click="setFreq(f)"
       >
@@ -213,9 +211,8 @@ function yearlyDayLabel(n: number): string {
     <div class="space-y-3 p-4">
       <!-- ── WEEKLY ── -->
       <template v-if="freq === 'WEEKLY'">
-        <select
+        <BaseSelect
           :value="weeklyInterval"
-          class="w-full rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
           @change="
             weeklyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -229,18 +226,18 @@ function yearlyDayLabel(n: number): string {
           >
             {{ opt.label }}
           </option>
-        </select>
+        </BaseSelect>
 
         <div v-if="!intervalOnly" class="flex gap-1.5">
           <button
             v-for="d in WEEKDAY_ORDER"
             :key="d"
             type="button"
-            class="flex-1 rounded-full py-1.5 text-xs font-medium transition-colors"
+            class="flex-1 rounded-pill py-1.5 text-meta font-medium transition-colors"
             :class="
               weeklyDays.has(d)
-                ? 'bg-ocean-400 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-accent text-fg-on-accent'
+                : 'bg-surface-muted text-fg-muted hover:bg-surface-strong'
             "
             @click="toggleWeekday(d)"
           >
@@ -251,9 +248,8 @@ function yearlyDayLabel(n: number): string {
 
       <!-- ── MONTHLY ── -->
       <template v-else-if="freq === 'MONTHLY'">
-        <select
+        <BaseSelect
           :value="monthlyInterval"
-          class="w-full rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
           @change="
             monthlyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -267,7 +263,7 @@ function yearlyDayLabel(n: number): string {
           >
             {{ opt.label }}
           </option>
-        </select>
+        </BaseSelect>
 
         <!-- Day-of-month grid: 1–31 + Last -->
         <div v-if="!intervalOnly" class="grid grid-cols-8 gap-1">
@@ -275,11 +271,11 @@ function yearlyDayLabel(n: number): string {
             v-for="d in Array.from({ length: 31 }, (_, i) => i + 1)"
             :key="d"
             type="button"
-            class="rounded-md py-1 text-xs font-medium transition-colors"
+            class="rounded-xs py-1 text-meta font-medium transition-colors"
             :class="
               monthlyDays.has(d)
-                ? 'bg-ocean-400 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-accent text-fg-on-accent'
+                : 'bg-surface-muted text-fg-muted hover:bg-surface-strong'
             "
             @click="toggleMonthDay(d)"
           >
@@ -287,11 +283,11 @@ function yearlyDayLabel(n: number): string {
           </button>
           <button
             type="button"
-            class="col-span-2 rounded-md py-1 text-xs font-medium transition-colors"
+            class="col-span-2 rounded-xs py-1 text-meta font-medium transition-colors"
             :class="
               monthlyDays.has(-1)
-                ? 'bg-ocean-400 text-white'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                ? 'bg-accent text-fg-on-accent'
+                : 'bg-surface-muted text-fg-muted hover:bg-surface-strong'
             "
             @click="toggleMonthDay(-1)"
           >
@@ -302,9 +298,8 @@ function yearlyDayLabel(n: number): string {
 
       <!-- ── YEARLY ── -->
       <template v-else>
-        <select
+        <BaseSelect
           :value="yearlyInterval"
-          class="w-full rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
           @change="
             yearlyInterval = Number(
               ($event.target as HTMLSelectElement).value,
@@ -313,15 +308,15 @@ function yearlyDayLabel(n: number): string {
         >
           <option :value="1">Every year</option>
           <option :value="2">Every 2 years</option>
-        </select>
+        </BaseSelect>
 
         <div v-if="!intervalOnly" class="grid grid-cols-2 gap-2">
-          <select
+          <BaseSelect
             :value="yearlyMonth"
-            class="rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
             @change="
               yearlyMonth = Number(($event.target as HTMLSelectElement).value)
             "
+            inline
           >
             <option
               v-for="(name, idx) in MONTH_NAMES"
@@ -330,26 +325,29 @@ function yearlyDayLabel(n: number): string {
             >
               {{ name }}
             </option>
-          </select>
+          </BaseSelect>
 
-          <select
+          <BaseSelect
             :value="yearlyDay"
-            class="rounded-subcard border border-neutral-200 px-3 py-2 text-sm text-neutral-900"
             @change="
               yearlyDay = Number(($event.target as HTMLSelectElement).value)
             "
+            inline
           >
             <option v-for="d in YEARLY_DAY_OPTIONS" :key="d" :value="d">
               {{ yearlyDayLabel(d) }}
             </option>
-          </select>
+          </BaseSelect>
         </div>
       </template>
 
       <!-- Preview block -->
-      <div v-if="!intervalOnly" class="rounded-subcard bg-neutral-50 px-3 py-2">
-        <p class="text-sm text-neutral-700">{{ rruleHuman(currentRrule) }}</p>
+      <div
+        v-if="!intervalOnly"
+        class="rounded-control bg-surface-sunken px-3 py-2"
+      >
+        <p class="text-body-sm text-fg">{{ rruleHuman(currentRrule) }}</p>
       </div>
     </div>
-  </div>
+  </BaseCard>
 </template>

@@ -2,7 +2,8 @@
 //
 // AllocationCard — renders a single allocation within a transaction
 // detail view.  Shows budget name, editable amount, and category.
-// Swipe-to-delete on mobile, hover × on desktop.  (UI_SPEC §4.6)
+// Its delete button is always visible on touch screens, and appears on
+// hover or keyboard focus with a pointer.
 //
 
 // 3rd party imports
@@ -12,9 +13,12 @@ import { computed, ref, watch } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { toDecimal } from "@/domain/money";
 import type { Allocation } from "@/models/allocation";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -63,33 +67,31 @@ const budgetId = computed(() => props.allocation.budgetId);
 </script>
 
 <template>
-  <div
-    class="group relative rounded-card border border-neutral-200 bg-white px-4 py-3"
-  >
+  <BaseCard padded class="group relative">
     <!-- Remove button -->
-    <button
-      type="button"
-      class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 opacity-0 transition-opacity hover:bg-coral-50 hover:text-coral-600 group-hover:opacity-100"
-      aria-label="Remove allocation"
+    <BaseIconButton
+      label="Remove allocation"
+      size="sm"
+      tone="danger"
+      class="absolute right-2 top-2 can-hover:opacity-0 can-hover:focus-visible:opacity-100 can-hover:group-hover:opacity-100"
       @click="emit('remove', allocation.id)"
     >
-      <IconTrash class="h-3.5 w-3.5" />
-    </button>
+      <IconTrash class="size-icon-xs" />
+    </BaseIconButton>
 
     <!-- Budget name + reassign -->
     <div class="flex items-center gap-2">
-      <button
+      <BaseButton
         v-if="budgetId"
-        type="button"
-        class="text-sm font-medium text-ocean-600 hover:underline"
+        variant="link"
         @click="emit('navigate-budget', budgetId)"
       >
         {{ budgetName }}
-      </button>
-      <span v-else class="text-sm italic text-secondary">Unallocated</span>
+      </BaseButton>
+      <span v-else class="text-body-sm italic text-fg-muted">Unallocated</span>
       <button
         type="button"
-        class="text-[11px] text-secondary hover:text-ocean-600"
+        class="text-meta text-fg-muted hover:text-accent-fg"
         @click="emit('reassign', allocation.id)"
       >
         change
@@ -103,7 +105,7 @@ const budgetId = computed(() => props.allocation.budgetId);
           v-model="amountInput"
           type="text"
           inputmode="decimal"
-          class="w-28 border-b border-ocean-400 bg-transparent font-mono text-[15px] font-medium text-neutral-900 outline-none"
+          class="w-28 border-b border-accent-border bg-transparent font-mono text-input font-medium text-fg outline-none"
           @blur="commitEdit"
           @keydown.enter="commitEdit"
         />
@@ -116,9 +118,9 @@ const budgetId = computed(() => props.allocation.budgetId);
     </div>
 
     <!-- Budget balance after this allocation -->
-    <div class="mt-1 flex items-center gap-2 text-xs text-secondary">
+    <div class="mt-1 flex items-center gap-2 text-meta text-fg-muted">
       <span class="flex-none">Budget balance after</span>
-      <span class="min-w-0 flex-1 border-b border-dotted border-neutral-200" />
+      <span class="min-w-0 flex-1 border-b border-dotted border-border" />
       <MoneyAmount
         class="flex-none"
         :amount="allocation.budgetBalance"
@@ -127,8 +129,11 @@ const budgetId = computed(() => props.allocation.budgetId);
     </div>
 
     <!-- Category -->
-    <div v-if="allocation.categoryFullName" class="mt-1 text-xs text-secondary">
+    <div
+      v-if="allocation.categoryFullName"
+      class="mt-1 text-meta text-fg-muted"
+    >
       {{ allocation.categoryFullName }}
     </div>
-  </div>
+  </BaseCard>
 </template>

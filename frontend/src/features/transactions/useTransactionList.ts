@@ -40,14 +40,13 @@ import { useFuzzySearch } from "@/composables/useFuzzySearch";
 import { useInfiniteList } from "@/composables/useInfiniteList";
 import { useAsync } from "@/composables/useAsync";
 import { useResource } from "@/composables/useResource";
-import { addDays, todayDateStr, txDateStr } from "@/domain/dates";
 import { isUnallocated } from "@/models/allocation";
 import { internalTransactionFromDto } from "@/models/internalTransaction";
 import type { InternalTransaction } from "@/models/internalTransaction";
 import { listRows, rowInstant } from "@/models/listRow";
 import { pageFromDto } from "@/models/page";
 import type { Transaction } from "@/models/transaction";
-import { occurredAt, transactionFromDto } from "@/models/transaction";
+import { transactionFromDto } from "@/models/transaction";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useAllocationsStore } from "@/stores/allocations";
 import { useBudgetsStore } from "@/stores/budgets";
@@ -56,19 +55,13 @@ import { useTransactionNavStore } from "@/stores/transactionNav";
 
 ////////////////////////////////////////////////////////////////////////
 //
-export type TransactionFilter =
-  | "all"
-  | "unallocated"
-  | "pending"
-  | "income"
-  | "last30";
+export type TransactionFilter = "all" | "unallocated" | "pending" | "income";
 
 export const FILTER_CHIPS: { key: TransactionFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "unallocated", label: "Unallocated" },
   { key: "pending", label: "Pending" },
   { key: "income", label: "Income" },
-  { key: "last30", label: "Last 30 days" },
 ];
 
 const ORDERING = "-transaction_date,-created_at";
@@ -147,11 +140,6 @@ export function useTransactionList() {
         return txs.filter((tx) => tx.pending);
       case "income":
         return txs.filter((tx) => tx.amount.isPositive());
-      case "last30": {
-        const tz = session.timezone;
-        const cutoff = addDays(todayDateStr(tz), -30);
-        return txs.filter((tx) => txDateStr(occurredAt(tx), tz) >= cutoff);
-      }
       default:
         return [...txs];
     }

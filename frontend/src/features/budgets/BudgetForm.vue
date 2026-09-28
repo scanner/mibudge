@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BudgetForm — create and edit form for budgets.  (UI_SPEC §4.3, §4.4)
+// BudgetForm — create and edit form for budgets.
 // Feature component (budgets); state and saving live in
 // `useBudgetForm`.
 //
@@ -21,6 +21,11 @@ import { IconBucket, IconRepeat, IconTarget } from "@tabler/icons-vue";
 import SchedulePicker from "@/components/budgets/SchedulePicker.vue";
 import type { Budget } from "@/models/budget";
 import { useBudgetForm } from "./useBudgetForm";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseToggle from "@/components/base/BaseToggle.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -73,75 +78,69 @@ async function submit() {
         class="rounded-card border-2 px-3 py-3 text-left transition-colors"
         :class="
           budgetType === 'G'
-            ? 'border-ocean-400 bg-ocean-50'
-            : 'border-neutral-200 bg-white hover:border-neutral-300'
+            ? 'border-accent-border bg-accent-subtle'
+            : 'border-border bg-surface hover:border-border-emphasis'
         "
         @click="budgetType = 'G'"
       >
         <IconTarget
-          class="h-5 w-5"
-          :class="budgetType === 'G' ? 'text-ocean-500' : 'text-neutral-400'"
+          class="size-icon-md"
+          :class="budgetType === 'G' ? 'text-accent-fg' : 'text-icon-muted'"
         />
-        <div class="mt-1 text-[14px] font-medium text-neutral-900">Goal</div>
-        <div class="mt-0.5 text-[11px] text-neutral-500">
-          Save toward a target
-        </div>
+        <div class="mt-1 text-body font-medium text-fg">Goal</div>
+        <div class="mt-0.5 text-meta text-fg-muted">Save toward a target</div>
       </button>
       <button
         type="button"
         class="rounded-card border-2 px-3 py-3 text-left transition-colors"
         :class="
           budgetType === 'R'
-            ? 'border-ocean-400 bg-ocean-50'
-            : 'border-neutral-200 bg-white hover:border-neutral-300'
+            ? 'border-accent-border bg-accent-subtle'
+            : 'border-border bg-surface hover:border-border-emphasis'
         "
         @click="budgetType = 'R'"
       >
         <IconRepeat
-          class="h-5 w-5"
-          :class="budgetType === 'R' ? 'text-ocean-500' : 'text-neutral-400'"
+          class="size-icon-md"
+          :class="budgetType === 'R' ? 'text-accent-fg' : 'text-icon-muted'"
         />
-        <div class="mt-1 text-[14px] font-medium text-neutral-900">
-          Recurring
-        </div>
-        <div class="mt-0.5 text-[11px] text-neutral-500">
-          Refills on a schedule
-        </div>
+        <div class="mt-1 text-body font-medium text-fg">Recurring</div>
+        <div class="mt-0.5 text-meta text-fg-muted">Refills on a schedule</div>
       </button>
       <button
         type="button"
         class="rounded-card border-2 px-3 py-3 text-left transition-colors"
         :class="
           budgetType === 'C'
-            ? 'border-ocean-400 bg-ocean-50'
-            : 'border-neutral-200 bg-white hover:border-neutral-300'
+            ? 'border-accent-border bg-accent-subtle'
+            : 'border-border bg-surface hover:border-border-emphasis'
         "
         @click="budgetType = 'C'"
       >
         <IconBucket
-          class="h-5 w-5"
-          :class="budgetType === 'C' ? 'text-ocean-500' : 'text-neutral-400'"
+          class="size-icon-md"
+          :class="budgetType === 'C' ? 'text-accent-fg' : 'text-icon-muted'"
         />
-        <div class="mt-1 text-[14px] font-medium text-neutral-900">Capped</div>
-        <div class="mt-0.5 text-[11px] text-neutral-500">Tops up to a cap</div>
+        <div class="mt-1 text-body font-medium text-fg">Capped</div>
+        <div class="mt-0.5 text-meta text-fg-muted">Tops up to a cap</div>
       </button>
     </div>
 
     <!-- Read-only type + account in edit mode -->
     <div v-if="mode === 'edit'" class="space-y-1">
       <div
-        class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3"
+        class="flex items-center justify-between rounded-control bg-surface-sunken px-4 py-3"
       >
-        <span class="text-sm text-neutral-500">Type</span>
-        <span class="text-sm font-medium text-neutral-900">
+        <span class="text-body-sm text-fg-muted">Type</span>
+        <span class="text-label text-fg">
           {{ budget?.budgetType === "G" ? "Goal" : "Recurring" }}
         </span>
       </div>
       <div
-        class="flex items-center justify-between rounded-subcard bg-neutral-50 px-4 py-3"
+        class="flex items-center justify-between rounded-control bg-surface-sunken px-4 py-3"
       >
-        <span class="text-sm text-neutral-500">Account</span>
-        <span class="text-sm font-medium text-neutral-900">
+        <span class="text-body-sm text-fg-muted">Account</span>
+        <span class="text-label text-fg">
           {{ accountName }}
         </span>
       </div>
@@ -149,56 +148,53 @@ async function submit() {
 
     <!-- Name -->
     <div>
-      <label
-        class="mb-1 block text-[13px] font-medium text-neutral-700"
-        for="budget-name"
-      >
-        Name
-      </label>
-      <input
-        id="budget-name"
-        v-model="name"
-        type="text"
-        required
-        placeholder="e.g. Groceries"
-        class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-[15px] text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none"
-      />
+      <BaseFormField id="budget-name" label="Name">
+        <template #default="{ id, describedBy, invalid }">
+          <BaseInput
+            :id="id"
+            v-model="name"
+            type="text"
+            required
+            placeholder="e.g. Groceries"
+            :aria-describedby="describedBy"
+            :invalid="invalid"
+          />
+        </template>
+      </BaseFormField>
     </div>
 
     <!-- Target amount (both types) -->
     <div>
-      <label
-        class="mb-1 block text-[13px] font-medium text-neutral-700"
-        for="target-balance"
-      >
-        Target amount
-      </label>
-      <input
-        id="target-balance"
-        v-model="targetBalance"
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="0.00"
-        class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-[15px] text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none"
-      />
+      <BaseFormField id="target-balance" label="Target amount">
+        <template #default="{ id, describedBy, invalid }">
+          <BaseInput
+            :id="id"
+            v-model="targetBalance"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            :aria-describedby="describedBy"
+            :invalid="invalid"
+            mono
+          />
+        </template>
+      </BaseFormField>
     </div>
 
     <!-- Goal-specific fields -->
     <template v-if="isGoal">
       <!-- Funding type toggle -->
       <div>
-        <p class="mb-1.5 text-[13px] font-medium text-neutral-700">
-          Funding type
-        </p>
+        <p class="mb-1.5 text-label text-fg">Funding type</p>
         <div class="flex gap-2">
           <button
             type="button"
-            class="flex-1 rounded-full border py-2 text-sm font-medium transition-colors"
+            class="flex-1 rounded-pill border py-2 text-label transition-colors"
             :class="
               fundingType === 'D'
-                ? 'border-ocean-400 bg-ocean-50 text-ocean-600'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'
+                ? 'border-accent-border bg-accent-subtle text-accent-fg'
+                : 'border-border bg-surface text-fg-muted hover:border-border-emphasis'
             "
             @click="fundingType = 'D'"
           >
@@ -206,11 +202,11 @@ async function submit() {
           </button>
           <button
             type="button"
-            class="flex-1 rounded-full border py-2 text-sm font-medium transition-colors"
+            class="flex-1 rounded-pill border py-2 text-label transition-colors"
             :class="
               fundingType === 'F'
-                ? 'border-ocean-400 bg-ocean-50 text-ocean-600'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'
+                ? 'border-accent-border bg-accent-subtle text-accent-fg'
+                : 'border-border bg-surface text-fg-muted hover:border-border-emphasis'
             "
             @click="fundingType = 'F'"
           >
@@ -221,38 +217,37 @@ async function submit() {
 
       <template v-if="fundingType === 'D'">
         <div>
-          <label
-            class="mb-1 block text-[13px] font-medium text-neutral-700"
-            for="target-date"
-          >
-            Target date
-          </label>
-          <input
-            id="target-date"
-            v-model="targetDate"
-            type="date"
-            class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
-          />
+          <BaseFormField id="target-date" label="Target date">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="targetDate"
+                type="date"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+              />
+            </template>
+          </BaseFormField>
         </div>
       </template>
 
       <template v-else>
         <div>
-          <label
-            class="mb-1 block text-[13px] font-medium text-neutral-700"
-            for="funding-amount"
-          >
-            Amount per funding event
-          </label>
-          <input
-            id="funding-amount"
-            v-model="fundingAmount"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-[15px] text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none"
-          />
+          <BaseFormField id="funding-amount" label="Amount per funding event">
+            <template #default="{ id, describedBy, invalid }">
+              <BaseInput
+                :id="id"
+                v-model="fundingAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                :aria-describedby="describedBy"
+                :invalid="invalid"
+                mono
+              />
+            </template>
+          </BaseFormField>
         </div>
       </template>
 
@@ -261,47 +256,35 @@ async function submit() {
 
     <!-- Capped-specific fields -->
     <template v-else-if="isCapped">
-      <p
-        class="rounded-subcard bg-ocean-50 px-3 py-2 text-[12px] text-ocean-600"
-      >
+      <BaseBanner tone="info">
         Funds a fixed amount on a schedule up to the cap above. Resumes
         automatically whenever spending brings the balance below the cap.
-      </p>
+      </BaseBanner>
       <div>
-        <label
-          class="mb-1 block text-[13px] font-medium text-neutral-700"
-          for="funding-amount"
-        >
-          Amount per funding event
-        </label>
-        <input
-          id="funding-amount"
-          v-model="fundingAmount"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
-          class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-[15px] text-neutral-900 placeholder-neutral-400 focus:border-ocean-400 focus:outline-none"
-        />
+        <BaseFormField id="funding-amount" label="Amount per funding event">
+          <template #default="{ id, describedBy, invalid }">
+            <BaseInput
+              :id="id"
+              v-model="fundingAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              :aria-describedby="describedBy"
+              :invalid="invalid"
+              mono
+            />
+          </template>
+        </BaseFormField>
       </div>
       <SchedulePicker v-model="fundingSchedule" label="Funding schedule" />
 
       <!-- Start paused toggle -->
       <label
-        class="flex cursor-pointer items-center justify-between rounded-subcard border border-neutral-200 bg-white px-4 py-3"
+        class="flex cursor-pointer items-center justify-between rounded-control border border-border bg-surface px-4 py-3"
       >
-        <div class="text-[15px] font-medium text-neutral-900">Start paused</div>
-        <div class="relative">
-          <input v-model="paused" type="checkbox" class="sr-only" />
-          <div
-            class="h-6 w-10 rounded-full transition-colors"
-            :class="paused ? 'bg-ocean-400' : 'bg-neutral-300'"
-          />
-          <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-            :class="paused ? 'translate-x-4' : 'translate-x-0.5'"
-          />
-        </div>
+        <div class="text-item-title text-fg">Start paused</div>
+        <BaseToggle v-model="paused" />
       </label>
     </template>
 
@@ -315,20 +298,16 @@ async function submit() {
 
       <!-- Next refresh date (stored as DTSTART in recurrence_schedule) -->
       <div>
-        <label
-          class="mb-1 block text-[13px] font-medium text-neutral-700"
-          for="next-refresh-date"
-        >
+        <label class="mb-1 block text-label text-fg" for="next-refresh-date">
           Next refresh date
         </label>
-        <p class="mb-1.5 text-[11px] text-neutral-500">
+        <p class="mb-1.5 text-meta text-fg-muted">
           When the budgeted expense next hits and the budget refreshes
         </p>
-        <input
+        <BaseInput
           id="next-refresh-date"
           v-model="nextRefreshDate"
           type="date"
-          class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-[15px] text-neutral-900 focus:border-ocean-400 focus:outline-none"
         />
       </div>
 
@@ -336,52 +315,26 @@ async function submit() {
 
       <!-- Start paused toggle -->
       <label
-        class="flex cursor-pointer items-center justify-between rounded-subcard border border-neutral-200 bg-white px-4 py-3"
+        class="flex cursor-pointer items-center justify-between rounded-control border border-border bg-surface px-4 py-3"
       >
-        <div class="text-[15px] font-medium text-neutral-900">Start paused</div>
-        <div class="relative">
-          <input v-model="paused" type="checkbox" class="sr-only" />
-          <div
-            class="h-6 w-10 rounded-full transition-colors"
-            :class="paused ? 'bg-ocean-400' : 'bg-neutral-300'"
-          />
-          <div
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-            :class="paused ? 'translate-x-4' : 'translate-x-0.5'"
-          />
-        </div>
+        <div class="text-item-title text-fg">Start paused</div>
+        <BaseToggle v-model="paused" />
       </label>
     </template>
 
     <!-- Error -->
-    <p
-      v-if="error"
-      class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600"
-    >
+    <BaseBanner v-if="error" tone="danger">
       {{ error }}
-    </p>
+    </BaseBanner>
 
     <!-- Actions -->
     <div class="flex gap-2 pt-2">
-      <button
-        type="button"
-        class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-        @click="emit('cancel')"
-      >
+      <BaseButton variant="secondary" class="flex-1" @click="emit('cancel')">
         Cancel
-      </button>
-      <button
-        type="submit"
-        :disabled="!canSubmit"
-        class="flex-1 rounded-full py-3 text-sm font-medium text-white transition-colors"
-        :class="
-          canSubmit
-            ? 'bg-ocean-400 hover:bg-ocean-600'
-            : 'cursor-not-allowed bg-neutral-300'
-        "
-      >
+      </BaseButton>
+      <BaseButton type="submit" :disabled="!canSubmit" class="flex-1">
         {{ saving ? "Saving…" : mode === "create" ? "Create" : "Save" }}
-      </button>
+      </BaseButton>
     </div>
   </form>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // TransactionsView — transaction list with filter chips, date-grouped
-// rows, infinite scroll, and search.  (UI_SPEC §4.5)  Route shell over
+// rows, infinite scroll, and search.  Route shell over
 // `useTransactionList`; Cmd/Ctrl-F opens the search.
 //
 
@@ -13,7 +13,7 @@ import { useRouter } from "vue-router";
 
 // app imports
 //
-import EmptyState from "@/components/shared/EmptyState.vue";
+import EmptyState from "@/components/base/EmptyState.vue";
 import TransactionGroupList from "@/components/transactions/TransactionGroupList.vue";
 import { useFindShortcut } from "@/composables/useFindShortcut";
 import { FILTER_CHIPS as filterChips } from "@/features/transactions/useTransactionList";
@@ -21,6 +21,10 @@ import { useTransactionList } from "@/features/transactions/useTransactionList";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -65,62 +69,52 @@ function openTransaction(id: string) {
 <template>
   <AppShell>
     <template #action>
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full transition-colors"
-        :class="
-          showInternalTxs
-            ? 'bg-ocean-400 text-white hover:bg-ocean-600'
-            : 'text-neutral-700 hover:bg-neutral-100'
-        "
-        aria-label="Toggle transfers"
+      <BaseIconButton
+        label="Toggle transfers"
+        :pressed="showInternalTxs"
         :title="showInternalTxs ? 'Hide transfers' : 'Show transfers'"
         @click="toggleInternalTxs"
       >
-        <IconArrowsRightLeft class="h-5 w-5" />
-      </button>
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
-        aria-label="Search transactions"
-        @click="toggleSearch"
-      >
-        <IconSearch v-if="!searchOpen" class="h-5 w-5" />
-        <IconX v-else class="h-5 w-5" />
-      </button>
+        <IconArrowsRightLeft class="size-icon-md" />
+      </BaseIconButton>
+      <BaseIconButton label="Search transactions" @click="toggleSearch">
+        <IconSearch v-if="!searchOpen" class="size-icon-md" />
+        <IconX v-else class="size-icon-md" />
+      </BaseIconButton>
     </template>
 
     <!-- Search bar -->
     <Transition
-      enter-active-class="transition-all duration-200 ease-out"
+      enter-active-class="transition-all duration-base ease-enter"
       enter-from-class="max-h-0 opacity-0"
       enter-to-class="max-h-12 opacity-100"
-      leave-active-class="transition-all duration-150 ease-in"
+      leave-active-class="transition-all duration-fast ease-exit"
       leave-from-class="max-h-12 opacity-100"
       leave-to-class="max-h-0 opacity-0"
     >
-      <div v-if="searchOpen" class="-mx-4 overflow-hidden px-4 pb-3">
-        <input
+      <div v-if="searchOpen" class="-mx-page-x overflow-hidden px-page-x pb-3">
+        <BaseInput
           ref="searchInput"
           v-model="searchQuery"
           type="text"
           placeholder="Search transactions…"
-          class="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-ocean-400 focus:ring-1 focus:ring-ocean-400"
         />
       </div>
     </Transition>
 
     <!-- Filter chips -->
-    <div class="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pt-1 scrollbar-none">
+    <div
+      class="-mx-page-x mb-4 flex gap-2 overflow-x-auto px-page-x pt-1 scrollbar-none"
+    >
       <button
         v-for="chip in filterChips"
         :key="chip.key"
         type="button"
-        class="flex-none rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+        class="flex-none rounded-pill border px-3 py-1 text-meta font-medium transition-colors"
         :class="
           activeFilter === chip.key
-            ? 'border-ocean-400 bg-ocean-50 text-ocean-600'
-            : 'border-neutral-200 bg-white text-secondary hover:border-neutral-300'
+            ? 'border-accent-border bg-accent-subtle text-accent-fg'
+            : 'border-border bg-surface text-fg-muted hover:border-border-emphasis'
         "
         @click="activeFilter = chip.key"
       >
@@ -130,30 +124,19 @@ function openTransaction(id: string) {
 
     <!-- Loading skeletons -->
     <div v-if="loading" class="space-y-3">
-      <div
-        v-for="i in 6"
-        :key="i"
-        class="h-16 animate-pulse rounded-card bg-neutral-100"
-      />
+      <BaseSkeleton v-for="i in 6" :key="i" class="h-16" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error"
-      class="rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
-    >
+    <BaseBanner v-else-if="error" tone="danger">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <!-- Transaction list -->
     <template v-else>
-      <p
-        v-if="assignmentsError"
-        class="mb-3 rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
-        role="alert"
-      >
+      <BaseBanner v-if="assignmentsError" tone="danger" class="mb-3">
         {{ assignmentsError }}
-      </p>
+      </BaseBanner>
 
       <TransactionGroupList
         v-if="displayTransactions.length > 0"
@@ -180,12 +163,12 @@ function openTransaction(id: string) {
       <!-- Loading more indicator -->
       <div v-if="loadingMore" class="flex justify-center py-4">
         <div
-          class="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-ocean-400"
+          class="h-5 w-5 animate-spin rounded-pill border-2 border-border border-t-accent"
         />
       </div>
       <p
         v-else-if="loadMoreError"
-        class="py-4 text-center text-sm text-coral-600"
+        class="py-4 text-center text-body-sm text-danger-fg"
         role="alert"
       >
         Couldn't load more transactions: {{ loadMoreError }}

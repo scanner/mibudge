@@ -77,13 +77,7 @@ export function useBankAccountDetail(id: () => string) {
     budgets.byId(account.value?.unallocatedBudgetId),
   );
   const createdDate = computed(() =>
-    account.value
-      ? formatInstantDate(account.value.createdAt, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })
-      : "",
+    account.value ? formatInstantDate(account.value.createdAt, "date") : "",
   );
 
   ////////////////////////////////////////////////////////////////////

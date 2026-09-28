@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// TransactionRow — list-row card for a single transaction.  (UI_SPEC §4.5)
+// TransactionRow — list-row card for a single transaction.
 //
 // Layout (non-split):
 //   [ Party name               ] [ $amount ]
@@ -27,7 +27,7 @@ import { computed } from "vue";
 
 // app imports
 //
-import MoneyAmount from "@/components/shared/MoneyAmount.vue";
+import MoneyAmount from "@/components/base/MoneyAmount.vue";
 import { transactionTypeLabel } from "@/domain/labels";
 import { formatMoney } from "@/domain/money";
 import type { Money } from "@/domain/money";
@@ -35,6 +35,9 @@ import type { Allocation } from "@/models/allocation";
 import { isUnallocated } from "@/models/allocation";
 import type { Transaction } from "@/models/transaction";
 import { displayName } from "@/models/transaction";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseBadge from "@/components/base/BaseBadge.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -124,37 +127,39 @@ const allocInfo = computed<{
 </script>
 
 <template>
-  <article
-    class="group/row cursor-pointer rounded-card border border-neutral-200 bg-white transition-colors hover:bg-neutral-50"
+  <BaseCard
+    as="article"
+    class="group/row cursor-pointer transition-colors hover:bg-surface-sunken"
     :class="
       transaction.pending
-        ? 'border-l-[3px] border-l-amber-400'
+        ? 'border-l-rule border-l-row-pending'
         : allocInfo.isUnallocated
-          ? 'border-l-[3px] border-l-ocean-400'
+          ? 'border-l-rule border-l-row-unallocated'
           : ''
     "
     @click="emit('select', transaction.id)"
   >
-    <div class="px-4 py-3">
+    <div class="px-card-x py-card-y">
       <!-- Row 1: party name + amount (+ account balance below) + optional remove -->
       <div class="flex items-start justify-between gap-2">
-        <span class="min-w-0 truncate text-[15px] font-medium text-neutral-900">
+        <span class="min-w-0 truncate text-item-title text-fg">
           {{ partyName }}
         </span>
         <div class="flex flex-none flex-col items-end">
           <div class="flex items-center gap-1.5">
             <MoneyAmount :amount="transaction.amount" size="md" coloured />
-            <button
+            <BaseIconButton
               v-if="removable"
-              type="button"
-              class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 opacity-0 transition-opacity hover:bg-coral-50 hover:text-coral-600 group-hover/row:opacity-100"
-              aria-label="Remove from budget"
+              label="Remove from budget"
+              size="sm"
+              tone="danger"
+              class="can-hover:opacity-0 can-hover:focus-visible:opacity-100 can-hover:group-hover/row:opacity-100"
               @click.stop="emit('remove', transaction.id)"
             >
-              <IconX class="h-3.5 w-3.5" />
-            </button>
+              <IconX class="size-icon-xs" />
+            </BaseIconButton>
           </div>
-          <span class="tabular-nums text-[11px] text-secondary">
+          <span class="tabular-nums text-meta text-fg-muted">
             {{ formatMoney(transaction.accountAvailableBalance) }}
           </span>
         </div>
@@ -167,24 +172,21 @@ const allocInfo = computed<{
       >
         <span
           v-if="transaction.pending"
-          class="min-w-0 truncate text-[12px] text-ocean-600"
+          class="min-w-0 truncate text-meta text-fg-link"
         >
           Unallocated
-          <span v-if="allocations?.[0]" class="text-secondary">
+          <span v-if="allocations?.[0]" class="text-fg-muted">
             (now {{ formatMoney(allocations[0].budgetBalance) }})
           </span>
         </span>
-        <span v-else class="min-w-0 truncate text-[12px] italic text-secondary">
+        <span v-else class="min-w-0 truncate text-meta italic text-fg-muted">
           Unallocated — tap to assign
         </span>
         <div class="flex flex-none items-center gap-1.5">
-          <span
-            v-if="transaction.pending"
-            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
-          >
+          <BaseBadge v-if="transaction.pending" tone="warning">
             Pending
-          </span>
-          <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+          </BaseBadge>
+          <span v-if="typeLabel" class="text-meta text-fg-muted">{{
             typeLabel
           }}</span>
         </div>
@@ -195,20 +197,17 @@ const allocInfo = computed<{
         v-else-if="allocInfo.single"
         class="mt-0.5 flex items-center justify-between gap-2"
       >
-        <span class="min-w-0 truncate text-[12px] text-ocean-600">
+        <span class="min-w-0 truncate text-meta text-fg-link">
           {{ allocInfo.single.name }}
-          <span class="text-secondary"
+          <span class="text-fg-muted"
             >(now {{ formatMoney(allocInfo.single.balance) }})</span
           >
         </span>
         <div class="flex flex-none items-center gap-1.5">
-          <span
-            v-if="transaction.pending"
-            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
-          >
+          <BaseBadge v-if="transaction.pending" tone="warning">
             Pending
-          </span>
-          <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+          </BaseBadge>
+          <span v-if="typeLabel" class="text-meta text-fg-muted">{{
             typeLabel
           }}</span>
         </div>
@@ -217,19 +216,12 @@ const allocInfo = computed<{
       <!-- Rows 2+ (split): header row + one line per leg -->
       <div v-else-if="allocInfo.isSplit" class="mt-0.5">
         <div class="flex items-center justify-between gap-2">
-          <span
-            class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-secondary ring-1 ring-neutral-300"
-          >
-            Split
-          </span>
+          <BaseBadge tone="neutral"> Split </BaseBadge>
           <div class="flex flex-none items-center gap-1.5">
-            <span
-              v-if="transaction.pending"
-              class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
-            >
+            <BaseBadge v-if="transaction.pending" tone="warning">
               Pending
-            </span>
-            <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+            </BaseBadge>
+            <span v-if="typeLabel" class="text-meta text-fg-muted">{{
               typeLabel
             }}</span>
           </div>
@@ -239,13 +231,13 @@ const allocInfo = computed<{
           :key="i"
           class="mt-0.5 flex items-baseline gap-1.5"
         >
-          <span class="min-w-0 flex-1 truncate text-[12px] text-ocean-600">
+          <span class="min-w-0 flex-1 truncate text-meta text-fg-link">
             {{ leg.name }}
-            <span class="text-secondary"
+            <span class="text-fg-muted"
               >(now {{ formatMoney(leg.balance) }})</span
             >
           </span>
-          <span class="flex-none text-[12px] font-medium text-neutral-700">
+          <span class="flex-none text-meta font-medium text-fg">
             {{ formatMoney(leg.amount) }}
           </span>
         </div>
@@ -256,16 +248,13 @@ const allocInfo = computed<{
         v-else-if="typeLabel || transaction.pending"
         class="mt-0.5 flex justify-end gap-1.5"
       >
-        <span
-          v-if="transaction.pending"
-          class="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-300"
-        >
+        <BaseBadge v-if="transaction.pending" tone="warning">
           Pending
-        </span>
-        <span v-if="typeLabel" class="text-[12px] text-secondary">{{
+        </BaseBadge>
+        <span v-if="typeLabel" class="text-meta text-fg-muted">{{
           typeLabel
         }}</span>
       </div>
     </div>
-  </article>
+  </BaseCard>
 </template>

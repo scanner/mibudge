@@ -11,6 +11,10 @@ import { IconPencil } from "@tabler/icons-vue";
 // app imports
 //
 import type { BankAccount } from "@/models/bankAccount";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseSectionHeader from "@/components/base/BaseSectionHeader.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -25,43 +29,36 @@ const emit = defineEmits<{ (e: "edit"): void }>();
 
 <template>
   <!-- Details -->
-  <section
-    class="overflow-hidden rounded-card border border-neutral-200 bg-white"
-  >
-    <h2
-      class="border-b border-neutral-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary"
-    >
-      Details
-    </h2>
-    <dl class="divide-y divide-neutral-100">
-      <div class="flex items-center justify-between px-4 py-3">
-        <dt class="text-sm text-secondary">Account number</dt>
+  <BaseCard as="section">
+    <BaseSectionHeader title="Details" card />
+    <dl>
+      <BaseListRow class="justify-between">
+        <dt class="text-body-sm text-fg-muted">Account number</dt>
         <dd class="flex items-center gap-2">
-          <span class="font-mono text-sm text-neutral-900">
+          <span class="font-mono text-amount-sm text-fg">
             {{
               account.accountNumber
                 ? `····${account.accountNumber.slice(-4)}`
                 : "—"
             }}
           </span>
-          <button
-            type="button"
-            class="flex h-6 w-6 flex-none items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
-            aria-label="Edit account number"
+          <BaseIconButton
+            label="Edit account number"
+            size="sm"
             @click="emit('edit')"
           >
-            <IconPencil class="h-3.5 w-3.5" />
-          </button>
+            <IconPencil class="size-icon-xs" />
+          </BaseIconButton>
         </dd>
-      </div>
-      <div class="flex items-center justify-between px-4 py-3">
-        <dt class="text-sm text-secondary">Bank</dt>
-        <dd class="text-sm text-neutral-900">{{ bankName ?? "—" }}</dd>
-      </div>
-      <div class="flex items-center justify-between px-4 py-3">
-        <dt class="text-sm text-secondary">Created</dt>
-        <dd class="text-sm text-neutral-900">{{ createdDate }}</dd>
-      </div>
+      </BaseListRow>
+      <BaseListRow class="justify-between">
+        <dt class="text-body-sm text-fg-muted">Bank</dt>
+        <dd class="text-body-sm text-fg">{{ bankName ?? "—" }}</dd>
+      </BaseListRow>
+      <BaseListRow class="justify-between">
+        <dt class="text-body-sm text-fg-muted">Created</dt>
+        <dd class="text-body-sm text-fg">{{ createdDate }}</dd>
+      </BaseListRow>
     </dl>
-  </section>
+  </BaseCard>
 </template>

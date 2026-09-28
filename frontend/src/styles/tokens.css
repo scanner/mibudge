@@ -1,0 +1,222 @@
+/*
+ * Design tokens.
+ *
+ * Every style value in the SPA is a custom property here, on `:root`:
+ *
+ *   --palette-*  raw colour ramps.  Only the semantic colours read them.
+ *   --color-*    semantic colours, named for their purpose.
+ *   --text-*, --leading-*, --weight-*, --tracking-*   typography roles.
+ *   --space-*, --size-*, --radius-*, --shadow-*, --duration-*, --ease-*
+ *
+ * Templates reach them through the Tailwind utilities defined in
+ * `tailwind.config.ts` (`text-fg-muted`, `text-label`, `rounded-card`).
+ * Colours are space-separated RGB channels so Tailwind's `/<alpha>`
+ * modifier works.  This is the only file in `src/` that contains colour
+ * literals.  See `docs/spa/styling.md`.
+ */
+
+:root {
+  /* Palette */
+  --palette-white: 255 255 255;
+
+  --palette-ocean-50: 234 244 255;
+  --palette-ocean-400: 55 138 221;
+  --palette-ocean-600: 24 95 165;
+  --palette-ocean-800: 12 68 124;
+
+  --palette-mint-50: 225 245 238;
+  --palette-mint-400: 29 158 117;
+  --palette-mint-500: 26 148 111;
+  --palette-mint-600: 15 110 86;
+
+  --palette-amber-50: 255 245 230;
+  --palette-amber-400: 239 159 39;
+  --palette-amber-500: 182 116 24;
+  --palette-amber-600: 133 79 11;
+
+  --palette-coral-50: 252 235 235;
+  --palette-coral-400: 226 75 74;
+  --palette-coral-600: 163 45 45;
+  --palette-coral-800: 122 34 34;
+
+  --palette-neutral-50: 245 244 240;
+  --palette-neutral-100: 241 239 232;
+  --palette-neutral-200: 224 222 216;
+  --palette-neutral-300: 211 209 199;
+  --palette-neutral-400: 180 178 169;
+  --palette-neutral-500: 136 135 128;
+  --palette-neutral-550: 113 112 107;
+  --palette-neutral-600: 95 94 90;
+  --palette-neutral-900: 26 26 26;
+
+  /* Text and icons */
+  --color-fg: var(--palette-neutral-900);
+  --color-fg-muted: var(--palette-neutral-600);
+  --color-fg-subtle: var(--palette-neutral-550);
+  --color-fg-disabled: var(--palette-neutral-400);
+  --color-fg-on-accent: var(--palette-white);
+  --color-fg-link: var(--palette-ocean-600);
+  --color-icon-muted: var(--palette-neutral-400);
+
+  /* Surfaces */
+  --color-canvas: var(--palette-neutral-50);
+  --color-surface: var(--palette-white);
+  --color-surface-sunken: var(--palette-neutral-50);
+  --color-surface-muted: var(--palette-neutral-100);
+  --color-surface-strong: var(--palette-neutral-200);
+  --color-scrim: var(--palette-neutral-900);
+
+  /* Borders */
+  --color-border: var(--palette-neutral-200);
+  --color-border-subtle: var(--palette-neutral-100);
+  --color-border-emphasis: var(--palette-neutral-300);
+  --color-border-strong: var(--palette-neutral-500);
+  --color-border-focus: var(--palette-ocean-400);
+
+  /* Accent */
+  --color-accent: var(--palette-ocean-600);
+  --color-accent-hover: var(--palette-ocean-800);
+  --color-accent-subtle: var(--palette-ocean-50);
+  --color-accent-fg: var(--palette-ocean-600);
+  --color-accent-border: var(--palette-ocean-400);
+
+  /* Status.  `-border` is drawn at `--alpha-status-border`. */
+  --alpha-status-border: 0.4;
+
+  --color-success-bg: var(--palette-mint-50);
+  --color-success-fg: var(--palette-mint-600);
+  --color-success-border: var(--palette-mint-400);
+  --color-success-solid: var(--palette-mint-600);
+
+  --color-warning-bg: var(--palette-amber-50);
+  --color-warning-fg: var(--palette-amber-600);
+  --color-warning-border: var(--palette-amber-400);
+  --color-warning-solid: var(--palette-amber-600);
+
+  --color-danger-bg: var(--palette-coral-50);
+  --color-danger-fg: var(--palette-coral-600);
+  --color-danger-border: var(--palette-coral-400);
+  --color-danger-solid: var(--palette-coral-600);
+  --color-danger-solid-hover: var(--palette-coral-800);
+
+  --color-info-bg: var(--palette-ocean-50);
+  --color-info-fg: var(--palette-ocean-600);
+  --color-info-border: var(--palette-ocean-400);
+  --color-info-solid: var(--palette-ocean-600);
+
+  /* Domain */
+  --color-money-positive: var(--palette-mint-600);
+  --color-money-negative: var(--palette-coral-600);
+
+  --color-progress-funded: var(--palette-mint-500);
+  --color-progress-active: var(--palette-ocean-400);
+  --color-progress-behind: var(--palette-amber-500);
+  --color-progress-over: var(--palette-coral-400);
+  --color-progress-paused: var(--palette-neutral-500);
+  --color-progress-track: var(--palette-neutral-100);
+
+  --color-row-pending: var(--palette-amber-400);
+  --color-row-unallocated: var(--palette-ocean-400);
+
+  /*
+   * Typography roles: size / line height / weight (/ tracking).  Sizes
+   * are rem so the user's text-size setting scales them.
+   */
+  --text-display-amount: 2.25rem;
+  --leading-display-amount: 2.5rem;
+  --text-title-amount: 1.375rem;
+  --leading-title-amount: 1.75rem;
+  --text-amount: 0.9375rem;
+  --leading-amount: 1.25rem;
+  --text-amount-sm: 0.75rem;
+  --leading-amount-sm: 1rem;
+  --text-page-title: 1.375rem;
+  --leading-page-title: 1.75rem;
+  --text-title: 1.125rem;
+  --leading-title: 1.5rem;
+  --text-item-title: 0.9375rem;
+  --leading-item-title: 1.25rem;
+  --text-body: 0.875rem;
+  --leading-body: 1.25rem;
+  --text-body-sm: 0.8125rem;
+  --leading-body-sm: 1.125rem;
+  --text-label: 0.8125rem;
+  --leading-label: 1.125rem;
+  --text-meta: 0.75rem;
+  --leading-meta: 1rem;
+  --text-overline: 0.6875rem;
+  --leading-overline: 1rem;
+  --tracking-overline: 0.06em;
+  --text-badge: 0.625rem;
+  --leading-badge: 0.875rem;
+  --tracking-badge: 0.025em;
+  /* 16px on phones keeps iOS Safari from zooming into a focused field. */
+  --text-input: 1rem;
+  --leading-input: 1.5rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing aliases */
+  --space-page-x: 0.75rem;
+  --space-card-x: 0.75rem;
+  --space-card-y: 0.75rem;
+  --space-stack-sm: 0.5rem;
+  --space-stack-md: 0.75rem;
+  --space-section: 1.5rem;
+
+  /* Sizing */
+  --size-icon-xs: 0.75rem;
+  --size-icon-sm: 1rem;
+  --size-icon-md: 1.25rem;
+  --size-icon-lg: 1.5rem;
+  --size-tap-min: 2.75rem;
+  --size-topbar: 4rem;
+  --size-bottomnav: 4rem;
+  --size-sheet: 30rem;
+  --size-sheet-max-height: 80vh;
+  --size-progress-sm: 3px;
+  --size-progress-md: 5px;
+  --size-progress-lg: 8px;
+  --width-rule: 3px;
+
+  /* Focus: the outline every focused control draws for keyboard users */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-control: 10px;
+  --radius-card: 14px;
+
+  /* Elevation */
+  --shadow-raised: 0 1px 2px 0 rgb(var(--palette-neutral-900) / 0.05);
+  --shadow-control:
+    0 1px 3px 0 rgb(var(--palette-neutral-900) / 0.1),
+    0 1px 2px -1px rgb(var(--palette-neutral-900) / 0.1);
+  --shadow-overlay:
+    0 20px 25px -5px rgb(var(--palette-neutral-900) / 0.1),
+    0 8px 10px -6px rgb(var(--palette-neutral-900) / 0.1);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /*
+   * The select chevron is an SVG data URI, which cannot read a custom
+   * property, so its stroke is `fg-muted` written out (neutral-600).
+   */
+  --icon-select-chevron: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5E5A' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}
+
+@media (min-width: 768px) {
+  :root {
+    --text-input: 0.875rem;
+    --leading-input: 1.25rem;
+  }
+}

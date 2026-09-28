@@ -1,0 +1,35 @@
+/*
+ * Keyboard focus and touch targets.
+ *
+ * Every element focused from the keyboard draws a `border-focus`
+ * outline, offset from its edge so it reads against any fill.  It
+ * follows the element's border radius.  Form fields draw their own
+ * focus ring instead (`BaseInput` and friends).
+ *
+ * `.tap-target` gives a small control a hit area of at least
+ * `--size-tap-min` in each direction with an invisible pseudo-element
+ * centred on it, so the control keeps its visual size.
+ */
+
+@layer base {
+  :focus-visible {
+    outline: var(--focus-ring-width) solid rgb(var(--color-border-focus));
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+@layer components {
+  .tap-target {
+    position: relative;
+  }
+
+  .tap-target::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--size-tap-min));
+    height: max(100%, var(--size-tap-min));
+    transform: translate(-50%, -50%);
+  }
+}

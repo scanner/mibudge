@@ -2,7 +2,7 @@
 //
 // BankAccountDetailView — one bank account: balances, details, owners
 // and co-owner invitations, budgets link, funding, and delete.
-// (UI_SPEC §4.8)  Route shell over `useBankAccountDetail`,
+// Route shell over `useBankAccountDetail`,
 // `useInviteFlow` and `useFundingRun`; the sections are presentational
 // components in `components/bankAccounts/`.
 //
@@ -27,6 +27,10 @@ import { useFundingRun } from "@/features/bankAccounts/useFundingRun";
 import { useInviteFlow } from "@/features/bankAccounts/useInviteFlow";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useAccountContextStore } from "@/stores/accountContext";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseCard from "@/components/base/BaseCard.vue";
+import BaseListRow from "@/components/base/BaseListRow.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -57,16 +61,12 @@ async function onDelete() {
 <template>
   <AppShell>
     <div v-if="loading" class="mt-8 flex justify-center">
-      <span class="text-sm text-secondary">Loading…</span>
+      <span class="text-body-sm text-fg-muted">Loading…</span>
     </div>
 
-    <div
-      v-else-if="error"
-      class="mt-4 rounded-subcard bg-coral-50 px-4 py-3 text-sm text-coral-600"
-      role="alert"
-    >
+    <BaseBanner v-else-if="error" tone="danger" class="mt-4">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <div v-else-if="account" class="mx-auto max-w-lg space-y-5 py-4">
       <BankAccountHeader
@@ -115,28 +115,22 @@ async function onDelete() {
       />
 
       <!-- Budgets -->
-      <section
-        class="overflow-hidden rounded-card border border-neutral-200 bg-white"
-      >
-        <button
-          type="button"
-          class="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-50"
-          @click="viewBudgets"
-        >
+      <BaseCard as="section">
+        <BaseListRow as="button" class="justify-between" @click="viewBudgets">
           <div>
-            <div class="text-sm font-medium text-neutral-900">
+            <div class="text-label text-fg">
               Budgets
-              <span v-if="budgetCount !== null" class="ml-1.5 text-secondary">
+              <span v-if="budgetCount !== null" class="ml-1.5 text-fg-muted">
                 {{ budgetCount }}
               </span>
             </div>
-            <div class="text-xs text-secondary">
+            <div class="text-meta text-fg-muted">
               View all budgets for this account
             </div>
           </div>
-          <IconChevronRight class="h-4 w-4 flex-none text-neutral-400" />
-        </button>
-      </section>
+          <IconChevronRight class="size-icon-sm flex-none text-icon-muted" />
+        </BaseListRow>
+      </BaseCard>
 
       <FundingCard
         :last-posted-through="account.lastPostedThrough"
@@ -153,19 +147,19 @@ async function onDelete() {
 
       <!-- Delete -->
       <section class="pt-2">
-        <button
-          type="button"
-          class="w-full rounded-card border border-coral-400 py-3 text-sm font-medium text-coral-600 hover:bg-coral-50"
+        <BaseButton
+          variant="danger-secondary"
+          block
           @click="confirmDelete = true"
         >
           Delete account
-        </button>
-        <p class="mt-2 px-1 text-center text-xs text-neutral-400">
+        </BaseButton>
+        <p class="mt-2 px-1 text-center text-meta text-fg-subtle">
           Deletes all budgets, transactions, and allocations for this account.
         </p>
         <p
           v-if="detail.deleteError.value"
-          class="mt-2 text-center text-sm text-coral-600"
+          class="mt-2 text-center text-body-sm text-danger-fg"
           role="alert"
         >
           {{ detail.deleteError.value }}
@@ -184,7 +178,7 @@ async function onDelete() {
       title="Send co-owner invitation?"
       :message="`Send a co-owner invitation to ${invite.email.value}? They will receive an email with a link to accept or decline.`"
       confirm-label="Send invitation"
-      tone="ocean"
+      tone="primary"
       @confirm="invite.send"
       @cancel="invite.confirming.value = false"
     />

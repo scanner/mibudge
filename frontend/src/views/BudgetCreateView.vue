@@ -1,6 +1,6 @@
 <script setup lang="ts">
 //
-// BudgetCreateView — type selector + BudgetForm.  (UI_SPEC §4.4)
+// BudgetCreateView — type selector + BudgetForm.
 // Route shell; the form saves through the budgets store.
 //
 // On success navigates to the new budget's detail view.
@@ -15,6 +15,7 @@ import { useRouter } from "vue-router";
 import BudgetForm from "@/features/budgets/BudgetForm.vue";
 import AppShell from "@/features/shell/AppShell.vue";
 import type { Budget } from "@/models/budget";
+import BasePageHeader from "@/components/base/BasePageHeader.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -28,7 +29,7 @@ function onSaved(budget: Budget) {
 <template>
   <AppShell>
     <div class="mx-auto max-w-lg pt-4">
-      <h1 class="mb-5 text-[22px] font-medium text-neutral-900">New budget</h1>
+      <BasePageHeader title="New budget" />
       <BudgetForm
         mode="create"
         @saved="onSaved"

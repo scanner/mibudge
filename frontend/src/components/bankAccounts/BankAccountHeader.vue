@@ -13,6 +13,10 @@ import { IconPencil } from "@tabler/icons-vue";
 //
 import { accountTypeLabel } from "@/domain/labels";
 import type { BankAccount } from "@/models/bankAccount";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseIconButton from "@/components/base/BaseIconButton.vue";
+import BaseFormField from "@/components/base/BaseFormField.vue";
+import BaseInput from "@/components/base/BaseInput.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -38,73 +42,60 @@ const emit = defineEmits<{
   <!-- Inline name editor -->
   <div
     v-if="editing"
-    class="rounded-card border border-ocean-400 bg-white px-4 py-4"
+    class="rounded-card border border-accent-border bg-surface px-4 py-4"
   >
+    <BaseFormField id="edit-name" label="Account name">
+      <template #default="{ id, describedBy, invalid }">
+        <BaseInput
+          :id="id"
+          v-model="name"
+          type="text"
+          @keydown.enter="emit('save')"
+          @keydown.escape="emit('cancel')"
+          :aria-describedby="describedBy"
+          :invalid="invalid"
+        />
+      </template>
+    </BaseFormField>
     <label
-      class="mb-1.5 block text-sm font-medium text-neutral-700"
-      for="edit-name"
-    >
-      Account name
-    </label>
-    <input
-      id="edit-name"
-      v-model="name"
-      type="text"
-      class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
-      @keydown.enter="emit('save')"
-      @keydown.escape="emit('cancel')"
-    />
-    <label
-      class="mb-1.5 mt-3 block text-sm font-medium text-neutral-700"
+      class="mb-1.5 mt-3 block text-label text-fg"
       for="edit-account-number"
     >
       Account number
     </label>
-    <input
+    <BaseInput
       id="edit-account-number"
       v-model="accountNumber"
       type="text"
       inputmode="numeric"
-      class="w-full rounded-subcard border border-neutral-200 px-3 py-2.5 font-mono text-sm text-neutral-900 focus:border-ocean-400 focus:outline-none focus:ring-1 focus:ring-ocean-400"
       @keydown.enter="emit('save')"
       @keydown.escape="emit('cancel')"
+      mono
     />
-    <p v-if="nameError" class="mt-1 text-xs text-coral-600">{{ nameError }}</p>
+    <p v-if="nameError" class="mt-1 text-meta text-danger-fg">
+      {{ nameError }}
+    </p>
     <div class="mt-3 flex gap-2">
-      <button
-        type="button"
-        :disabled="saving"
-        class="flex-1 rounded-subcard bg-ocean-400 py-2 text-sm font-medium text-white hover:bg-ocean-600 disabled:opacity-50"
-        @click="emit('save')"
-      >
+      <BaseButton :loading="saving" class="flex-1" @click="emit('save')">
         {{ saving ? "Saving…" : "Save" }}
-      </button>
-      <button
-        type="button"
-        class="flex-1 rounded-subcard border border-neutral-200 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-        @click="emit('cancel')"
-      >
+      </BaseButton>
+      <BaseButton variant="secondary" class="flex-1" @click="emit('cancel')">
         Cancel
-      </button>
+      </BaseButton>
     </div>
   </div>
 
   <!-- Account name heading (non-editing) -->
   <div v-else>
     <div class="flex items-center gap-2">
-      <h1 class="text-[22px] font-medium text-neutral-900">
+      <h1 class="text-page-title text-fg">
         {{ account.name }}
       </h1>
-      <button
-        type="button"
-        class="flex h-7 w-7 flex-none items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
-        aria-label="Edit account"
-        @click="emit('edit')"
-      >
-        <IconPencil class="h-4 w-4" />
-      </button>
+      <BaseIconButton label="Edit account" size="sm" @click="emit('edit')">
+        <IconPencil class="size-icon-sm" />
+      </BaseIconButton>
     </div>
-    <p class="text-sm text-secondary">
+    <p class="text-body-sm text-fg-muted">
       {{ accountTypeLabel(account.accountType) }}
       <template v-if="bankName"> · {{ bankName }}</template>
     </p>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 //
 // BudgetDetailView — full detail screen for a single budget.
-// (UI_SPEC §4.3)  Route shell: reads the `id` param and composes the
+// Route shell: reads the `id` param and composes the
 // budget feature sections.
 //
 // Sections:
@@ -38,6 +38,9 @@ import MoveMoneySheet from "@/features/budgets/MoveMoneySheet.vue";
 import { useBudgetDetail } from "@/features/budgets/useBudgetDetail";
 import AppShell from "@/features/shell/AppShell.vue";
 import { useSessionStore } from "@/stores/session";
+import BaseButton from "@/components/base/BaseButton.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseSkeleton from "@/components/base/BaseSkeleton.vue";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -85,31 +88,28 @@ async function confirmArchive() {
 <template>
   <AppShell>
     <template #action>
-      <button
+      <BaseButton
         v-if="budget && !isUnallocated"
-        type="button"
-        class="flex h-10 items-center rounded-full px-3 text-sm font-medium text-ocean-600 hover:bg-ocean-50"
+        variant="ghost"
+        size="sm"
         @click="showEditSheet = true"
       >
-        <IconPencil class="mr-1 h-4 w-4" />
+        <IconPencil class="size-icon-sm" />
         Edit
-      </button>
+      </BaseButton>
     </template>
 
     <!-- Loading skeleton -->
     <div v-if="loading" class="space-y-4 pt-4">
-      <div class="h-48 animate-pulse rounded-card bg-neutral-100" />
-      <div class="h-14 animate-pulse rounded-card bg-neutral-100" />
-      <div class="h-32 animate-pulse rounded-card bg-neutral-100" />
+      <BaseSkeleton class="h-48" />
+      <BaseSkeleton class="h-14" />
+      <BaseSkeleton class="h-32" />
     </div>
 
     <!-- Error -->
-    <div
-      v-else-if="error && !budget"
-      class="mt-4 rounded-card bg-coral-50 px-4 py-3 text-sm text-coral-600"
-    >
+    <BaseBanner v-else-if="error && !budget" tone="danger" class="mt-4">
       {{ error }}
-    </div>
+    </BaseBanner>
 
     <template v-else-if="budget">
       <div class="space-y-4 pt-4">
@@ -124,15 +124,15 @@ async function confirmArchive() {
         <button
           v-if="!isUnallocated"
           type="button"
-          class="flex w-full items-start gap-3 rounded-card border border-neutral-200 bg-ocean-50 px-4 py-3 text-left"
+          class="flex w-full items-start gap-3 rounded-card border border-border bg-accent-subtle px-4 py-3 text-left"
           @click="showMoveMoneyForm = true"
         >
           <IconArrowsRightLeft
-            class="mt-0.5 h-5 w-5 flex-none text-ocean-400"
+            class="mt-0.5 size-icon-md flex-none text-accent-fg"
           />
           <div>
-            <div class="text-[15px] font-medium text-ocean-600">Move money</div>
-            <div class="text-xs text-secondary">
+            <div class="text-item-title text-fg-link">Move money</div>
+            <div class="text-meta text-fg-muted">
               Transfer to or from another budget
             </div>
           </div>
@@ -148,34 +148,27 @@ async function confirmArchive() {
 
         <!-- Action row -->
         <div v-if="!isUnallocated" class="mt-2 flex gap-2">
-          <button
-            type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            @click="togglePause"
-          >
-            <IconPlayerPause class="mr-1 inline-block h-4 w-4" />
+          <BaseButton variant="secondary" class="flex-1" @click="togglePause">
+            <IconPlayerPause class="size-icon-sm" />
             {{ budget.paused ? "Resume budget" : "Pause budget" }}
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-full border border-neutral-200 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            class="flex-1"
             @click="showArchiveConfirm = true"
           >
-            <IconArchive class="mr-1 inline-block h-4 w-4" />
+            <IconArchive class="size-icon-sm" />
             Archive
-          </button>
+          </BaseButton>
         </div>
 
         <!-- Transactions section -->
         <BudgetTransactionsSection :budget-id="id" />
 
         <!-- Inline error banner -->
-        <p
-          v-if="error"
-          class="rounded-subcard bg-coral-50 px-4 py-2 text-sm text-coral-600"
-        >
+        <BaseBanner v-if="error" tone="danger">
           {{ error }}
-        </p>
+        </BaseBanner>
       </div>
     </template>
 
