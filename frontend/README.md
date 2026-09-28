@@ -10,12 +10,22 @@ the REST API (`/api/v1/`) and the JWT endpoints (`/api/token/...`).
 
 ## Stack
 
-- Vue 3 (`<script setup>` SFCs), TypeScript in strict mode, Vite
-- Pinia for state, Vue Router 4 (history mode, base `/app/`) with typed route names
-- Native `fetch`, wrapped once in `src/api/http.ts`
+- Vue 3 (`<script setup>` SFCs, so props, emits and state are plain
+  typed declarations), TypeScript in strict mode, Vite
+- Pinia for state (typed setup stores, and a plugin API that lets one
+  plugin reset every store on sign-out), Vue Router 4 (history mode,
+  base `/app/`) with typed route names
+- Native `fetch`, wrapped once in `src/api/http.ts` (auth, the 401
+  refresh and error parsing in one place, no HTTP library)
 - Types generated from `docs/openapi.yaml` by openapi-typescript
-- `decimal.js` for money arithmetic, Tailwind CSS for styling
-- Vitest + happy-dom + MSW for tests, oxfmt for formatting (80 columns, `.oxfmtrc.json`), oxlint for linting (`.oxlintrc.json`), vue-tsc for type checking
+- `decimal.js` for money arithmetic, Tailwind CSS for styling (its
+  config maps the utilities onto the design tokens, and `pnpm
+  lint:styles` rejects raw values)
+- Vitest + happy-dom + MSW for tests, oxfmt for formatting (80 columns,
+  `.oxfmtrc.json`; its rules are compiled in with no plugin chain and
+  the lockfile fixes its version, so only an oxfmt upgrade changes the
+  output), oxlint for linting (`.oxlintrc.json`), vue-tsc for type
+  checking
 
 ## Source layout
 

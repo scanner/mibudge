@@ -45,6 +45,13 @@ and why is in [../docs/spa/styling.md](../docs/spa/styling.md).
   `styles/interaction.css`), and 44px touch targets (`.tap-target`;
   `BaseButton` and `BaseIconButton` have it).
 
+## State
+
+- **A setting that saves on change** (a toggle, a select) goes through
+  `useOptimistic` (`src/composables/useOptimistic.ts`), keyed by the
+  record it edits; never hand-roll a pending value. See "Settings that
+  save on change" in `docs/spa/state.md`.
+
 ## After a change
 
 Run, from `frontend/`:
@@ -57,5 +64,5 @@ pnpm test
 
 ## Keeping this file current
 
-When a rule in `docs/spa/styling.md` changes, update this file in the
+When a rule in `docs/spa/styling.md` or `docs/spa/state.md` changes, update this file in the
 same change.

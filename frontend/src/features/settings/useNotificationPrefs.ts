@@ -122,7 +122,9 @@ export function useNotificationPrefs() {
 
   const error = computed(
     () =>
-      loadError.value ?? deliveryModes.error.value ?? emailDigest.error.value,
+      loadError.value ??
+      prefs.value.map((p) => deliveryModes.error(p.kind)).find(Boolean) ??
+      emailDigest.error("email"),
   );
 
   return {

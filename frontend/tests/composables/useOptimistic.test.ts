@@ -1,7 +1,8 @@
 //
 // `useOptimistic` tests: the value shown while a change is saving, one
 // request per key at a time with queued changes coalesced, the server's
-// answer as the value afterwards, and the error from the final request.
+// answer as the value afterwards, and each key's error from its final
+// request.
 //
 
 // 3rd party imports
@@ -74,7 +75,7 @@ describe("useOptimistic", () => {
     expect(saved.value.a).toBe("on");
     expect(opt.value("a")).toBe("on");
     expect(opt.saving("a")).toBe(false);
-    expect(opt.error.value).toBeNull();
+    expect(opt.error("a")).toBeNull();
   });
 
   // GIVEN: a saved value
@@ -90,7 +91,7 @@ describe("useOptimistic", () => {
 
     expect(opt.value("a")).toBe("off");
     expect(opt.saving("a")).toBe(false);
-    expect(opt.error.value).toBe("Not allowed.");
+    expect(opt.error("a")).toBe("Not allowed.");
   });
 
   // GIVEN: a request in flight
@@ -135,7 +136,7 @@ describe("useOptimistic", () => {
     calls[1].done.resolve();
     await Promise.all([first, second]);
     expect(opt.value("a")).toBe("on");
-    expect(opt.error.value).toBeNull();
+    expect(opt.error("a")).toBeNull();
   });
 
   // GIVEN: a change in flight
@@ -175,6 +176,25 @@ describe("useOptimistic", () => {
     expect(opt.value("a")).toBe("on");
   });
 
+  // GIVEN: two keys
+  // WHEN:  one key's request fails and then the other key changes
+  // THEN:  the error belongs to the failed key alone and survives the
+  //        other key's change
+  //
+  it("keeps each key's error separate", async () => {
+    const { calls, opt } = harness({ a: "off", b: "off" });
+
+    const failed = opt.set("a", "on");
+    calls[0].done.reject(new Error("boom"));
+    await failed;
+
+    const other = opt.set("b", "on");
+    expect(opt.error("a")).toBe("Failed to save.");
+    expect(opt.error("b")).toBeNull();
+    calls[1].done.resolve();
+    await other;
+  });
+
   // GIVEN: an error from an earlier change
   // WHEN:  a new change is made
   // THEN:  the error clears
@@ -185,10 +205,10 @@ describe("useOptimistic", () => {
     const failed = opt.set("a", "on");
     calls[0].done.reject(new Error("boom"));
     await failed;
-    expect(opt.error.value).toBe("Failed to save.");
+    expect(opt.error("a")).toBe("Failed to save.");
 
     const next = opt.set("a", "on");
-    expect(opt.error.value).toBeNull();
+    expect(opt.error("a")).toBeNull();
     calls[1].done.resolve();
     await next;
   });

@@ -143,7 +143,9 @@ export function useBankAccountDetail(id: () => string) {
   const autoFundingEnabled = computed(() =>
     account.value ? autoFunding.value(account.value.id) : false,
   );
-  const autoFundingError = autoFunding.error;
+  const autoFundingError = computed(() =>
+    account.value ? autoFunding.error(account.value.id) : null,
+  );
 
   function toggleAutoFunding(): Promise<void> {
     const current = account.value;

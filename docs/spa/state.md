@@ -80,6 +80,59 @@ per-page state comes from `useResource` in the feature composable.
 
 ---
 
+## Settings that save on change
+
+A control that saves as soon as the user changes it (a toggle, a
+select) is optimistic: the new value shows at once and the request runs
+in the background. The feature composable wraps the setting in
+`useOptimistic(source, commit, options?)` from
+`composables/useOptimistic.ts`. It never hand-rolls a pending value.
+
+```ts
+// features/bankAccounts/useBankAccountDetail.ts
+const autoFunding = useOptimistic(
+  (accountId: string) => accounts.byId(accountId)?.autoFundingEnabled ?? false,
+  async (accountId: string, enabled: boolean) => {
+    await accounts.update(accountId, { autoFundingEnabled: enabled });
+  },
+  { errorMessage: "Failed to change automatic funding." },
+);
+const autoFundingEnabled = computed(() =>
+  account.value ? autoFunding.value(account.value.id) : false,
+);
+```
+
+- **Everything is keyed** by the record the setting belongs to (an
+  account id, a notification kind, or a fixed key such as `"default"`
+  for a single setting). `value(key)`, `saving(key)` and `error(key)`
+  all take the key, so one composable serves every record on a page,
+  and a view that moves to another record never shows the last one's
+  state.
+- **`source(key)` is the saved value, and `commit` writes the server's
+  answer into it.** Usually `source` reads a store cache and `commit`
+  calls the store's update action, which writes the cache. A `commit`
+  that does not update what `source` reads makes the control snap back
+  to the old value once the request finishes.
+- **`set(key, value)`** shows `value` at once, clears the key's error
+  and saves. Bind the control to `value(key)` and its change event to
+  `set`.
+- **One request per key at a time.** Requests for a key run in the
+  order the user made the changes, so the server ends with the user's
+  last choice and the answers reach `source` in order. Changes made
+  while a request is in flight coalesce: only the latest is sent next.
+  Different keys save independently.
+- **When a key's last request finishes**, the pending value is dropped
+  and `value(key)` reads `source` again: the server's answer after a
+  success, the unchanged saved value after a failure. A refused change
+  therefore shows the saved value, and `error(key)` says why
+  (`describeError`, with `errorMessage` as the fallback). A failure that a later queued
+  change supersedes is not reported.
+
+A text field that saves after the user stops typing uses
+`useDebouncedAutosave` instead.
+
+---
+
 ## Sign-out resets every store
 
 `main.ts` and `tests/setup.ts` install `resetPlugin` from
@@ -126,7 +179,7 @@ no server-side logout endpoint yet.
 |--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
 | **A store** (`stores/`)                    | More than one route or section reads it, it must outlive the page, or one section must see another's change.                           | The session, the active account, the budget cache the top bar and budget pages share, the transaction list's row order for the detail page's prev/next. |
 | **A feature composable** (`features/<section>/use*.ts`) | Data and actions belonging to one section. It loads through `api` or a store, holds the section's form state, and exposes computed views of it. | `useBudgetDetail`, `useMoveMoney`, `useApiKeys`, `useTransactionList`.      |
-| **A shared composable** (`composables/`)   | Behaviour that several features reuse and that carries no data of its own.                                                              | `useResource`, `useInfiniteList`, `useModal`, `useFormErrors`, `useDebouncedAutosave`. |
+| **A shared composable** (`composables/`)   | Behaviour that several features reuse and that carries no data of its own.                                                              | `useResource`, `useInfiniteList`, `useModal`, `useFormErrors`, `useOptimistic`, `useDebouncedAutosave`. |
 | **Local component state** (`ref` in the SFC) | Pure UI state nothing else needs.                                                                                                     | Which tab is active, whether a sheet is open, an input's draft text.        |
 
 Rules of thumb:
