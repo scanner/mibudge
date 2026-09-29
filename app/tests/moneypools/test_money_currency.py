@@ -18,13 +18,13 @@ from rest_framework.test import APIClient
 
 # Project imports
 from moneypools.api.v1 import serializers
-from moneypools.api.v1.serializers.money import AccountCurrencyMixin
+from moneypools.api.v1.serializers.money import BankAccountCurrencyMixin
 from moneypools.models import Bank, BankAccount, Budget, Transaction
 from users.models import User
 
 pytestmark = pytest.mark.django_db
 
-MISMATCH = "Must be the account's currency, 'EUR'."
+MISMATCH = "Must be the bank account's currency, 'EUR'."
 
 
 ####################################################################
@@ -37,8 +37,9 @@ def account(
 ) -> BankAccount:
     """A EUR bank account, at a EUR bank, owned by `user`.
 
-    On a USD account the server default and the account's currency are
-    the same, so these tests would pass whatever currency was applied.
+    On a USD bank account the server default and the bank account's
+    currency are the same, so these tests would pass whatever currency
+    was applied.
     """
     bank = bank_factory(default_currency="EUR")
     return bank_account_factory(bank=bank, currency="EUR", owners=[user])
@@ -47,7 +48,7 @@ def account(
 ####################################################################
 #
 def bank_account_create(account: BankAccount, *_: Any) -> tuple[str, dict]:
-    """A new account at `account`'s (EUR) bank, with an opening balance."""
+    """A new bank account at `account`'s (EUR) bank, with an opening balance."""
     return reverse("api_v1:bankaccount-list"), {
         "name": "Giro",
         "bank": str(account.bank.id),
@@ -124,7 +125,7 @@ class TestMoneyCurrency:
         field: str,
     ) -> None:
         """
-        GIVEN: a EUR account
+        GIVEN: a EUR bank account
         WHEN:  a money amount is sent without its `<field>_currency`
         THEN:  it is stored in EUR
         """
@@ -148,7 +149,7 @@ class TestMoneyCurrency:
         field: str,
     ) -> None:
         """
-        GIVEN: a EUR account
+        GIVEN: a EUR bank account
         WHEN:  a money amount is sent with `<field>_currency` USD
         THEN:  400 on `<field>_currency`, and nothing is created
         """
@@ -169,8 +170,8 @@ class TestMoneyCurrency:
     ) -> None:
         """
         GIVEN: a EUR bank
-        WHEN:  an account is created there without `currency`
-        THEN:  the account and its balances are EUR
+        WHEN:  a bank account is created there without `currency`
+        THEN:  the bank account and its balances are EUR
         """
         url, payload = bank_account_create(account)
 
@@ -239,7 +240,7 @@ class TestMoneyCurrency:
         errors: dict | None,
     ) -> None:
         """
-        GIVEN: a EUR account and a two-row scrape
+        GIVEN: a EUR bank account and a two-row scrape
         WHEN:  it is synced with no currencies, or with USD on one row
         THEN:  without currencies it syncs in EUR; with USD the error
                names that row's `amount_currency`
@@ -276,7 +277,7 @@ class TestMoneyCurrency:
 ########################################################################
 #
 class TestMoneySerializersResolveCurrency:
-    """Every money input goes through `AccountCurrencyMixin`."""
+    """Every money input goes through `BankAccountCurrencyMixin`."""
 
     ####################################################################
     #
@@ -284,7 +285,7 @@ class TestMoneySerializersResolveCurrency:
         """
         GIVEN: the moneypools v1 serializers
         WHEN:  one has a writable money field
-        THEN:  it includes `AccountCurrencyMixin` (the schema documents
+        THEN:  it includes `BankAccountCurrencyMixin` (the schema documents
                the currency rule for every writable money field), unless
                it is listed here with the reason it does not need it
         """
@@ -311,7 +312,8 @@ class TestMoneySerializersResolveCurrency:
         missing = [
             cls.__name__
             for cls in with_money
-            if cls not in exempt and not issubclass(cls, AccountCurrencyMixin)
+            if cls not in exempt
+            and not issubclass(cls, BankAccountCurrencyMixin)
         ]
 
         assert missing == []

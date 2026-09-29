@@ -14,7 +14,7 @@ from rest_framework import serializers
 # Project imports
 from moneypools.models import DECIMAL_PLACES, MAX_DIGITS, get_default_currency
 
-from .money import AccountCurrencyMixin
+from .money import BankAccountCurrencyMixin
 
 
 ########################################################################
@@ -58,7 +58,7 @@ class ScrapeSyncTransactionSerializer(serializers.Serializer):
 ########################################################################
 ########################################################################
 #
-class ScrapeSyncSerializer(AccountCurrencyMixin, serializers.Serializer):
+class ScrapeSyncSerializer(BankAccountCurrencyMixin, serializers.Serializer):
     """Input serializer for the bank-account scrape-sync action.
 
     Validates a full bank-side snapshot for one account: when the
@@ -76,10 +76,13 @@ class ScrapeSyncSerializer(AccountCurrencyMixin, serializers.Serializer):
 
     ####################################################################
     #
-    def account_currency(self, attrs: dict) -> str | None:
-        """The currency of the account being synced (`context["account"]`)."""
-        account = self.context.get("account")
-        return account.currency if account is not None else None
+    def bank_account_currency(self, attrs: dict) -> str | None:
+        """The currency of the bank account being synced.
+
+        The view passes it as `context["bank_account"]`.
+        """
+        bank_account = self.context.get("bank_account")
+        return bank_account.currency if bank_account is not None else None
 
 
 ########################################################################

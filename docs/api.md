@@ -32,17 +32,18 @@ there.
   `/api/v1/users/me/` is every caller's own profile.
 - **Everything else** (bank accounts, budgets, transactions, allocations,
   internal transactions, categories): scoped to bank-account ownership.  A
-  caller sees only accounts they own and the objects in them; another
-  account's objects answer 404.  Staff status does not bypass this.
+  caller sees only the bank accounts they own and the objects in them;
+  another bank account's objects answer 404.  Staff status does not bypass this.
 
 ## Money
 
 A money value is a decimal string plus a sibling currency code: `"amount":
 "-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
 negative.  Every amount is in its bank account's currency: in a request
-the `<field>_currency` key is optional and defaults to the account's, and
-any other currency is refused with 400 on that key.  A new bank account
-takes its bank's default currency unless `currency` is given.
+the `<field>_currency` key is optional and defaults to the bank
+account's, and any other currency is refused with 400 on that key.  A
+new bank account takes its bank's default currency unless `currency` is
+given.
 
 ## Pagination
 

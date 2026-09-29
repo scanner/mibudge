@@ -21,13 +21,15 @@ from moneypools.models import (
     get_default_currency,
 )
 
-from .money import AccountCurrencyMixin
+from .money import BankAccountCurrencyMixin
 
 
 ########################################################################
 ########################################################################
 #
-class BankAccountSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
+class BankAccountSerializer(
+    BankAccountCurrencyMixin, serializers.ModelSerializer
+):
     """Serializer for bank accounts.
 
     On create the caller supplies name, bank (UUID), account_type,
@@ -117,8 +119,8 @@ class BankAccountSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
 
     ####################################################################
     #
-    def account_currency(self, attrs: dict) -> str | None:
-        """The account's currency.
+    def bank_account_currency(self, attrs: dict) -> str | None:
+        """The bank account's currency.
 
         On create it is the `currency` sent, else the bank's default
         (as `bank_account_svc.create` applies it).

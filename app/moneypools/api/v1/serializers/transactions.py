@@ -27,13 +27,15 @@ from moneypools.models import (
 
 from .allocations import TransactionAllocationSerializer
 from .fields import OwnedBankAccountField
-from .money import AccountCurrencyMixin
+from .money import BankAccountCurrencyMixin
 
 
 ########################################################################
 ########################################################################
 #
-class TransactionSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
+class TransactionSerializer(
+    BankAccountCurrencyMixin, serializers.ModelSerializer
+):
     """Serializer for bank transactions.
 
     On create the caller supplies bank_account, amount,
@@ -202,12 +204,12 @@ class TransactionSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
 
     ####################################################################
     #
-    def account_currency(self, attrs: dict) -> str | None:
+    def bank_account_currency(self, attrs: dict) -> str | None:
         """The currency of the transaction's bank account."""
-        account = attrs.get("bank_account") or getattr(
+        bank_account = attrs.get("bank_account") or getattr(
             self.instance, "bank_account", None
         )
-        return account.currency if account is not None else None
+        return bank_account.currency if bank_account is not None else None
 
     ####################################################################
     #
@@ -410,7 +412,9 @@ class TransactionSplitsSerializer(serializers.Serializer):
 ########################################################################
 ########################################################################
 #
-class ResolvePendingSerializer(AccountCurrencyMixin, serializers.Serializer):
+class ResolvePendingSerializer(
+    BankAccountCurrencyMixin, serializers.Serializer
+):
     """Input serializer for the resolve-pending action.
 
     Validates the settled posted_date and optional final amount.
@@ -455,7 +459,7 @@ class ResolvePendingSerializer(AccountCurrencyMixin, serializers.Serializer):
 
     ####################################################################
     #
-    def account_currency(self, attrs: dict) -> str | None:
+    def bank_account_currency(self, attrs: dict) -> str | None:
         """The currency of the pending transaction's bank account."""
         transaction = self.context.get("transaction")
         return transaction.bank_account.currency if transaction else None

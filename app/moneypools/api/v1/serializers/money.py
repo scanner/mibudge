@@ -2,9 +2,9 @@
 Money inputs in the moneypools v1 API take their bank account's currency.
 
 A money field (`amount`) arrives with an optional sibling
-`<field>_currency`.  `AccountCurrencyMixin` resolves each one against
+`<field>_currency`.  `BankAccountCurrencyMixin` resolves each one against
 the currency of the bank account the object belongs to: an omitted
-currency is the account's, and a different one is refused with a 400 on
+currency is the bank account's, and a different one is refused with a 400 on
 `<field>_currency`.  djmoney's `MoneyField` fills an omitted currency
 with the server default, so the mixin reads what the client actually
 sent from `initial_data`, including per item for a list of objects.
@@ -64,7 +64,7 @@ def resolve_currencies(
             sent = raw.get(currency_field_name(name))
             if sent and sent != currency:
                 errors[currency_field_name(name)] = [
-                    f"Must be the account's currency, '{currency}'."
+                    f"Must be the bank account's currency, '{currency}'."
                 ]
                 continue
             amount = value.amount if isinstance(value, Money) else value
@@ -90,7 +90,7 @@ def resolve_currencies(
 ########################################################################
 ########################################################################
 #
-class AccountCurrencyMixin:
+class BankAccountCurrencyMixin:
     """Resolve a serializer's money inputs to its bank account's currency.
 
     List it before the DRF serializer base.  A serializer that defines its
@@ -99,7 +99,7 @@ class AccountCurrencyMixin:
 
     ####################################################################
     #
-    def account_currency(self, attrs: dict) -> str | None:
+    def bank_account_currency(self, attrs: dict) -> str | None:
         """The currency of the bank account `attrs` belong to.
 
         Returns:
@@ -112,7 +112,7 @@ class AccountCurrencyMixin:
     #
     def validate(self, attrs: dict) -> dict:
         attrs = super().validate(attrs)  # type: ignore[misc]
-        currency = self.account_currency(attrs)
+        currency = self.bank_account_currency(attrs)
         if currency is None:
             return attrs
         errors = resolve_currencies(

@@ -45,11 +45,11 @@ def create(
 ) -> BankAccount:
     """Create a bank account, add owners, and seed the Unallocated budget.
 
-    An account created without a `currency` takes its bank's default
+    A bank account created without a `currency` takes its bank's default
     currency.  Fires bank_account_pre_save (currency alignment) then
     creates the "Unallocated" budget whose initial balance matches the
-    account's available_balance, back-linking unallocated_budget_id
-    without triggering an extra save signal on the account.
+    bank account's available_balance, back-linking unallocated_budget_id
+    without triggering an extra save signal on the bank account.
 
     Args:
         bank: The Bank this account belongs to.

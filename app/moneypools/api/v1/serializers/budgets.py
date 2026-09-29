@@ -28,7 +28,7 @@ from .fields import (
     OwnedBankAccountField,
     RecurrenceSerializerField,
 )
-from .money import AccountCurrencyMixin
+from .money import BankAccountCurrencyMixin
 
 
 ########################################################################
@@ -47,7 +47,7 @@ class NextFundingSerializer(serializers.Serializer):
 ########################################################################
 ########################################################################
 #
-class BudgetSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
+class BudgetSerializer(BankAccountCurrencyMixin, serializers.ModelSerializer):
     """Serializer for budgets.
 
     On create the caller supplies bank_account (UUID) and budget
@@ -238,12 +238,12 @@ class BudgetSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
 
     ####################################################################
     #
-    def account_currency(self, attrs: dict) -> str | None:
+    def bank_account_currency(self, attrs: dict) -> str | None:
         """The currency of the budget's bank account."""
-        account = attrs.get("bank_account") or getattr(
+        bank_account = attrs.get("bank_account") or getattr(
             self.instance, "bank_account", None
         )
-        return account.currency if account is not None else None
+        return bank_account.currency if bank_account is not None else None
 
     ####################################################################
     #

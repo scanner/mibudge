@@ -22,7 +22,7 @@ def bank_account_pre_save(
 ) -> None:
     """Align a new bank account's balance currencies with its currency.
 
-    The account's own currency defaults to its bank's in
+    The bank account's own currency defaults to its bank's in
     `bank_account_svc.create`.
 
     Args:
@@ -49,7 +49,7 @@ def budget_pre_save(
         Sets the currency of every money field (balance, target_balance,
         funded_amount, funding_amount) to the bank account's on every
         save, so a budget's amounts can always be added to each other
-        and to its account's transactions.
+        and to its bank account's transactions.
 
     'complete' flag management:
         Recurring (R) -- set True when balance >= target; cleared by
