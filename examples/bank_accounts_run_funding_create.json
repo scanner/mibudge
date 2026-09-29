@@ -1,0 +1,19 @@
+{
+  "summary": "Run funding for events due through 2026-09-30",
+  "request": {
+    "as_of": "2026-09-30"
+  },
+  "response": {
+    "status": "200",
+    "summary": "Two transfers made; a paused budget skipped",
+    "body": {
+      "transfers": 2,
+      "occurrences_completed": 2,
+      "occurrences_partial": 0,
+      "warnings": [],
+      "skipped_budgets": [
+        "Vacation"
+      ]
+    }
+  }
+}

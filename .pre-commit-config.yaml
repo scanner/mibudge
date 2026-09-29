@@ -1,6 +1,6 @@
 # NOTE: entries must match path segments, not bare substrings -- a bare
 # 'migrations' would also exclude files like tests/.../test_migrations.py.
-exclude: 'docs|node_modules|(^|/)migrations/|\.git|\.tox'
+exclude: '(^|/)docs/|node_modules|(^|/)migrations/|\.git|\.tox'
 default_stages: [pre-commit]
 
 repos:

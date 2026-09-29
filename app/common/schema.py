@@ -100,6 +100,13 @@ class ValidationErrorExtension(OpenApiSerializerExtension):
         }
 
 
+# Vendor extension marking a response `AutoSchema` added by default
+# (rather than one the view declared), so documentation can describe
+# the common responses once instead of under every endpoint.
+#
+COMMON_RESPONSE = "x-common-response"
+
+
 ####################################################################
 #
 def error_response(description: str) -> OpenApiResponse:
@@ -137,6 +144,7 @@ class AutoSchema(SpectacularAutoSchema):
                     code,
                     direction=direction,
                 )
+                responses[code][COMMON_RESPONSE] = True
         return responses
 
     ####################################################################
@@ -155,7 +163,11 @@ class AutoSchema(SpectacularAutoSchema):
         if (writes and self.get_request_serializer() is not None) or (
             filtered_list and self._is_list_view()
         ):
-            errors["400"] = (ValidationErrorSerializer, "Invalid input.")
+            errors["400"] = (
+                ValidationErrorSerializer,
+                "Invalid input: a field error in the request body, or a "
+                "bad filter value on a list.",
+            )
 
         # Authentication runs before the permission check, so a bad
         # credential is a 401 even on an AllowAny view.
@@ -163,7 +175,8 @@ class AutoSchema(SpectacularAutoSchema):
         if view.get_authenticators():
             errors["401"] = (
                 ErrorSerializer,
-                "Missing or invalid credentials.",
+                "Missing, invalid or expired credentials.  Sent even to "
+                "public endpoints when a bad credential is given.",
             )
 
         denies = any(
@@ -177,19 +190,31 @@ class AutoSchema(SpectacularAutoSchema):
         if denies:
             errors["403"] = (
                 ErrorSerializer,
-                "The credentials are not allowed to do this.",
+                "The credentials may not use this endpoint: it is "
+                "staff-only, or it needs an interactive login and got an "
+                "API key.",
             )
 
         if getattr(view, "detail", False):
-            errors["404"] = (ErrorSerializer, "No such object.")
+            errors["404"] = (
+                ErrorSerializer,
+                "No such object, or one the caller cannot see.",
+            )
         elif (
             self.method == "GET"
             and self._is_list_view()
             and self._get_paginator()
         ):
-            errors["404"] = (ErrorSerializer, "Invalid page.")
+            errors["404"] = (
+                ErrorSerializer,
+                "The requested `page` is past the last one.",
+            )
 
         if view.get_throttles():
-            errors["429"] = (ErrorSerializer, "Too many requests.")
+            errors["429"] = (
+                ErrorSerializer,
+                "Rate limit exceeded; wait `Retry-After` seconds (see "
+                "Throttling).",
+            )
 
         return errors

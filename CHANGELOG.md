@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The API reference (`docs/api.md`) is rewritten for client developers: common responses, pagination and throttling (with how to pace a throttled client) are described once, bodies are commented JSON with each field's type, shared objects are defined once and linked, and complex endpoints have worked examples
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - SPA look: text and controls meet WCAG AA contrast (darker primary and destructive buttons, stronger input borders and muted text), one button shape, and consistent sizes, spacing and padding throughout; text honours the browser's text-size setting, and phone inputs no longer zoom the page when focused
 - SPA dates display in one consistent format everywhere, set in a single place so it can become a user preference

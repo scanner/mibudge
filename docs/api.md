@@ -1,35 +1,117 @@
 # mibudge API
 
-REST API for the mibudge personal budgeting service.
+Version 1.0.0.
+
+REST API for the mibudge personal budgeting service.  Every versioned
+endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`.
 
 ## Authentication
 
-All endpoints require JWT authentication via `Authorization: Bearer <token>` header. Obtain tokens through the login flow; refresh via `POST /api/token/refresh/` (httpOnly cookie).
+Send one of:
+
+- **Access token** -- `Authorization: Bearer <access>`.  The browser app
+  gets a short-lived access token from `POST /api/token/` (email and
+  password), which also sets the refresh token as an httpOnly cookie;
+  `POST /api/token/refresh/` exchanges that cookie for a new access token
+  and `POST /api/token/logout/` revokes it.
+- **API key** -- `Authorization: Api-Key <key>`, for importers and other
+  services.  Create keys at `/api/v1/users/me/api-keys/`; the key is shown
+  once.  API keys reach the budgeting endpoints and can read
+  `GET /api/v1/users/me/` (importers read `timezone`), but not the other
+  user and security endpoints (profile updates, password and email
+  change, invitations, API-key management), which answer 403.
+
+A few endpoints need no credentials (the public invitation and
+email-change link endpoints).  A bad credential is refused with 401 even
+there.
 
 ## Permissions
 
-- **Banks**: read-only, any authenticated user.
-- **Users**: list/retrieve/update restricted to staff; `/api/v1/users/me/` available to all authenticated users.
-- **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does not bypass ownership checks.
+- **Banks** and **currencies**: read-only, any authenticated caller.
+- **Users**: list, retrieve and update are staff-only;
+  `/api/v1/users/me/` is every caller's own profile.
+- **Everything else** (bank accounts, budgets, transactions, allocations,
+  internal transactions, categories): scoped to bank-account ownership.  A
+  caller sees only accounts they own and the objects in them; another
+  account's objects answer 404.  Staff status does not bypass this.
 
-## Money fields
+## Money
 
-Monetary values are represented as a decimal amount paired with an ISO 4217 currency code (e.g. `amount` + `amount_currency`). Currency defaults to the account's currency if not specified.
+A money value is a decimal string plus a sibling currency code: `"amount":
+"-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
+negative.  An omitted currency defaults to the bank account's.
 
-**Version:** 1.0.0
+## Pagination
 
-## Authentication
+List endpoints answer a page:
 
-- **apiKeyAuth**: `apiKey` (in: `header`, name: `Authorization`)
-- **jwtAuth**: `http` (in: ``, name: ``)
+```json
+{"count": 250, "next": "https://.../?page=3", "previous": "https://.../?page=1", "results": [...]}
+```
+
+`page` selects the page (a page past the end answers 404) and `page_size`
+the number of results, 100 by default and at most 500.  Follow `next` until it is `null`.
+
+## Throttling
+
+Requests are rate-limited per caller:
+
+- **Authenticated** (access token or API key): 20000/hour per user.  All of a user's API keys and sessions share the one budget.
+- **Anonymous** (login, token refresh, the public endpoints): 100/hour per client address.
+
+Over the limit a request answers 429 with a `Retry-After` header giving
+the seconds to wait.  A throttled request was refused before it ran, so
+it is safe to retry.  To pace a client:
+
+- On 429, wait `Retry-After` seconds, then retry the same request.
+- Without a `Retry-After`, back off exponentially with jitter (1s, 2s,
+  4s, ... capped at a few minutes) instead of retrying at once.
+- Some endpoints refuse with 429 for their own business limits (e.g.
+  too many invitations to one address); the endpoint says so, and
+  retrying soon will not succeed.
+- Bulk work (imports) should send requests one at a time rather than in
+  parallel, and spread a large batch over time rather than bursting it.
+
+## Errors
+
+An error body is `Error` or, for invalid input, `ValidationError`:
+
+- `Error`: `{"detail": "..."}`, sometimes with a machine-readable
+  `"code"` as well (e.g. `"token_not_valid"` from the token endpoints).
+- `ValidationError`: a map of field name to messages, with
+  `non_field_errors` for errors not tied to one field:
+
+  ```json
+  {"target_balance": ["This field is required."], "non_field_errors": ["..."]}
+  ```
+
+  A field's messages may be a single string instead of a list, a list of
+  per-item maps for a list field, or a nested map.  Some actions answer a
+  bare list of messages instead, e.g. `["Cannot split a pending
+  transaction."]`.
+
+The statuses every endpoint of a kind shares are described once, under
+Common responses; each endpoint lists which apply to it, and its own
+errors in full.
+
+## Common responses
+
+Error statuses shared by every endpoint of a kind.  Each endpoint lists the ones that apply to it.
+
+| Status | Body | Meaning |
+|---|---|---|
+| `400` | ValidationError | Invalid input: a field error in the request body, or a bad filter value on a list. |
+| `401` | Error | Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. |
+| `403` | Error | The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. |
+| `404` | Error | No such object, or one the caller cannot see. |
+| `404` | Error | The requested `page` is past the last one. |
+| `429` | Error | Rate limit exceeded; wait `Retry-After` seconds (see Throttling). |
 
 ## Endpoints
 
-### api
+### auth
 
 #### `POST /api/token/`
-
-**Operation:** `api_token_create`
 
 JWT obtain endpoint that stores the refresh token in an httpOnly
 cookie and returns only the access token in the response body.
@@ -39,44 +121,26 @@ access token (kept in memory); the refresh token is a
 Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
 and that the browser sends automatically to /api/token/refresh/.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`email`** (`string`) *(required)*
-- **`password`** (`string`) *(required)*
+```jsonc
+{
+  "email": "string",                // string · required
+  "password": "string"              // string · required
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+**200**
 
-- **`email`** (`string`) *(required)*
-- **`password`** (`string`) *(required)*
+Returns [AccessToken](#accesstoken-object).
 
-**Request Body** (`multipart/form-data`):
+Errors:
 
-- **`email`** (`string`) *(required)*
-- **`password`** (`string`) *(required)*
+- **401** (Error) -- Wrong email or password.
 
-**Response 200:** 
-
-- **`access`** (`string`) *(required, read-only)*
-
-**Response 401:** Wrong email or password.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `429`
 
 #### `POST /api/token/logout/`
-
-**Operation:** `api_token_logout_create`
 
 Sign-out endpoint: blacklists the refresh token in the httpOnly
 cookie and expires the cookie, so a reload cannot sign the user
@@ -86,16 +150,11 @@ Always answers 204.  A missing, invalid, expired or already
 blacklisted cookie leaves nothing to revoke, and the cookie is
 cleared either way.
 
-**Response 204:** No response body
+**204** -- no body.
 
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `429`
 
 #### `POST /api/token/refresh/`
-
-**Operation:** `api_token_refresh_create`
 
 JWT refresh endpoint that reads the refresh token from the httpOnly
 cookie rather than the request body.
@@ -104,3696 +163,1822 @@ On success, returns {"access": "<new_access_token>"} in JSON.
 When token rotation is enabled, also rotates the refresh cookie so
 the 14-day sliding window resets with each use.
 
-**Response 200:** 
+**200**
 
-- **`access`** (`string`) *(required, read-only)*
+Returns [AccessToken](#accesstoken-object).
 
-**Response 401:** No refresh cookie, or its token is invalid or expired.
+Errors:
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+- **401** (Error) -- No refresh cookie, or its token is invalid or expired.
 
-**Response 429:** Too many requests.
+Common responses: `429`
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+#### AccessToken object
+
+```jsonc
+{
+  "access": "string"                // string
+}
+```
 
 ### allocations
 
 #### `GET /api/v1/allocations/`
 
-**Operation:** `allocations_list`
+**List transaction allocations.**
 
 Return allocations belonging to the authenticated user's transactions. Filterable by transaction, budget, and category. Orderable by created_at.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `bank_account` | query | uuid |  |  |
+| `budget` | query | uuid |  |  |
+| `category` | query | uuid |  |  |
+| `category_group` | query | string |  |  |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
+| `transaction` | query | uuid |  |  |
+| `uncategorized` | query | boolean |  |  |
 
-- `bank_account` (query, optional)
-- `budget` (query, optional)
-- `category` (query, optional)
-- `category_group` (query, optional)
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
-- `transaction` (query, optional)
-- `uncategorized` (query, optional)
+**200**
 
-**Response 200:** 
+Returns a page of [TransactionAllocation](#transactionallocation-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `GET /api/v1/allocations/{id}/`
 
-**Operation:** `allocations_retrieve`
+**Get allocation details.**
 
 Return a single transaction allocation by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [TransactionAllocation](#transactionallocation-object).
 
-**Response 200:** 
+Common responses: `401` · `404` · `429`
 
-- **`id`** (`string`) *(required, read-only)*
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`budget_balance`** (`string`) *(required, read-only)*
-- **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`memo`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+#### TransactionAllocation object
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
+  "transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
+  "amount": "125.00",               // decimal · required
+  "amount_currency": "USD",         // string · read-only
+  "budget_balance": "125.00",       // decimal · read-only
+  "budget_balance_currency": "USD",  // string · read-only
+  "category": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
+  "category_full_name": "string",   // string | null · read-only
+  "memo": "string",                 // string | null · optional
+  "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
+}
+```
 
 ### bank-accounts
 
 #### `GET /api/v1/bank-accounts/`
 
-**Operation:** `bank_accounts_list`
+**List bank accounts.**
 
 Return bank accounts owned by the authenticated user. Filterable by account_type. Orderable by name or created_at.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `account_type` | query | enum |  | `C` Checking, `S` Savings, `X` Credit Card |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
 
-- `account_type` (query, optional) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
+**200**
 
-**Response 200:** 
+Returns a page of [BankAccount](#bankaccount-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/bank-accounts/`
 
-**Operation:** `bank_accounts_create`
+**Create a bank account.**
 
 Create a new bank account. The authenticated user is automatically added as an owner. An 'Unallocated' budget is auto-created by a post_save signal. Optionally set initial posted_balance, available_balance, and currency (all immutable after creation).
 
-**Request Body** (`application/json`):
+Send [BankAccount](#bankaccount-object) -- its writable fields.
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
+**201**
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Returns [BankAccount](#bankaccount-object).
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Response 201:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
-- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `429`
 
 #### `GET /api/v1/bank-accounts/{id}/`
 
-**Operation:** `bank_accounts_retrieve`
+**Get bank account details.**
 
 Return a single bank account by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [BankAccount](#bankaccount-object).
 
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
-- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `PUT /api/v1/bank-accounts/{id}/`
 
-**Operation:** `bank_accounts_update`
+**Update a bank account.**
 
 Full update of a bank account. Only 'name' is mutable after creation -- bank, account_type, currency, and balances are rejected if changed.
 
-**Parameters:**
+Send [BankAccount](#bankaccount-object) -- its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [BankAccount](#bankaccount-object).
 
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
-- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `PATCH /api/v1/bank-accounts/{id}/`
 
-**Operation:** `bank_accounts_partial_update`
+**Partially update a bank account.**
 
 Partial update of a bank account. Only 'name' is mutable after creation.
 
-**Parameters:**
+Send [BankAccount](#bankaccount-object) -- any subset of its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [BankAccount](#bankaccount-object).
 
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
-- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `DELETE /api/v1/bank-accounts/{id}/`
 
-**Operation:** `bank_accounts_destroy`
+**Delete a bank account.**
 
 Delete a bank account and all associated budgets, transactions, and allocations.
 
-**Parameters:**
+**204** -- no body.
 
-- `id` (path, required)
-
-**Response 204:** No response body
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `GET /api/v1/bank-accounts/{id}/funding-event-dates/`
 
-**Operation:** `bank_accounts_funding_event_dates_retrieve`
+**Funding event dates.**
 
 Return all dates in (after, before] on which at least one funding or recurrence event is due for this account.  The importer uses this to find batch-split boundaries.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `after` | query | date | required | Exclusive lower bound (YYYY-MM-DD). |
+| `before` | query | date | required | Inclusive upper bound (YYYY-MM-DD). |
 
-- `after` (query, required) — Exclusive lower bound (YYYY-MM-DD).
-- `before` (query, required) — Inclusive upper bound (YYYY-MM-DD).
-- `id` (path, required)
+**200**
 
-**Response 200:** 
+Returns:
 
-- **`dates`** (`array`) *(required)*
+```jsonc
+{
+  "dates": ["2026-09-29"]           // array of date
+}
+```
 
-**Response 400:** 'after' or 'before' is missing or not a date.
+Errors:
 
-One of:
-- `map of string | array of any | object`
-- `array of string`
+- **400** (ValidationError) -- 'after' or 'before' is missing or not a date.
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `GET /api/v1/bank-accounts/{id}/funding-summary/`
 
-**Operation:** `bank_accounts_funding_summary_retrieve`
+**Funding summary.**
 
 Return the total amounts that will be automatically funded at the next event for each distinct funding schedule on this account.  Only active, schedulable budgets are included -- paused, archived, completed goals, and RECURRING budgets that delegate to a fill-up goal are excluded.  Results are grouped by funding schedule (RRULE string) and sorted by next event date.
 
-**Parameters:**
+Example: The account after creating the Rent budget (see budgets_create).
 
-- `id` (path, required)
+**200**
 
-**Response 200:** 
+Returns:
 
-- **`schedules`** (`array`) *(required)*
-- **`total_amount`** (`string`) *(required)*
-- **`currency`** (`string`) *(required)*
+```jsonc
+{
+  "schedules": [{...}],             // array of FundingScheduleTotal
+  "total_amount": "125.00",         // decimal
+  "currency": "USD"                 // string
+}
+```
 
-**Response 401:** Missing or invalid credentials.
+Nested objects: [FundingScheduleTotal](#fundingscheduletotal-object).
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+*Example response -- Rent's fill-up goal gets $900.00 on the 1st:*
 
-**Response 404:** No such object.
+```json
+{
+  "schedules": [
+    {
+      "schedule": "DTSTART:20261001T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1,15",
+      "next_date": "2026-10-01",
+      "total_amount": "900.00",
+      "currency": "USD",
+      "budget_count": 1
+    }
+  ],
+  "total_amount": "900.00",
+  "currency": "USD"
+}
+```
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `GET /api/v1/bank-accounts/{id}/invitations/`
 
-**Operation:** `bank_accounts_invitations_list`
+**List pending invitations for this account.**
 
 Returns all pending invitations for this bank account.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns an array of [BankAccountInvitation](#bankaccountinvitation-object).
 
-**Response 200:** 
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `403` · `404` · `429`
 
 #### `POST /api/v1/bank-accounts/{id}/invitations/{token}/cancel/`
 
-**Operation:** `bank_accounts_invitations_cancel_create`
+**Cancel a pending invitation.**
 
 Cancel a pending co-ownership invitation by token. Only the user who sent the invitation may cancel it.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `token` | path | string | required | The invitation's opaque token. |
 
-- `id` (path, required)
-- `token` (path, required) — The invitation's opaque token.
+**200** -- no body.
 
-**Response 200:** No response body
+Errors:
 
-**Response 400:** The invitation is no longer pending.
+- **400** (Error) -- The invitation is no longer pending.
+- **403** (Error) -- Only the invitation's sender may cancel it, or the credentials are not interactive.
+- **404** (Error) -- No such account or invitation.
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** Only the invitation's sender may cancel it, or the credentials are not interactive.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such account or invitation.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `POST /api/v1/bank-accounts/{id}/invite/`
 
-**Operation:** `bank_accounts_invite_create`
+**Invite a co-owner.**
 
 Send a co-ownership invitation to the given email address. If no mibudge account exists for that address, an inactive placeholder account is created; the invitee sets their password after accepting. Returns 409 if the address is already an owner or a pending invitation already exists; 429 if too many invitations have been sent to this address for this account in the rolling window.
 
-**Parameters:**
+Send:
 
-- `id` (path, required)
+```jsonc
+{
+  "invitee_email": "user@example.com"  // email · required
+}
+```
 
-**Request Body** (`application/json`):
+**201** -- no body.
 
-- **`invitee_email`** (`string`) *(required)*
+Errors:
 
-**Request Body** (`application/x-www-form-urlencoded`):
+- **409** (Error) -- The address is already an owner, or has a pending invitation.
+- **429** (Error) -- Too many invitations to this address for this account.
 
-- **`invitee_email`** (`string`) *(required)*
-
-**Request Body** (`multipart/form-data`):
-
-- **`invitee_email`** (`string`) *(required)*
-
-**Response 201:** No response body
-
-**Response 409:** The address is already an owner, or has a pending invitation.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many invitations to this address for this account.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `403` · `404`
 
 #### `POST /api/v1/bank-accounts/{id}/mark-imported/`
 
-**Operation:** `bank_accounts_mark_imported_create`
+**Mark import complete.**
 
 Record that a transaction import has been completed for this account.  Sets last_imported_at to now and advances last_posted_through to the supplied date (never regresses an existing value).  Body: {"last_posted_through": "YYYY-MM-DD"}.
 
-**Parameters:**
+Send:
 
-- `id` (path, required)
+```jsonc
+{
+  "last_posted_through": "2026-09-29"  // date · required
+}
+```
 
-**Request Body** (`application/json`):
+**200**
 
-- **`last_posted_through`** (`string`) *(required)*
+Returns [BankAccount](#bankaccount-object).
 
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
-- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/bank-accounts/{id}/run-funding/`
 
-**Operation:** `bank_accounts_run_funding_create`
+**Run funding.**
 
 Run the funding engine for this account immediately.  Processes all due fund and recurrence events up to `as_of` (defaults to today) and returns a summary of what happened.  Pass `as_of` when calling between import batches so the engine only sees events up to that batch boundary date.
 
-**Parameters:**
+Example: Run funding for events due through 2026-09-30.
 
-- `id` (path, required)
+Send:
 
-**Request Body** (`application/json`):
+```jsonc
+{
+  // Upper bound for event enumeration (YYYY-MM-DD). Defaults to today.
+  "as_of": "2026-09-29"             // date · optional
+}
+```
 
-- **`as_of`** (`string`) — Upper bound for event enumeration (YYYY-MM-DD). Defaults to today.
+*Example request:*
 
-**Response 200:** 
+```json
+{
+  "as_of": "2026-09-30"
+}
+```
 
-- **`transfers`** (`integer`) *(required)*
-- **`occurrences_completed`** (`integer`) *(required)*
-- **`occurrences_partial`** (`integer`) *(required)*
-- **`warnings`** (`array`) *(required)*
-- **`skipped_budgets`** (`array`) *(required)* — Names of paused budgets the run skipped.
+**200**
 
-**Response 409:** Either another worker is currently processing this account (lock held), or there is nothing due or outstanding to run as of the supplied date.
+Returns:
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "transfers": 0,                   // integer
+  "occurrences_completed": 0,       // integer
+  "occurrences_partial": 0,         // integer
+  "warnings": ["string"],           // array of string
+  // Names of paused budgets the run skipped.
+  "skipped_budgets": ["string"]     // array of string
+}
+```
 
-**Response 503:** The funding system user is not configured.
+*Example response -- Two transfers made; a paused budget skipped:*
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```json
+{
+  "transfers": 2,
+  "occurrences_completed": 2,
+  "occurrences_partial": 0,
+  "warnings": [],
+  "skipped_budgets": [
+    "Vacation"
+  ]
+}
+```
 
-**Response 400:** Invalid input.
+Errors:
 
-One of:
-- `map of string | array of any | object`
-- `array of string`
+- **409** (Error) -- Either another worker is currently processing this account (lock held), or there is nothing due or outstanding to run as of the supplied date.
+- **503** (Error) -- The funding system user is not configured.
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/bank-accounts/{id}/sync-scrape/`
 
-**Operation:** `bank_accounts_sync_scrape_create`
+**Sync a bank-side scrape.**
 
 Reconcile this account against a fresh snapshot from a live bank scraper.  All existing pending transactions on the account are deleted, posted transactions from the scrape are de-duplicated against the database, and any new posted/pending rows are inserted in the order the scraper supplies (newest-first).  Per-transaction running balance snapshots and the unallocated-budget allocation snapshots are recomputed before the request returns.  Runs atomically under the account + unallocated-budget locks; on any error the database is unchanged.
 
-**Parameters:**
+Example: One pending and one posted row, newest first.
 
-- `id` (path, required)
+On an account whose previous sync left one pending row and whose balance agrees with the bank's.  `details_needed[].index` points into the submitted `transactions` array; send those rows' details to `transaction-details`.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`scraped_at`** (`string`) *(required)*
-- **`ending_balance`** (`string`) *(required)*
-- **`transactions`** (`array`) *(required)*
+```jsonc
+{
+  "scraped_at": "2026-09-29T14:00:00Z",  // date-time · required
+  "ending_balance": "125.00",       // decimal · required
+  "transactions": [{...}]           // array of ScrapeSyncTransaction · required
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Nested objects: [ScrapeSyncTransaction](#scrapesynctransaction-object).
 
-- **`scraped_at`** (`string`) *(required)*
-- **`ending_balance`** (`string`) *(required)*
-- **`transactions`** (`array`) *(required)*
+*Example request:*
 
-**Request Body** (`multipart/form-data`):
+```json
+{
+  "scraped_at": "2026-09-29T08:15:00-07:00",
+  "ending_balance": "1432.18",
+  "transactions": [
+    {
+      "is_pending": true,
+      "posted_date": "2026-09-29T08:15:00-07:00",
+      "raw_description": "CORNER MARKET 09/28 PURCHASE",
+      "amount": "-18.25",
+      "transaction_type": "",
+      "running_balance": null
+    },
+    {
+      "is_pending": false,
+      "posted_date": "2026-09-28T00:00:00-07:00",
+      "raw_description": "BLUE BOTTLE COFFEE 09/27 PURCHASE",
+      "amount": "-6.50",
+      "transaction_type": "signature_purchase",
+      "running_balance": "1450.43"
+    }
+  ]
+}
+```
 
-- **`scraped_at`** (`string`) *(required)*
-- **`ending_balance`** (`string`) *(required)*
-- **`transactions`** (`array`) *(required)*
+**200**
 
-**Response 200:** 
+Returns:
 
-- **`deleted_pending`** (`integer`) *(required)*
-- **`inserted_posted`** (`integer`) *(required)*
-- **`skipped_posted`** (`integer`) *(required)*
-- **`inserted_pending`** (`integer`) *(required)*
-- **`balance_mismatch`** (`string`) *(required)*
-- **`posting_order_mismatches`** (`array`) *(required)*
-- **`last_posted_through`** (`string`) *(required)*
-- **`new_transaction_ids`** (`array`) *(required)*
-- **`details_needed`** (`array`) *(required)*
+```jsonc
+{
+  "deleted_pending": 0,             // integer
+  "inserted_posted": 0,             // integer
+  "skipped_posted": 0,              // integer
+  "inserted_pending": 0,            // integer
+  "balance_mismatch": "125.00",     // decimal | null
+  "posting_order_mismatches": ["string"],  // array of string
+  "last_posted_through": "2026-09-29",  // date | null
+  "new_transaction_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],  // array of uuid
+  "details_needed": [{...}]         // array of ScrapeSyncDetailsNeeded
+}
+```
 
-**Response 400:** Invalid input.
+Nested objects: [ScrapeSyncDetailsNeeded](#scrapesyncdetailsneeded-object).
 
-One of:
-- `map of string | array of any | object`
-- `array of string`
+*Example response -- The pending row replaced, the posted row new and needing details:*
 
-**Response 401:** Missing or invalid credentials.
+```json
+{
+  "deleted_pending": 1,
+  "inserted_posted": 1,
+  "skipped_posted": 0,
+  "inserted_pending": 1,
+  "balance_mismatch": null,
+  "posting_order_mismatches": [],
+  "last_posted_through": "2026-09-28",
+  "new_transaction_ids": [
+    "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+    "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6e"
+  ],
+  "details_needed": [
+    {
+      "index": 1,
+      "transaction": "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a"
+    }
+  ]
+}
+```
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/bank-accounts/{id}/transaction-details/`
 
-**Operation:** `bank_accounts_transaction_details_create`
+**Apply scraped transaction details.**
 
 Apply per-transaction detail records (merchant name, location, MCC, virtual card number) fetched by a live scraper to posted transactions on this account.  Each raw details dict is stored verbatim on its transaction and the merchant columns are extracted from it.  An item's optional `category` is a mibudge category full name ('{group} : {name}') -- importers translate their provider's category vocabulary before submitting.  It seeds the transaction's category (and its unassigned allocations) when NULL; an unknown name yields a per-item warning and leaves the transaction unassigned.  The display description is recomposed on first enrichment unless the user has edited it.  Rows already enriched are skipped unless `overwrite` is true; pending rows are always skipped.  Per-item outcomes are returned in submission order.
 
-**Parameters:**
+Example: Details for the row `sync-scrape` asked for.
 
-- `id` (path, required)
+`details` is the provider's raw record, stored verbatim; mibudge reads `merchant_name`, `merchant_information` ('CITY, ST'), `merchant_category`, `merchant_category_code` and `virtual_card_number` from it.  `category` is a mibudge category full name.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`overwrite`** (`boolean`)
-- **`details`** (`array`) *(required)*
+```jsonc
+{
+  "overwrite": false,               // boolean · optional
+  "details": [{...}]                // array of TransactionDetailsItem · required
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Nested objects: [TransactionDetailsItem](#transactiondetailsitem-object).
 
-- **`overwrite`** (`boolean`)
-- **`details`** (`array`) *(required)*
+*Example request:*
 
-**Request Body** (`multipart/form-data`):
+```json
+{
+  "overwrite": false,
+  "details": [
+    {
+      "transaction": "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+      "details": {
+        "merchant_name": "Blue Bottle Coffee",
+        "merchant_information": "OAKLAND, CA",
+        "merchant_category": "Coffee Shops",
+        "merchant_category_code": "5814"
+      },
+      "category": "Food & Drink : Coffee & Tea"
+    }
+  ]
+}
+```
 
-- **`overwrite`** (`boolean`)
-- **`details`** (`array`) *(required)*
+**200**
 
-**Response 200:** 
+Returns:
 
-- **`applied`** (`integer`) *(required)*
-- **`skipped_has_details`** (`integer`) *(required)*
-- **`skipped_pending`** (`integer`) *(required)*
-- **`not_found`** (`integer`) *(required)*
-- **`results`** (`array`) *(required)*
+```jsonc
+{
+  "applied": 0,                     // integer
+  "skipped_has_details": 0,         // integer
+  "skipped_pending": 0,             // integer
+  "not_found": 0,                   // integer
+  "results": [{...}]                // array of TransactionDetailsResult
+}
+```
 
-**Response 400:** Invalid input.
+Nested objects: [TransactionDetailsResult](#transactiondetailsresult-object).
 
-One of:
-- `map of string | array of any | object`
-- `array of string`
+*Example response -- Applied, with nothing to warn about:*
 
-**Response 401:** Missing or invalid credentials.
+```json
+{
+  "applied": 1,
+  "skipped_has_details": 0,
+  "skipped_pending": 0,
+  "not_found": 0,
+  "results": [
+    {
+      "transaction": "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+      "status": "applied",
+      "warnings": []
+    }
+  ]
+}
+```
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
-**Response 404:** No such object.
+#### BankAccount object
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
+  "name": "string",                 // string · required
+  "bank": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "owners": ["string"],             // array of string · read-only
+  // "C" Checking, "S" Savings, "X" Credit Card
+  "account_type": "C",              // enum · optional
+  "account_number": "string",       // string | null · optional
+  // ISO 4217 currency code (e.g. USD, EUR, GBP).
+  "currency": "USD",                // string · optional
+  "posted_balance": "125.00",       // decimal · optional
+  "posted_balance_currency": "USD",  // string · read-only
+  "available_balance": "125.00",    // decimal · optional
+  "available_balance_currency": "USD",  // string · read-only
+  "unallocated_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · read-only
+  // When enabled (the default), scheduled funding and recurrence events run
+  // automatically for this account. Disable to opt out of automation and drive funding
+  // entirely from the 'Run funding now' button.
+  "auto_funding_enabled": false,    // boolean · optional
+  // Wall-clock time of the most recent completed import for this account.
+  "last_imported_at": "2026-09-29T14:00:00Z",  // date-time | null · read-only
+  // Latest posted_date seen in the most recent import batch. The funding engine will
+  // not process events dated after this value.
+  "last_posted_through": "2026-09-29",  // date | null · read-only
+  "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
+}
+```
 
-**Response 429:** Too many requests.
+#### BankAccountInvitation object
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  "token": "string",                // string
+  "bank_account_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  "bank_account_name": "string",    // string
+  // Email address the invitation was sent to. Immutable after creation.
+  "invitee_email": "user@example.com",  // email
+  "invited_by": "user@example.com",  // email
+  // "pending" Pending, "accepted" Accepted, "declined" Declined, "cancelled" Cancelled,
+  // "expired" Expired
+  "status": "pending",              // enum
+  "expires_at": "2026-09-29T14:00:00Z",  // date-time
+  "accepted_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "declined_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "cancelled_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "created_at": "2026-09-29T14:00:00Z",  // date-time
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time
+}
+```
+
+#### FundingScheduleTotal object
+
+```jsonc
+{
+  "schedule": "string",             // string -- The RRULE string.
+  "next_date": "2026-09-29",        // date
+  "total_amount": "125.00",         // decimal
+  "currency": "USD",                // string
+  "budget_count": 0                 // integer
+}
+```
+
+#### ScrapeSyncDetailsNeeded object
+
+```jsonc
+{
+  "index": 0,                       // integer
+  "transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6"  // uuid
+}
+```
+
+#### ScrapeSyncTransaction object
+
+```jsonc
+{
+  "is_pending": false,              // boolean · required
+  "posted_date": "2026-09-29T14:00:00Z",  // date-time · required
+  "raw_description": "string",      // string · required
+  "amount": "125.00",               // decimal · required
+  "transaction_type": "string",     // string · optional
+  "running_balance": "125.00"       // decimal | null · optional
+}
+```
+
+#### TransactionDetailsItem object
+
+```jsonc
+{
+  "transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "details": {"<key>": null},       // map of any · required
+  "category": "string"              // string | null · optional
+}
+```
+
+#### TransactionDetailsResult object
+
+```jsonc
+{
+  "transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  // "applied", "skipped_has_details", "skipped_pending", "not_found"
+  "status": "applied",              // enum
+  "warnings": ["string"]            // array of string
+}
+```
 
 ### banks
 
 #### `GET /api/v1/banks/`
 
-**Operation:** `banks_list`
+**List banks.**
 
 Return all banks in the system. Banks are shared reference data managed through the admin -- any authenticated user can list and retrieve them.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `ordering` | query | string |  | Which field to use when ordering the results. |
 
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
+**200**
 
-**Response 200:** 
+Returns a page of [Bank](#bank-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `GET /api/v1/banks/{id}/`
 
-**Operation:** `banks_retrieve`
+**Get bank details.**
 
 Return a single bank by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [Bank](#bank-object).
 
-**Response 200:** 
+Common responses: `401` · `404` · `429`
 
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)*
-- **`routing_number`** (`string`) *(required, read-only)*
-- **`default_currency`** (`string`) *(required, read-only)* — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+#### Bank object
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  "name": "string",                 // string
+  "routing_number": "string",       // string | null
+  // ISO 4217 currency code (e.g. USD, EUR, GBP).
+  "default_currency": "USD",        // string
+  "created_at": "2026-09-29T14:00:00Z",  // date-time
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time
+}
+```
 
 ### budgets
 
 #### `GET /api/v1/budgets/`
 
-**Operation:** `budgets_list`
+**List budgets.**
 
 Return budgets belonging to the authenticated user's accounts. Filterable by bank_account, budget_type, archived, and paused. Searchable by name. Orderable by name, created_at, or balance.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `archived` | query | boolean |  |  |
+| `bank_account` | query | uuid |  |  |
+| `budget_type` | query | enum |  | `G` Goal, `R` Recurring, `A` Associated Fill-up Goal, `C` Capped |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
+| `paused` | query | boolean |  |  |
+| `search` | query | string |  | A search term. |
 
-- `archived` (query, optional)
-- `bank_account` (query, optional)
-- `budget_type` (query, optional) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
-- `paused` (query, optional)
-- `search` (query, optional) — A search term.
+**200**
 
-**Response 200:** 
+Returns a page of [Budget](#budget-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/budgets/`
 
-**Operation:** `budgets_create`
+**Create a budget.**
 
 Create a new budget under a bank account. Required: name, bank_account (UUID), budget_type, funding_type, and target_balance. The bank_account and budget_type are immutable after creation. Balance is managed by signals and is always read-only.
 
-**Request Body** (`application/json`):
+Example: $1800 rent, refreshed on the 1st, funded on the 1st and 15th.
 
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
+A Recurring budget also gets an associated fill-up goal (`fillup_goal` in the response). The funding schedule fills the goal toward `target_balance` by the next `recurrence_schedule` date, when its balance moves into the budget.
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Send [Budget](#budget-object) -- its writable fields.
 
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
+*Example request:*
 
-**Request Body** (`multipart/form-data`):
+```json
+{
+  "name": "Rent",
+  "bank_account": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+  "budget_type": "R",
+  "funding_type": "D",
+  "target_balance": "1800.00",
+  "funding_schedule": "DTSTART:20261001T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1,15",
+  "recurrence_schedule": "DTSTART:20261001T000000Z\nRRULE:FREQ=MONTHLY"
+}
+```
 
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
+**201**
 
-**Response 201:** 
+Returns [Budget](#budget-object).
 
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `429`
 
 #### `GET /api/v1/budgets/{id}/`
 
-**Operation:** `budgets_retrieve`
+**Get budget details.**
 
 Return a single budget by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [Budget](#budget-object).
 
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `PUT /api/v1/budgets/{id}/`
 
-**Operation:** `budgets_update`
+**Update a budget.**
 
 Full update of a budget. bank_account and budget_type are immutable. The unallocated budget cannot be renamed.
 
-**Parameters:**
+Send [Budget](#budget-object) -- its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [BudgetUpdateResult](#budgetupdateresult-object).
 
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-- **`warnings`** (`array`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `PATCH /api/v1/budgets/{id}/`
 
-**Operation:** `budgets_partial_update`
+**Partially update a budget.**
 
 Partial update of a budget. bank_account and budget_type are immutable. The unallocated budget cannot be renamed.
 
-**Parameters:**
+Send [Budget](#budget-object) -- any subset of its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [BudgetUpdateResult](#budgetupdateresult-object).
 
-- **`name`** (`string`)
-- **`bank_account`** (`string`)
-- **`target_balance`** (`string`)
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`bank_account`** (`string`)
-- **`target_balance`** (`string`)
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`bank_account`** (`string`)
-- **`target_balance`** (`string`)
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-- **`warnings`** (`array`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `DELETE /api/v1/budgets/{id}/`
 
-**Operation:** `budgets_destroy`
+**Delete a budget.**
 
 Delete a budget and its fill-up goal. The unallocated budget cannot be deleted (403). A budget whose own or fill-up goal's transaction allocations exist cannot be deleted (400) -- archive it instead. Transfers between the deleted budgets and other budgets are reversed on those budgets, and any remaining balance moves to the unallocated budget.
 
-**Parameters:**
+**204** -- no body.
 
-- `id` (path, required)
+Errors:
 
-**Response 204:** No response body
+- **400** (ValidationError) -- The budget has transaction allocations; archive it instead.
+- **403** (Error) -- The unallocated budget cannot be deleted or archived.
 
-**Response 400:** The budget has transaction allocations; archive it instead.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 403:** The unallocated budget cannot be deleted or archived.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `POST /api/v1/budgets/{id}/archive/`
 
-**Operation:** `budgets_archive_create`
+**Archive a budget.**
 
 Archive a budget. Any remaining balance is transferred to the account's unallocated budget. If the budget has an associated fill-up goal, that budget is also archived and its balance moved to unallocated. The unallocated budget cannot be archived.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [Budget](#budget-object).
 
-**Response 200:** 
+Errors:
 
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+- **400** (ValidationError) -- The budget is already archived.
+- **403** (Error) -- The unallocated budget cannot be deleted or archived.
 
-**Response 400:** The budget is already archived.
+Common responses: `401` · `404` · `429`
 
-One of:
-- `map of string | array of any | object`
-- `array of string`
+#### Budget object
 
-**Response 403:** The unallocated budget cannot be deleted or archived.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
+  "name": "string",                 // string · required
+  "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "balance": "125.00",              // decimal · read-only
+  "balance_currency": "USD",        // string · read-only
+  // For Goal budgets: running net of all ITX credits minus debits. Unused for other
+  // types.
+  "funded_amount": "125.00",        // decimal · read-only
+  "funded_amount_currency": "USD",  // string · read-only
+  "target_balance": "125.00",       // decimal · required
+  "target_balance_currency": "USD",  // string · read-only
+  "funding_amount": "125.00",       // decimal | null · optional
+  "funding_amount_currency": "USD",  // string | null · read-only
+  // "G" Goal, "R" Recurring, "A" Associated Fill-up Goal, "C" Capped
+  "budget_type": "G",               // enum · optional
+  // "D" Target Date, "F" Fixed Amount
+  "funding_type": "D",              // enum · optional
+  "target_date": "2026-09-29",      // date | null · optional
+  "fillup_goal": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · read-only
+  "archived": false,                // boolean · read-only
+  "archived_at": "2026-09-29T14:00:00Z",  // date-time | null · read-only
+  // True when this budget has reached its target and should not be funded further.
+  // Managed by signals and funding tasks; do not set manually.
+  "complete": false,                // boolean · read-only
+  // A paused budget does not get automatically funded on its schedule.
+  "paused": false,                  // boolean · optional
+  "funding_schedule": "string",     // string · optional
+  // Refresh cycle for Recurring budgets. Restricted grammar: a single RRULE whose FREQ
+  // is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART
+  // that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z
+  // RRULE:FREQ=MONTHLY' refreshes on the 8th of every month). BY* parts, COUNT, UNTIL,
+  // and exception rules/dates are rejected -- the anchor date is the only day-of-cycle
+  // control. The funding_schedule field is not restricted this way.
+  "recurrence_schedule": "string",  // string | null · optional
+  "memo": "string",                 // string | null · optional
+  // List of matcher strings; currently transaction-category full names ('{group} :
+  // {name}'). Spend matching an entry is auto-routed to this budget.
+  "auto_spend": null,               // any · optional
+  "next_funding": {...},            // NextFunding | null · read-only
+  "next_recurrence": "2026-09-29",  // date | null · read-only
+  // "ahead", "on_track", "behind"
+  "funding_pace": "ahead",          // enum | null · read-only
+  "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
+}
+```
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Nested objects: [NextFunding](#nextfunding-object).
 
-**Response 401:** Missing or invalid credentials.
+#### BudgetUpdateResult object
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Every field of [Budget](#budget-object), plus:
 
-**Response 404:** No such object.
+```jsonc
+{
+  "warnings": ["string"]            // array of string
+}
+```
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+#### NextFunding object
 
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "date": "2026-09-29",             // date
+  "amount": "125.00",               // decimal
+  "amount_currency": "USD"          // string
+}
+```
 
 ### channel-preferences
 
 #### `GET /api/v1/channel-preferences/`
 
-**Operation:** `channel_preferences_list`
+**List channel preferences.**
 
 Return all notification channels with the authenticated user's delivery preferences. Channels without a stored preference fall back to DAILY_MORNING.
 
-**Response 200:** 
+**200**
 
-**Response 401:** Missing or invalid credentials.
+Returns an array of [ChannelPreference](#channelpreference-object).
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `PATCH /api/v1/channel-preferences/{channel}/`
 
-**Operation:** `channel_preferences_partial_update`
+**Update a channel preference.**
 
 Set the digest_frequency for a notification channel. Returns 404 if the channel value is not valid.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `channel` | path | string | required | Channel identifier (e.g. 'email'). |
 
-- `channel` (path, required) — Channel identifier (e.g. 'email').
+Send [ChannelPreference](#channelpreference-object) -- any subset of its writable fields.
 
-**Request Body** (`application/json`):
+**200**
 
-- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+Returns [ChannelPreference](#channelpreference-object).
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Common responses: `400` · `401` · `404` · `429`
 
-- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
+#### ChannelPreference object
 
-**Request Body** (`multipart/form-data`):
-
-- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
-
-**Response 200:** 
-
-- **`channel`** (`string`) *(required, read-only)*
-- **`display_name`** (`string`) *(required, read-only)*
-- **`digest_frequency`** (`string`) *(required)* — * `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "channel": "string",              // string
+  "display_name": "string",         // string
+  // "daily_morning" Once daily (morning, ~7 am), "daily_evening" Once daily (evening,
+  // ~6 pm), "twice_daily" Twice daily (morning + evening), "weekly_friday" Weekly on
+  // Friday, "weekly_saturday" Weekly on Saturday, "weekly_sunday" Weekly on Sunday
+  "digest_frequency": "daily_morning"  // enum
+}
+```
 
 ### currencies
 
 #### `GET /api/v1/currencies/`
 
-**Operation:** `currencies_list`
+**List supported currencies.**
 
 Return all ISO 4217 currency codes supported by the system, sorted by code. Each entry includes the code, English name, and numeric ISO 4217 code. Requires authentication.
 
-**Response 200:** 
+**200**
 
-**Response 401:** Missing or invalid credentials.
+Returns an array of:
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "code": "string",                 // string
+  "name": "string",                 // string
+  // ISO 4217 numeric code; null for historic currencies.
+  "numeric": "string"               // string | null
+}
+```
 
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 ### funding-occurrences
 
 #### `GET /api/v1/funding-occurrences/`
 
-**Operation:** `funding_occurrences_list`
+**List funding event occurrences.**
 
 Return funding event occurrences for budgets on accounts owned by the authenticated user.  Filterable by bank_account, budget, kind, status (multi-value), and scheduled_date range.  Orderable by scheduled_date or created_at.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `bank_account` | query | uuid |  |  |
+| `budget` | query | uuid |  |  |
+| `date_from` | query | date |  |  |
+| `date_to` | query | date |  |  |
+| `kind` | query | enum |  | `fund` fund, `recur` recur |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
+| `status` | query | array of enum |  | `PENDING` Pending, `PARTIAL` Partial, `COMPLETE` Complete, `SKIPPED` Skipped |
 
-- `bank_account` (query, optional)
-- `budget` (query, optional)
-- `date_from` (query, optional)
-- `date_to` (query, optional)
-- `kind` (query, optional) — Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
+**200**
 
-* `fund` - fund
-* `recur` - recur
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
-- `status` (query, optional) — * `PENDING` - Pending
-* `PARTIAL` - Partial
-* `COMPLETE` - Complete
-* `SKIPPED` - Skipped
+Returns a page of [FundingEventOccurrence](#fundingeventoccurrence-object) (see Pagination).
 
-**Response 200:** 
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `GET /api/v1/funding-occurrences/{id}/`
 
-**Operation:** `funding_occurrences_retrieve`
+**Get a funding event occurrence.**
 
 Return a single funding event occurrence by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [FundingEventOccurrence](#fundingeventoccurrence-object).
 
-**Response 200:** 
+Common responses: `401` · `404` · `429`
 
-- **`id`** (`string`) *(required, read-only)*
-- **`budget`** (`string`) *(required, read-only)*
-- **`kind`** (`string`) *(required, read-only)* — Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
-- **`scheduled_date`** (`string`) *(required, read-only)* — Calendar date the event was scheduled to fire.
-- **`status`** (``) *(required, read-only)*
-- **`completed_at`** (`string`) *(required, read-only)* — Wall-clock time the occurrence reached COMPLETE.  Null while PENDING/PARTIAL/SKIPPED.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+#### FundingEventOccurrence object
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  "budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  // Funding event discriminator: "fund" or "recur". Stored as the EventKind string
+  // value; not exposed in user-facing forms so no choices= is set.
+  "kind": "string",                 // string
+  // Calendar date the event was scheduled to fire.
+  "scheduled_date": "2026-09-29",   // date
+  // "PENDING" Pending, "PARTIAL" Partial, "COMPLETE" Complete, "SKIPPED" Skipped
+  "status": "PENDING",              // enum
+  // Wall-clock time the occurrence reached COMPLETE. Null while
+  // PENDING/PARTIAL/SKIPPED.
+  "completed_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "created_at": "2026-09-29T14:00:00Z",  // date-time
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time
+}
+```
 
 ### internal-transactions
 
 #### `GET /api/v1/internal-transactions/`
 
-**Operation:** `internal_transactions_list`
+**List internal transactions.**
 
 Return budget-to-budget transfers belonging to the authenticated user's accounts. Filterable by bank_account, src_budget, dst_budget, and date range (date_from/date_to). Orderable by created_at.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `bank_account` | query | uuid |  |  |
+| `budget` | query | uuid |  |  |
+| `date_from` | query | date-time |  |  |
+| `date_to` | query | date-time |  |  |
+| `dst_budget` | query | uuid |  |  |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
+| `src_budget` | query | uuid |  |  |
 
-- `bank_account` (query, optional)
-- `budget` (query, optional)
-- `date_from` (query, optional)
-- `date_to` (query, optional)
-- `dst_budget` (query, optional)
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
-- `src_budget` (query, optional)
+**200**
 
-**Response 200:** 
+Returns a page of [InternalTransaction](#internaltransaction-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/internal-transactions/`
 
-**Operation:** `internal_transactions_create`
+**Create an internal transaction.**
 
 Transfer money between two budgets in the same bank account. Required: bank_account (UUID), amount, src_budget (UUID), and dst_budget (UUID). The authenticated user is recorded as the actor. Internal transactions are write-once -- to reverse a transfer, create a new one with src and dst swapped.
 
-**Request Body** (`application/json`):
+Example: Move $50.00 from Unallocated to Groceries.
 
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`effective_date`** (`string`)
+Send [InternalTransaction](#internaltransaction-object) -- its writable fields.
 
-**Request Body** (`application/x-www-form-urlencoded`):
+*Example request:*
 
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`effective_date`** (`string`)
+```json
+{
+  "bank_account": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+  "amount": "50.00",
+  "src_budget": "e7f8a9b0-c1d2-4e3f-8a4b-5c6d7e8f9a01",
+  "dst_budget": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f"
+}
+```
 
-**Request Body** (`multipart/form-data`):
+**201**
 
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`effective_date`** (`string`)
+Returns [InternalTransaction](#internaltransaction-object).
 
-**Response 201:** 
+*Example response -- The transfer, with both budgets' balances after it:*
 
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`actor`** (`integer`) *(required, read-only)*
-- **`effective_date`** (`string`)
-- **`src_budget_balance`** (`string`) *(required, read-only)*
-- **`src_budget_balance_currency`** (`string`) *(required, read-only)*
-- **`dst_budget_balance`** (`string`) *(required, read-only)*
-- **`dst_budget_balance_currency`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+```json
+{
+  "id": "77777777-8888-4999-8aaa-bbbbbbbbbbbb",
+  "bank_account": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+  "amount": "50.00",
+  "amount_currency": "USD",
+  "src_budget": "e7f8a9b0-c1d2-4e3f-8a4b-5c6d7e8f9a01",
+  "dst_budget": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+  "actor": 1,
+  "effective_date": "2026-09-29T14:10:00Z",
+  "src_budget_balance": "1160.53",
+  "src_budget_balance_currency": "USD",
+  "dst_budget_balance": "390.00",
+  "dst_budget_balance_currency": "USD",
+  "created_at": "2026-09-29T14:10:00Z",
+  "modified_at": "2026-09-29T14:10:00Z"
+}
+```
 
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `429`
 
 #### `GET /api/v1/internal-transactions/{id}/`
 
-**Operation:** `internal_transactions_retrieve`
+**Get internal transaction details.**
 
 Return a single internal transaction by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [InternalTransaction](#internaltransaction-object).
 
-**Response 200:** 
+Common responses: `401` · `404` · `429`
 
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`actor`** (`integer`) *(required, read-only)*
-- **`effective_date`** (`string`)
-- **`src_budget_balance`** (`string`) *(required, read-only)*
-- **`src_budget_balance_currency`** (`string`) *(required, read-only)*
-- **`dst_budget_balance`** (`string`) *(required, read-only)*
-- **`dst_budget_balance_currency`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+#### InternalTransaction object
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
+  "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "amount": "125.00",               // decimal · required
+  "amount_currency": "USD",         // string · read-only
+  "src_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "dst_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "actor": 0,                       // integer · read-only
+  "effective_date": "2026-09-29T14:00:00Z",  // date-time · optional
+  "src_budget_balance": "125.00",   // decimal · read-only
+  "src_budget_balance_currency": "USD",  // string · read-only
+  "dst_budget_balance": "125.00",   // decimal · read-only
+  "dst_budget_balance_currency": "USD",  // string · read-only
+  "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
+}
+```
 
 ### invitations
 
 #### `GET /api/v1/invitations/{token}/`
 
-**Operation:** `invitations_retrieve`
+**Get invitation details (public).**
 
 Return bank account name, current owners, and invitee status for the invitation identified by *token*. No authentication required -- the token is the credential. Used by native apps to render the acceptance UI; the Django template view renders this server-side.
 
-**Parameters:**
+**200**
 
-- `token` (path, required)
+Returns:
 
-**Response 200:** 
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  // "pending" Pending, "accepted" Accepted, "declined" Declined, "cancelled" Cancelled,
+  // "expired" Expired
+  "status": "pending",              // enum
+  // Email address the invitation was sent to. Immutable after creation.
+  "invitee_email": "user@example.com",  // email
+  "bank_account_name": "string",    // string
+  "bank_name": "string",            // string
+  "current_owners": ["string"],     // array of string
+  "is_new_user": false,             // boolean
+  "expires_at": "2026-09-29T14:00:00Z"  // date-time
+}
+```
 
-- **`id`** (`string`) *(required, read-only)*
-- **`status`** (``) *(required, read-only)*
-- **`invitee_email`** (`string`) *(required, read-only)* — Email address the invitation was sent to. Immutable after creation.
-- **`bank_account_name`** (`string`) *(required, read-only)*
-- **`bank_name`** (`string`) *(required, read-only)*
-- **`current_owners`** (`array`) *(required, read-only)*
-- **`is_new_user`** (`boolean`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
+Errors:
 
-**Response 404:** Invitation not found.
+- **404** (Error) -- Invitation not found.
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `POST /api/v1/invitations/{token}/accept/`
 
-**Operation:** `invitations_accept_create`
+**Accept an invitation (public).**
 
 Accept the co-ownership invitation identified by *token*. Adds the invitee to the account's owners. For brand-new users (no password set), a password-reset email is also dispatched. No authentication required.
 
-**Parameters:**
+**200** -- no body.
 
-- `token` (path, required)
+Errors:
 
-**Response 200:** No response body
+- **400** (Error) -- Invitation expired, cancelled, or already resolved.
+- **404** (Error) -- Invitation not found.
 
-**Response 400:** Invitation expired, cancelled, or already resolved.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invitation not found.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `POST /api/v1/invitations/{token}/decline/`
 
-**Operation:** `invitations_decline_create`
+**Decline an invitation (public).**
 
 Decline the co-ownership invitation identified by *token*. No authentication required.
 
-**Parameters:**
+**200** -- no body.
 
-- `token` (path, required)
+Errors:
 
-**Response 200:** No response body
+- **400** (Error) -- Invitation expired, cancelled, or already resolved.
+- **404** (Error) -- Invitation not found.
 
-**Response 400:** Invitation expired, cancelled, or already resolved.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invitation not found.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 ### notification-preferences
 
 #### `GET /api/v1/notification-preferences/`
 
-**Operation:** `notification_preferences_list`
+**List notification preferences.**
 
 Return all registered notification kinds merged with the authenticated user's preferences. Kinds without a stored preference fall back to the registry default_delivery_mode.
 
-**Response 200:** 
+**200**
 
-**Response 401:** Missing or invalid credentials.
+Returns an array of [NotificationPreference](#notificationpreference-object).
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `PATCH /api/v1/notification-preferences/{kind}/`
 
-**Operation:** `notification_preferences_partial_update`
+**Update a notification preference.**
 
 Set delivery_mode ('digest', 'immediate', or 'off') for a single notification kind. Returns 400 if the kind has can_suppress=False. Returns 404 if the kind is not registered.
 
-**Parameters:**
+Send [NotificationPreference](#notificationpreference-object) -- any subset of its writable fields.
 
-- `kind` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [NotificationPreference](#notificationpreference-object).
 
-- **`delivery_mode`** (`string`) — * `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off Enum: ['digest', 'immediate', 'off']
+Common responses: `400` · `401` · `404` · `429`
 
-**Request Body** (`application/x-www-form-urlencoded`):
+#### NotificationPreference object
 
-- **`delivery_mode`** (`string`) — * `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off Enum: ['digest', 'immediate', 'off']
-
-**Request Body** (`multipart/form-data`):
-
-- **`delivery_mode`** (`string`) — * `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off Enum: ['digest', 'immediate', 'off']
-
-**Response 200:** 
-
-- **`kind`** (`string`) *(required, read-only)*
-- **`display_name`** (`string`) *(required, read-only)*
-- **`can_suppress`** (`boolean`) *(required, read-only)*
-- **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off Enum: ['digest', 'immediate', 'off']
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "kind": "string",                 // string
+  "display_name": "string",         // string
+  "can_suppress": false,            // boolean
+  // "digest" Digest, "immediate" Immediate, "off" Off
+  "delivery_mode": "digest"         // enum
+}
+```
 
 ### transaction-categories
 
 #### `GET /api/v1/transaction-categories/`
 
-**Operation:** `transaction_categories_list`
+**List transaction categories.**
 
 Return the transaction categories visible to the authenticated user: the global base set, the user's own custom categories, categories owned by users they co-own a bank account with, and categories still referenced by the user's transactions after sharing ended.  Filterable by group, archived, and scope (global|mine|shared).  Searchable by group and name.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `archived` | query | boolean |  |  |
+| `group` | query | string |  |  |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
+| `scope` | query | enum |  | `global` Global, `mine` Mine, `shared` Shared |
+| `search` | query | string |  | A search term. |
 
-- `archived` (query, optional)
-- `group` (query, optional)
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
-- `scope` (query, optional) — * `global` - Global
-* `mine` - Mine
-* `shared` - Shared
-- `search` (query, optional) — A search term.
+**200**
 
-**Response 200:** 
+Returns a page of [TransactionCategory](#transactioncategory-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/transaction-categories/`
 
-**Operation:** `transaction_categories_create`
+**Create a transaction category.**
 
 Create a custom category owned by the authenticated user (global categories are managed via the admin).  Group and name are whitespace-normalized; case-insensitive duplicates of global rows or the user's own rows are rejected.
 
-**Request Body** (`application/json`):
+Send [TransactionCategory](#transactioncategory-object) -- its writable fields.
 
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
+**201**
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Returns [TransactionCategory](#transactioncategory-object).
 
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-
-**Request Body** (`multipart/form-data`):
-
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-
-**Response 201:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
-- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
-- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `429`
 
 #### `GET /api/v1/transaction-categories/{id}/`
 
-**Operation:** `transaction_categories_retrieve`
+**Get transaction category details.**
 
 Return a single visible category by UUID.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [TransactionCategory](#transactioncategory-object).
 
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
-- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
-- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `PUT /api/v1/transaction-categories/{id}/`
 
-**Operation:** `transaction_categories_update`
+**Update a transaction category.**
 
 Full update of a category.  Only the owner may update; global categories are managed via the admin.
 
-**Parameters:**
+Send [TransactionCategory](#transactioncategory-object) -- its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [TransactionCategory](#transactioncategory-object).
 
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
+Errors:
 
-**Request Body** (`application/x-www-form-urlencoded`):
+- **403** (Error) -- The category is global or owned by someone else; only its owner may change it.
 
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-
-**Request Body** (`multipart/form-data`):
-
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
-- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
-- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 403:** The category is global or owned by someone else; only its owner may change it.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `PATCH /api/v1/transaction-categories/{id}/`
 
-**Operation:** `transaction_categories_partial_update`
+**Partially update a transaction category.**
 
 Partial update of a category.  Only the owner may update; global categories are managed via the admin.
 
-**Parameters:**
+Send [TransactionCategory](#transactioncategory-object) -- any subset of its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [TransactionCategory](#transactioncategory-object).
 
-- **`group`** (`string`)
-- **`name`** (`string`)
+Errors:
 
-**Request Body** (`application/x-www-form-urlencoded`):
+- **403** (Error) -- The category is global or owned by someone else; only its owner may change it.
 
-- **`group`** (`string`)
-- **`name`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`group`** (`string`)
-- **`name`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
-- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
-- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 403:** The category is global or owned by someone else; only its owner may change it.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `DELETE /api/v1/transaction-categories/{id}/`
 
-**Operation:** `transaction_categories_destroy`
+**Delete a transaction category.**
 
 Delete a category.  Only the owner may delete; global categories are managed via the admin.  A category still referenced by transactions or allocations cannot be deleted (409) -- archive it instead.
 
-**Parameters:**
+**204** -- no body.
 
-- `id` (path, required)
+Errors:
 
-**Response 204:** No response body
+- **403** (Error) -- The category is global or owned by someone else; only its owner may change it.
+- **409** (Error) -- The category is referenced by transactions or allocations; archive it instead.
 
-**Response 403:** The category is global or owned by someone else; only its owner may change it.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 409:** The category is referenced by transactions or allocations; archive it instead.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `POST /api/v1/transaction-categories/{id}/archive/`
 
-**Operation:** `transaction_categories_archive_create`
+**Archive a transaction category.**
 
 Archive a category so pickers hide it while existing references stay valid.  Only the owner may archive; global categories are managed via the admin.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [TransactionCategory](#transactioncategory-object).
 
-**Response 200:** 
+Errors:
 
-- **`id`** (`string`) *(required, read-only)*
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
-- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
-- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
+- **403** (Error) -- The category is global or owned by someone else; only its owner may change it.
 
-**Response 403:** The category is global or owned by someone else; only its owner may change it.
+Common responses: `401` · `404` · `429`
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+#### TransactionCategory object
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
+  "group": "string",                // string · required
+  "name": "string",                 // string · required
+  // Canonical display form: '{group} : {name}'.
+  "full_name": "string",            // string · read-only
+  // Owner username; null for a global category.
+  "owner": "string",                // string | null · read-only
+  // Archived categories are hidden from pickers but remain valid on existing
+  // transactions and allocations.
+  "archived": false,                // boolean · read-only
+  "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
+}
+```
 
 ### transactions
 
 #### `GET /api/v1/transactions/`
 
-**Operation:** `transactions_list`
+**List transactions.**
 
 Return transactions belonging to the authenticated user's accounts, each with all of its allocations embedded. Filterable by bank_account, budget (transactions with an allocation to that budget), unallocated (true: no allocation to a budget other than the account's Unallocated budget), pending status, transaction_type, date range (date_from/date_to), category, and merchant fields. Searchable by description, raw_description, and party. Orderable by transaction_date, amount, or created_at.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `bank_account` | query | uuid |  |  |
+| `budget` | query | uuid |  |  |
+| `category` | query | uuid |  |  |
+| `category_group` | query | string |  |  |
+| `date_from` | query | date-time |  |  |
+| `date_to` | query | date-time |  |  |
+| `has_details` | query | boolean |  |  |
+| `merchant_category_code` | query | string |  |  |
+| `merchant_city` | query | string |  |  |
+| `merchant_intermediary` | query | string |  |  |
+| `merchant_name` | query | string |  |  |
+| `merchant_region` | query | string |  |  |
+| `ordering` | query | string |  | Which field to use when ordering the results. |
+| `pending` | query | boolean |  |  |
+| `posted_date_from` | query | date-time |  |  |
+| `posted_date_to` | query | date-time |  |  |
+| `search` | query | string |  | A search term. |
+| `transaction_type` | query | enum |  | `signature_purchase` Signature Purchase, `ach` ACH, `round-up_transfer` Round-up Transfer, `protected_goal_account_transfer` Protected Goal Account Transfer, `fee` Fee, `pin_purchase` Pin Purchase, `signature_credit` Signature Credit, `interest_credit` Interest Credit, `shared_transfer` Shared Transfer, `courtesy_credit` Courtesy Credit, `atm_withdrawal` ATM Withdrawal, `bill_payment` Bill Payment, `bank_generated_credit` Bank Generated Credit, `wire_transfer` Wire Transfer, `check_deposit` Check Deposit, `check` Check, `c2c` c2c, `migration_interbank_transfer` Migration Interbank Transfer, `balance_sweep` Balance Sweep, `ach_reversal` ACH Reversal, `adjustment` Adjustment, `signature_return` Signature return, `fx_order` FX Order |
+| `unallocated` | query | boolean |  |  |
+| `uncategorized` | query | boolean |  |  |
+| `virtual_card_last4` | query | string |  |  |
 
-- `bank_account` (query, optional)
-- `budget` (query, optional)
-- `category` (query, optional)
-- `category_group` (query, optional)
-- `date_from` (query, optional)
-- `date_to` (query, optional)
-- `has_details` (query, optional)
-- `merchant_category_code` (query, optional)
-- `merchant_city` (query, optional)
-- `merchant_intermediary` (query, optional)
-- `merchant_name` (query, optional)
-- `merchant_region` (query, optional)
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
-- `pending` (query, optional)
-- `posted_date_from` (query, optional)
-- `posted_date_to` (query, optional)
-- `search` (query, optional) — A search term.
-- `transaction_type` (query, optional) — * `signature_purchase` - Signature Purchase
-* `ach` - ACH
-* `round-up_transfer` - Round-up Transfer
-* `protected_goal_account_transfer` - Protected Goal Account Transfer
-* `fee` - Fee
-* `pin_purchase` - Pin Purchase
-* `signature_credit` - Signature Credit
-* `interest_credit` - Interest Credit
-* `shared_transfer` - Shared Transfer
-* `courtesy_credit` - Courtesy Credit
-* `atm_withdrawal` - ATM Withdrawal
-* `bill_payment` - Bill Payment
-* `bank_generated_credit` - Bank Generated Credit
-* `wire_transfer` - Wire Transfer
-* `check_deposit` - Check Deposit
-* `check` - Check
-* `c2c` - c2c
-* `migration_interbank_transfer` - Migration Interbank Transfer
-* `balance_sweep` - Balance Sweep
-* `ach_reversal` - ACH Reversal
-* `adjustment` - Adjustment
-* `signature_return` - Signature return
-* `fx_order` - FX Order
-* `` - --------
-- `unallocated` (query, optional)
-- `uncategorized` (query, optional)
-- `virtual_card_last4` (query, optional)
+**200**
 
-**Response 200:** 
+Returns a page of [Transaction](#transaction-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/transactions/`
 
-**Operation:** `transactions_create`
+**Create a transaction.**
 
 Create a new bank transaction. Required: bank_account (UUID), amount, transaction_date, transaction_type, and raw_description. A default TransactionAllocation to the bank account's unallocated budget is auto-created. After creation, only transaction_type, memo, and description are updatable.
 
-**Request Body** (`application/json`):
+Send [Transaction](#transaction-object) -- its writable fields.
 
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
+**201**
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Returns [Transaction](#transaction-object).
 
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Response 201:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`party`** (`string`) *(required, read-only)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`description_user_edited`** (`boolean`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`merchant_name`** (`string`) *(required, read-only)*
-- **`merchant_intermediary`** (`string`) *(required, read-only)*
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`merchant_category`** (`string`) *(required, read-only)*
-- **`merchant_category_code`** (`string`) *(required, read-only)*
-- **`virtual_card_number`** (`string`) *(required, read-only)*
-- **`has_details`** (`boolean`) *(required, read-only)*
-- **`allocations`** (`array`) *(required, read-only)*
-- **`bank_transaction_id`** (`string`)
-- **`linked_transaction`** (`string`) *(required, read-only)*
-- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
-- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
-- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
-- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
-- **`image`** (`string`)
-- **`document`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `429`
 
 #### `GET /api/v1/transactions/{id}/`
 
-**Operation:** `transactions_retrieve`
+**Get transaction details.**
 
 Return a single transaction by UUID, with all of its allocations embedded.
 
-**Parameters:**
+**200**
 
-- `id` (path, required)
+Returns [Transaction](#transaction-object).
 
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`party`** (`string`) *(required, read-only)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`description_user_edited`** (`boolean`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`merchant_name`** (`string`) *(required, read-only)*
-- **`merchant_intermediary`** (`string`) *(required, read-only)*
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`merchant_category`** (`string`) *(required, read-only)*
-- **`merchant_category_code`** (`string`) *(required, read-only)*
-- **`virtual_card_number`** (`string`) *(required, read-only)*
-- **`has_details`** (`boolean`) *(required, read-only)*
-- **`allocations`** (`array`) *(required, read-only)*
-- **`bank_transaction_id`** (`string`)
-- **`linked_transaction`** (`string`) *(required, read-only)*
-- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
-- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
-- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
-- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
-- **`image`** (`string`)
-- **`document`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `PUT /api/v1/transactions/{id}/`
 
-**Operation:** `transactions_update`
+**Update a transaction.**
 
 Full update of a transaction. Only transaction_type, memo, and description are mutable after creation.
 
-**Parameters:**
+Send [Transaction](#transaction-object) -- its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [Transaction](#transaction-object).
 
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`party`** (`string`) *(required, read-only)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`description_user_edited`** (`boolean`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`merchant_name`** (`string`) *(required, read-only)*
-- **`merchant_intermediary`** (`string`) *(required, read-only)*
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`merchant_category`** (`string`) *(required, read-only)*
-- **`merchant_category_code`** (`string`) *(required, read-only)*
-- **`virtual_card_number`** (`string`) *(required, read-only)*
-- **`has_details`** (`boolean`) *(required, read-only)*
-- **`allocations`** (`array`) *(required, read-only)*
-- **`bank_transaction_id`** (`string`)
-- **`linked_transaction`** (`string`) *(required, read-only)*
-- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
-- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
-- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
-- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
-- **`image`** (`string`)
-- **`document`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `PATCH /api/v1/transactions/{id}/`
 
-**Operation:** `transactions_partial_update`
+**Partially update a transaction.**
 
 Partial update of a transaction. Only transaction_type, memo, and description are mutable after creation.
 
-**Parameters:**
+Send [Transaction](#transaction-object) -- any subset of its writable fields.
 
-- `id` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [Transaction](#transaction-object).
 
-- **`bank_account`** (`string`)
-- **`amount`** (`string`)
-- **`posted_date`** (`string`)
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``)
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`)
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`bank_account`** (`string`)
-- **`amount`** (`string`)
-- **`posted_date`** (`string`)
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``)
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`)
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`bank_account`** (`string`)
-- **`amount`** (`string`)
-- **`posted_date`** (`string`)
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``)
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`)
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`party`** (`string`) *(required, read-only)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`description_user_edited`** (`boolean`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`merchant_name`** (`string`) *(required, read-only)*
-- **`merchant_intermediary`** (`string`) *(required, read-only)*
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`merchant_category`** (`string`) *(required, read-only)*
-- **`merchant_category_code`** (`string`) *(required, read-only)*
-- **`virtual_card_number`** (`string`) *(required, read-only)*
-- **`has_details`** (`boolean`) *(required, read-only)*
-- **`allocations`** (`array`) *(required, read-only)*
-- **`bank_transaction_id`** (`string`)
-- **`linked_transaction`** (`string`) *(required, read-only)*
-- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
-- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
-- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
-- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
-- **`image`** (`string`)
-- **`document`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `DELETE /api/v1/transactions/{id}/`
 
-**Operation:** `transactions_destroy`
+**Delete a transaction.**
 
 Delete a transaction. Balance changes are reversed by the pre_delete signal. Associated allocations are cascade-deleted.
 
-**Parameters:**
+**204** -- no body.
 
-- `id` (path, required)
-
-**Response 204:** No response body
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `404` · `429`
 
 #### `POST /api/v1/transactions/{id}/resolve-pending/`
 
-**Operation:** `transactions_resolve_pending_create`
+**Resolve a pending transaction to posted.**
 
 Transition a pending transaction to posted status. Supplies the bank-confirmed posted date and optionally a final settled amount (which may differ from the pending estimate). The bank account's posted_balance is credited; if the amount changed, available_balance and the Unallocated allocation are adjusted atomically.
 
-**Parameters:**
+Send:
 
-- `id` (path, required)
+```jsonc
+{
+  "posted_date": "2026-09-29T14:00:00Z",  // date-time · required
+  "amount": "125.00"                // decimal | null · optional
+}
+```
 
-**Request Body** (`application/json`):
+**200**
 
-- **`posted_date`** (`string`) *(required)*
-- **`amount`** (`string`)
+Returns [Transaction](#transaction-object).
 
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`posted_date`** (`string`) *(required)*
-- **`amount`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`posted_date`** (`string`) *(required)*
-- **`amount`** (`string`)
-
-**Response 200:** 
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`party`** (`string`) *(required, read-only)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`description_user_edited`** (`boolean`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`merchant_name`** (`string`) *(required, read-only)*
-- **`merchant_intermediary`** (`string`) *(required, read-only)*
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`merchant_category`** (`string`) *(required, read-only)*
-- **`merchant_category_code`** (`string`) *(required, read-only)*
-- **`virtual_card_number`** (`string`) *(required, read-only)*
-- **`has_details`** (`boolean`) *(required, read-only)*
-- **`allocations`** (`array`) *(required, read-only)*
-- **`bank_transaction_id`** (`string`)
-- **`linked_transaction`** (`string`) *(required, read-only)*
-- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
-- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
-- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
-- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
-- **`image`** (`string`)
-- **`document`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `404` · `429`
 
 #### `POST /api/v1/transactions/{id}/splits/`
 
-**Operation:** `transactions_splits_create`
+**Declare transaction splits.**
 
 Declaratively set how a transaction's amount is split across budgets. All referenced budgets must belong to the same bank account as the transaction. The backend reconciles existing allocations to match: creating, updating, or deleting as needed. Any unallocated remainder gets an allocation to the account's unallocated budget. Returns all allocations for this transaction after reconciliation.
 
-**Parameters:**
+Example: Put $60.00 of an $82.47 purchase in Groceries.
 
-- `id` (path, required)
+The $22.47 not declared goes to the account's unallocated budget.  Amounts are positive; the sign follows the transaction.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
+```jsonc
+{
+  // Map of budget UUID → amount. Amounts must not exceed the transaction total. Omitted
+  // remainder is assigned to the unallocated budget.
+  "splits": {"<key>": "125.00"}     // map of decimal · required
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+*Example request:*
 
-- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
+```json
+{
+  "splits": {
+    "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f": "60.00"
+  }
+}
+```
 
-**Request Body** (`multipart/form-data`):
+**200**
 
-- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
+Returns an array of [TransactionAllocation](#transactionallocation-object).
 
-**Response 200:** 
+*Example response -- The purchase's allocations after the split:*
 
-**Response 400:** Invalid input.
+```json
+[
+  {
+    "id": "66666666-7777-4888-8999-aaaaaaaaaaaa",
+    "transaction": "b2e4c6d8-1a3f-4b5c-8d7e-9f0a1b2c3d4e",
+    "budget": "e7f8a9b0-c1d2-4e3f-8a4b-5c6d7e8f9a01",
+    "amount": "-22.47",
+    "amount_currency": "USD",
+    "budget_balance": "1210.53",
+    "budget_balance_currency": "USD",
+    "category": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    "category_full_name": "Food & Drink : Groceries",
+    "memo": null,
+    "created_at": "2026-09-28T18:40:05Z",
+    "modified_at": "2026-09-29T14:02:11Z"
+  },
+  {
+    "id": "11111111-2222-4333-8444-555555555555",
+    "transaction": "b2e4c6d8-1a3f-4b5c-8d7e-9f0a1b2c3d4e",
+    "budget": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+    "amount": "-60.00",
+    "amount_currency": "USD",
+    "budget_balance": "340.00",
+    "budget_balance_currency": "USD",
+    "category": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    "category_full_name": "Food & Drink : Groceries",
+    "memo": null,
+    "created_at": "2026-09-29T14:02:11Z",
+    "modified_at": "2026-09-29T14:02:11Z"
+  }
+]
+```
 
-One of:
-- `map of string | array of any | object`
-- `array of string`
+Common responses: `400` · `401` · `404` · `429`
 
-**Response 401:** Missing or invalid credentials.
+#### Transaction object
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+```jsonc
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
+  "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
+  "amount": "125.00",               // decimal · required
+  "amount_currency": "USD",         // string · read-only
+  "party": "string",                // string | null · read-only
+  "posted_date": "2026-09-29T14:00:00Z",  // date-time · required
+  "transaction_date": "2026-09-29T14:00:00Z",  // date-time | null · optional
+  // "signature_purchase" Signature Purchase, "ach" ACH, "round-up_transfer" Round-up
+  // Transfer, "protected_goal_account_transfer" Protected Goal Account Transfer, "fee"
+  // Fee, "pin_purchase" Pin Purchase, "signature_credit" Signature Credit,
+  // "interest_credit" Interest Credit, "shared_transfer" Shared Transfer,
+  // "courtesy_credit" Courtesy Credit, "atm_withdrawal" ATM Withdrawal, "bill_payment"
+  // Bill Payment, "bank_generated_credit" Bank Generated Credit, "wire_transfer" Wire
+  // Transfer, "check_deposit" Check Deposit, "check" Check, "c2c",
+  // "migration_interbank_transfer" Migration Interbank Transfer, "balance_sweep"
+  // Balance Sweep, "ach_reversal" ACH Reversal, "adjustment" Adjustment,
+  // "signature_return" Signature return, "fx_order" FX Order
+  "transaction_type": "signature_purchase",  // enum · required
+  "pending": false,                 // boolean · optional
+  "memo": "string",                 // string | null · optional
+  "raw_description": "string",      // string · required
+  "description": "string",          // string · optional
+  "description_user_edited": false,  // boolean · read-only
+  "category": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
+  "category_full_name": "string",   // string | null · read-only
+  "merchant_name": "string",        // string | null · read-only
+  "merchant_intermediary": "string",  // string | null · read-only
+  "merchant_address": "string",     // string | null · optional
+  "merchant_city": "string",        // string | null · optional
+  "merchant_region": "string",      // string | null · optional
+  "merchant_country": "string",     // string | null · optional
+  "merchant_latitude": "125.00",    // decimal | null · optional
+  "merchant_longitude": "125.00",   // decimal | null · optional
+  "merchant_category": "string",    // string | null · read-only
+  "merchant_category_code": "string",  // string | null · read-only
+  "virtual_card_number": "string",  // string | null · read-only
+  "has_details": false,             // boolean · read-only
+  "allocations": [{...}],           // array of TransactionAllocation · read-only
+  "bank_transaction_id": "string",  // string | null · optional
+  "linked_transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · read-only
+  // Posted Balance does not include pending debits.
+  "bank_account_posted_balance": "125.00",  // decimal · read-only
+  "bank_account_posted_balance_currency": "USD",  // string · read-only
+  // Available Balance has pending debits deducted.
+  "bank_account_available_balance": "125.00",  // decimal · read-only
+  "bank_account_available_balance_currency": "USD",  // string · read-only
+  "image": "https://mibudge.example.com/...",  // uri | null · optional
+  "document": "https://mibudge.example.com/...",  // uri | null · optional
+  "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
+  "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
+}
+```
 
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Nested objects: [TransactionAllocation](#transactionallocation-object).
 
 ### users
 
 #### `GET /api/v1/users/`
 
-**Operation:** `users_list`
+**List users (staff only).**
 
 Return all users. Restricted to staff/admin users.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `ordering` | query | string |  | Which field to use when ordering the results. |
 
-- `ordering` (query, optional) — Which field to use when ordering the results.
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
+**200**
 
-**Response 200:** 
+Returns a page of [User](#user-object) (see Pagination).
 
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `403` · `404` · `429`
 
 #### `GET /api/v1/users/{username}/`
 
-**Operation:** `users_retrieve`
+**Get user details (staff only).**
 
 Return a single user by username. Restricted to staff/admin users.
 
-**Parameters:**
+**200**
 
-- `username` (path, required)
+Returns [User](#user-object).
 
-**Response 200:** 
-
-- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-- **`email`** (`string`) *(required, read-only)* — Login email address; blank for system accounts.
-- **`name`** (`string`)
-- **`url`** (`string`) *(required, read-only)*
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `403` · `404` · `429`
 
 #### `PUT /api/v1/users/{username}/`
 
-**Operation:** `users_update`
+**Update a user (staff only).**
 
 Full update of a user profile. Restricted to staff/admin users.
 
-**Parameters:**
+Send [User](#user-object) -- its writable fields.
 
-- `username` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [User](#user-object).
 
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Response 200:** 
-
-- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-- **`email`** (`string`) *(required, read-only)* — Login email address; blank for system accounts.
-- **`name`** (`string`)
-- **`url`** (`string`) *(required, read-only)*
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `403` · `404` · `429`
 
 #### `PATCH /api/v1/users/{username}/`
 
-**Operation:** `users_partial_update`
+**Partially update a user (staff only).**
 
 Partial update of a user profile. Restricted to staff/admin users.
 
-**Parameters:**
+Send [User](#user-object) -- any subset of its writable fields.
 
-- `username` (path, required)
+**200**
 
-**Request Body** (`application/json`):
+Returns [User](#user-object).
 
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`application/x-www-form-urlencoded`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Response 200:** 
-
-- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-- **`email`** (`string`) *(required, read-only)* — Login email address; blank for system accounts.
-- **`name`** (`string`)
-- **`url`** (`string`) *(required, read-only)*
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `403` · `404` · `429`
 
 #### `GET /api/v1/users/me/`
 
-**Operation:** `users_me_retrieve`
+**Get or update current user profile.**
 
 GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff). GET is also available to machine credentials (API keys) -- importers read the timezone field; PATCH requires an interactive login session.
 
-**Response 200:** 
+**200**
 
-- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-- **`email`** (`string`) *(required, read-only)* — Login email address; blank for system accounts.
-- **`name`** (`string`)
-- **`url`** (`string`) *(required, read-only)*
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
+Returns [User](#user-object).
 
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `PATCH /api/v1/users/me/`
 
-**Operation:** `users_me_partial_update`
+**Get or update current user profile.**
 
 GET returns the authenticated user's own profile. PATCH allows updating the name field. Available to any authenticated user (not restricted to staff). GET is also available to machine credentials (API keys) -- importers read the timezone field; PATCH requires an interactive login session.
 
-**Request Body** (`application/json`):
+Send [User](#user-object) -- any subset of its writable fields.
 
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
+**200**
 
-**Request Body** (`application/x-www-form-urlencoded`):
+Returns [User](#user-object).
 
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Request Body** (`multipart/form-data`):
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-**Response 200:** 
-
-- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-- **`email`** (`string`) *(required, read-only)* — Login email address; blank for system accounts.
-- **`name`** (`string`)
-- **`url`** (`string`) *(required, read-only)*
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `403` · `429`
 
 #### `GET /api/v1/users/me/api-keys/`
 
-**Operation:** `users_me_api_keys_list`
+**List the current user's API keys.**
 
 Return all API keys (active, expired, and revoked) belonging to the authenticated user.  Key material is never included -- only the displayable prefix.
 
-**Parameters:**
+**200**
 
-- `page` (query, optional) — A page number within the paginated result set.
-- `page_size` (query, optional) — Number of results to return per page.
+Returns a page of [APIKey](#apikey-object) (see Pagination).
 
-**Response 200:** 
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** Invalid page.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `403` · `404` · `429`
 
 #### `POST /api/v1/users/me/api-keys/`
 
-**Operation:** `users_me_api_keys_create`
+**Create an API key.**
 
 Create a new API key for the authenticated user.  ``expiry_days`` sets the key's lifetime in days (the UI presets are 30 / 60 / 90 / 365); omit it or pass null for a key that never expires.
 
 The response is the **only** time the plaintext ``key`` is returned; it cannot be recovered afterwards.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`name`** (`string`) *(required)*
-- **`expiry_days`** (`integer`)
+```jsonc
+{
+  "name": "string",                 // string · required
+  "expiry_days": 0                  // integer | null · optional
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+**201**
 
-- **`name`** (`string`) *(required)*
-- **`expiry_days`** (`integer`)
+Returns:
 
-**Request Body** (`multipart/form-data`):
+```jsonc
+{
+  "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  // User-supplied label identifying what this key is for.
+  "name": "string",                 // string
+  "prefix": "string",               // string
+  "expires_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "last_used_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "revoked_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "created_at": "2026-09-29T14:00:00Z",  // date-time
+  "key": "string"                   // string
+}
+```
 
-- **`name`** (`string`) *(required)*
-- **`expiry_days`** (`integer`)
-
-**Response 201:** 
-
-- **`uuid`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
-- **`prefix`** (`string`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-- **`last_used_at`** (`string`) *(required, read-only)*
-- **`revoked_at`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`key`** (`string`) *(required, read-only)*
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `403` · `429`
 
 #### `GET /api/v1/users/me/api-keys/{uuid}/`
 
-**Operation:** `users_me_api_keys_retrieve`
+**Get one of the current user's API keys.**
 
 Return a single API key by its UUID.
 
-**Parameters:**
+**200**
 
-- `uuid` (path, required)
+Returns [APIKey](#apikey-object).
 
-**Response 200:** 
-
-- **`uuid`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
-- **`prefix`** (`string`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-- **`last_used_at`** (`string`) *(required, read-only)*
-- **`revoked_at`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `403` · `404` · `429`
 
 #### `POST /api/v1/users/me/api-keys/{uuid}/revoke/`
 
-**Operation:** `users_me_api_keys_revoke_create`
+**Revoke an API key.**
 
 Permanently revoke an API key.  Revoked keys stop authenticating immediately but remain listed for audit purposes.  Revocation cannot be undone.
 
-**Parameters:**
+**200**
 
-- `uuid` (path, required)
+Returns [APIKey](#apikey-object).
 
-**Response 200:** 
+Errors:
 
-- **`uuid`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
-- **`prefix`** (`string`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-- **`last_used_at`** (`string`) *(required, read-only)*
-- **`revoked_at`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
+- **400** (Error) -- The key is already revoked.
 
-**Response 400:** The key is already revoked.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 404:** No such object.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `403` · `404` · `429`
 
 #### `POST /api/v1/users/me/change-email/`
 
-**Operation:** `users_me_change_email_create`
+**Request an email address change.**
 
 Initiate a self-service email change.  Sends a verification link to the new address and a revocation link to the old address.  Returns 403 if the user has no usable password; 409 if new_email is already taken or a revocation window is currently open for this account.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`new_email`** (`string`) *(required)*
+```jsonc
+{
+  "new_email": "user@example.com"   // email · required
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+**201** -- no body.
 
-- **`new_email`** (`string`) *(required)*
+Errors:
 
-**Request Body** (`multipart/form-data`):
+- **403** (Error) -- The account has no password yet, or the credentials are not interactive.
+- **409** (ValidationError) -- The address is taken ('new_email'), or a revocation window is still open ('detail').
 
-- **`new_email`** (`string`) *(required)*
-
-**Response 201:** No response body
-
-**Response 403:** The account has no password yet, or the credentials are not interactive.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 409:** The address is taken ('new_email'), or a revocation window is still open ('detail').
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `429`
 
 #### `POST /api/v1/users/me/change-email/{token}/confirm/`
 
-**Operation:** `users_me_change_email_confirm_create`
+**Confirm an email address change (new-address token).**
 
 Verify a pending email change using the token from the verification link sent to the new address.  No authentication required -- the token is the credential.
 
 **Dual-path note:** The email link points to a Django GET view at ``/users/email-change/{token}/confirm/`` which processes the action and redirects the browser to the SPA result page.  Native apps that register mibudge.money as a Universal Link (iOS) or App Link (Android) intercept that URL and call this endpoint instead, receiving JSON and controlling their own UI.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `token` | path | string | required | The email-change verification token. |
 
-- `token` (path, required) — The email-change verification token.
+**200** -- no body.
 
-**Response 200:** No response body
+Errors:
 
-**Response 400:** The link is unknown, expired, revoked or already used.
+- **400** (Error) -- The link is unknown, expired, revoked or already used.
+- **409** (Error) -- The address was taken meanwhile.
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 409:** The address was taken meanwhile.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `POST /api/v1/users/me/change-email/{token}/revoke/`
 
-**Operation:** `users_me_change_email_revoke_create`
+**Revoke an email address change ('this wasn't me').**
 
 Cancel a pending or recently confirmed email change using the token from the notification sent to the old address.  Valid for up to 7 days after confirmation.  No authentication required -- the token is the credential.
 
@@ -3801,1253 +1986,78 @@ On post-confirmation revocation the email is reverted and all active sessions ar
 
 **Dual-path note:** See ``change_email_confirm`` -- the same Universal Link / App Link pattern applies here.
 
-**Parameters:**
+| Parameter | In | Type | | Description |
+|---|---|---|---|---|
+| `token` | path | string | required | The email-change revocation token. |
 
-- `token` (path, required) — The email-change revocation token.
+**200** -- no body.
 
-**Response 200:** No response body
+Errors:
 
-**Response 400:** The link is unknown, or its revocation window has closed.
+- **400** (Error) -- The link is unknown, or its revocation window has closed.
 
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `401` · `429`
 
 #### `POST /api/v1/users/me/change-password/`
 
-**Operation:** `users_me_change_password_create`
+**Change current user's password.**
 
 Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale. Existing JWT tokens remain valid; the caller may silently refresh as normal -- no forced re-login is imposed.
 
-**Request Body** (`application/json`):
+Send:
 
-- **`current_password`** (`string`) *(required)*
-- **`new_password`** (`string`) *(required)*
-- **`confirm_password`** (`string`) *(required)*
+```jsonc
+{
+  "current_password": "string",     // string · required
+  "new_password": "string",         // string · required
+  "confirm_password": "string"      // string · required
+}
+```
 
-**Request Body** (`application/x-www-form-urlencoded`):
+**204** -- no body.
 
-- **`current_password`** (`string`) *(required)*
-- **`new_password`** (`string`) *(required)*
-- **`confirm_password`** (`string`) *(required)*
-
-**Request Body** (`multipart/form-data`):
-
-- **`current_password`** (`string`) *(required)*
-- **`new_password`** (`string`) *(required)*
-- **`confirm_password`** (`string`) *(required)*
-
-**Response 204:** No response body
-
-**Response 400:** Invalid input.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
+Common responses: `400` · `401` · `403` · `429`
 
 #### `GET /api/v1/users/me/invitations/`
 
-**Operation:** `users_me_invitations_list`
+**List current user's outgoing pending invitations.**
 
 Return all pending co-ownership invitations sent by the authenticated user, across all accounts.
 
-**Response 200:** 
-
-**Response 401:** Missing or invalid credentials.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 403:** The credentials are not allowed to do this.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-**Response 429:** Too many requests.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-## Schemas
-
-### APIKey
-
-Read serializer for API keys.
-
-Never exposes the key material -- only the displayable prefix.  The
-plaintext key appears exactly once, in the creation response (see
-APIKeyViewSet.create).
-
-- **`uuid`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
-- **`prefix`** (`string`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-- **`last_used_at`** (`string`) *(required, read-only)*
-- **`revoked_at`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-
-### APIKeyCreateRequest
-
-Validate an API-key creation request.
-
-``expiry_days`` covers all the expiry presets (30 / 60 / 90 / 365 /
-a specific number of days); null or omitted means the key never
-expires.  The presets themselves are a UI concern.
-
-- **`name`** (`string`) *(required)*
-- **`expiry_days`** (`integer`)
-
-### APIKeyCreated
-
-Creation response -- the only place the plaintext key appears.
-
-Exists to document the creation response shape in the OpenAPI
-schema; the view assembles the payload itself.  ``key`` is never a
-model field and cannot be recovered after this response.
-
-- **`uuid`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)* — User-supplied label identifying what this key is for.
-- **`prefix`** (`string`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-- **`last_used_at`** (`string`) *(required, read-only)*
-- **`revoked_at`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`key`** (`string`) *(required, read-only)*
-
-### AccessToken
-
-Response body of the cookie-based token endpoints: the access token
-only, since the refresh token travels in the httpOnly cookie.
-
-- **`access`** (`string`) *(required, read-only)*
-
-### AccountTypeEnum
-
-* `C` - Checking
-* `S` - Savings
-* `X` - Credit Card
-
-
-### Bank
-
-Read-only serializer for banks.
-
-Banks are shared reference data managed only through the admin.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required, read-only)*
-- **`routing_number`** (`string`) *(required, read-only)*
-- **`default_currency`** (`string`) *(required, read-only)* — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### BankAccount
-
-Serializer for bank accounts.
-
-On create the caller supplies name, bank (UUID), account_type,
-account_number, and optionally currency and initial balances.
-The view routes creation through BankAccountService which adds
-the requesting user as owner and seeds the Unallocated budget.
-
-After creation, name and account_number are updatable.  Currency,
-account_type, bank, and balances are immutable once the account
-exists.
-
-Group assignment is not yet supported via the API.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`owners`** (`array`) *(required, read-only)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`posted_balance_currency`** (`string`) *(required, read-only)*
-- **`available_balance`** (`string`)
-- **`available_balance_currency`** (`string`) *(required, read-only)*
-- **`unallocated_budget`** (`string`) *(required, read-only)*
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-- **`last_imported_at`** (`string`) *(required, read-only)* — Wall-clock time of the most recent completed import for this account.
-- **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### BankAccountInvitation
-
-Read-only serializer for BankAccountInvitation rows.
-
-``token`` is included so the SPA can construct the cancel URL without a
-separate lookup.  It is safe to expose to authenticated account owners
-since they created the invitation and the cancel endpoint enforces that
-only the sender may cancel.
-
-``bank_account_id`` and ``bank_account_name`` are included for the
-cross-account listing on the user's settings page (me/invitations/).
-
-- **`id`** (`string`) *(required, read-only)*
-- **`token`** (`string`) *(required, read-only)*
-- **`bank_account_id`** (`string`) *(required, read-only)*
-- **`bank_account_name`** (`string`) *(required, read-only)*
-- **`invitee_email`** (`string`) *(required, read-only)* — Email address the invitation was sent to. Immutable after creation.
-- **`invited_by`** (`string`) *(required, read-only)*
-- **`status`** (``) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-- **`accepted_at`** (`string`) *(required, read-only)*
-- **`declined_at`** (`string`) *(required, read-only)*
-- **`cancelled_at`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### BankAccountInvitationStatusEnum
-
-* `pending` - Pending
-* `accepted` - Accepted
-* `declined` - Declined
-* `cancelled` - Cancelled
-* `expired` - Expired
-
-
-### BankAccountRequest
-
-Serializer for bank accounts.
-
-On create the caller supplies name, bank (UUID), account_type,
-account_number, and optionally currency and initial balances.
-The view routes creation through BankAccountService which adds
-the requesting user as owner and seeds the Unallocated budget.
-
-After creation, name and account_number are updatable.  Currency,
-account_type, bank, and balances are immutable once the account
-exists.
-
-Group assignment is not yet supported via the API.
-
-- **`name`** (`string`) *(required)*
-- **`bank`** (`string`) *(required)*
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-### BlankEnum
-
-
-### Budget
-
-Serializer for budgets.
-
-On create the caller supplies bank_account (UUID) and budget
-properties.  After creation, bank_account and budget_type are
-immutable.  Balance is managed by signals and is always read-only.
-The unallocated budget's name cannot be changed.
-
-Currency is inherited from the bank account via the pre_save
-signal and is not accepted from the client.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### BudgetRequest
-
-Serializer for budgets.
-
-On create the caller supplies bank_account (UUID) and budget
-properties.  After creation, bank_account and budget_type are
-immutable.  Balance is managed by signals and is always read-only.
-The unallocated budget's name cannot be changed.
-
-Currency is inherited from the bank account via the pre_save
-signal and is not accepted from the client.
-
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`target_balance`** (`string`) *(required)*
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-### BudgetTypeEnum
-
-* `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped
-
-
-### BudgetUpdateResult
-
-Response body of a budget update: the budget plus the warnings
-the service emitted (e.g. recurrence boundaries missed while paused).
-
-- **`id`** (`string`) *(required, read-only)*
-- **`name`** (`string`) *(required)*
-- **`bank_account`** (`string`) *(required)*
-- **`balance`** (`string`) *(required, read-only)*
-- **`balance_currency`** (`string`) *(required, read-only)*
-- **`funded_amount`** (`string`) *(required, read-only)* — For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
-- **`funded_amount_currency`** (`string`) *(required, read-only)*
-- **`target_balance`** (`string`) *(required)*
-- **`target_balance_currency`** (`string`) *(required, read-only)*
-- **`funding_amount`** (`string`)
-- **`funding_amount_currency`** (`string`) *(required, read-only)*
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`fillup_goal`** (`string`) *(required, read-only)*
-- **`archived`** (`boolean`) *(required, read-only)*
-- **`archived_at`** (`string`) *(required, read-only)*
-- **`complete`** (`boolean`) *(required, read-only)* — True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually.
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-- **`next_funding`** (``) *(required, read-only)*
-- **`next_recurrence`** (`string`) *(required, read-only)*
-- **`funding_pace`** (``) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-- **`warnings`** (`array`) *(required, read-only)*
-
-### ChangePasswordRequest
-
-Validate a password-change request.
-
-Checks that the new password is strong enough (zxcvbn score >= 2)
-and that the two new-password fields match.  Current-password
-verification and the actual password update are handled in the view.
-
-- **`current_password`** (`string`) *(required)*
-- **`new_password`** (`string`) *(required)*
-- **`confirm_password`** (`string`) *(required)*
-
-### ChannelPreference
-
-Channel delivery preference.
-
-Read: channel, display_name, digest_frequency.
-Write (PATCH): digest_frequency only.
-
-- **`channel`** (`string`) *(required, read-only)*
-- **`display_name`** (`string`) *(required, read-only)*
-- **`digest_frequency`** (`string`) *(required)* — * `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
-
-### Currency
-
-An ISO 4217 currency the system supports.
-
-- **`code`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`numeric`** (`string`) *(required)* — ISO 4217 numeric code; null for historic currencies.
-
-### DeliveryModeEnum
-
-* `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off
-
-
-### DigestFrequencyEnum
-
-* `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday
-
-
-### EmailChangeRequestRequest
-
-Validate a request to initiate an email-address change.
-
-- **`new_email`** (`string`) *(required)*
-
-### EmailTokenObtainPairRequest
-
-TokenObtainPairSerializer variant that uses ``email`` as the login
-field instead of ``username``.
-
-USERNAME_FIELD is kept as "username" so Django admin is unaffected;
-we override ``username_field`` here so simplejwt presents an ``email``
-field in the login payload and passes it to EmailBackend.authenticate().
-
-- **`email`** (`string`) *(required)*
-- **`password`** (`string`) *(required)*
-
-### Error
-
-DRF's error body for everything but a validation failure.
-
-- **`detail`** (`string`) *(required)* — Human-readable reason.
-- **`code`** (`string`) — Machine-readable reason, when given.
-
-### FundingEventDates
-
-Sorted dates on which an account has a funding event due.
-
-- **`dates`** (`array`) *(required)*
-
-### FundingEventOccurrence
-
-Read-only serializer for FundingEventOccurrence rows.
-
-Exposes the budget UUID as 'budget' rather than the internal pkid so
-callers can cross-reference with the Budget endpoint.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`budget`** (`string`) *(required, read-only)*
-- **`kind`** (`string`) *(required, read-only)* — Funding event discriminator: "fund" or "recur".  Stored as the EventKind string value; not exposed in user-facing forms so no choices= is set.
-- **`scheduled_date`** (`string`) *(required, read-only)* — Calendar date the event was scheduled to fire.
-- **`status`** (``) *(required, read-only)*
-- **`completed_at`** (`string`) *(required, read-only)* — Wall-clock time the occurrence reached COMPLETE.  Null while PENDING/PARTIAL/SKIPPED.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### FundingEventStatusEnum
-
-* `PENDING` - Pending
-* `PARTIAL` - Partial
-* `COMPLETE` - Complete
-* `SKIPPED` - Skipped
-
-
-### FundingPaceEnum
-
-* `ahead` - ahead
-* `on_track` - on_track
-* `behind` - behind
-
-
-### FundingRunResult
-
-What one `run-funding` call did.
-
-- **`transfers`** (`integer`) *(required)*
-- **`occurrences_completed`** (`integer`) *(required)*
-- **`occurrences_partial`** (`integer`) *(required)*
-- **`warnings`** (`array`) *(required)*
-- **`skipped_budgets`** (`array`) *(required)* — Names of paused budgets the run skipped.
-
-### FundingScheduleTotal
-
-The next funding event's total for one funding schedule.
-
-- **`schedule`** (`string`) *(required)* — The RRULE string.
-- **`next_date`** (`string`) *(required)*
-- **`total_amount`** (`string`) *(required)*
-- **`currency`** (`string`) *(required)*
-- **`budget_count`** (`integer`) *(required)*
-
-### FundingSummary
-
-Per-schedule totals of an account's next funding events.
-
-- **`schedules`** (`array`) *(required)*
-- **`total_amount`** (`string`) *(required)*
-- **`currency`** (`string`) *(required)*
-
-### FundingTypeEnum
-
-* `D` - Target Date
-* `F` - Fixed Amount
-
-
-### InternalTransaction
-
-Serializer for internal transactions (budget-to-budget transfers).
-
-Internal transactions are write-once: the API supports create and
-read but not update or delete.  To reverse a transfer, create a
-new internal transaction with the src and dst budgets swapped.
-
-On create the caller supplies bank_account, amount, src_budget,
-and dst_budget.  The view sets the actor to the requesting user.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`actor`** (`integer`) *(required, read-only)*
-- **`effective_date`** (`string`)
-- **`src_budget_balance`** (`string`) *(required, read-only)*
-- **`src_budget_balance_currency`** (`string`) *(required, read-only)*
-- **`dst_budget_balance`** (`string`) *(required, read-only)*
-- **`dst_budget_balance_currency`** (`string`) *(required, read-only)*
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### InternalTransactionRequest
-
-Serializer for internal transactions (budget-to-budget transfers).
-
-Internal transactions are write-once: the API supports create and
-read but not update or delete.  To reverse a transfer, create a
-new internal transaction with the src and dst budgets swapped.
-
-On create the caller supplies bank_account, amount, src_budget,
-and dst_budget.  The view sets the actor to the requesting user.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`src_budget`** (`string`) *(required)*
-- **`dst_budget`** (`string`) *(required)*
-- **`effective_date`** (`string`)
-
-### InviteOwnerRequest
-
-Write-only serializer for the invite-owner action.
-
-- **`invitee_email`** (`string`) *(required)*
-
-### NextFunding
-
-The next scheduled funding event of a budget (read-only).
-
-- **`date`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required)*
-
-### NotificationPreference
-
-Notification kind preference.
-
-Read: kind, display_name, can_suppress, delivery_mode.
-Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
-
-- **`kind`** (`string`) *(required, read-only)*
-- **`display_name`** (`string`) *(required, read-only)*
-- **`can_suppress`** (`boolean`) *(required, read-only)*
-- **`delivery_mode`** (`string`) *(required)* — * `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off Enum: ['digest', 'immediate', 'off']
-
-### NullEnum
-
-
-### PaginatedAPIKeyList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedBankAccountList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedBankList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedBudgetList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedFundingEventOccurrenceList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedInternalTransactionList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedTransactionAllocationList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedTransactionCategoryList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedTransactionList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PaginatedUserList
-
-- **`count`** (`integer`) *(required)*
-- **`next`** (`string`)
-- **`previous`** (`string`)
-- **`results`** (`array`) *(required)*
-
-### PatchedBankAccountRequest
-
-Serializer for bank accounts.
-
-On create the caller supplies name, bank (UUID), account_type,
-account_number, and optionally currency and initial balances.
-The view routes creation through BankAccountService which adds
-the requesting user as owner and seeds the Unallocated budget.
-
-After creation, name and account_number are updatable.  Currency,
-account_type, bank, and balances are immutable once the account
-exists.
-
-Group assignment is not yet supported via the API.
-
-- **`name`** (`string`)
-- **`bank`** (`string`)
-- **`account_type`** (`string`) — * `C` - Checking
-* `S` - Savings
-* `X` - Credit Card Enum: ['C', 'S', 'X']
-- **`account_number`** (`string`)
-- **`currency`** (`string`) — ISO 4217 currency code (e.g. USD, EUR, GBP).
-- **`posted_balance`** (`string`)
-- **`available_balance`** (`string`)
-- **`auto_funding_enabled`** (`boolean`) — When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button.
-
-### PatchedBudgetRequest
-
-Serializer for budgets.
-
-On create the caller supplies bank_account (UUID) and budget
-properties.  After creation, bank_account and budget_type are
-immutable.  Balance is managed by signals and is always read-only.
-The unallocated budget's name cannot be changed.
-
-Currency is inherited from the bank account via the pre_save
-signal and is not accepted from the client.
-
-- **`name`** (`string`)
-- **`bank_account`** (`string`)
-- **`target_balance`** (`string`)
-- **`funding_amount`** (`string`)
-- **`budget_type`** (`string`) — * `G` - Goal
-* `R` - Recurring
-* `A` - Associated Fill-up Goal
-* `C` - Capped Enum: ['G', 'R', 'A', 'C']
-- **`funding_type`** (`string`) — * `D` - Target Date
-* `F` - Fixed Amount Enum: ['D', 'F']
-- **`target_date`** (`string`)
-- **`paused`** (`boolean`) — A paused budget does not get automatically funded on its schedule.
-- **`funding_schedule`** (`string`)
-- **`recurrence_schedule`** (`string`) — Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way.
-- **`memo`** (`string`)
-- **`auto_spend`** (``) — List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget.
-
-### PatchedChannelPreferenceRequest
-
-Channel delivery preference.
-
-Read: channel, display_name, digest_frequency.
-Write (PATCH): digest_frequency only.
-
-- **`digest_frequency`** (`string`) — * `daily_morning` - Once daily (morning, ~7 am)
-* `daily_evening` - Once daily (evening, ~6 pm)
-* `twice_daily` - Twice daily (morning + evening)
-* `weekly_friday` - Weekly on Friday
-* `weekly_saturday` - Weekly on Saturday
-* `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
-
-### PatchedNotificationPreferenceRequest
-
-Notification kind preference.
-
-Read: kind, display_name, can_suppress, delivery_mode.
-Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
-
-- **`delivery_mode`** (`string`) — * `digest` - Digest
-* `immediate` - Immediate
-* `off` - Off Enum: ['digest', 'immediate', 'off']
-
-### PatchedTransactionCategoryRequest
-
-Serializer for transaction categories.
-
-On create the caller supplies group and name; the view forces the
-owner to the requesting user (global rows are managed via the
-django-admin only).  Group and name are whitespace-normalized and
-checked case-insensitively against the global rows and the user's
-own rows for duplicates.  'archived' is toggled via the archive
-action, not writable here.
-
-- **`group`** (`string`)
-- **`name`** (`string`)
-
-### PatchedTransactionRequest
-
-Serializer for bank transactions.
-
-On create the caller supplies bank_account, amount,
-transaction_date, transaction_type, raw_description, and
-optionally pending, memo, and description.
-
-After creation only transaction_type, memo, and description are
-updatable.  The view is responsible for creating the default
-TransactionAllocation to the unallocated budget on create.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`bank_account`** (`string`)
-- **`amount`** (`string`)
-- **`posted_date`** (`string`)
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``)
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`)
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-### PatchedUserRequest
-
-Serializer for user profiles.
-
-The ``default_bank_account`` field is writable but constrained:
-the bank account must be owned by the user being updated.  On
-output it returns the UUID string (or null).
-
-``has_usable_password`` is read-only and used by the SPA to decide
-whether to enable the change-email and change-password forms.
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-### PublicInvitationDetail
-
-Read-only serializer for the public invitation-detail endpoint.
-
-Returns the minimum information needed to render the acceptance page
-for API clients.  Owner names are intentionally minimal (display name
-or email only) to limit PII exposure behind a bare token.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`status`** (``) *(required, read-only)*
-- **`invitee_email`** (`string`) *(required, read-only)* — Email address the invitation was sent to. Immutable after creation.
-- **`bank_account_name`** (`string`) *(required, read-only)*
-- **`bank_name`** (`string`) *(required, read-only)*
-- **`current_owners`** (`array`) *(required, read-only)*
-- **`is_new_user`** (`boolean`) *(required, read-only)*
-- **`expires_at`** (`string`) *(required, read-only)*
-
-### ResolvePendingRequest
-
-Input serializer for the resolve-pending action.
-
-Validates the settled posted_date and optional final amount.
-Requires ``transaction`` in the serializer context for sign validation.
-
-- **`posted_date`** (`string`) *(required)*
-- **`amount`** (`string`)
-
-### ScrapeSyncDetailsNeeded
-
-One posted scrape row still needing a transaction-details fetch.
-
-`index` is the row's position in the SUBMITTED transactions array
-(exact correlation back to the scraper's own rows); `transaction`
-is the DB row the fetched details should be applied to via the
-transaction-details action.
-
-- **`index`** (`integer`) *(required)*
-- **`transaction`** (`string`) *(required)*
-
-### ScrapeSyncReport
-
-Output serializer for the bank-account scrape-sync action.
-
-Mirrors `service.sync_scrape.ScrapeSyncReport`.  Reports
-everything the caller needs to summarise what changed and surface
-validation warnings.
-
-- **`deleted_pending`** (`integer`) *(required)*
-- **`inserted_posted`** (`integer`) *(required)*
-- **`skipped_posted`** (`integer`) *(required)*
-- **`inserted_pending`** (`integer`) *(required)*
-- **`balance_mismatch`** (`string`) *(required)*
-- **`posting_order_mismatches`** (`array`) *(required)*
-- **`last_posted_through`** (`string`) *(required)*
-- **`new_transaction_ids`** (`array`) *(required)*
-- **`details_needed`** (`array`) *(required)*
-
-### ScrapeSyncRequest
-
-Input serializer for the bank-account scrape-sync action.
-
-Validates a full bank-side snapshot for one account: when the
-scrape was taken, the bank's ending available balance, and the
-list of transactions (newest-first as the bank renders them).
-
-- **`scraped_at`** (`string`) *(required)*
-- **`ending_balance`** (`string`) *(required)*
-- **`transactions`** (`array`) *(required)*
-
-### ScrapeSyncTransactionRequest
-
-One transaction in a scrape-sync payload.
-
-Mirrors `service.sync_scrape.ScrapedTransaction`.  Pending rows
-carry the scrape's local `posted_date` (banks typically render
-pending rows without a real settlement date -- e.g. BofA shows
-'Processing' in the date column -- and the scraper substitutes
-the current local datetime).  Posted rows carry the bank-supplied
-settlement datetime.  `transaction_date` is derived server-side
-from the embedded MM/DD pattern in `raw_description`.
-
-`running_balance` is optional and used only for the posting-order
-sanity walk; never persisted.
-
-- **`is_pending`** (`boolean`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`raw_description`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`transaction_type`** (`string`)
-- **`running_balance`** (`string`)
-
-### Transaction
-
-Serializer for bank transactions.
-
-On create the caller supplies bank_account, amount,
-transaction_date, transaction_type, raw_description, and
-optionally pending, memo, and description.
-
-After creation only transaction_type, memo, and description are
-updatable.  The view is responsible for creating the default
-TransactionAllocation to the unallocated budget on create.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`party`** (`string`) *(required, read-only)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`description_user_edited`** (`boolean`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`merchant_name`** (`string`) *(required, read-only)*
-- **`merchant_intermediary`** (`string`) *(required, read-only)*
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`merchant_category`** (`string`) *(required, read-only)*
-- **`merchant_category_code`** (`string`) *(required, read-only)*
-- **`virtual_card_number`** (`string`) *(required, read-only)*
-- **`has_details`** (`boolean`) *(required, read-only)*
-- **`allocations`** (`array`) *(required, read-only)*
-- **`bank_transaction_id`** (`string`)
-- **`linked_transaction`** (`string`) *(required, read-only)*
-- **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
-- **`bank_account_posted_balance_currency`** (`string`) *(required, read-only)*
-- **`bank_account_available_balance`** (`string`) *(required, read-only)* — Available Balance has pending debits deducted.
-- **`bank_account_available_balance_currency`** (`string`) *(required, read-only)*
-- **`image`** (`string`)
-- **`document`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### TransactionAllocation
-
-Serializer for transaction allocations.
-
-An allocation maps a portion of a transaction's amount to a budget.
-On create the caller supplies transaction, amount, and optionally
-budget (defaults to unallocated) and category.  After creation,
-budget, category, and memo are updatable.
-
-The serializer enforces two key constraints:
-
-1. **Same-account restriction** -- the budget must belong to the
-   same bank account as the transaction.  Cross-account allocations
-   are rejected with a 400 error.
-2. **Sum constraint** -- the total allocated amount across all
-   allocations for a transaction must not exceed the transaction
-   amount.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`amount_currency`** (`string`) *(required, read-only)*
-- **`budget_balance`** (`string`) *(required, read-only)*
-- **`budget_balance_currency`** (`string`) *(required, read-only)*
-- **`category`** (`string`)
-- **`category_full_name`** (`string`) *(required, read-only)*
-- **`memo`** (`string`)
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### TransactionAllocationRequest
-
-Serializer for transaction allocations.
-
-An allocation maps a portion of a transaction's amount to a budget.
-On create the caller supplies transaction, amount, and optionally
-budget (defaults to unallocated) and category.  After creation,
-budget, category, and memo are updatable.
-
-The serializer enforces two key constraints:
-
-1. **Same-account restriction** -- the budget must belong to the
-   same bank account as the transaction.  Cross-account allocations
-   are rejected with a 400 error.
-2. **Sum constraint** -- the total allocated amount across all
-   allocations for a transaction must not exceed the transaction
-   amount.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`transaction`** (`string`) *(required)*
-- **`budget`** (`string`)
-- **`amount`** (`string`) *(required)*
-- **`category`** (`string`)
-- **`memo`** (`string`)
-
-### TransactionCategory
-
-Serializer for transaction categories.
-
-On create the caller supplies group and name; the view forces the
-owner to the requesting user (global rows are managed via the
-django-admin only).  Group and name are whitespace-normalized and
-checked case-insensitively against the global rows and the user's
-own rows for duplicates.  'archived' is toggled via the archive
-action, not writable here.
-
-- **`id`** (`string`) *(required, read-only)*
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-- **`full_name`** (`string`) *(required, read-only)* — Canonical display form: '{group} : {name}'.
-- **`owner`** (`string`) *(required, read-only)* — Owner username; null for a global category.
-- **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
-- **`created_at`** (`string`) *(required, read-only)*
-- **`modified_at`** (`string`) *(required, read-only)*
-
-### TransactionCategoryRequest
-
-Serializer for transaction categories.
-
-On create the caller supplies group and name; the view forces the
-owner to the requesting user (global rows are managed via the
-django-admin only).  Group and name are whitespace-normalized and
-checked case-insensitively against the global rows and the user's
-own rows for duplicates.  'archived' is toggled via the archive
-action, not writable here.
-
-- **`group`** (`string`) *(required)*
-- **`name`** (`string`) *(required)*
-
-### TransactionDetailsItemRequest
-
-One (transaction, raw details dict) pair to apply.
-
-The details dict is stored verbatim on the transaction (it is the
-provenance record); the service extracts the merchant columns from
-it.  `category` is a mibudge category full name ('{group} :
-{name}') -- the IMPORTER translates its provider's vocabulary
-before submitting; mibudge carries no provider mappings.  The name
-is resolved case-insensitively among the categories visible to the
-caller; an unknown name yields a per-item warning and the
-transaction stays unassigned.
-
-- **`transaction`** (`string`) *(required)*
-- **`details`** (`object`) *(required)*
-- **`category`** (`string`)
-
-### TransactionDetailsReport
-
-Output serializer for the bank-account transaction-details action.
-
-- **`applied`** (`integer`) *(required)*
-- **`skipped_has_details`** (`integer`) *(required)*
-- **`skipped_pending`** (`integer`) *(required)*
-- **`not_found`** (`integer`) *(required)*
-- **`results`** (`array`) *(required)*
-
-### TransactionDetailsRequest
-
-Input serializer for the bank-account transaction-details action.
-
-`overwrite` re-applies scraper-owned fields on rows already
-enriched (location fields and an assigned category are still
-never clobbered).
-
-- **`overwrite`** (`boolean`)
-- **`details`** (`array`) *(required)*
-
-### TransactionDetailsResult
-
-Per-item outcome of the transaction-details action.
-
-- **`transaction`** (`string`) *(required)*
-- **`status`** (`string`) *(required)* — * `applied` - applied
-* `skipped_has_details` - skipped_has_details
-* `skipped_pending` - skipped_pending
-* `not_found` - not_found Enum: ['applied', 'skipped_has_details', 'skipped_pending', 'not_found']
-- **`warnings`** (`array`) *(required)*
-
-### TransactionDetailsResultStatusEnum
-
-* `applied` - applied
-* `skipped_has_details` - skipped_has_details
-* `skipped_pending` - skipped_pending
-* `not_found` - not_found
-
-
-### TransactionRequest
-
-Serializer for bank transactions.
-
-On create the caller supplies bank_account, amount,
-transaction_date, transaction_type, raw_description, and
-optionally pending, memo, and description.
-
-After creation only transaction_type, memo, and description are
-updatable.  The view is responsible for creating the default
-TransactionAllocation to the unallocated budget on create.
-
-The ``amount_currency`` is read from raw request data by
-djmoney's ``MoneyField.get_value()`` -- no explicit currency
-field declaration is needed.
-
-- **`bank_account`** (`string`) *(required)*
-- **`amount`** (`string`) *(required)*
-- **`posted_date`** (`string`) *(required)*
-- **`transaction_date`** (`string`)
-- **`transaction_type`** (``) *(required)*
-- **`pending`** (`boolean`)
-- **`memo`** (`string`)
-- **`raw_description`** (`string`) *(required)*
-- **`description`** (`string`)
-- **`category`** (`string`)
-- **`merchant_address`** (`string`)
-- **`merchant_city`** (`string`)
-- **`merchant_region`** (`string`)
-- **`merchant_country`** (`string`)
-- **`merchant_latitude`** (`string`)
-- **`merchant_longitude`** (`string`)
-- **`bank_transaction_id`** (`string`)
-- **`image`** (`string`)
-- **`document`** (`string`)
-
-### TransactionSplitsRequest
-
-Serializer for the declarative splits endpoint.
-
-Accepts a dict mapping budget UUIDs to amounts.  The backend
-reconciles existing allocations to match the declared state.
-Any remainder goes to the unallocated budget.
-
-All budgets must belong to the same bank account as the
-transaction.  Cross-account budget references are rejected
-with a 400 error.
-
-- **`splits`** (`object`) *(required)* — Map of budget UUID → amount.  Amounts must not exceed the transaction total.  Omitted remainder is assigned to the unallocated budget.
-
-### TransactionTypeEnum
-
-* `signature_purchase` - Signature Purchase
-* `ach` - ACH
-* `round-up_transfer` - Round-up Transfer
-* `protected_goal_account_transfer` - Protected Goal Account Transfer
-* `fee` - Fee
-* `pin_purchase` - Pin Purchase
-* `signature_credit` - Signature Credit
-* `interest_credit` - Interest Credit
-* `shared_transfer` - Shared Transfer
-* `courtesy_credit` - Courtesy Credit
-* `atm_withdrawal` - ATM Withdrawal
-* `bill_payment` - Bill Payment
-* `bank_generated_credit` - Bank Generated Credit
-* `wire_transfer` - Wire Transfer
-* `check_deposit` - Check Deposit
-* `check` - Check
-* `c2c` - c2c
-* `migration_interbank_transfer` - Migration Interbank Transfer
-* `balance_sweep` - Balance Sweep
-* `ach_reversal` - ACH Reversal
-* `adjustment` - Adjustment
-* `signature_return` - Signature return
-* `fx_order` - FX Order
-* `` - --------
-
-
-### User
-
-Serializer for user profiles.
-
-The ``default_bank_account`` field is writable but constrained:
-the bank account must be owned by the user being updated.  On
-output it returns the UUID string (or null).
-
-``has_usable_password`` is read-only and used by the SPA to decide
-whether to enable the change-email and change-password forms.
-
-- **`username`** (`string`) *(required, read-only)* — Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-- **`email`** (`string`) *(required, read-only)* — Login email address; blank for system accounts.
-- **`name`** (`string`)
-- **`url`** (`string`) *(required, read-only)*
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-- **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
-
-### UserRequest
-
-Serializer for user profiles.
-
-The ``default_bank_account`` field is writable but constrained:
-the bank account must be owned by the user being updated.  On
-output it returns the UUID string (or null).
-
-``has_usable_password`` is read-only and used by the SPA to decide
-whether to enable the change-email and change-password forms.
-
-- **`name`** (`string`)
-- **`default_bank_account`** (`string`)
-- **`timezone`** (`string`)
-
-### ValidationError
-
-Field name to messages (`non_field_errors` for errors not tied to one field), or a list of messages.
-
-One of:
-- `map of string | array of any | object`
-- `array of string`
-
+**200**
+
+Returns an array of [BankAccountInvitation](#bankaccountinvitation-object).
+
+Common responses: `401` · `403` · `429`
+
+#### APIKey object
+
+```jsonc
+{
+  "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid
+  // User-supplied label identifying what this key is for.
+  "name": "string",                 // string
+  "prefix": "string",               // string
+  "expires_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "last_used_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "revoked_at": "2026-09-29T14:00:00Z",  // date-time | null
+  "created_at": "2026-09-29T14:00:00Z"  // date-time
+}
+```
+
+#### User object
+
+```jsonc
+{
+  // Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
+  "username": "string",             // string · read-only
+  // Login email address; blank for system accounts.
+  "email": "string",                // string · read-only
+  "name": "string",                 // string · optional
+  "url": "https://mibudge.example.com/...",  // uri · read-only
+  "default_bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
+  "timezone": "string",             // string · optional
+  // Return True if the user has a usable (non-unusable) password set.
+  "has_usable_password": false      // boolean · read-only
+}
+```

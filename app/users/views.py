@@ -143,6 +143,11 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
+# The API reference groups the token endpoints under this tag.
+#
+AUTH_TAG = "auth"
+
+
 ########################################################################
 ########################################################################
 #
@@ -160,10 +165,11 @@ class CookieTokenObtainPairView(TokenObtainPairView):
     ####################################################################
     #
     @extend_schema(
+        tags=[AUTH_TAG],
         responses={
             200: AccessTokenSerializer,
             401: error_response("Wrong email or password."),
-        }
+        },
     )
     def post(
         self, request: HttpRequest, *args: object, **kwargs: object
@@ -197,6 +203,7 @@ class CookieTokenRefreshView(TokenRefreshView):
     ####################################################################
     #
     @extend_schema(
+        tags=[AUTH_TAG],
         request=None,
         responses={
             200: AccessTokenSerializer,
@@ -252,7 +259,7 @@ class CookieTokenLogoutView(TokenBlacklistView):
 
     ####################################################################
     #
-    @extend_schema(request=None, responses={204: None})
+    @extend_schema(tags=[AUTH_TAG], request=None, responses={204: None})
     def post(
         self, request: HttpRequest, *args: object, **kwargs: object
     ) -> Response:

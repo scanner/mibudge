@@ -2,22 +2,98 @@ openapi: 3.0.3
 info:
   title: mibudge API
   version: 1.0.0
-  description: |-
-    REST API for the mibudge personal budgeting service.
+  description: |
+    REST API for the mibudge personal budgeting service.  Every versioned
+    endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`.
 
     ## Authentication
 
-    All endpoints require JWT authentication via `Authorization: Bearer <token>` header. Obtain tokens through the login flow; refresh via `POST /api/token/refresh/` (httpOnly cookie).
+    Send one of:
+
+    - **Access token** -- `Authorization: Bearer <access>`.  The browser app
+      gets a short-lived access token from `POST /api/token/` (email and
+      password), which also sets the refresh token as an httpOnly cookie;
+      `POST /api/token/refresh/` exchanges that cookie for a new access token
+      and `POST /api/token/logout/` revokes it.
+    - **API key** -- `Authorization: Api-Key <key>`, for importers and other
+      services.  Create keys at `/api/v1/users/me/api-keys/`; the key is shown
+      once.  API keys reach the budgeting endpoints and can read
+      `GET /api/v1/users/me/` (importers read `timezone`), but not the other
+      user and security endpoints (profile updates, password and email
+      change, invitations, API-key management), which answer 403.
+
+    A few endpoints need no credentials (the public invitation and
+    email-change link endpoints).  A bad credential is refused with 401 even
+    there.
 
     ## Permissions
 
-    - **Banks**: read-only, any authenticated user.
-    - **Users**: list/retrieve/update restricted to staff; `/api/v1/users/me/` available to all authenticated users.
-    - **All other resources** (bank accounts, budgets, transactions, allocations, internal transactions): scoped to bank account ownership. Only users in an account's `owners` M2M can access that account and its related objects. Staff and superuser status does not bypass ownership checks.
+    - **Banks** and **currencies**: read-only, any authenticated caller.
+    - **Users**: list, retrieve and update are staff-only;
+      `/api/v1/users/me/` is every caller's own profile.
+    - **Everything else** (bank accounts, budgets, transactions, allocations,
+      internal transactions, categories): scoped to bank-account ownership.  A
+      caller sees only accounts they own and the objects in them; another
+      account's objects answer 404.  Staff status does not bypass this.
 
-    ## Money fields
+    ## Money
 
-    Monetary values are represented as a decimal amount paired with an ISO 4217 currency code (e.g. `amount` + `amount_currency`). Currency defaults to the account's currency if not specified.
+    A money value is a decimal string plus a sibling currency code: `"amount":
+    "-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
+    negative.  An omitted currency defaults to the bank account's.
+
+    ## Pagination
+
+    List endpoints answer a page:
+
+    ```json
+    {"count": 250, "next": "https://.../?page=3", "previous": "https://.../?page=1", "results": [...]}
+    ```
+
+    `page` selects the page (a page past the end answers 404) and `page_size`
+    the number of results, 100 by default and at most 500.  Follow `next` until it is `null`.
+
+    ## Throttling
+
+    Requests are rate-limited per caller:
+
+    - **Authenticated** (access token or API key): 20000/hour per user.  All of a user's API keys and sessions share the one budget.
+    - **Anonymous** (login, token refresh, the public endpoints): 100/hour per client address.
+
+    Over the limit a request answers 429 with a `Retry-After` header giving
+    the seconds to wait.  A throttled request was refused before it ran, so
+    it is safe to retry.  To pace a client:
+
+    - On 429, wait `Retry-After` seconds, then retry the same request.
+    - Without a `Retry-After`, back off exponentially with jitter (1s, 2s,
+      4s, ... capped at a few minutes) instead of retrying at once.
+    - Some endpoints refuse with 429 for their own business limits (e.g.
+      too many invitations to one address); the endpoint says so, and
+      retrying soon will not succeed.
+    - Bulk work (imports) should send requests one at a time rather than in
+      parallel, and spread a large batch over time rather than bursting it.
+
+    ## Errors
+
+    An error body is `Error` or, for invalid input, `ValidationError`:
+
+    - `Error`: `{"detail": "..."}`, sometimes with a machine-readable
+      `"code"` as well (e.g. `"token_not_valid"` from the token endpoints).
+    - `ValidationError`: a map of field name to messages, with
+      `non_field_errors` for errors not tied to one field:
+
+      ```json
+      {"target_balance": ["This field is required."], "non_field_errors": ["..."]}
+      ```
+
+      A field's messages may be a single string instead of a list, a list of
+      per-item maps for a list field, or a nested map.  Some actions answer a
+      bare list of messages instead, e.g. `["Cannot split a pending
+      transaction."]`.
+
+    The statuses every endpoint of a kind shares are described once, under
+    Common responses; each endpoint lists which apply to it, and its own
+    errors in full.
 paths:
   /api/token/:
     post:
@@ -31,7 +107,7 @@ paths:
         Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
         and that the browser sends automatically to /api/token/refresh/.
       tags:
-      - api
+      - auth
       requestBody:
         content:
           application/json:
@@ -62,13 +138,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/token/logout/:
     post:
       operationId: api_token_logout_create
@@ -81,7 +160,7 @@ paths:
         blacklisted cookie leaves nothing to revoke, and the cookie is
         cleared either way.
       tags:
-      - api
+      - auth
       responses:
         '204':
           description: No response body
@@ -90,7 +169,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/token/refresh/:
     post:
       operationId: api_token_refresh_create
@@ -102,7 +182,7 @@ paths:
         When token rotation is enabled, also rotates the refresh cookie so
         the 14-day sliding window resets with each use.
       tags:
-      - api
+      - auth
       responses:
         '200':
           content:
@@ -121,7 +201,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/allocations/:
     get:
       operationId: allocations_list
@@ -192,25 +273,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/allocations/{id}/:
     get:
       operationId: allocations_retrieve
@@ -240,19 +327,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/:
     get:
       operationId: bank_accounts_list
@@ -307,25 +398,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     post:
       operationId: bank_accounts_create
       description: Create a new bank account. The authenticated user is automatically
@@ -362,19 +459,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/:
     get:
       operationId: bank_accounts_retrieve
@@ -404,19 +506,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     put:
       operationId: bank_accounts_update
       description: Full update of a bank account. Only 'name' is mutable after creation
@@ -458,25 +564,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     patch:
       operationId: bank_accounts_partial_update
       description: Partial update of a bank account. Only 'name' is mutable after
@@ -517,25 +629,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     delete:
       operationId: bank_accounts_destroy
       description: Delete a bank account and all associated budgets, transactions,
@@ -561,19 +679,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/funding-event-dates/:
     get:
       operationId: bank_accounts_funding_event_dates_retrieve
@@ -625,19 +747,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/funding-summary/:
     get:
       operationId: bank_accounts_funding_summary_retrieve
@@ -671,19 +797,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/invitations/:
     get:
       operationId: bank_accounts_invitations_list
@@ -715,25 +845,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/invitations/{token}/cancel/:
     post:
       operationId: bank_accounts_invitations_cancel_create
@@ -785,13 +921,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/invite/:
     post:
       operationId: bank_accounts_invite_create
@@ -846,25 +985,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
   /api/v1/bank-accounts/{id}/mark-imported/:
     post:
       operationId: bank_accounts_mark_imported_create
@@ -907,25 +1053,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/run-funding/:
     post:
       operationId: bank_accounts_run_funding_create
@@ -983,25 +1135,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/sync-scrape/:
     post:
       operationId: bank_accounts_sync_scrape_create
@@ -1049,25 +1207,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/bank-accounts/{id}/transaction-details/:
     post:
       operationId: bank_accounts_transaction_details_create
@@ -1119,25 +1283,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/banks/:
     get:
       operationId: banks_list
@@ -1181,19 +1351,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/banks/{id}/:
     get:
       operationId: banks_retrieve
@@ -1223,19 +1397,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/budgets/:
     get:
       operationId: budgets_list
@@ -1312,25 +1490,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     post:
       operationId: budgets_create
       description: 'Create a new budget under a bank account. Required: name, bank_account
@@ -1367,19 +1551,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/budgets/{id}/:
     get:
       operationId: budgets_retrieve
@@ -1409,19 +1598,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     put:
       operationId: budgets_update
       description: Full update of a budget. bank_account and budget_type are immutable.
@@ -1463,25 +1656,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     patch:
       operationId: budgets_partial_update
       description: Partial update of a budget. bank_account and budget_type are immutable.
@@ -1522,25 +1721,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     delete:
       operationId: budgets_destroy
       description: Delete a budget and its fill-up goal. The unallocated budget cannot
@@ -1581,19 +1786,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/budgets/{id}/archive/:
     post:
       operationId: budgets_archive_create
@@ -1638,19 +1847,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/channel-preferences/:
     get:
       operationId: channel_preferences_list
@@ -1676,13 +1889,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/channel-preferences/{channel}/:
     patch:
       operationId: channel_preferences_partial_update
@@ -1724,25 +1940,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/currencies/:
     get:
       operationId: currencies_list
@@ -1769,13 +1991,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/funding-occurrences/:
     get:
       operationId: funding_occurrences_list
@@ -1869,25 +2094,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/funding-occurrences/{id}/:
     get:
       operationId: funding_occurrences_retrieve
@@ -1917,19 +2148,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/internal-transactions/:
     get:
       operationId: internal_transactions_list
@@ -2003,25 +2238,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     post:
       operationId: internal_transactions_create
       description: 'Transfer money between two budgets in the same bank account. Required:
@@ -2058,19 +2299,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/internal-transactions/{id}/:
     get:
       operationId: internal_transactions_retrieve
@@ -2100,19 +2346,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/invitations/{token}/:
     get:
       operationId: invitations_retrieve
@@ -2151,13 +2401,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/invitations/{token}/accept/:
     post:
       operationId: invitations_accept_create
@@ -2197,13 +2450,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/invitations/{token}/decline/:
     post:
       operationId: invitations_decline_create
@@ -2242,13 +2498,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/notification-preferences/:
     get:
       operationId: notification_preferences_list
@@ -2275,13 +2534,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/notification-preferences/{kind}/:
     patch:
       operationId: notification_preferences_partial_update
@@ -2324,25 +2586,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transaction-categories/:
     get:
       operationId: transaction_categories_list
@@ -2414,25 +2682,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     post:
       operationId: transaction_categories_create
       description: Create a custom category owned by the authenticated user (global
@@ -2468,19 +2742,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transaction-categories/{id}/:
     get:
       operationId: transaction_categories_retrieve
@@ -2510,19 +2789,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     put:
       operationId: transaction_categories_update
       description: Full update of a category.  Only the owner may update; global categories
@@ -2571,25 +2854,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     patch:
       operationId: transaction_categories_partial_update
       description: Partial update of a category.  Only the owner may update; global
@@ -2637,25 +2926,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     delete:
       operationId: transaction_categories_destroy
       description: Delete a category.  Only the owner may delete; global categories
@@ -2696,19 +2991,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transaction-categories/{id}/archive/:
     post:
       operationId: transaction_categories_archive_create
@@ -2747,19 +3046,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transactions/:
     get:
       operationId: transactions_list
@@ -2946,25 +3249,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     post:
       operationId: transactions_create
       description: 'Create a new bank transaction. Required: bank_account (UUID),
@@ -3001,19 +3310,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transactions/{id}/:
     get:
       operationId: transactions_retrieve
@@ -3044,19 +3358,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     put:
       operationId: transactions_update
       description: Full update of a transaction. Only transaction_type, memo, and
@@ -3098,25 +3416,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     patch:
       operationId: transactions_partial_update
       description: Partial update of a transaction. Only transaction_type, memo, and
@@ -3157,25 +3481,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     delete:
       operationId: transactions_destroy
       description: Delete a transaction. Balance changes are reversed by the pre_delete
@@ -3201,19 +3531,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transactions/{id}/resolve-pending/:
     post:
       operationId: transactions_resolve_pending_create
@@ -3259,25 +3593,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/transactions/{id}/splits/:
     post:
       operationId: transactions_splits_create
@@ -3326,25 +3666,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/:
     get:
       operationId: users_list
@@ -3386,25 +3732,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/{username}/:
     get:
       operationId: users_retrieve
@@ -3435,25 +3787,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     put:
       operationId: users_update
       description: Full update of a user profile. Restricted to staff/admin users.
@@ -3494,31 +3852,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     patch:
       operationId: users_partial_update
       description: Partial update of a user profile. Restricted to staff/admin users.
@@ -3559,31 +3925,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/:
     get:
       operationId: users_me_retrieve
@@ -3609,13 +3983,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     patch:
       operationId: users_me_partial_update
       description: GET returns the authenticated user's own profile. PATCH allows
@@ -3651,25 +4028,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/api-keys/:
     get:
       operationId: users_me_api_keys_list
@@ -3707,25 +4091,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Invalid page.
+          description: The requested `page` is past the last one.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
     post:
       operationId: users_me_api_keys_create
       description: |-
@@ -3762,25 +4152,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/api-keys/{uuid}/:
     get:
       operationId: users_me_api_keys_retrieve
@@ -3810,25 +4207,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/api-keys/{uuid}/revoke/:
     post:
       operationId: users_me_api_keys_revoke_create
@@ -3865,25 +4268,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '404':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: No such object.
+          description: No such object, or one the caller cannot see.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/change-email/:
     post:
       operationId: users_me_change_email_create
@@ -3931,19 +4340,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/change-email/{token}/confirm/:
     post:
       operationId: users_me_change_email_confirm_create
@@ -3985,13 +4399,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/change-email/{token}/revoke/:
     post:
       operationId: users_me_change_email_revoke_create
@@ -4029,13 +4446,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/change-password/:
     post:
       operationId: users_me_change_password_create
@@ -4069,25 +4489,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
-          description: Invalid input.
+          description: 'Invalid input: a field error in the request body, or a bad
+            filter value on a list.'
+          x-common-response: true
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/invitations/:
     get:
       operationId: users_me_invitations_list
@@ -4113,19 +4540,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Missing or invalid credentials.
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
         '403':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: The credentials are not allowed to do this.
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
         '429':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Too many requests.
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
 components:
   schemas:
     APIKey:

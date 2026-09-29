@@ -1,0 +1,36 @@
+{
+  "summary": "Details for the row `sync-scrape` asked for",
+  "description": "`details` is the provider's raw record, stored verbatim; mibudge reads `merchant_name`, `merchant_information` ('CITY, ST'), `merchant_category`, `merchant_category_code` and `virtual_card_number` from it.  `category` is a mibudge category full name.",
+  "request": {
+    "overwrite": false,
+    "details": [
+      {
+        "transaction": "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+        "details": {
+          "merchant_name": "Blue Bottle Coffee",
+          "merchant_information": "OAKLAND, CA",
+          "merchant_category": "Coffee Shops",
+          "merchant_category_code": "5814"
+        },
+        "category": "Food & Drink : Coffee & Tea"
+      }
+    ]
+  },
+  "response": {
+    "status": "200",
+    "summary": "Applied, with nothing to warn about",
+    "body": {
+      "applied": 1,
+      "skipped_has_details": 0,
+      "skipped_pending": 0,
+      "not_found": 0,
+      "results": [
+        {
+          "transaction": "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+          "status": "applied",
+          "warnings": []
+        }
+      ]
+    }
+  }
+}

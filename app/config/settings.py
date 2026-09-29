@@ -409,6 +409,24 @@ SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 
 # django-rest-framework
 # ------------------------------------------------------------------------------
+# List endpoints' default `page_size`, and the largest a client may ask
+# for (`config.pagination.FlexiblePageNumberPagination`).
+#
+API_PAGE_SIZE = 100
+API_MAX_PAGE_SIZE = 500
+
+# Rate limits. 'user' is sized to accommodate bulk imports: a year of
+# statements across several accounts can easily exceed several thousand
+# POSTs in a few minutes. The per-minute 'burst' scope (applied
+# selectively on write endpoints via ScopedRateThrottle on specific views
+# if needed) keeps runaway clients bounded without capping normal import
+# workflows. Review these numbers once real usage data is available.
+#
+API_THROTTLE_RATES = {
+    "anon": "100/hour",
+    "user": "20000/hour",
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -423,19 +441,9 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ),
-    # Rate limits. 'user' is sized to accommodate bulk imports: a year
-    # of statements across several accounts can easily exceed several
-    # thousand POSTs in a few minutes. The per-minute 'burst' scope
-    # (applied selectively on write endpoints via ScopedRateThrottle on
-    # specific views if needed) keeps runaway clients bounded without
-    # capping normal import workflows. Review these numbers once real
-    # usage data is available.
-    "DEFAULT_THROTTLE_RATES": {
-        "anon": "100/hour",
-        "user": "20000/hour",
-    },
+    "DEFAULT_THROTTLE_RATES": API_THROTTLE_RATES,
     "DEFAULT_PAGINATION_CLASS": "config.pagination.FlexiblePageNumberPagination",
-    "PAGE_SIZE": 100,
+    "PAGE_SIZE": API_PAGE_SIZE,
     "DEFAULT_SCHEMA_CLASS": "common.schema.AutoSchema",
 }
 
@@ -451,30 +459,112 @@ API_KEY_EXPIRY_NOTICE_DAYS = env.int("API_KEY_EXPIRY_NOTICE_DAYS", default=14)
 
 # drf-spectacular
 # ------------------------------------------------------------------------------
+# The API reference's introduction: rendered at the top of Swagger UI,
+# ReDoc and `docs/api.md`.  Rates and page sizes come from the settings
+# above, so the text follows them.
+#
+API_DESCRIPTION = f"""\
+REST API for the mibudge personal budgeting service.  Every versioned
+endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`.
+
+## Authentication
+
+Send one of:
+
+- **Access token** -- `Authorization: Bearer <access>`.  The browser app
+  gets a short-lived access token from `POST /api/token/` (email and
+  password), which also sets the refresh token as an httpOnly cookie;
+  `POST /api/token/refresh/` exchanges that cookie for a new access token
+  and `POST /api/token/logout/` revokes it.
+- **API key** -- `Authorization: Api-Key <key>`, for importers and other
+  services.  Create keys at `/api/v1/users/me/api-keys/`; the key is shown
+  once.  API keys reach the budgeting endpoints and can read
+  `GET /api/v1/users/me/` (importers read `timezone`), but not the other
+  user and security endpoints (profile updates, password and email
+  change, invitations, API-key management), which answer 403.
+
+A few endpoints need no credentials (the public invitation and
+email-change link endpoints).  A bad credential is refused with 401 even
+there.
+
+## Permissions
+
+- **Banks** and **currencies**: read-only, any authenticated caller.
+- **Users**: list, retrieve and update are staff-only;
+  `/api/v1/users/me/` is every caller's own profile.
+- **Everything else** (bank accounts, budgets, transactions, allocations,
+  internal transactions, categories): scoped to bank-account ownership.  A
+  caller sees only accounts they own and the objects in them; another
+  account's objects answer 404.  Staff status does not bypass this.
+
+## Money
+
+A money value is a decimal string plus a sibling currency code: `"amount":
+"-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
+negative.  An omitted currency defaults to the bank account's.
+
+## Pagination
+
+List endpoints answer a page:
+
+```json
+{{"count": 250, "next": "https://.../?page=3", "previous": "https://.../?page=1", "results": [...]}}
+```
+
+`page` selects the page (a page past the end answers 404) and `page_size`
+the number of results, {API_PAGE_SIZE} by default and at most \
+{API_MAX_PAGE_SIZE}.  Follow `next` until it is `null`.
+
+## Throttling
+
+Requests are rate-limited per caller:
+
+- **Authenticated** (access token or API key): \
+{API_THROTTLE_RATES["user"]} per user.  All of a \
+user's API keys and sessions share the one budget.
+- **Anonymous** (login, token refresh, the public endpoints): \
+{API_THROTTLE_RATES["anon"]} per client address.
+
+Over the limit a request answers 429 with a `Retry-After` header giving
+the seconds to wait.  A throttled request was refused before it ran, so
+it is safe to retry.  To pace a client:
+
+- On 429, wait `Retry-After` seconds, then retry the same request.
+- Without a `Retry-After`, back off exponentially with jitter (1s, 2s,
+  4s, ... capped at a few minutes) instead of retrying at once.
+- Some endpoints refuse with 429 for their own business limits (e.g.
+  too many invitations to one address); the endpoint says so, and
+  retrying soon will not succeed.
+- Bulk work (imports) should send requests one at a time rather than in
+  parallel, and spread a large batch over time rather than bursting it.
+
+## Errors
+
+An error body is `Error` or, for invalid input, `ValidationError`:
+
+- `Error`: `{{"detail": "..."}}`, sometimes with a machine-readable
+  `"code"` as well (e.g. `"token_not_valid"` from the token endpoints).
+- `ValidationError`: a map of field name to messages, with
+  `non_field_errors` for errors not tied to one field:
+
+  ```json
+  {{"target_balance": ["This field is required."], "non_field_errors": ["..."]}}
+  ```
+
+  A field's messages may be a single string instead of a list, a list of
+  per-item maps for a list field, or a nested map.  Some actions answer a
+  bare list of messages instead, e.g. `["Cannot split a pending
+  transaction."]`.
+
+The statuses every endpoint of a kind shares are described once, under
+Common responses; each endpoint lists which apply to it, and its own
+errors in full.
+"""
+
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "mibudge API",
-    "DESCRIPTION": (
-        "REST API for the mibudge personal budgeting service.\n\n"
-        "## Authentication\n\n"
-        "All endpoints require JWT authentication via "
-        "`Authorization: Bearer <token>` header. Obtain tokens "
-        "through the login flow; refresh via "
-        "`POST /api/token/refresh/` (httpOnly cookie).\n\n"
-        "## Permissions\n\n"
-        "- **Banks**: read-only, any authenticated user.\n"
-        "- **Users**: list/retrieve/update restricted to staff; "
-        "`/api/v1/users/me/` available to all authenticated users.\n"
-        "- **All other resources** (bank accounts, budgets, transactions, "
-        "allocations, internal transactions): scoped to bank account "
-        "ownership. Only users in an account's `owners` M2M can "
-        "access that account and its related objects. Staff and "
-        "superuser status does not bypass ownership checks.\n\n"
-        "## Money fields\n\n"
-        "Monetary values are represented as a decimal amount paired "
-        "with an ISO 4217 currency code (e.g. `amount` + "
-        "`amount_currency`). Currency defaults to the account's "
-        "currency if not specified."
-    ),
+    "DESCRIPTION": API_DESCRIPTION,
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,

@@ -33,8 +33,14 @@ Generating API docs (re-run whenever the REST API changes):
 
 ```bash
 make api-schema   # Generate docs/openapi.yaml via manage.py spectacular
-make api-docs     # Generate docs/api.md from the OpenAPI schema
+make api-docs     # Generate docs/api.md from the OpenAPI schema and examples/
 ```
+
+The API reference's introduction (authentication, pagination, throttling,
+errors) is `API_DESCRIPTION` in `app/config/settings.py`. Worked examples are
+JSON files in `examples/`, one per endpoint named by its `operationId` (see
+`examples/README.md`); `app/tests/test_api_examples.py` validates them against
+the schema.
 
 Interactive API docs (when the dev server is running):
 - Swagger UI: `/api/v1/schema/swagger-ui/`
