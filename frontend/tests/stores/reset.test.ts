@@ -59,7 +59,7 @@ describe("store reset", () => {
   // WHEN:  the user signs out
   // THEN:  every store is empty and the tab's stored account is gone
   //
-  it("sign-out empties every store", () => {
+  it("sign-out empties every store", async () => {
     withAuth();
     const account = makeBankAccount();
     withAccounts([account]);
@@ -69,7 +69,7 @@ describe("store reset", () => {
     nav.setIds(["a", "b"]);
     nav.savedSearch = "coffee";
 
-    useSessionStore().logout();
+    await useSessionStore().logout();
 
     expect(useSessionStore().isAuthenticated).toBe(false);
     expect(useBankAccountsStore().all).toEqual([]);
@@ -117,7 +117,7 @@ describe("store reset", () => {
 
       const pending = load().catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 10));
-      useSessionStore().logout();
+      await useSessionStore().logout();
       release();
       await pending;
 

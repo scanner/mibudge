@@ -9,10 +9,13 @@
 // `createSessionHttpClient()` builds the HTTP client wired to this
 // store: requests carry `accessToken`, a 401 runs `renewToken()` (once
 // for all concurrent requests), and a failed refresh ends the session
-// (`logout()`) before the caller's `onAuthFailure` runs -- `main.ts`
-// uses that to send the user to the login page with a return path.
+// (`endSession()`) before the caller's `onAuthFailure` runs --
+// `main.ts` uses that to send the user to the login page with a
+// return path.
 //
-// `logout()` resets every store (see `stores/reset.ts`).
+// `endSession()` resets every store (see `stores/reset.ts`).
+// `logout()` first asks the server to revoke the refresh cookie, then
+// ends the session.
 //
 
 // 3rd party imports
@@ -120,12 +123,26 @@ export const useSessionStore = defineStore("session", () => {
   ////////////////////////////////////////////////////////////////////
   //
   // End the session in this tab: forget the token and reset every
-  // store.  The refresh cookie stays valid until it expires (there is
-  // no server-side logout endpoint yet).
+  // store.
   //
-  function logout(): void {
+  function endSession(): void {
     if (pinia) resetAllStores(pinia);
     else reset();
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  //
+  // Sign out: revoke the refresh cookie on the server, then end the
+  // session.  The server call is best-effort; the session ends even
+  // when it fails.
+  //
+  async function logout(): Promise<void> {
+    try {
+      await api.auth.logout();
+    } catch {
+      // The cookie outlives a failed call; there is nothing to retry.
+    }
+    endSession();
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -146,6 +163,7 @@ export const useSessionStore = defineStore("session", () => {
     refresh,
     loadUser,
     updateProfile,
+    endSession,
     logout,
     reset,
   };
@@ -173,7 +191,7 @@ export function createSessionHttpClient(
     getToken: () => session.accessToken,
     refresh: () => session.renewToken(),
     onAuthFailure: (err) => {
-      session.logout();
+      session.endSession();
       options.onAuthFailure?.(err);
     },
   });

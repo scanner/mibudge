@@ -56,6 +56,20 @@ and that the browser sends automatically to /api/token/refresh/.
 
 **Response 200:** No response body
 
+#### `POST /api/token/logout/`
+
+**Operation:** `api_token_logout_create`
+
+Sign-out endpoint: blacklists the refresh token in the httpOnly
+cookie and expires the cookie, so a reload cannot sign the user
+back in.
+
+Always answers 204.  A missing, invalid, expired or already
+blacklisted cookie leaves nothing to revoke, and the cookie is
+cleared either way.
+
+**Response 204:** No response body
+
 #### `POST /api/token/refresh/`
 
 **Operation:** `api_token_refresh_create`

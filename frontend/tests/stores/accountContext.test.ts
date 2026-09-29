@@ -226,7 +226,7 @@ describe("switching accounts", () => {
     const ctx = useAccountContextStore();
     await ctx.init();
 
-    useSessionStore().logout();
+    await useSessionStore().logout();
 
     expect(ctx.accounts).toEqual([]);
     expect(ctx.activeBankAccountId).toBeNull();

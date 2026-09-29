@@ -42,6 +42,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/token/logout/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Sign-out endpoint: blacklists the refresh token in the httpOnly
+         *     cookie and expires the cookie, so a reload cannot sign the user
+         *     back in.
+         *
+         *     Always answers 204.  A missing, invalid, expired or already
+         *     blacklisted cookie leaves nothing to revoke, and the cookie is
+         *     cleared either way.
+         */
+        post: operations["api_token_logout_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/token/refresh/": {
         parameters: {
             query?: never;
@@ -2522,6 +2547,24 @@ export interface operations {
         responses: {
             /** @description No response body */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_token_logout_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

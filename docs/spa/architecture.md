@@ -140,7 +140,7 @@ view ──► feature composable / store
    first one just renewed. The original request is retried once with
    the new token.
 3. **AuthError.** When the refresh fails, the session-wired client calls
-   `session.logout()` (which resets every store) and then the
+   `session.endSession()` (which resets every store) and then the
    `onAuthFailure` callback from `main.ts`, which calls
    `redirectToLogin(router)`: the user lands on `/app/login/?next=<the
    page they were on>`. The request then rejects with `AuthError`;

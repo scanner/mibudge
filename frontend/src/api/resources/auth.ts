@@ -1,7 +1,7 @@
 //
 // JWT endpoints (`/api/token/...`).  API layer.
 //
-// Both requests go out without an access token and without the 401
+// Every request goes out without an access token and without the 401
 // refresh: the refresh token is an httpOnly cookie the browser sends
 // on its own, and a 401 here means the credentials or the cookie are
 // no good.
@@ -33,6 +33,15 @@ export function authResource(http: HttpClient) {
     //
     refreshToken(): Promise<AccessTokenDto> {
       return http.request(`${AUTH}/token/refresh/`, {
+        method: "POST",
+        auth: false,
+      });
+    },
+
+    // Revoke the refresh token and clear its cookie.  Always 204.
+    //
+    logout(): Promise<void> {
+      return http.request(`${AUTH}/token/logout/`, {
         method: "POST",
         auth: false,
       });
