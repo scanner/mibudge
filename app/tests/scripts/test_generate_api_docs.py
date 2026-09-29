@@ -10,14 +10,18 @@ import pytest_check as check
 from scripts.generate_api_docs import Reference, generate_markdown
 
 REF = "#/components/schemas/"
-ERROR_BODY = {"content": {"application/json": {"schema": {"$ref": f"{REF}Error"}}}}
+ERROR_BODY = {
+    "content": {"application/json": {"schema": {"$ref": f"{REF}Error"}}}
+}
 
 
 ####################################################################
 #
 def json_body(name: str) -> dict:
     """A JSON request or response body referring to component `name`."""
-    return {"content": {"application/json": {"schema": {"$ref": f"{REF}{name}"}}}}
+    return {
+        "content": {"application/json": {"schema": {"$ref": f"{REF}{name}"}}}
+    }
 
 
 ####################################################################
@@ -132,7 +136,9 @@ class TestGenerateMarkdown:
             "its own error is described",
         )
         check.equal(
-            markdown.count("#### Widget object"), 1, "shared object defined once"
+            markdown.count("#### Widget object"),
+            1,
+            "shared object defined once",
         )
         check.is_in(
             "Send [Widget](#widget-object) -- its writable fields.",
@@ -140,7 +146,9 @@ class TestGenerateMarkdown:
             "and linked",
         )
         check.is_not_in(
-            "#### Report object", markdown, "the single-use body is not an object"
+            "#### Report object",
+            markdown,
+            "the single-use body is not an object",
         )
         check.is_in('"total": 0', markdown, "but inlined at its endpoint")
         check.is_in("// uuid · read-only", markdown, "read-only field flagged")

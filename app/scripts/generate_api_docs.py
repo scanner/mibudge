@@ -346,7 +346,11 @@ class Reference:
         description = schema.get("description", "")
         prose, values = split_enum_description(description)
         if not values:
-            members = [schema, *schema.get("oneOf", []), *schema.get("anyOf", [])]
+            members = [
+                schema,
+                *schema.get("oneOf", []),
+                *schema.get("anyOf", []),
+            ]
             for member in members:
                 target = self.schemas.get(ref_name(member) or "", {})
                 if "enum" in target:
@@ -534,7 +538,9 @@ class Reference:
         if request:
             lines += self.body_lines(request["schema"], "Send")
             if "request" in worked:
-                lines += self.example_block("Example request", worked["request"])
+                lines += self.example_block(
+                    "Example request", worked["request"]
+                )
             lines.append("")
 
         for code, response in responses.items():
