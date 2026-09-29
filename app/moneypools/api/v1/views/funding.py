@@ -17,7 +17,6 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiParameter,
-    OpenApiResponse,
     extend_schema,
     extend_schema_view,
 )
@@ -30,6 +29,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.schema import error_response, validation_error_response
 from common.views import AtomicWritesMixin
 from moneypools.models import BankAccount, Budget, FundingEventOccurrence
 from moneypools.permissions import IsAccountOwner
@@ -85,13 +85,12 @@ class BankAccountFundingActions(viewsets.GenericViewSet):
         },
         responses={
             200: FundingRunResultSerializer,
-            409: OpenApiResponse(
-                description=(
-                    "Either another worker is currently processing this "
-                    "account (lock held), or there is nothing due or "
-                    "outstanding to run as of the supplied date."
-                ),
+            409: error_response(
+                "Either another worker is currently processing this "
+                "account (lock held), or there is nothing due or "
+                "outstanding to run as of the supplied date."
             ),
+            503: error_response("The funding system user is not configured."),
         },
     )
     @action(detail=True, methods=["post"], url_path="run-funding")
@@ -193,7 +192,12 @@ class BankAccountFundingActions(viewsets.GenericViewSet):
                 description="Inclusive upper bound (YYYY-MM-DD).",
             ),
         ],
-        responses={200: FundingEventDatesSerializer},
+        responses={
+            200: FundingEventDatesSerializer,
+            400: validation_error_response(
+                "'after' or 'before' is missing or not a date."
+            ),
+        },
     )
     @action(detail=True, methods=["get"], url_path="funding-event-dates")
     def funding_event_dates(self, request: Request, id: str = "") -> Response:

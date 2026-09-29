@@ -944,6 +944,22 @@ class TestPublicInvitationAPI:
 
     ####################################################################
     #
+    def test_detail_with_bad_credentials_returns_401(
+        self, api_client: APIClient
+    ) -> None:
+        """
+        GIVEN: a public (AllowAny) endpoint
+        WHEN:  it is called with an invalid bearer token
+        THEN:  401 -- authentication runs before the permission check
+        """
+        api_client.credentials(HTTP_AUTHORIZATION="Bearer not-a-token")
+
+        response = api_client.get(_public_detail_url("no-such-token"))
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    ####################################################################
+    #
     @pytest.mark.usefixtures("mock_send_notification_now")
     def test_accept_via_api(
         self,

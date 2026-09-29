@@ -8,9 +8,10 @@ code, so a view or serializer change that the schema does not reflect
 fails the test that exercised it.  `make api-schema` regenerates the
 schema after an API change.
 
-A response whose status code the schema does not document (most error
-responses) is not checked, and neither is a 4xx from a path or method
-the API does not serve.
+A status code the schema does not document for the operation fails the
+check too, so every error a test provokes must be declared.  A 4xx from
+a path or method the API does not serve (an unrouted URL, a 405) is not
+checked.
 """
 
 # system imports
@@ -110,8 +111,11 @@ def check_response(response: HttpResponseBase) -> None:
     )
     try:
         openapi().validate_response(mock_request, mock_response)
-    except ResponseNotFound:
-        return
+    except ResponseNotFound as exc:
+        raise AssertionError(
+            f"{request.method} {path} -> {response.status_code}: the "
+            f"status is not documented in {SCHEMA_PATH.name}"
+        ) from exc
     except (PathNotFound, OperationNotFound) as exc:
         if response.status_code >= 400:
             return

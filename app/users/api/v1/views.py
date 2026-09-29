@@ -23,6 +23,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from common.schema import error_response, validation_error_response
 from common.views import AtomicWritesMixin
 from moneypools.api.v1.serializers import BankAccountInvitationSerializer
 from moneypools.models import BankAccountInvitation
@@ -209,7 +210,17 @@ class UserViewSet(
             "currently open for this account."
         ),
         request=EmailChangeRequestSerializer,
-        responses={201: None},
+        responses={
+            201: None,
+            403: error_response(
+                "The account has no password yet, or the credentials are "
+                "not interactive."
+            ),
+            409: validation_error_response(
+                "The address is taken ('new_email'), or a revocation "
+                "window is still open ('detail')."
+            ),
+        },
     )
     @action(
         detail=False,
@@ -271,7 +282,13 @@ class UserViewSet(
             ),
         ],
         request=None,
-        responses={200: None},
+        responses={
+            200: None,
+            400: error_response(
+                "The link is unknown, expired, revoked or already used."
+            ),
+            409: error_response("The address was taken meanwhile."),
+        },
     )
     @action(
         detail=False,
@@ -330,7 +347,12 @@ class UserViewSet(
             ),
         ],
         request=None,
-        responses={200: None},
+        responses={
+            200: None,
+            400: error_response(
+                "The link is unknown, or its revocation window has closed."
+            ),
+        },
     )
     @action(
         detail=False,
@@ -478,7 +500,10 @@ class APIKeyViewSet(
             "purposes.  Revocation cannot be undone."
         ),
         request=None,
-        responses={200: APIKeySerializer},
+        responses={
+            200: APIKeySerializer,
+            400: error_response("The key is already revoked."),
+        },
     )
     @action(detail=True, methods=["POST"])
     def revoke(self, request, uuid=None):

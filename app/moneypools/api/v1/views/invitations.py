@@ -11,7 +11,6 @@ are the public token-based endpoints the invitee uses.
 from django.db import transaction
 from drf_spectacular.utils import (
     OpenApiParameter,
-    OpenApiResponse,
     extend_schema,
 )
 from rest_framework import status, viewsets
@@ -21,6 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.schema import error_response
 from moneypools.models import BankAccount, BankAccountInvitation
 from moneypools.permissions import IsAccountOwner
 from moneypools.service import invitation as invitation_svc
@@ -61,7 +61,15 @@ class BankAccountInvitationActions(viewsets.GenericViewSet):
             "window."
         ),
         request=InviteOwnerSerializer,
-        responses={201: None},
+        responses={
+            201: None,
+            409: error_response(
+                "The address is already an owner, or has a pending invitation."
+            ),
+            429: error_response(
+                "Too many invitations to this address for this account."
+            ),
+        },
     )
     @action(
         detail=True,
@@ -156,7 +164,15 @@ class BankAccountInvitationActions(viewsets.GenericViewSet):
             ),
         ],
         request=None,
-        responses={200: None},
+        responses={
+            200: None,
+            400: error_response("The invitation is no longer pending."),
+            403: error_response(
+                "Only the invitation's sender may cancel it, or the "
+                "credentials are not interactive."
+            ),
+            404: error_response("No such account or invitation."),
+        },
     )
     @action(
         detail=True,
@@ -217,7 +233,10 @@ class BankAccountInvitationActions(viewsets.GenericViewSet):
         "the token is the credential. Used by native apps to render the "
         "acceptance UI; the Django template view renders this server-side."
     ),
-    responses={200: PublicInvitationDetailSerializer},
+    responses={
+        200: PublicInvitationDetailSerializer,
+        404: error_response("Invitation not found."),
+    },
 )
 # A read-only view: `ATOMIC_REQUESTS` would open a transaction, which
 # on SQLite takes the database write lock (see
@@ -255,10 +274,10 @@ def invitation_detail(request: Request, token: str) -> Response:
     request=None,
     responses={
         200: None,
-        400: OpenApiResponse(
-            description="Invitation expired, cancelled, or already resolved."
+        400: error_response(
+            "Invitation expired, cancelled, or already resolved."
         ),
-        404: OpenApiResponse(description="Invitation not found."),
+        404: error_response("Invitation not found."),
     },
 )
 @api_view(["POST"])
@@ -305,10 +324,10 @@ def invitation_accept(request: Request, token: str) -> Response:
     request=None,
     responses={
         200: None,
-        400: OpenApiResponse(
-            description="Invitation expired, cancelled, or already resolved."
+        400: error_response(
+            "Invitation expired, cancelled, or already resolved."
         ),
-        404: OpenApiResponse(description="Invitation not found."),
+        404: error_response("Invitation not found."),
     },
 )
 @api_view(["POST"])

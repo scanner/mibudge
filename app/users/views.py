@@ -27,6 +27,7 @@ from rest_framework_simplejwt.views import (
 
 # Project imports
 #
+from common.schema import error_response
 from users.email_change import (
     SPA_EMAIL_CHANGE_CONFIRMED,
     SPA_EMAIL_CHANGE_ERROR,
@@ -158,7 +159,12 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 
     ####################################################################
     #
-    @extend_schema(responses={200: AccessTokenSerializer})
+    @extend_schema(
+        responses={
+            200: AccessTokenSerializer,
+            401: error_response("Wrong email or password."),
+        }
+    )
     def post(
         self, request: HttpRequest, *args: object, **kwargs: object
     ) -> Response:
@@ -190,7 +196,15 @@ class CookieTokenRefreshView(TokenRefreshView):
 
     ####################################################################
     #
-    @extend_schema(request=None, responses={200: AccessTokenSerializer})
+    @extend_schema(
+        request=None,
+        responses={
+            200: AccessTokenSerializer,
+            401: error_response(
+                "No refresh cookie, or its token is invalid or expired."
+            ),
+        },
+    )
     def post(
         self, request: HttpRequest, *args: object, **kwargs: object
     ) -> Response:

@@ -58,6 +58,22 @@ and that the browser sends automatically to /api/token/refresh/.
 
 - **`access`** (`string`) *(required, read-only)*
 
+**Response 401:** Wrong email or password.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/token/logout/`
 
 **Operation:** `api_token_logout_create`
@@ -71,6 +87,11 @@ blacklisted cookie leaves nothing to revoke, and the cookie is
 cleared either way.
 
 **Response 204:** No response body
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/token/refresh/`
 
@@ -86,6 +107,16 @@ the 14-day sliding window resets with each use.
 **Response 200:** 
 
 - **`access`** (`string`) *(required, read-only)*
+
+**Response 401:** No refresh cookie, or its token is invalid or expired.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### allocations
 
@@ -114,6 +145,27 @@ Return allocations belonging to the authenticated user's transactions. Filterabl
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/allocations/{id}/`
 
 **Operation:** `allocations_retrieve`
@@ -139,6 +191,21 @@ Return a single transaction allocation by UUID.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### bank-accounts
 
 #### `GET /api/v1/bank-accounts/`
@@ -162,6 +229,27 @@ Return bank accounts owned by the authenticated user. Filterable by account_type
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/bank-accounts/`
 
@@ -230,6 +318,22 @@ Create a new bank account. The authenticated user is automatically added as an o
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/bank-accounts/{id}/`
 
 **Operation:** `bank_accounts_retrieve`
@@ -261,6 +365,21 @@ Return a single bank account by UUID.
 - **`last_posted_through`** (`string`) *(required, read-only)* — Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PUT /api/v1/bank-accounts/{id}/`
 
@@ -333,6 +452,27 @@ Full update of a bank account. Only 'name' is mutable after creation -- bank, ac
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `PATCH /api/v1/bank-accounts/{id}/`
 
 **Operation:** `bank_accounts_partial_update`
@@ -404,6 +544,27 @@ Partial update of a bank account. Only 'name' is mutable after creation.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `DELETE /api/v1/bank-accounts/{id}/`
 
 **Operation:** `bank_accounts_destroy`
@@ -415,6 +576,21 @@ Delete a bank account and all associated budgets, transactions, and allocations.
 - `id` (path, required)
 
 **Response 204:** No response body
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `GET /api/v1/bank-accounts/{id}/funding-event-dates/`
 
@@ -432,6 +608,27 @@ Return all dates in (after, before] on which at least one funding or recurrence 
 
 - **`dates`** (`array`) *(required)*
 
+**Response 400:** 'after' or 'before' is missing or not a date.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/bank-accounts/{id}/funding-summary/`
 
 **Operation:** `bank_accounts_funding_summary_retrieve`
@@ -448,6 +645,21 @@ Return the total amounts that will be automatically funded at the next event for
 - **`total_amount`** (`string`) *(required)*
 - **`currency`** (`string`) *(required)*
 
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/bank-accounts/{id}/invitations/`
 
 **Operation:** `bank_accounts_invitations_list`
@@ -459,6 +671,26 @@ Returns all pending invitations for this bank account.
 - `id` (path, required)
 
 **Response 200:** 
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/bank-accounts/{id}/invitations/{token}/cancel/`
 
@@ -472,6 +704,31 @@ Cancel a pending co-ownership invitation by token. Only the user who sent the in
 - `token` (path, required) — The invitation's opaque token.
 
 **Response 200:** No response body
+
+**Response 400:** The invitation is no longer pending.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** Only the invitation's sender may cancel it, or the credentials are not interactive.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such account or invitation.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/bank-accounts/{id}/invite/`
 
@@ -496,6 +753,37 @@ Send a co-ownership invitation to the given email address. If no mibudge account
 - **`invitee_email`** (`string`) *(required)*
 
 **Response 201:** No response body
+
+**Response 409:** The address is already an owner, or has a pending invitation.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many invitations to this address for this account.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/bank-accounts/{id}/mark-imported/`
 
@@ -533,6 +821,27 @@ Record that a transaction import has been completed for this account.  Sets last
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/v1/bank-accounts/{id}/run-funding/`
 
 **Operation:** `bank_accounts_run_funding_create`
@@ -556,6 +865,35 @@ Run the funding engine for this account immediately.  Processes all due fund and
 - **`skipped_budgets`** (`array`) *(required)* — Names of paused budgets the run skipped.
 
 **Response 409:** Either another worker is currently processing this account (lock held), or there is nothing due or outstanding to run as of the supplied date.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 503:** The funding system user is not configured.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/bank-accounts/{id}/sync-scrape/`
 
@@ -597,6 +935,27 @@ Reconcile this account against a fresh snapshot from a live bank scraper.  All e
 - **`new_transaction_ids`** (`array`) *(required)*
 - **`details_needed`** (`array`) *(required)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/v1/bank-accounts/{id}/transaction-details/`
 
 **Operation:** `bank_accounts_transaction_details_create`
@@ -630,6 +989,27 @@ Apply per-transaction detail records (merchant name, location, MCC, virtual card
 - **`not_found`** (`integer`) *(required)*
 - **`results`** (`array`) *(required)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### banks
 
 #### `GET /api/v1/banks/`
@@ -651,6 +1031,21 @@ Return all banks in the system. Banks are shared reference data managed through 
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/banks/{id}/`
 
 **Operation:** `banks_retrieve`
@@ -669,6 +1064,21 @@ Return a single bank by UUID.
 - **`default_currency`** (`string`) *(required, read-only)* — ISO 4217 currency code (e.g. USD, EUR, GBP).
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### budgets
 
@@ -698,6 +1108,27 @@ Return budgets belonging to the authenticated user's accounts. Filterable by ban
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/budgets/`
 
@@ -797,6 +1228,22 @@ Create a new budget under a bank account. Required: name, bank_account (UUID), b
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_retrieve`
@@ -841,6 +1288,21 @@ Return a single budget by UUID.
 - **`funding_pace`** (``) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PUT /api/v1/budgets/{id}/`
 
@@ -945,6 +1407,27 @@ Full update of a budget. bank_account and budget_type are immutable. The unalloc
 - **`modified_at`** (`string`) *(required, read-only)*
 - **`warnings`** (`array`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `PATCH /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_partial_update`
@@ -1048,6 +1531,27 @@ Partial update of a budget. bank_account and budget_type are immutable. The unal
 - **`modified_at`** (`string`) *(required, read-only)*
 - **`warnings`** (`array`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `DELETE /api/v1/budgets/{id}/`
 
 **Operation:** `budgets_destroy`
@@ -1059,6 +1563,32 @@ Delete a budget and its fill-up goal. The unallocated budget cannot be deleted (
 - `id` (path, required)
 
 **Response 204:** No response body
+
+**Response 400:** The budget has transaction allocations; archive it instead.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 403:** The unallocated budget cannot be deleted or archived.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/budgets/{id}/archive/`
 
@@ -1105,6 +1635,32 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** The budget is already archived.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 403:** The unallocated budget cannot be deleted or archived.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### channel-preferences
 
 #### `GET /api/v1/channel-preferences/`
@@ -1114,6 +1670,16 @@ Archive a budget. Any remaining balance is transferred to the account's unalloca
 Return all notification channels with the authenticated user's delivery preferences. Channels without a stored preference fall back to DAILY_MORNING.
 
 **Response 200:** 
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PATCH /api/v1/channel-preferences/{channel}/`
 
@@ -1163,6 +1729,27 @@ Set the digest_frequency for a notification channel. Returns 404 if the channel 
 * `weekly_saturday` - Weekly on Saturday
 * `weekly_sunday` - Weekly on Sunday Enum: ['daily_morning', 'daily_evening', 'twice_daily', 'weekly_friday', 'weekly_saturday', 'weekly_sunday']
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### currencies
 
 #### `GET /api/v1/currencies/`
@@ -1172,6 +1759,16 @@ Set the digest_frequency for a notification channel. Returns 404 if the channel 
 Return all ISO 4217 currency codes supported by the system, sorted by code. Each entry includes the code, English name, and numeric ISO 4217 code. Requires authentication.
 
 **Response 200:** 
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### funding-occurrences
 
@@ -1206,6 +1803,27 @@ Return funding event occurrences for budgets on accounts owned by the authentica
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/funding-occurrences/{id}/`
 
 **Operation:** `funding_occurrences_retrieve`
@@ -1226,6 +1844,21 @@ Return a single funding event occurrence by UUID.
 - **`completed_at`** (`string`) *(required, read-only)* — Wall-clock time the occurrence reached COMPLETE.  Null while PENDING/PARTIAL/SKIPPED.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### internal-transactions
 
@@ -1253,6 +1886,27 @@ Return budget-to-budget transfers belonging to the authenticated user's accounts
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/internal-transactions/`
 
@@ -1301,6 +1955,22 @@ Transfer money between two budgets in the same bank account. Required: bank_acco
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/internal-transactions/{id}/`
 
 **Operation:** `internal_transactions_retrieve`
@@ -1328,6 +1998,21 @@ Return a single internal transaction by UUID.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### invitations
 
 #### `GET /api/v1/invitations/{token}/`
@@ -1351,6 +2036,21 @@ Return bank account name, current owners, and invitee status for the invitation 
 - **`is_new_user`** (`boolean`) *(required, read-only)*
 - **`expires_at`** (`string`) *(required, read-only)*
 
+**Response 404:** Invitation not found.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/v1/invitations/{token}/accept/`
 
 **Operation:** `invitations_accept_create`
@@ -1365,7 +2065,23 @@ Accept the co-ownership invitation identified by *token*. Adds the invitee to th
 
 **Response 400:** Invitation expired, cancelled, or already resolved.
 
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 **Response 404:** Invitation not found.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/invitations/{token}/decline/`
 
@@ -1381,7 +2097,23 @@ Decline the co-ownership invitation identified by *token*. No authentication req
 
 **Response 400:** Invitation expired, cancelled, or already resolved.
 
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 **Response 404:** Invitation not found.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### notification-preferences
 
@@ -1392,6 +2124,16 @@ Decline the co-ownership invitation identified by *token*. No authentication req
 Return all registered notification kinds merged with the authenticated user's preferences. Kinds without a stored preference fall back to the registry default_delivery_mode.
 
 **Response 200:** 
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PATCH /api/v1/notification-preferences/{kind}/`
 
@@ -1430,6 +2172,27 @@ Set delivery_mode ('digest', 'immediate', or 'off') for a single notification ki
 * `immediate` - Immediate
 * `off` - Off Enum: ['digest', 'immediate', 'off']
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### transaction-categories
 
 #### `GET /api/v1/transaction-categories/`
@@ -1456,6 +2219,27 @@ Return the transaction categories visible to the authenticated user: the global 
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/transaction-categories/`
 
@@ -1489,6 +2273,22 @@ Create a custom category owned by the authenticated user (global categories are 
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/transaction-categories/{id}/`
 
 **Operation:** `transaction_categories_retrieve`
@@ -1509,6 +2309,21 @@ Return a single visible category by UUID.
 - **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PUT /api/v1/transaction-categories/{id}/`
 
@@ -1546,6 +2361,32 @@ Full update of a category.  Only the owner may update; global categories are man
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 403:** The category is global or owned by someone else; only its owner may change it.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `PATCH /api/v1/transaction-categories/{id}/`
 
 **Operation:** `transaction_categories_partial_update`
@@ -1582,6 +2423,32 @@ Partial update of a category.  Only the owner may update; global categories are 
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 403:** The category is global or owned by someone else; only its owner may change it.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `DELETE /api/v1/transaction-categories/{id}/`
 
 **Operation:** `transaction_categories_destroy`
@@ -1594,7 +2461,30 @@ Delete a category.  Only the owner may delete; global categories are managed via
 
 **Response 204:** No response body
 
+**Response 403:** The category is global or owned by someone else; only its owner may change it.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 **Response 409:** The category is referenced by transactions or allocations; archive it instead.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/transaction-categories/{id}/archive/`
 
@@ -1616,6 +2506,26 @@ Archive a category so pickers hide it while existing references stay valid.  Onl
 - **`archived`** (`boolean`) *(required, read-only)* — Archived categories are hidden from pickers but remain valid on existing transactions and allocations.
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 403:** The category is global or owned by someone else; only its owner may change it.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### transactions
 
@@ -1680,6 +2590,27 @@ Return transactions belonging to the authenticated user's accounts, each with al
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/transactions/`
 
@@ -1794,6 +2725,22 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_retrieve`
@@ -1844,6 +2791,21 @@ Return a single transaction by UUID, with all of its allocations embedded.
 - **`document`** (`string`)
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PUT /api/v1/transactions/{id}/`
 
@@ -1962,6 +2924,27 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `PATCH /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_partial_update`
@@ -2079,6 +3062,27 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `DELETE /api/v1/transactions/{id}/`
 
 **Operation:** `transactions_destroy`
@@ -2090,6 +3094,21 @@ Delete a transaction. Balance changes are reversed by the pre_delete signal. Ass
 - `id` (path, required)
 
 **Response 204:** No response body
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/transactions/{id}/resolve-pending/`
 
@@ -2157,6 +3176,27 @@ Transition a pending transaction to posted status. Supplies the bank-confirmed p
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/v1/transactions/{id}/splits/`
 
 **Operation:** `transactions_splits_create`
@@ -2181,6 +3221,27 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 
 **Response 200:** 
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 ### users
 
 #### `GET /api/v1/users/`
@@ -2202,6 +3263,26 @@ Return all users. Restricted to staff/admin users.
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
 
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/users/{username}/`
 
 **Operation:** `users_retrieve`
@@ -2221,6 +3302,26 @@ Return a single user by username. Restricted to staff/admin users.
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
 - **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PUT /api/v1/users/{username}/`
 
@@ -2260,6 +3361,32 @@ Full update of a user profile. Restricted to staff/admin users.
 - **`timezone`** (`string`)
 - **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `PATCH /api/v1/users/{username}/`
 
 **Operation:** `users_partial_update`
@@ -2298,6 +3425,32 @@ Partial update of a user profile. Restricted to staff/admin users.
 - **`timezone`** (`string`)
 - **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/users/me/`
 
 **Operation:** `users_me_retrieve`
@@ -2313,6 +3466,16 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
 - **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `PATCH /api/v1/users/me/`
 
@@ -2348,6 +3511,27 @@ GET returns the authenticated user's own profile. PATCH allows updating the name
 - **`timezone`** (`string`)
 - **`has_usable_password`** (`boolean`) *(required, read-only)* — Return True if the user has a usable (non-unusable) password set.
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/users/me/api-keys/`
 
 **Operation:** `users_me_api_keys_list`
@@ -2365,6 +3549,26 @@ Return all API keys (active, expired, and revoked) belonging to the authenticate
 - **`next`** (`string`)
 - **`previous`** (`string`)
 - **`results`** (`array`) *(required)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** Invalid page.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/users/me/api-keys/`
 
@@ -2400,6 +3604,27 @@ The response is the **only** time the plaintext ``key`` is returned; it cannot b
 - **`created_at`** (`string`) *(required, read-only)*
 - **`key`** (`string`) *(required, read-only)*
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/users/me/api-keys/{uuid}/`
 
 **Operation:** `users_me_api_keys_retrieve`
@@ -2419,6 +3644,26 @@ Return a single API key by its UUID.
 - **`last_used_at`** (`string`) *(required, read-only)*
 - **`revoked_at`** (`string`) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/users/me/api-keys/{uuid}/revoke/`
 
@@ -2440,6 +3685,31 @@ Permanently revoke an API key.  Revoked keys stop authenticating immediately but
 - **`revoked_at`** (`string`) *(required, read-only)*
 - **`created_at`** (`string`) *(required, read-only)*
 
+**Response 400:** The key is already revoked.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 404:** No such object.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/v1/users/me/change-email/`
 
 **Operation:** `users_me_change_email_create`
@@ -2460,6 +3730,33 @@ Initiate a self-service email change.  Sends a verification link to the new addr
 
 **Response 201:** No response body
 
+**Response 403:** The account has no password yet, or the credentials are not interactive.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 409:** The address is taken ('new_email'), or a revocation window is still open ('detail').
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `POST /api/v1/users/me/change-email/{token}/confirm/`
 
 **Operation:** `users_me_change_email_confirm_create`
@@ -2473,6 +3770,26 @@ Verify a pending email change using the token from the verification link sent to
 - `token` (path, required) — The email-change verification token.
 
 **Response 200:** No response body
+
+**Response 400:** The link is unknown, expired, revoked or already used.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 409:** The address was taken meanwhile.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/users/me/change-email/{token}/revoke/`
 
@@ -2489,6 +3806,21 @@ On post-confirmation revocation the email is reverted and all active sessions ar
 - `token` (path, required) — The email-change revocation token.
 
 **Response 200:** No response body
+
+**Response 400:** The link is unknown, or its revocation window has closed.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 #### `POST /api/v1/users/me/change-password/`
 
@@ -2516,6 +3848,27 @@ Change the authenticated user's password. Requires the current password for veri
 
 **Response 204:** No response body
 
+**Response 400:** Invalid input.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
 #### `GET /api/v1/users/me/invitations/`
 
 **Operation:** `users_me_invitations_list`
@@ -2523,6 +3876,21 @@ Change the authenticated user's password. Requires the current password for veri
 Return all pending co-ownership invitations sent by the authenticated user, across all accounts.
 
 **Response 200:** 
+
+**Response 401:** Missing or invalid credentials.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 403:** The credentials are not allowed to do this.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
+
+**Response 429:** Too many requests.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ## Schemas
 
@@ -2887,6 +4255,13 @@ field in the login payload and passes it to EmailBackend.authenticate().
 
 - **`email`** (`string`) *(required)*
 - **`password`** (`string`) *(required)*
+
+### Error
+
+DRF's error body for everything but a validation failure.
+
+- **`detail`** (`string`) *(required)* — Human-readable reason.
+- **`code`** (`string`) — Machine-readable reason, when given.
 
 ### FundingEventDates
 
@@ -3667,4 +5042,12 @@ whether to enable the change-email and change-password forms.
 - **`name`** (`string`)
 - **`default_bank_account`** (`string`)
 - **`timezone`** (`string`)
+
+### ValidationError
+
+Field name to messages (`non_field_errors` for errors not tied to one field), or a list of messages.
+
+One of:
+- `map of string | array of any | object`
+- `array of string`
 
