@@ -33,6 +33,12 @@ servers) is planned as the next phase of machine authentication.
   calls `POST /api/token/refresh/` -- the browser sends the httpOnly cookie
   automatically, returning a new access token and rotating the refresh
   cookie.
+- **Sign-out**: `POST /api/token/logout/` (`CookieTokenLogoutView`)
+  blacklists the refresh token in the cookie and expires the cookie, so a
+  reload does not sign the user back in. It always answers 204, with or
+  without a valid cookie. The access token in the tab is dropped from
+  memory; it would stay valid for the rest of its 60 minutes, but nothing
+  holds it any more.
 - **django-allauth**: remains mounted at `/accounts/` for password reset
   only (`/accounts/password/reset/`); it is not part of the SPA login path.
   The allauth templates are plain Django-rendered pages -- they do not use

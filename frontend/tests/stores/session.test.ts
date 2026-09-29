@@ -117,7 +117,7 @@ describe("loadUser", () => {
     session.user = null;
     const pending = session.loadUser();
 
-    session.logout();
+    session.endSession();
     await pending;
 
     expect(session.user).toBeNull();
@@ -168,13 +168,35 @@ describe("timezone", () => {
 describe("logout", () => {
   // GIVEN: a logged-in store
   // WHEN:  the user signs out
-  // THEN:  the token and user are dropped and it reports unauthenticated
+  // THEN:  the server is asked to revoke the refresh cookie
+  //  AND:  the token and user are dropped and it reports unauthenticated
   //
-  it("drops the token and the user", () => {
+  it("revokes the refresh cookie and drops the token and the user", async () => {
     const session = withAuth();
-    session.logout();
+
+    await session.logout();
+
+    expect(await requestsTo("POST", "/api/token/logout/")).toHaveLength(1);
     expect(session.accessToken).toBeNull();
     expect(session.user).toBeNull();
+    expect(session.isAuthenticated).toBe(false);
+  });
+
+  // GIVEN: a logged-in store and a logout endpoint that fails
+  // WHEN:  the user signs out
+  // THEN:  the session still ends
+  //
+  it("ends the session when the server call fails", async () => {
+    const session = withAuth();
+    server.use(
+      http.post(
+        "/api/token/logout/",
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+
+    await session.logout();
+
     expect(session.isAuthenticated).toBe(false);
   });
 

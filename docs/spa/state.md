@@ -14,7 +14,7 @@ holds models from `models/`, never DTOs, and defines `reset()`.
 
 | Store (`use…Store`) | File                       | Responsibility                                                                                                                                    |
 |---------------------|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `session`           | `stores/session.ts`        | The in-memory access token, the signed-in `user`, `isAuthenticated` and the profile `timezone`. Sign-in (`login`), token renewal (`renewToken`, `refresh`), `loadUser`, `updateProfile`, `logout`. Also builds the session-wired HTTP client (`createSessionHttpClient`). |
+| `session`           | `stores/session.ts`        | The in-memory access token, the signed-in `user`, `isAuthenticated` and the profile `timezone`. Sign-in (`login`), token renewal (`renewToken`, `refresh`), `loadUser`, `updateProfile`, `logout`, `endSession`. Also builds the session-wired HTTP client (`createSessionHttpClient`). |
 | `bankAccounts`      | `stores/bankAccounts.ts`   | The user's bank accounts, in list order. `loadAll`, `refresh`, `invalidate`, `fetchOne`, `create`, `update`, `remove`; read with `all` and `byId`. |
 | `accountContext`    | `stores/accountContext.ts` | Which account the user is looking at: `activeBankAccountId`, `activeBankAccount`, `unallocatedBudgetId`. `init()` picks the account: the one stored for this tab, else the user's default, else the first. `refresh()` moves off a deleted account. The choice persists per tab in `sessionStorage`. |
 | `budgets`           | `stores/budgets.ts`        | Budgets keyed by id. `fetchOne`, `fetchList` (every page), `refreshAccount`, `create`, `update`, `archive`, `transfer`; read with `byId`, `forAccount`, `names`. |
@@ -134,13 +134,17 @@ A text field that saves after the user stops typing uses
 created. `resetAllStores(pinia)` then calls every recorded store's
 `reset()`.
 
-`session.logout()` calls `resetAllStores`. It runs on:
+`session.endSession()` calls `resetAllStores`. It runs on:
 
-- **Sign-out.** `features/auth/useSignOut.ts` calls `logout()`, then
-  navigates to the login page.
+- **Sign-out.** `features/auth/useSignOut.ts` awaits `logout()`, which
+  posts to `/api/token/logout/` so the server revokes the refresh cookie,
+  then calls `endSession()`; the reset happens even when that request
+  fails. The login page opens after `logout()` finishes, so the
+  cookie-clearing answer cannot land after a new sign-in.
 - **Session end.** When a token refresh fails, the session-wired HTTP
-  client calls `logout()` before `main.ts`'s `onAuthFailure` redirects
-  to `/app/login/?next=<path>`.
+  client calls `endSession()` before `main.ts`'s `onAuthFailure`
+  redirects to `/app/login/?next=<path>`. The cookie is already dead, so
+  no logout request is sent.
 
 After a reset no cached account, budget, navigation list or
 stored active-account id survives into the next user's session in the
@@ -161,9 +165,6 @@ The budgets and bank-accounts stores do this; the session store compares
 its own in-flight promise instead.
 `tests/stores/reset.test.ts` checks that a late answer leaves the store
 empty.
-
-The refresh cookie stays valid after sign-out until it expires. There is
-no server-side logout endpoint yet.
 
 ---
 

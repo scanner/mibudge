@@ -96,6 +96,7 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 | `/api/v1/` | DRF REST API v1 (JWT-authenticated) |
 | `/api/token/` | `TokenObtainPairView` -- JWT access+refresh pair (cross-version) |
 | `/api/token/refresh/` | `CookieTokenRefreshView` -- silent JWT refresh from httpOnly cookie (cross-version) |
+| `/api/token/logout/` | `CookieTokenLogoutView` -- sign-out: blacklists the cookie's refresh token and clears the cookie (cross-version) |
 | `/api/v1/schema/` | drf-spectacular -- OpenAPI schema for v1 (YAML) |
 | `/api/v1/schema/swagger-ui/` | drf-spectacular -- Swagger UI (interactive docs) |
 | `/api/v1/schema/redoc/` | drf-spectacular -- ReDoc (interactive docs) |
@@ -105,7 +106,7 @@ Django project root is `app/`. Settings live in a single file `app/config/settin
 
 Two-token JWT pattern:
 - **Access token**: short-lived (60 min), stored in JS memory only, sent as `Authorization: Bearer` header.
-- **Refresh token**: long-lived (14 days sliding), httpOnly cookie, refreshed via `/api/token/refresh/`.
+- **Refresh token**: long-lived (14 days sliding), httpOnly cookie, refreshed via `/api/token/refresh/` and revoked on sign-out via `/api/token/logout/`.
 
 The SPA's `session` Pinia store holds the access token; the HTTP client in `frontend/src/api/http.ts` (wired to the store by `createSessionHttpClient()`) attaches it, and when a request gets 401 it refreshes the access token once (single-flight, so concurrent 401s share one `POST /api/token/refresh/`) and retries the request with the new token. A failed refresh resets every store and redirects to `/app/login/?next=<path>`.
 

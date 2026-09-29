@@ -47,6 +47,22 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/token/logout/:
+    post:
+      operationId: api_token_logout_create
+      description: |-
+        Sign-out endpoint: blacklists the refresh token in the httpOnly
+        cookie and expires the cookie, so a reload cannot sign the user
+        back in.
+
+        Always answers 204.  A missing, invalid, expired or already
+        blacklisted cookie leaves nothing to revoke, and the cookie is
+        cleared either way.
+      tags:
+      - api
+      responses:
+        '204':
+          description: No response body
   /api/token/refresh/:
     post:
       operationId: api_token_refresh_create

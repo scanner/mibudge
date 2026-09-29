@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Signing out now ends the session on the server: `POST /api/token/logout/` revokes the refresh token and clears its cookie, so reloading the page or reopening the app no longer signs you straight back in
 - Creating a budget, transaction or internal transaction checked only that the named bank account existed, not that you owned it, so any logged-in user or API key that knew another account's UUID could create objects in it and change its balances. The `bank_account` field on these create endpoints now accepts only accounts you own (an account you do not own gets the same 400 "does not exist" error as a nonexistent one), and the views re-check ownership of every account-owned object in the request before creating anything. A budget's `fillup_goal` is now read-only in the API; the budget service manages it
 
 ## [0.2.0] - 2026-07-12

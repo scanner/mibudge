@@ -1,4 +1,4 @@
-"""Tests for JWT-related auth views: CookieTokenObtainPairView, CookieTokenRefreshView, SpaShellView."""
+"""Tests for JWT-related auth views: token obtain, refresh, logout, SpaShellView."""
 
 # system imports
 #
@@ -218,6 +218,72 @@ class TestCookieTokenRefreshView:
             response = client.post(reverse("token-refresh"))
 
         assert response.status_code == 401
+
+
+########################################################################
+########################################################################
+#
+class TestCookieTokenLogoutView:
+    """Tests for CookieTokenLogoutView -- server-side SPA sign-out."""
+
+    ####################################################################
+    #
+    def test_logout_revokes_refresh_token_and_clears_cookie(
+        self, client: Client, login_response: tuple[User, "Response"]
+    ) -> None:
+        """
+        GIVEN: a user signed in through POST /api/token/
+        WHEN:  POST /api/token/logout/
+        THEN:  the response is 204 and expires the refresh cookie
+         AND:  the refresh token that was in the cookie no longer
+               refreshes
+        """
+        _, login = login_response
+        refresh_token = login.cookies[REFRESH_COOKIE_NAME].value
+
+        response = client.post(reverse("token-logout"))
+
+        check.equal(response.status_code, 204, "no content")
+        check.equal(
+            response.cookies[REFRESH_COOKIE_NAME]["max-age"],
+            0,
+            "refresh cookie expired",
+        )
+        client.cookies[REFRESH_COOKIE_NAME] = refresh_token
+        check.equal(
+            client.post(reverse("token-refresh")).status_code,
+            401,
+            "revoked token does not refresh",
+        )
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "cookie_value",
+        [
+            pytest.param(None, id="no-cookie"),
+            pytest.param("not.a.valid.jwt", id="invalid-cookie"),
+        ],
+    )
+    def test_missing_or_invalid_cookie_returns_204(
+        self, client: Client, cookie_value: str | None
+    ) -> None:
+        """
+        GIVEN: a request with no refresh cookie or an invalid one
+        WHEN:  POST /api/token/logout/
+        THEN:  the response is 204 and still expires the refresh cookie
+        """
+        if cookie_value is not None:
+            client.cookies[REFRESH_COOKIE_NAME] = cookie_value
+
+        response = client.post(reverse("token-logout"))
+
+        check.equal(response.status_code, 204, "no content")
+        check.equal(
+            response.cookies[REFRESH_COOKIE_NAME]["max-age"],
+            0,
+            "refresh cookie expired",
+        )
 
 
 ########################################################################

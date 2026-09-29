@@ -171,8 +171,9 @@ SPA calls, with paths and shapes from `docs/openapi.yaml` (list them with
 `grep -n '^  /api' docs/openapi.yaml`). List endpoints return DRF's
 `{count, next, previous, results}` envelope with one factory-built item;
 detail endpoints echo the requested id; `PATCH`/`POST` handlers echo the
-submitted fields. `POST /api/token/` returns `LOGIN_TOKEN` and
-`POST /api/token/refresh/` returns `REFRESHED_TOKEN`.
+submitted fields. `POST /api/token/` returns `LOGIN_TOKEN`,
+`POST /api/token/refresh/` returns `REFRESHED_TOKEN` and
+`POST /api/token/logout/` returns 204.
 
 The defaults do not check the `Authorization` header; a test that needs a
 401 installs one (below).

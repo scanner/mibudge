@@ -15,6 +15,7 @@ import { api, AuthError, initApi } from "@/api";
 import { createAppRouter, redirectToLogin, routes } from "@/router";
 import { createSessionHttpClient, useSessionStore } from "@/stores/session";
 import { expire, respondOnce401, TEST_TOKEN, withAuth } from "../helpers";
+import { requestsTo } from "../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -141,7 +142,7 @@ describe("session end", () => {
   // GIVEN: a signed-in user on a protected page whose session has
   //        expired on the server (access token and refresh cookie)
   // WHEN:  any API request fails its refresh
-  // THEN:  every store is reset
+  // THEN:  every store is reset without a sign-out request
   //  AND:  the user is sent to the login page with the page as `next`
   //
   it("redirects to login with a return path", async () => {
@@ -163,6 +164,7 @@ describe("session end", () => {
     );
     expect(router.currentRoute.value.query.next).toBe("/budgets/?tab=paused");
     expect(useSessionStore().isAuthenticated).toBe(false);
+    expect(await requestsTo("POST", "/api/token/logout/")).toHaveLength(0);
   });
 
   // GIVEN: a visitor on a public page

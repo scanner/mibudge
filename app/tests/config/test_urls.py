@@ -29,6 +29,13 @@ class TestRootURLs:
                 id="token-refresh",
             ),
             pytest.param(
+                "token-logout",
+                {},
+                "/api/token/logout/",
+                "token-logout",
+                id="token-logout",
+            ),
+            pytest.param(
                 "spa-shell",
                 {},
                 "/app/",

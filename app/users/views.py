@@ -15,10 +15,12 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import DetailView, RedirectView, UpdateView
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import (
+    TokenBlacklistView,
     TokenObtainPairView,
     TokenRefreshView,
 )
@@ -48,7 +50,8 @@ User = get_user_model()
 ########################################################################
 #
 # Cookie name used for the httpOnly refresh token throughout the auth flow.
-# Shared by CookieTokenObtainPairView and CookieTokenRefreshView.
+# Shared by CookieTokenObtainPairView, CookieTokenRefreshView and
+# CookieTokenLogoutView.
 #
 REFRESH_COOKIE_NAME = "refresh_token"
 
@@ -117,6 +120,21 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         REFRESH_COOKIE_NAME,
         refresh_token,
         max_age=int(lifetime.total_seconds()),
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Strict",
+    )
+
+
+########################################################################
+########################################################################
+#
+def _clear_refresh_cookie(response: Response) -> None:
+    """Expire the httpOnly refresh cookie on `response`."""
+    response.set_cookie(
+        REFRESH_COOKIE_NAME,
+        "",
+        max_age=0,
         httponly=True,
         secure=not settings.DEBUG,
         samesite="Strict",
@@ -199,6 +217,42 @@ class CookieTokenRefreshView(TokenRefreshView):
 
 
 cookie_token_refresh_view = CookieTokenRefreshView.as_view()
+
+
+########################################################################
+########################################################################
+#
+class CookieTokenLogoutView(TokenBlacklistView):
+    """
+    Sign-out endpoint: blacklists the refresh token in the httpOnly
+    cookie and expires the cookie, so a reload cannot sign the user
+    back in.
+
+    Always answers 204.  A missing, invalid, expired or already
+    blacklisted cookie leaves nothing to revoke, and the cookie is
+    cleared either way.
+    """
+
+    ####################################################################
+    #
+    @extend_schema(request=None, responses={204: None})
+    def post(
+        self, request: HttpRequest, *args: object, **kwargs: object
+    ) -> Response:
+        refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+        if refresh_token:
+            serializer = self.get_serializer(data={"refresh": refresh_token})
+            try:
+                serializer.is_valid()
+            except TokenError:
+                pass
+
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        _clear_refresh_cookie(response)
+        return response
+
+
+cookie_token_logout_view = CookieTokenLogoutView.as_view()
 
 
 ########################################################################

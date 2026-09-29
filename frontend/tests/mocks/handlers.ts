@@ -72,6 +72,7 @@ export const handlers = [
   //
   http.post("/api/token/", () => json({ access: LOGIN_TOKEN })),
   http.post("/api/token/refresh/", () => json({ access: REFRESHED_TOKEN })),
+  http.post("/api/token/logout/", () => noContent()),
 
   // Users.
   //

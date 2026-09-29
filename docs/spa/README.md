@@ -51,10 +51,6 @@ current behaviour:
   what a page shows only when the page next loads its data. Nothing
   pushes changes to an open page
   ([state.md](state.md#caching-and-invalidation)).
-- **Sign-out is client-side.** Signing out clears the tab's state, but
-  the refresh cookie stays valid until it expires, because the API has
-  no logout endpoint
-  ([state.md](state.md#sign-out-resets-every-store)).
 - **Hand-written response types.** A few endpoints have no named
   response schema in `docs/openapi.yaml`, so their DTOs are taken from
   inline operation types or written by hand in `api/dto.ts`

@@ -63,9 +63,10 @@ beforeEach(() => {
 describe("AccountView", () => {
   // GIVEN: a signed-in user with cached budgets and a remembered list
   // WHEN:  they sign out
-  // THEN:  every store is emptied and the login page opens
+  // THEN:  the refresh cookie is revoked, every store is emptied and
+  //        the login page opens
   //
-  it("sign-out resets every store", async () => {
+  it("sign-out revokes the cookie and resets every store", async () => {
     const { wrapper, router } = await open("/account/");
     expect(wrapper.text()).toContain("AL");
     useBudgetsStore().upsert(budgetFromDto(makeBudget()));
@@ -80,6 +81,34 @@ describe("AccountView", () => {
     expect(useBudgetsStore().all).toEqual([]);
     expect(useTransactionNavStore().orderedIds).toEqual([]);
     expect(useAccountContextStore().accounts).toEqual([]);
+    expect(await requestsTo("POST", "/api/token/logout/")).toHaveLength(1);
+  });
+
+  // GIVEN: a signed-in user whose sign-out request has not answered
+  // WHEN:  they sign out
+  // THEN:  the login page waits for the answer, so a late
+  //        cookie-clearing response cannot land after a new sign-in
+  //
+  it("opens the login page only after the server answers", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post("/api/token/logout/", async () => {
+        await gate;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { wrapper, router } = await open("/account/");
+
+    await button(wrapper, "Sign out").trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.name).not.toBe("login");
+    expect(useSessionStore().isAuthenticated).toBe(true);
+
+    release();
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.name).toBe("login"),
+    );
   });
 
   // GIVEN: an account with a funding event

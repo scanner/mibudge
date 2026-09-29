@@ -12,6 +12,7 @@ from drf_spectacular.views import (
 
 from config.views import home_view, spa_shell_view
 from users.views import (
+    cookie_token_logout_view,
     cookie_token_obtain_pair_view,
     cookie_token_refresh_view,
 )
@@ -89,8 +90,11 @@ urlpatterns = [
     #                        token in the JSON body. Browser SPA flow.
     # /api/token/refresh/ -- reads refresh token from httpOnly cookie, returns
     #                        new access token (browser SPA flow).
+    # /api/token/logout/  -- blacklists the refresh token in the cookie and
+    #                        clears the cookie (browser SPA sign-out).
     path("api/token/", cookie_token_obtain_pair_view, name="token-obtain"),
     path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
+    path("api/token/logout/", cookie_token_logout_view, name="token-logout"),
     # OpenAPI schema + interactive docs for v1. The schema necessarily
     # describes one API version, so it lives under that version's prefix.
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),
