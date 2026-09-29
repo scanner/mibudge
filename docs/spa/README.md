@@ -51,9 +51,6 @@ current behaviour:
   what a page shows only when the page next loads its data. Nothing
   pushes changes to an open page
   ([state.md](state.md#caching-and-invalidation)).
-- **Allocations load per account.** The transaction list API does not
-  embed allocations, so the list fetches every allocation of the account
-  on each visit ([state.md](state.md#caching-and-invalidation)).
 - **Sign-out is client-side.** Signing out clears the tab's state, but
   the refresh cookie stays valid until it expires, because the API has
   no logout endpoint

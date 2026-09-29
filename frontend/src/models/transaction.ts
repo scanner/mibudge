@@ -12,6 +12,8 @@ import type {
 } from "@/api/dto";
 import type { TransactionType } from "@/domain/labels";
 import { DEFAULT_CURRENCY, Money } from "@/domain/money";
+import type { Allocation } from "@/models/allocation";
+import { allocationFromDto } from "@/models/allocation";
 import type { Equal, Expect } from "@/models/schemaCheck";
 
 export type TransactionTypeMatchesSchema = Expect<
@@ -61,6 +63,9 @@ export interface Transaction {
   merchant: Merchant;
   virtualCardNumber: string | null;
   hasDetails: boolean;
+  // Every allocation of the transaction, oldest first.  The server
+  // embeds them in list and detail responses.
+  allocations: Allocation[];
   bankTransactionId: string | null;
   // The counterpart transaction on another account (e.g. a card
   // payment's credit on the card), when the importer linked one.
@@ -106,6 +111,7 @@ export function transactionFromDto(dto: TransactionDto): Transaction {
     },
     virtualCardNumber: dto.virtual_card_number ?? null,
     hasDetails: dto.has_details ?? false,
+    allocations: dto.allocations.map(allocationFromDto),
     bankTransactionId: dto.bank_transaction_id ?? null,
     // The schema marks this non-null; the server sends `null` for an
     // unlinked transaction.
@@ -144,16 +150,6 @@ export function displayName(
   tx: Pick<Transaction, "party" | "description" | "rawDescription">,
 ): string {
   return tx.party || tx.description || tx.rawDescription;
-}
-
-////////////////////////////////////////////////////////////////////////
-//
-// Newest first by occurrence, then by creation.
-//
-export function compareNewestFirst(a: Transaction, b: Transaction): number {
-  const [da, db] = [occurredAt(a), occurredAt(b)];
-  if (da !== db) return da > db ? -1 : 1;
-  return a.createdAt > b.createdAt ? -1 : a.createdAt < b.createdAt ? 1 : 0;
 }
 
 ////////////////////////////////////////////////////////////////////////

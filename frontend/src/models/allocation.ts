@@ -47,22 +47,6 @@ export function allocationFromDto(dto: AllocationDto): Allocation {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// Allocations grouped by transaction id, in list order.
-//
-export function indexByTransaction(
-  allocations: Iterable<Allocation>,
-): Map<string, Allocation[]> {
-  const map = new Map<string, Allocation[]>();
-  for (const a of allocations) {
-    const list = map.get(a.transactionId);
-    if (list) list.push(a);
-    else map.set(a.transactionId, [a]);
-  }
-  return map;
-}
-
-////////////////////////////////////////////////////////////////////////
-//
 // True when nothing is assigned to a real budget: no allocations, or
 // all of them on Unallocated / no budget.  Callers that have not loaded
 // a transaction's allocations must not ask.

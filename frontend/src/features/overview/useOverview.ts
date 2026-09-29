@@ -16,8 +16,6 @@ import { computed } from "vue";
 //
 import { api } from "@/api";
 import { useResource } from "@/composables/useResource";
-import type { Allocation } from "@/models/allocation";
-import { allocationFromDto } from "@/models/allocation";
 import type { FundingSummary } from "@/models/bankAccount";
 import { fundingSummaryFromDto } from "@/models/bankAccount";
 import type { Budget } from "@/models/budget";
@@ -35,7 +33,6 @@ const RECENT_COUNT = 5;
 interface Loaded {
   budgetIds: string[];
   recent: Transaction[];
-  allocationsByTx: Map<string, Allocation[]>;
   summary: FundingSummary;
 }
 
@@ -61,19 +58,9 @@ export function useOverview() {
         }),
         api.bankAccounts.fundingSummary(accountId),
       ]);
-      const recent = txPage.results.map(transactionFromDto);
-      // One allocation request per recent transaction, in parallel, so
-      // each row can show its budgets.
-      const pages = await Promise.all(
-        recent.map((tx) => api.allocations.list({ transaction: tx.id })),
-      );
-      const allocationsByTx = new Map(
-        recent.map((tx, i) => [tx.id, pages[i].results.map(allocationFromDto)]),
-      );
       return {
         budgetIds: budgets.map((b) => b.id),
-        recent,
-        allocationsByTx,
+        recent: txPage.results.map(transactionFromDto),
         summary: fundingSummaryFromDto(summary),
       };
     },
@@ -110,9 +97,6 @@ export function useOverview() {
     unallocated,
     budgetNames: computed(() => store.names),
     recentTransactions: computed(() => resource.data.value?.recent ?? []),
-    allocationsByTx: computed(
-      () => resource.data.value?.allocationsByTx ?? new Map(),
-    ),
     summary: computed(() => resource.data.value?.summary ?? null),
     loading: resource.loading,
     error: resource.error,

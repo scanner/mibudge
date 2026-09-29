@@ -51,7 +51,6 @@ const {
   unallocated,
   budgetNames,
   recentTransactions: recentTx,
-  allocationsByTx: allocsByTx,
   summary,
   loading,
   error,
@@ -220,7 +219,6 @@ function openTransaction(id: string) {
               v-for="tx in recentTx"
               :key="tx.id"
               :transaction="tx"
-              :allocations="allocsByTx.get(tx.id)"
               :budget-names="budgetNames"
               :unallocated-budget-id="ctx.unallocatedBudgetId"
               @select="openTransaction"

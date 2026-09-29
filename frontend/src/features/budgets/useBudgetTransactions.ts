@@ -3,12 +3,12 @@
 // optionally mixed with its transfers, searchable and grouped by date.
 // Feature composable (budgets).
 //
-// The API lists allocations by budget but has no endpoint returning a
-// budget's transactions, so each transaction is fetched by id (at most
-// `CONCURRENCY` at a time).  A transaction only partly allocated here
-// is a split; its other allocations are fetched so the row can show
-// every budget.  Everything reloads when the budget id changes, and a
-// response for a previous id is dropped.
+// Pages come from `GET /api/v1/transactions/?budget=<id>` through
+// `useInfiniteList`, each row carrying all of its allocations (a split
+// shows every budget).  Everything reloads when the budget id changes,
+// and a page for a previous id is dropped.  Search matches the loaded
+// rows at once and asks the server for older matches after a pause
+// (`useMergedSearch`).
 //
 // `error` is the load's failure or the last failed removal, with the
 // server's message when it sent one.
@@ -16,93 +16,33 @@
 
 // 3rd party imports
 //
-import { computed, ref, shallowRef, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 // app imports
 //
 import { api } from "@/api";
+import type { TransactionDto } from "@/api/dto";
 import { describeError } from "@/api/errors";
 import { useDateGroupedRows } from "@/composables/useDateGroupedRows";
-import { useFuzzySearch } from "@/composables/useFuzzySearch";
+import { useInfiniteList } from "@/composables/useInfiniteList";
+import { useMergedSearch } from "@/composables/useMergedSearch";
 import { useResource } from "@/composables/useResource";
-import type { Allocation } from "@/models/allocation";
-import { allocationFromDto, indexByTransaction } from "@/models/allocation";
 import type { InternalTransaction } from "@/models/internalTransaction";
 import { internalTransactionFromDto } from "@/models/internalTransaction";
 import { listRows, rowInstant } from "@/models/listRow";
+import { pageFromDto } from "@/models/page";
 import type { Transaction } from "@/models/transaction";
-import { compareNewestFirst, transactionFromDto } from "@/models/transaction";
+import { transactionFromDto } from "@/models/transaction";
 import { useAccountContextStore } from "@/stores/accountContext";
-import { useAllocationsStore } from "@/stores/allocations";
 import { useBudgetsStore } from "@/stores/budgets";
 import { useSessionStore } from "@/stores/session";
 
 ////////////////////////////////////////////////////////////////////////
 //
-const CONCURRENCY = 6;
+const ORDERING = "-transaction_date,-created_at";
 
-// `fn` over `items`, at most `limit` calls in flight, results in order.
-//
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-) {
-  const out: R[] = [];
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i]);
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, worker),
-  );
-  return out;
-}
-
-async function allocationsFor(query: {
-  budget?: string;
-  transaction?: string;
-}) {
-  const first = await api.allocations.list(query);
-  return (await api.pages.all(first)).map(allocationFromDto);
-}
-
-////////////////////////////////////////////////////////////////////////
-//
-interface BudgetTransactions {
-  transactions: Transaction[];
-  allocationsByTx: Map<string, Allocation[]>;
-}
-
-async function loadBudgetTransactions(
-  budgetId: string,
-): Promise<BudgetTransactions> {
-  const allocationsByTx = indexByTransaction(
-    await allocationsFor({ budget: budgetId }),
-  );
-  const transactions = await mapLimit(
-    [...allocationsByTx.keys()],
-    CONCURRENCY,
-    async (id) => transactionFromDto(await api.transactions.get(id)),
-  );
-
-  const splits = transactions.filter((tx) => {
-    const allocs = allocationsByTx.get(tx.id);
-    return (
-      allocs?.length === 1 && !allocs[0].amount.abs().equals(tx.amount.abs())
-    );
-  });
-  await mapLimit(splits, CONCURRENCY, async (tx) => {
-    allocationsByTx.set(tx.id, await allocationsFor({ transaction: tx.id }));
-  });
-
-  return {
-    transactions: transactions.sort(compareNewestFirst),
-    allocationsByTx,
-  };
+function searchText(tx: Transaction): string {
+  return `${tx.party ?? ""} ${tx.description} ${tx.rawDescription}`;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -111,22 +51,37 @@ export function useBudgetTransactions(budgetId: () => string) {
   const session = useSessionStore();
   const ctx = useAccountContextStore();
   const budgets = useBudgetsStore();
-  const allocationsStore = useAllocationsStore();
 
   ////////////////////////////////////////////////////////////////////
   //
-  const resource = useResource(budgetId, loadBudgetTransactions, {
-    errorMessage: "Failed to load this budget's transactions.",
-  });
-  const transactions = shallowRef<Transaction[]>([]);
-  const allocationsByTx = shallowRef(new Map<string, Allocation[]>());
+  const list = useInfiniteList(
+    async () =>
+      pageFromDto(
+        await api.transactions.list({ budget: budgetId(), ordering: ORDERING }),
+        transactionFromDto,
+      ),
+    async (url) =>
+      pageFromDto(
+        await api.pages.fetchPage<TransactionDto>(url),
+        transactionFromDto,
+      ),
+    { errorMessage: "Failed to load this budget's transactions." },
+  );
+
+  // Transactions taken off this budget since the list loaded.
+  const removedIds = ref(new Set<string>());
+  const transactions = computed(() =>
+    list.items.value.filter((tx) => !removedIds.value.has(tx.id)),
+  );
   const actionError = ref<string | null>(null);
 
-  watch(resource.data, (data) => {
-    transactions.value = data?.transactions ?? [];
-    allocationsByTx.value = data?.allocationsByTx ?? new Map();
-  });
-  watch(budgetId, () => (actionError.value = null));
+  function reload(): void {
+    removedIds.value = new Set();
+    actionError.value = null;
+    void list.reload();
+  }
+
+  watch(budgetId, reload, { immediate: true });
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -148,10 +103,21 @@ export function useBudgetTransactions(budgetId: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
-  const search = useFuzzySearch(
-    () => transactions.value,
-    (tx) => `${tx.party ?? ""} ${tx.description} ${tx.rawDescription}`,
-  );
+  const search = useMergedSearch({
+    items: () => transactions.value,
+    text: searchText,
+    id: (tx) => tx.id,
+    scope: budgetId,
+    fetchMatches: async (q) =>
+      (
+        await api.transactions.list({
+          budget: budgetId(),
+          search: q,
+          ordering: ORDERING,
+        })
+      ).results.map(transactionFromDto),
+    refine: (txs) => txs.filter((tx) => !removedIds.value.has(tx.id)),
+  });
 
   const groups = useDateGroupedRows(
     () =>
@@ -174,39 +140,32 @@ export function useBudgetTransactions(budgetId: () => string) {
   async function removeTransaction(transactionId: string): Promise<void> {
     const id = budgetId();
     actionError.value = null;
-    let updated: Allocation[];
     try {
-      const current = await allocationsFor({ transaction: transactionId });
+      const current = transactionFromDto(
+        await api.transactions.get(transactionId),
+      );
       const splits: Record<string, string> = {};
-      for (const a of current) {
+      for (const a of current.allocations) {
         if (a.budgetId && a.budgetId !== id)
           splits[a.budgetId] = a.amount.abs().toDecimalString();
       }
-      updated = (await api.transactions.split(transactionId, splits)).map(
-        allocationFromDto,
-      );
+      await api.transactions.split(transactionId, splits);
     } catch (err) {
       if (budgetId() === id) {
         actionError.value = describeError(
           err,
           "Couldn't remove the transaction from this budget.",
         );
-        await resource.reload();
+        removedIds.value = new Set();
+        await list.reload();
       }
       return;
     }
 
-    if (budgetId() === id) {
-      transactions.value = transactions.value.filter(
-        (tx) => tx.id !== transactionId,
-      );
-      const next = new Map(allocationsByTx.value);
-      next.delete(transactionId);
-      allocationsByTx.value = next;
-    }
+    if (budgetId() === id)
+      removedIds.value = new Set([...removedIds.value, transactionId]);
     const accountId = ctx.activeBankAccountId;
     if (accountId) {
-      allocationsStore.setForTransaction(accountId, transactionId, updated);
       await budgets.refreshAccount(accountId).catch(() => undefined);
     } else {
       await budgets.fetchOne(id).catch(() => undefined);
@@ -214,10 +173,13 @@ export function useBudgetTransactions(budgetId: () => string) {
   }
 
   return {
-    transactions: computed(() => transactions.value),
-    allocationsByTx: computed(() => allocationsByTx.value),
-    loading: resource.loading,
-    error: computed(() => actionError.value ?? resource.error.value),
+    transactions,
+    loading: list.loading,
+    loadingMore: list.loadingMore,
+    loadMoreError: list.loadMoreError,
+    loadMore: list.loadMore,
+    sentinel: list.sentinel,
+    error: computed(() => actionError.value ?? list.error.value),
     showTransfers: computed(() => showTransfers.value),
     toggleTransfers,
     query: search.query,

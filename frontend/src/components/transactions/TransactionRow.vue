@@ -44,13 +44,11 @@ import BaseBadge from "@/components/base/BaseBadge.vue";
 const props = withDefaults(
   defineProps<{
     transaction: Transaction;
-    allocations?: Allocation[];
     budgetNames?: Map<string, string>;
     unallocatedBudgetId?: string | null;
     removable?: boolean;
   }>(),
   {
-    allocations: undefined,
     budgetNames: undefined,
     unallocatedBudgetId: null,
     removable: false,
@@ -88,7 +86,7 @@ const allocInfo = computed<{
   // All legs for split display, including any Unallocated portion.
   allLegs: AllocDisplay[];
 }>(() => {
-  const allocs = props.allocations;
+  const allocs = props.transaction.allocations;
   const empty = {
     isUnallocated: false,
     isSplit: false,
@@ -175,8 +173,8 @@ const allocInfo = computed<{
           class="min-w-0 truncate text-meta text-fg-link"
         >
           Unallocated
-          <span v-if="allocations?.[0]" class="text-fg-muted">
-            (now {{ formatMoney(allocations[0].budgetBalance) }})
+          <span v-if="transaction.allocations[0]" class="text-fg-muted">
+            (now {{ formatMoney(transaction.allocations[0].budgetBalance) }})
           </span>
         </span>
         <span v-else class="min-w-0 truncate text-meta italic text-fg-muted">

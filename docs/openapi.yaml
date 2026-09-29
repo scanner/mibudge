@@ -1772,14 +1772,22 @@ paths:
   /api/v1/transactions/:
     get:
       operationId: transactions_list
-      description: Return transactions belonging to the authenticated user's accounts.
-        Filterable by bank_account, pending status, transaction_type, and date range
-        (date_from/date_to). Searchable by description, raw_description, and party.
-        Orderable by transaction_date, amount, or created_at.
+      description: 'Return transactions belonging to the authenticated user''s accounts,
+        each with all of its allocations embedded. Filterable by bank_account, budget
+        (transactions with an allocation to that budget), unallocated (true: no allocation
+        to a budget other than the account''s Unallocated budget), pending status,
+        transaction_type, date range (date_from/date_to), category, and merchant fields.
+        Searchable by description, raw_description, and party. Orderable by transaction_date,
+        amount, or created_at.'
       summary: List transactions
       parameters:
       - in: query
         name: bank_account
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: budget
         schema:
           type: string
           format: uuid
@@ -1919,6 +1927,10 @@ paths:
           * `fx_order` - FX Order
           * `` - --------
       - in: query
+        name: unallocated
+        schema:
+          type: boolean
+      - in: query
         name: uncategorized
         schema:
           type: boolean
@@ -1972,7 +1984,8 @@ paths:
   /api/v1/transactions/{id}/:
     get:
       operationId: transactions_retrieve
-      description: Return a single transaction by UUID.
+      description: Return a single transaction by UUID, with all of its allocations
+        embedded.
       summary: Get transaction details
       parameters:
       - in: path
@@ -2141,6 +2154,11 @@ paths:
           type: string
           format: uuid
       - in: query
+        name: budget
+        schema:
+          type: string
+          format: uuid
+      - in: query
         name: category
         schema:
           type: string
@@ -2281,6 +2299,10 @@ paths:
           * `signature_return` - Signature return
           * `fx_order` - FX Order
           * `` - --------
+      - in: query
+        name: unallocated
+        schema:
+          type: boolean
       - in: query
         name: uncategorized
         schema:
@@ -4654,6 +4676,11 @@ components:
         has_details:
           type: boolean
           readOnly: true
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionAllocation'
+          readOnly: true
         bank_transaction_id:
           type: string
           nullable: true
@@ -4697,6 +4724,7 @@ components:
           format: date-time
           readOnly: true
       required:
+      - allocations
       - amount
       - amount_currency
       - bank_account
@@ -4798,6 +4826,51 @@ components:
       - created_at
       - id
       - modified_at
+      - transaction
+    TransactionAllocationRequest:
+      type: object
+      description: |-
+        Serializer for transaction allocations.
+
+        An allocation maps a portion of a transaction's amount to a budget.
+        On create the caller supplies transaction, amount, and optionally
+        budget (defaults to unallocated) and category.  After creation,
+        budget, category, and memo are updatable.
+
+        The serializer enforces two key constraints:
+
+        1. **Same-account restriction** -- the budget must belong to the
+           same bank account as the transaction.  Cross-account allocations
+           are rejected with a 400 error.
+        2. **Sum constraint** -- the total allocated amount across all
+           allocations for a transaction must not exceed the transaction
+           amount.
+
+        The ``amount_currency`` is read from raw request data by
+        djmoney's ``MoneyField.get_value()`` -- no explicit currency
+        field declaration is needed.
+      properties:
+        transaction:
+          type: string
+          format: uuid
+        budget:
+          type: string
+          format: uuid
+          nullable: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        category:
+          type: string
+          format: uuid
+          nullable: true
+        memo:
+          type: string
+          nullable: true
+          maxLength: 512
+      required:
+      - amount
       - transaction
     TransactionCategory:
       type: object

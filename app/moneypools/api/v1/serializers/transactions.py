@@ -25,6 +25,7 @@ from moneypools.models import (
     get_default_currency,
 )
 
+from .allocations import TransactionAllocationSerializer
 from .fields import OwnedBankAccountField
 
 
@@ -113,6 +114,12 @@ class TransactionSerializer(serializers.ModelSerializer):
     # extracted merchant_* columns are.
     has_details = serializers.SerializerMethodField()
 
+    # Every allocation of the transaction, oldest first, so a list row
+    # can show its budgets without a second request.  Read-only:
+    # allocations change through the `splits` action.
+    #
+    allocations = TransactionAllocationSerializer(many=True, read_only=True)
+
     class Meta:
         model = Transaction
         fields = [
@@ -143,6 +150,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "merchant_category_code",
             "virtual_card_number",
             "has_details",
+            "allocations",
             "bank_transaction_id",
             "linked_transaction",
             "bank_account_posted_balance",
@@ -167,6 +175,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "description_user_edited",
             "category_full_name",
             "has_details",
+            "allocations",
             "linked_transaction",
             "bank_account_posted_balance",
             "bank_account_posted_balance_currency",

@@ -10,6 +10,7 @@ read-only allocation rows.
 from decimal import Decimal
 
 # 3rd party imports
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, viewsets
@@ -47,10 +48,15 @@ from ..serializers.transactions import (
         summary="List transactions",
         description=(
             "Return transactions belonging to the authenticated user's "
-            "accounts. Filterable by bank_account, pending status, "
-            "transaction_type, and date range (date_from/date_to). "
-            "Searchable by description, raw_description, and party. "
-            "Orderable by transaction_date, amount, or created_at."
+            "accounts, each with all of its allocations embedded. "
+            "Filterable by bank_account, budget (transactions with an "
+            "allocation to that budget), unallocated (true: no "
+            "allocation to a budget other than the account's "
+            "Unallocated budget), pending status, transaction_type, "
+            "date range (date_from/date_to), category, and merchant "
+            "fields. Searchable by description, raw_description, and "
+            "party. Orderable by transaction_date, amount, or "
+            "created_at."
         ),
     ),
     create=extend_schema(
@@ -66,7 +72,10 @@ from ..serializers.transactions import (
     ),
     retrieve=extend_schema(
         summary="Get transaction details",
-        description="Return a single transaction by UUID.",
+        description=(
+            "Return a single transaction by UUID, with all of its "
+            "allocations embedded."
+        ),
     ),
     update=extend_schema(
         summary="Update a transaction",
@@ -100,7 +109,16 @@ class TransactionViewSet(
     """Bank transactions (purchases, deposits, transfers) on user accounts."""
 
     serializer_class = TransactionSerializer
-    queryset = Transaction.objects.select_related("bank_account").all()
+    queryset = Transaction.objects.select_related(
+        "bank_account", "category", "linked_transaction"
+    ).prefetch_related(
+        Prefetch(
+            "allocations",
+            queryset=TransactionAllocation.objects.select_related(
+                "budget", "category"
+            ).order_by("created_at"),
+        )
+    )
     lookup_field = "id"
     permission_classes = [IsAuthenticated, IsAccountOwner]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

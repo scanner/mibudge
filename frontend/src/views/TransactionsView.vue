@@ -34,13 +34,11 @@ const budgets = useBudgetsStore();
 
 const {
   groups: displayTransactions,
-  allocationsByTx: allocsByTx,
   loading,
   loadingMore,
   loadMoreError,
   loadMore,
   error,
-  assignmentsError,
   sentinel,
   activeFilter,
   query: searchQuery,
@@ -134,14 +132,9 @@ function openTransaction(id: string) {
 
     <!-- Transaction list -->
     <template v-else>
-      <BaseBanner v-if="assignmentsError" tone="danger" class="mb-3">
-        {{ assignmentsError }}
-      </BaseBanner>
-
       <TransactionGroupList
         v-if="displayTransactions.length > 0"
         :groups="displayTransactions"
-        :allocations-by-tx="allocsByTx"
         :budget-names="budgets.names"
         :unallocated-budget-id="ctx.unallocatedBudgetId"
         @select="openTransaction"

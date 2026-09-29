@@ -143,10 +143,12 @@ export function makeBudget(overrides: Partial<Budget> = {}): Budget {
 export function makeTransaction(
   overrides: Partial<Transaction> = {},
 ): Transaction {
+  const id = overrides.id ?? uuid();
+  const amount = overrides.amount ?? "-12.34";
   return {
-    id: uuid(),
+    id,
     bank_account: uuid(),
-    amount: "-12.34",
+    amount,
     amount_currency: "USD",
     party: null,
     posted_date: TIMESTAMP,
@@ -171,6 +173,9 @@ export function makeTransaction(
     merchant_category_code: null,
     virtual_card_number: null,
     has_details: false,
+    // The server always sends at least one allocation.  The default
+    // has no budget, so the transaction reads as unallocated.
+    allocations: [makeAllocation({ transaction: id, budget: null, amount })],
     bank_transaction_id: null,
     // The schema types this as a string; the server sends `null` for an
     // unlinked transaction.

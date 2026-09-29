@@ -212,7 +212,7 @@ other's state. They share data in two ways:
 
 - **Through a store**, when the data outlives one page or one section
   shows what another changed. The entity caches (`budgets`,
-  `bankAccounts`, `allocations`) update themselves from the server's
+  `bankAccounts`) update themselves from the server's
   answer to every mutation, so every reader sees the change.
 - **Through props and events**, between a view and the features and
   components it lays out.

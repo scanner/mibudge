@@ -1789,11 +1789,12 @@ Archive a category so pickers hide it while existing references stay valid.  Onl
 
 **Operation:** `transactions_list`
 
-Return transactions belonging to the authenticated user's accounts. Filterable by bank_account, pending status, transaction_type, and date range (date_from/date_to). Searchable by description, raw_description, and party. Orderable by transaction_date, amount, or created_at.
+Return transactions belonging to the authenticated user's accounts, each with all of its allocations embedded. Filterable by bank_account, budget (transactions with an allocation to that budget), unallocated (true: no allocation to a budget other than the account's Unallocated budget), pending status, transaction_type, date range (date_from/date_to), category, and merchant fields. Searchable by description, raw_description, and party. Orderable by transaction_date, amount, or created_at.
 
 **Parameters:**
 
 - `bank_account` (query, optional)
+- `budget` (query, optional)
 - `category` (query, optional)
 - `category_group` (query, optional)
 - `date_from` (query, optional)
@@ -1835,6 +1836,7 @@ Return transactions belonging to the authenticated user's accounts. Filterable b
 * `signature_return` - Signature return
 * `fx_order` - FX Order
 * `` - --------
+- `unallocated` (query, optional)
 - `uncategorized` (query, optional)
 - `virtual_card_last4` (query, optional)
 
@@ -1946,6 +1948,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 - **`merchant_category_code`** (`string`) *(required, read-only)*
 - **`virtual_card_number`** (`string`) *(required, read-only)*
 - **`has_details`** (`boolean`) *(required, read-only)*
+- **`allocations`** (`array`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -1961,7 +1964,7 @@ Create a new bank transaction. Required: bank_account (UUID), amount, transactio
 
 **Operation:** `transactions_retrieve`
 
-Return a single transaction by UUID.
+Return a single transaction by UUID, with all of its allocations embedded.
 
 **Parameters:**
 
@@ -1996,6 +1999,7 @@ Return a single transaction by UUID.
 - **`merchant_category_code`** (`string`) *(required, read-only)*
 - **`virtual_card_number`** (`string`) *(required, read-only)*
 - **`has_details`** (`boolean`) *(required, read-only)*
+- **`allocations`** (`array`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2112,6 +2116,7 @@ Full update of a transaction. Only transaction_type, memo, and description are m
 - **`merchant_category_code`** (`string`) *(required, read-only)*
 - **`virtual_card_number`** (`string`) *(required, read-only)*
 - **`has_details`** (`boolean`) *(required, read-only)*
+- **`allocations`** (`array`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2228,6 +2233,7 @@ Partial update of a transaction. Only transaction_type, memo, and description ar
 - **`merchant_category_code`** (`string`) *(required, read-only)*
 - **`virtual_card_number`** (`string`) *(required, read-only)*
 - **`has_details`** (`boolean`) *(required, read-only)*
+- **`allocations`** (`array`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2305,6 +2311,7 @@ Transition a pending transaction to posted status. Supplies the bank-confirmed p
 - **`merchant_category_code`** (`string`) *(required, read-only)*
 - **`virtual_card_number`** (`string`) *(required, read-only)*
 - **`has_details`** (`boolean`) *(required, read-only)*
+- **`allocations`** (`array`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -2325,6 +2332,7 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 **Parameters:**
 
 - `bank_account` (query, optional)
+- `budget` (query, optional)
 - `category` (query, optional)
 - `category_group` (query, optional)
 - `date_from` (query, optional)
@@ -2367,6 +2375,7 @@ Declaratively set how a transaction's amount is split across budgets. All refere
 * `signature_return` - Signature return
 * `fx_order` - FX Order
 * `` - --------
+- `unallocated` (query, optional)
 - `uncategorized` (query, optional)
 - `virtual_card_last4` (query, optional)
 
@@ -3560,6 +3569,7 @@ field declaration is needed.
 - **`merchant_category_code`** (`string`) *(required, read-only)*
 - **`virtual_card_number`** (`string`) *(required, read-only)*
 - **`has_details`** (`boolean`) *(required, read-only)*
+- **`allocations`** (`array`) *(required, read-only)*
 - **`bank_transaction_id`** (`string`)
 - **`linked_transaction`** (`string`) *(required, read-only)*
 - **`bank_account_posted_balance`** (`string`) *(required, read-only)* — Posted Balance does not include pending debits.
@@ -3605,6 +3615,34 @@ field declaration is needed.
 - **`memo`** (`string`)
 - **`created_at`** (`string`) *(required, read-only)*
 - **`modified_at`** (`string`) *(required, read-only)*
+
+### TransactionAllocationRequest
+
+Serializer for transaction allocations.
+
+An allocation maps a portion of a transaction's amount to a budget.
+On create the caller supplies transaction, amount, and optionally
+budget (defaults to unallocated) and category.  After creation,
+budget, category, and memo are updatable.
+
+The serializer enforces two key constraints:
+
+1. **Same-account restriction** -- the budget must belong to the
+   same bank account as the transaction.  Cross-account allocations
+   are rejected with a 400 error.
+2. **Sum constraint** -- the total allocated amount across all
+   allocations for a transaction must not exceed the transaction
+   amount.
+
+The ``amount_currency`` is read from raw request data by
+djmoney's ``MoneyField.get_value()`` -- no explicit currency
+field declaration is needed.
+
+- **`transaction`** (`string`) *(required)*
+- **`budget`** (`string`)
+- **`amount`** (`string`) *(required)*
+- **`category`** (`string`)
+- **`memo`** (`string`)
 
 ### TransactionCategory
 

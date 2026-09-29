@@ -15,7 +15,6 @@ import {
   allocationCoverage,
   allocationFromDto,
   assignedAllocations,
-  indexByTransaction,
   isUnallocated,
   splitsOf,
 } from "@/models/allocation";
@@ -26,7 +25,6 @@ import {
 } from "@/models/internalTransaction";
 import { listRows, rowInstant, rowKey } from "@/models/listRow";
 import {
-  compareNewestFirst,
   displayName,
   occurredAt,
   transactionFromDto,
@@ -43,9 +41,9 @@ import {
 describe("transactionFromDto", () => {
   // GIVEN: a transaction as the API sends it, with merchant details
   // WHEN:  it is mapped to the model
-  // THEN:  amounts become Money, merchant fields are grouped, and the
-  //        fields the schema marks non-null but the server may omit
-  //        become null
+  // THEN:  amounts become Money, merchant fields are grouped, the
+  //        embedded allocations become models, and the fields the
+  //        schema marks non-null but the server may omit become null
   //
   it("maps every field", () => {
     const dto = makeTransaction({
@@ -68,6 +66,9 @@ describe("transactionFromDto", () => {
     expect(tx.linkedTransactionId).toBeNull();
     expect(tx.transactionDate).toBeNull();
     expect(tx.accountAvailableBalance.toString()).toBe("987.66 USD");
+    expect(tx.allocations.map((a) => a.amount.toString())).toEqual([
+      "-12.34 USD",
+    ]);
   });
 
   // GIVEN: a transaction with or without a transaction date
@@ -95,36 +96,6 @@ describe("transactionFromDto", () => {
     expect(displayName(fields)).toBe(name);
   });
 
-  // GIVEN: transactions on different and equal dates
-  // WHEN:  they are sorted newest first
-  // THEN:  later dates come first, then later creation
-  //
-  it("sorts newest first", () => {
-    const a = transactionFromDto(
-      makeTransaction({
-        transaction_date: "2026-01-01T00:00:00Z",
-        created_at: "2026-01-05T00:00:00Z",
-      }),
-    );
-    const b = transactionFromDto(
-      makeTransaction({
-        transaction_date: "2026-01-02T00:00:00Z",
-        created_at: "2026-01-01T00:00:00Z",
-      }),
-    );
-    const c = transactionFromDto(
-      makeTransaction({
-        transaction_date: "2026-01-01T00:00:00Z",
-        created_at: "2026-01-06T00:00:00Z",
-      }),
-    );
-    expect([a, b, c].sort(compareNewestFirst).map((t) => t.id)).toEqual([
-      b.id,
-      c.id,
-      a.id,
-    ]);
-  });
-
   // GIVEN: a text edit, including clearing the memo
   // WHEN:  it becomes a PATCH body
   // THEN:  a cleared memo is sent as null so the server clears it
@@ -143,21 +114,6 @@ describe("transactionFromDto", () => {
 //
 describe("allocations", () => {
   const UNALLOC = "unalloc";
-
-  // GIVEN: allocations of several transactions
-  // WHEN:  they are indexed by transaction
-  // THEN:  each transaction lists its allocations in order
-  //
-  it("indexes by transaction", () => {
-    const [a1, a2, b1] = [
-      allocationFromDto(makeAllocation({ transaction: "a" })),
-      allocationFromDto(makeAllocation({ transaction: "a" })),
-      allocationFromDto(makeAllocation({ transaction: "b" })),
-    ];
-    const index = indexByTransaction([a1, b1, a2]);
-    expect(index.get("a")).toEqual([a1, a2]);
-    expect(index.get("b")).toEqual([b1]);
-  });
 
   // GIVEN: a transaction's allocations
   // WHEN:  it is checked for being unallocated
