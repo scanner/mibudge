@@ -21,11 +21,15 @@ from moneypools.models import (
     get_default_currency,
 )
 
+from .money import BankAccountCurrencyMixin
+
 
 ########################################################################
 ########################################################################
 #
-class BankAccountSerializer(serializers.ModelSerializer):
+class BankAccountSerializer(
+    BankAccountCurrencyMixin, serializers.ModelSerializer
+):
     """Serializer for bank accounts.
 
     On create the caller supplies name, bank (UUID), account_type,
@@ -112,6 +116,21 @@ class BankAccountSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "account_number": {"required": False},
         }
+
+    ####################################################################
+    #
+    def bank_account_currency(self, attrs: dict) -> str | None:
+        """The bank account's currency.
+
+        On create it is the `currency` sent, else the bank's default
+        (as `bank_account_svc.create` applies it).
+        """
+        if self.instance is not None:
+            return self.instance.currency
+        if attrs.get("currency"):
+            return attrs["currency"]
+        bank = attrs.get("bank")
+        return bank.default_currency if bank is not None else None
 
     ####################################################################
     #

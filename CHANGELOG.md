@@ -49,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Money amounts always take their bank account's currency: an omitted `<field>_currency` now means the bank account's currency rather than the server default, a different currency is refused with 400 (it was silently overwritten, stored, or failed with a 500 when amounts were added up), and budgets keep every amount in the bank account's currency
+- A bank account created without `currency` takes its bank's default currency, as documented, instead of the server default
 - The OpenAPI schema documents every endpoint's error responses (`Error` for `{"detail": ...}` bodies, `ValidationError` for field errors), and the notification/channel preference endpoints answer an unknown kind or channel with a `{"detail": ...}` 404 instead of an empty body
 - The OpenAPI schema now describes the splits, invitation-list and notification/channel-preference endpoints as plain arrays (without phantom pagination or filter parameters), types `next_funding`, `next_recurrence` and the `run-funding`, `funding-summary`, `funding-event-dates` and `currencies` responses, documents the `after`/`before` parameters of `funding-event-dates`, the `warnings` on budget updates and the `{access}` body of `/api/token/` and `/api/token/refresh/`, no longer requires a body for budget `archive`, and marks `linked_transaction` and category `owner` nullable
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)

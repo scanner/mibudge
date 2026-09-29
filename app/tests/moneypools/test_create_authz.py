@@ -42,64 +42,30 @@ from moneypools.permissions import (
 )
 from users.models import User
 
+from .payloads import budget_payload, transaction_payload, transfer_payload
+
 pytestmark = pytest.mark.django_db
-
-
-####################################################################
-#
-def _budget_payload(account: BankAccount, budgets: list[Budget]) -> dict:
-    """Build a minimal budget create body for `account`."""
-    return {
-        "name": "Groceries",
-        "bank_account": str(account.id),
-        "budget_type": "G",
-        "funding_type": "D",
-        "target_balance": "100.00",
-    }
-
-
-####################################################################
-#
-def _transaction_payload(account: BankAccount, budgets: list[Budget]) -> dict:
-    """Build a minimal transaction create body for `account`."""
-    return {
-        "bank_account": str(account.id),
-        "amount": "-5.00",
-        "posted_date": "2026-04-01T12:00:00Z",
-        "transaction_type": "signature_purchase",
-        "raw_description": "COFFEE SHOP",
-    }
-
-
-####################################################################
-#
-def _internal_transaction_payload(
-    account: BankAccount, budgets: list[Budget]
-) -> dict:
-    """Build a transfer body between two of `account`'s budgets."""
-    src, dst = budgets
-    return {
-        "bank_account": str(account.id),
-        "amount": "10.00",
-        "src_budget": str(src.id),
-        "dst_budget": str(dst.id),
-    }
 
 
 # Each case names the create route, the payload builder, and the model
 # whose rows on the target account must not grow on rejection.
 #
 CREATE_ENDPOINTS = [
-    pytest.param("api_v1:budget-list", _budget_payload, Budget, id="budget"),
+    pytest.param(
+        "api_v1:budget-list",
+        lambda account, budgets: budget_payload(account),
+        Budget,
+        id="budget",
+    ),
     pytest.param(
         "api_v1:transaction-list",
-        _transaction_payload,
+        lambda account, budgets: transaction_payload(account),
         Transaction,
         id="transaction",
     ),
     pytest.param(
         "api_v1:internaltransaction-list",
-        _internal_transaction_payload,
+        lambda account, budgets: transfer_payload(account, *budgets),
         InternalTransaction,
         id="internal-transaction",
     ),
@@ -275,7 +241,7 @@ class TestCreateScopedToOwnedAccounts:
         """
         _, [other_budget, _] = make_account_with_budgets(user_factory())
         account, budgets = make_account_with_budgets(user)
-        payload = _budget_payload(account, budgets)
+        payload = budget_payload(account)
         payload["fillup_goal"] = str(other_budget.id)
 
         response = any_auth_client.post(
@@ -418,7 +384,7 @@ class TestBudgetCreateFundingTypeDefault:
         AND:   the budget has the documented defaults: Goal budget type
                and Target Date funding type
         """
-        payload = _budget_payload(account, [])
+        payload = budget_payload(account)
         for key in omitted:
             payload.pop(key)
 

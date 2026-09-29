@@ -20,11 +20,10 @@ from .service.schedules import normalize_dtstart
 def bank_account_pre_save(
     sender: type[BankAccount], instance: BankAccount, **kwargs: Any
 ) -> None:
-    """Propagate currency settings when a bank account is created.
+    """Align a new bank account's balance currencies with its currency.
 
-    On creation, if no currency is set, inherits the bank's
-    default_currency.  Always aligns posted_balance and
-    available_balance currencies with the account's currency.
+    The bank account's own currency defaults to its bank's in
+    `bank_account_svc.create`.
 
     Args:
         sender: The BankAccount model class.
@@ -34,14 +33,6 @@ def bank_account_pre_save(
     bank_account = instance
 
     if bank_account.pkid is None:
-        # Default to the bank's currency if the caller did not
-        # specify one.
-        #
-        if not bank_account.currency:
-            bank_account.currency = bank_account.bank.default_currency
-
-        # Align balance currencies with the account currency.
-        #
         bank_account.posted_balance_currency = bank_account.currency
         bank_account.available_balance_currency = bank_account.currency
 
@@ -55,10 +46,10 @@ def budget_pre_save(
     """Align currencies and manage the 'complete' flag before each save.
 
     Currency alignment:
-        Sets balance_currency and target_balance_currency to match the
-        bank account's currency on every save so balances stay aligned
-        if a budget is saved after its bank account's currency was
-        corrected.
+        Sets the currency of every money field (balance, target_balance,
+        funded_amount, funding_amount) to the bank account's on every
+        save, so a budget's amounts can always be added to each other
+        and to its bank account's transactions.
 
     'complete' flag management:
         Recurring (R) -- set True when balance >= target; cleared by
@@ -77,6 +68,9 @@ def budget_pre_save(
     acct_currency = instance.bank_account.currency
     instance.balance_currency = acct_currency  # type: ignore[attr-defined]
     instance.target_balance_currency = acct_currency  # type: ignore[attr-defined]
+    instance.funded_amount_currency = acct_currency  # type: ignore[attr-defined]
+    if instance.funding_amount is not None:
+        instance.funding_amount_currency = acct_currency  # type: ignore[attr-defined]
 
     # Invariant: a funding schedule never leaves save() without a
     # DTSTART anchored on a real rule occurrence.  Enforced here (not

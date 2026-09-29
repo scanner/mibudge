@@ -23,7 +23,12 @@ from moneypools.models import (
 from moneypools.service import categories as categories_svc
 from moneypools.service import funding as funding_svc
 
-from .fields import OwnedBankAccountField, RecurrenceSerializerField
+from .fields import (
+    CategoryNamesField,
+    OwnedBankAccountField,
+    RecurrenceSerializerField,
+)
+from .money import BankAccountCurrencyMixin
 
 
 ########################################################################
@@ -42,7 +47,7 @@ class NextFundingSerializer(serializers.Serializer):
 ########################################################################
 ########################################################################
 #
-class BudgetSerializer(serializers.ModelSerializer):
+class BudgetSerializer(BankAccountCurrencyMixin, serializers.ModelSerializer):
     """Serializer for budgets.
 
     On create the caller supplies bank_account (UUID) and budget
@@ -107,6 +112,13 @@ class BudgetSerializer(serializers.ModelSerializer):
         ),
     )
 
+    auto_spend = CategoryNamesField(
+        required=False,
+        help_text=(
+            "Transaction-category full names ('{group} : {name}').  Spend "
+            "in a listed category is auto-routed to this budget."
+        ),
+    )
     next_funding = serializers.SerializerMethodField()
     next_recurrence = serializers.SerializerMethodField()
     funding_pace = serializers.SerializerMethodField()
@@ -223,6 +235,15 @@ class BudgetSerializer(serializers.ModelSerializer):
             'ahead', 'on_track', 'behind', or None.
         """
         return funding_svc.funding_pace(obj)
+
+    ####################################################################
+    #
+    def bank_account_currency(self, attrs: dict) -> str | None:
+        """The currency of the budget's bank account."""
+        bank_account = attrs.get("bank_account") or getattr(
+            self.instance, "bank_account", None
+        )
+        return bank_account.currency if bank_account is not None else None
 
     ####################################################################
     #

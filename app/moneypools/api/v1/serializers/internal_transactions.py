@@ -22,12 +22,15 @@ from moneypools.models import (
 )
 
 from .fields import OwnedBankAccountField
+from .money import BankAccountCurrencyMixin
 
 
 ########################################################################
 ########################################################################
 #
-class InternalTransactionSerializer(serializers.ModelSerializer):
+class InternalTransactionSerializer(
+    BankAccountCurrencyMixin, serializers.ModelSerializer
+):
     """Serializer for internal transactions (budget-to-budget transfers).
 
     Internal transactions are write-once: the API supports create and
@@ -160,4 +163,10 @@ class InternalTransactionSerializer(serializers.ModelSerializer):
                     )
                 }
             )
-        return attrs
+        return super().validate(attrs)
+
+    ####################################################################
+    #
+    def bank_account_currency(self, attrs: dict) -> str | None:
+        """The currency of the transfer's bank account."""
+        return attrs["bank_account"].currency

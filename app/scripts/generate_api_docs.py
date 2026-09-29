@@ -245,7 +245,8 @@ class Reference:
 
         A field only the response has is read-only, one only the request
         has is write-only, and a writable field is required or optional
-        as the request (create) shape says.
+        as the request (create) shape says, and is described by its
+        request schema (which carries the rules for sending it).
         """
         response = self.schemas.get(fam)
         request = self.schemas.get(f"{fam}Request")
@@ -254,9 +255,7 @@ class Reference:
             writable = (request or {}).get("properties", {})
             for name, schema in response.get("properties", {}).items():
                 flags = []
-                if request is not None and (
-                    schema.get("readOnly") or name not in writable
-                ):
+                if request is not None and name not in writable:
                     flags.append("read-only")
                 out[name] = Field(name, schema, flags)
         if request is not None:
@@ -265,6 +264,11 @@ class Reference:
                 wanted = "required" if name in required else "optional"
                 if name in out:
                     out[name].flags.append(wanted)
+                    if schema.get("description"):
+                        out[name].schema = {
+                            **out[name].schema,
+                            "description": schema["description"],
+                        }
                 else:
                     flags = [wanted] if response is None else ["write-only"]
                     out[name] = Field(name, schema, flags)

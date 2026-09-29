@@ -121,7 +121,9 @@ class BankAccountImportActions(viewsets.GenericViewSet):
         """Reconcile the account against a fresh bank-side scrape."""
         account: BankAccount = self.get_object()
 
-        serializer = ScrapeSyncSerializer(data=request.data)
+        serializer = ScrapeSyncSerializer(
+            data=request.data, context={"bank_account": account}
+        )
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
 
