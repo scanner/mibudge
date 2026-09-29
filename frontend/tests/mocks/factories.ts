@@ -179,7 +179,7 @@ export function makeTransaction(
     bank_transaction_id: null,
     // The schema types this as a string; the server sends `null` for an
     // unlinked transaction.
-    linked_transaction: null as unknown as string,
+    linked_transaction: null,
     bank_account_posted_balance: "987.66",
     bank_account_posted_balance_currency: "USD",
     bank_account_available_balance: "987.66",
@@ -240,6 +240,21 @@ export function makeInternalTransaction(
 
 ////////////////////////////////////////////////////////////////////////
 //
+export function makeFundingSchedule(
+  overrides: Partial<FundingSummary["schedules"][number]> = {},
+): FundingSummary["schedules"][number] {
+  return {
+    schedule: "RRULE:FREQ=MONTHLY",
+    next_date: "2026-10-01",
+    total_amount: "0.00",
+    currency: "USD",
+    budget_count: 1,
+    ...overrides,
+  };
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 export function makeFundingSummary(
   overrides: Partial<FundingSummary> = {},
 ): FundingSummary {
@@ -272,7 +287,7 @@ export function makeCategory(
     name: "Groceries",
     full_name: "Food : Groceries",
     // Global rows have no owner; the schema types this as a string.
-    owner: null as unknown as string,
+    owner: null,
     archived: false,
     created_at: TIMESTAMP,
     modified_at: TIMESTAMP,

@@ -14,7 +14,9 @@ from decimal import Decimal
 # 3rd party imports
 import recurrence as recurrence_lib
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
+    OpenApiParameter,
     OpenApiResponse,
     extend_schema,
     extend_schema_view,
@@ -35,7 +37,12 @@ from moneypools.service import funding as funding_svc
 from moneypools.service.shared import funding_system_user
 
 from ..filters import FundingEventOccurrenceFilter
-from ..serializers.funding import FundingEventOccurrenceSerializer
+from ..serializers.funding import (
+    FundingEventDatesSerializer,
+    FundingEventOccurrenceSerializer,
+    FundingRunResultSerializer,
+    FundingSummarySerializer,
+)
 
 
 ########################################################################
@@ -77,25 +84,7 @@ class BankAccountFundingActions(viewsets.GenericViewSet):
             }
         },
         responses={
-            200: OpenApiResponse(
-                description="Funding run result.",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "transfers": {"type": "integer"},
-                        "occurrences_completed": {"type": "integer"},
-                        "occurrences_partial": {"type": "integer"},
-                        "warnings": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                        "skipped_budgets": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                    },
-                },
-            ),
+            200: FundingRunResultSerializer,
             409: OpenApiResponse(
                 description=(
                     "Either another worker is currently processing this "
@@ -188,20 +177,23 @@ class BankAccountFundingActions(viewsets.GenericViewSet):
             "funding or recurrence event is due for this account.  "
             "The importer uses this to find batch-split boundaries."
         ),
-        responses={
-            200: OpenApiResponse(
-                description="Sorted list of event dates.",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "dates": {
-                            "type": "array",
-                            "items": {"type": "string", "format": "date"},
-                        }
-                    },
-                },
-            )
-        },
+        parameters=[
+            OpenApiParameter(
+                "after",
+                OpenApiTypes.DATE,
+                OpenApiParameter.QUERY,
+                required=True,
+                description="Exclusive lower bound (YYYY-MM-DD).",
+            ),
+            OpenApiParameter(
+                "before",
+                OpenApiTypes.DATE,
+                OpenApiParameter.QUERY,
+                required=True,
+                description="Inclusive upper bound (YYYY-MM-DD).",
+            ),
+        ],
+        responses={200: FundingEventDatesSerializer},
     )
     @action(detail=True, methods=["get"], url_path="funding-event-dates")
     def funding_event_dates(self, request: Request, id: str = "") -> Response:
@@ -241,34 +233,7 @@ class BankAccountFundingActions(viewsets.GenericViewSet):
             "grouped by funding schedule (RRULE string) and sorted by "
             "next event date."
         ),
-        responses={
-            200: OpenApiResponse(
-                description="Per-schedule funding totals.",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "schedules": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "schedule": {"type": "string"},
-                                    "next_date": {
-                                        "type": "string",
-                                        "format": "date",
-                                    },
-                                    "total_amount": {"type": "string"},
-                                    "currency": {"type": "string"},
-                                    "budget_count": {"type": "integer"},
-                                },
-                            },
-                        },
-                        "total_amount": {"type": "string"},
-                        "currency": {"type": "string"},
-                    },
-                },
-            )
-        },
+        responses={200: FundingSummarySerializer},
     )
     @action(detail=True, methods=["get"], url_path="funding-summary")
     def funding_summary(self, request: Request, id: str = "") -> Response:

@@ -30,6 +30,7 @@ class TransactionCategorySerializer(serializers.ModelSerializer):
     owner = serializers.SlugRelatedField(
         slug_field="username",
         read_only=True,
+        allow_null=True,
         help_text="Owner username; null for a global category.",
     )
     full_name = serializers.CharField(

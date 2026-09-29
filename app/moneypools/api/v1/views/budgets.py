@@ -24,7 +24,10 @@ from moneypools.permissions import (
 from moneypools.service import budget as budget_svc
 
 from ..filters import BudgetFilter
-from ..serializers.budgets import BudgetSerializer
+from ..serializers.budgets import (
+    BudgetSerializer,
+    BudgetUpdateResultSerializer,
+)
 
 
 ########################################################################
@@ -60,6 +63,7 @@ from ..serializers.budgets import BudgetSerializer
             "Full update of a budget. bank_account and budget_type "
             "are immutable. The unallocated budget cannot be renamed."
         ),
+        responses={200: BudgetUpdateResultSerializer},
     ),
     partial_update=extend_schema(
         summary="Partially update a budget",
@@ -67,6 +71,7 @@ from ..serializers.budgets import BudgetSerializer
             "Partial update of a budget. bank_account and budget_type "
             "are immutable. The unallocated budget cannot be renamed."
         ),
+        responses={200: BudgetUpdateResultSerializer},
     ),
     destroy=extend_schema(
         summary="Delete a budget",
@@ -188,6 +193,7 @@ class BudgetViewSet(
             "fill-up goal, that budget is also archived and its balance moved "
             "to unallocated. The unallocated budget cannot be archived."
         ),
+        request=None,
         responses={200: BudgetSerializer},
     )
     @action(detail=True, methods=["post"], url_path="archive")

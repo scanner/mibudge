@@ -21,6 +21,7 @@ import { mountWithApp, withAccounts, withAuth } from "../helpers";
 import {
   makeBankAccount,
   makeBudget,
+  makeFundingSchedule,
   makeFundingSummary,
   makePage,
   makeTransaction,
@@ -292,7 +293,7 @@ describe("OverviewView", () => {
         HttpResponse.json(
           makeFundingSummary({
             total_amount: "40.00",
-            schedules: [{ next_date: "2026-10-01" }],
+            schedules: [makeFundingSchedule({ next_date: "2026-10-01" })],
           }),
         ),
       ),

@@ -56,7 +56,12 @@ export type InternalTransactionCreateDto =
 
 export type TransactionCategoryDto = Schemas["TransactionCategory"];
 
+export type AccessTokenDto = Schemas["AccessToken"];
+
 export type InvitationDto = Schemas["BankAccountInvitation"];
+
+export type FundingSummaryDto = Schemas["FundingSummary"];
+export type FundingRunResultDto = Schemas["FundingRunResult"];
 
 export type ApiKeyDto = Schemas["APIKey"];
 export type ApiKeyCreatedDto = Schemas["APIKeyCreated"];
@@ -73,21 +78,6 @@ export type BudgetTypeDto = Schemas["BudgetTypeEnum"];
 export type FundingTypeDto = Schemas["FundingTypeEnum"];
 export type FundingPaceDto = Schemas["FundingPaceEnum"];
 export type TransactionTypeDto = Schemas["TransactionTypeEnum"];
-
-////////////////////////////////////////////////////////////////////////
-//
-// Inline response bodies the schema declares without a named component.
-//
-export type FundingSummaryDto =
-  operations["bank_accounts_funding_summary_retrieve"]["responses"][200]["content"]["application/json"];
-export type FundingRunResultDto =
-  operations["bank_accounts_run_funding_create"]["responses"][200]["content"]["application/json"];
-
-// `POST /api/token/` and `/api/token/refresh/` answer `{access}`; the
-// schema documents no response body for them.
-export interface AccessTokenDto {
-  access: string;
-}
 
 ////////////////////////////////////////////////////////////////////////
 //

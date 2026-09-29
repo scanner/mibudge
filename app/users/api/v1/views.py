@@ -373,6 +373,8 @@ class UserViewSet(
         detail=False,
         methods=["GET"],
         url_path="me/invitations",
+        pagination_class=None,
+        filter_backends=[],
         permission_classes=[IsAuthenticated, RequiresInteractiveAuth],
     )
     def my_invitations(self, request) -> Response:

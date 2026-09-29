@@ -115,7 +115,7 @@ export function transactionFromDto(dto: TransactionDto): Transaction {
     bankTransactionId: dto.bank_transaction_id ?? null,
     // The schema marks this non-null; the server sends `null` for an
     // unlinked transaction.
-    linkedTransactionId: dto.linked_transaction ?? null,
+    linkedTransactionId: dto.linked_transaction,
     accountPostedBalance: Money.of(
       dto.bank_account_posted_balance,
       dto.bank_account_posted_balance_currency || currency,

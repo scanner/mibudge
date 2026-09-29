@@ -92,7 +92,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     # server-side, never by the client.
     #
     linked_transaction = serializers.SlugRelatedField(
-        slug_field="id", read_only=True
+        slug_field="id", read_only=True, allow_null=True
     )
 
     # What the transaction was spent on.  Nullable (null = unassigned);

@@ -29,6 +29,19 @@ from .fields import OwnedBankAccountField, RecurrenceSerializerField
 ########################################################################
 ########################################################################
 #
+class NextFundingSerializer(serializers.Serializer):
+    """The next scheduled funding event of a budget (read-only)."""
+
+    date = serializers.DateField()
+    amount = serializers.DecimalField(
+        max_digits=MAX_DIGITS, decimal_places=DECIMAL_PLACES
+    )
+    amount_currency = serializers.CharField()
+
+
+########################################################################
+########################################################################
+#
 class BudgetSerializer(serializers.ModelSerializer):
     """Serializer for budgets.
 
@@ -147,6 +160,7 @@ class BudgetSerializer(serializers.ModelSerializer):
 
     ####################################################################
     #
+    @extend_schema_field(NextFundingSerializer(allow_null=True))
     def get_next_funding(self, obj: Budget) -> dict | None:
         """Return the next scheduled funding event for this budget, or null.
 
@@ -167,6 +181,7 @@ class BudgetSerializer(serializers.ModelSerializer):
 
     ####################################################################
     #
+    @extend_schema_field(serializers.DateField(allow_null=True))
     def get_next_recurrence(self, obj: Budget) -> str | None:
         """Return the date of the next recurrence (refresh) event, or null.
 
@@ -406,3 +421,19 @@ class BudgetSerializer(serializers.ModelSerializer):
                     "Cannot rename the unallocated budget."
                 )
         return value
+
+
+########################################################################
+########################################################################
+#
+class BudgetUpdateResultSerializer(BudgetSerializer):
+    """Response body of a budget update: the budget plus the warnings
+    the service emitted (e.g. recurrence boundaries missed while paused).
+    """
+
+    warnings = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
+
+    class Meta(BudgetSerializer.Meta):
+        fields = [*BudgetSerializer.Meta.fields, "warnings"]

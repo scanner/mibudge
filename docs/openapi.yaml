@@ -46,7 +46,11 @@ paths:
         required: true
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessToken'
+          description: ''
   /api/token/logout/:
     post:
       operationId: api_token_logout_create
@@ -75,24 +79,12 @@ paths:
         the 14-day sliding window resets with each use.
       tags:
       - api
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-        required: true
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenRefresh'
+                $ref: '#/components/schemas/AccessToken'
           description: ''
   /api/v1/allocations/:
     get:
@@ -386,6 +378,20 @@ paths:
         batch-split boundaries.
       summary: Funding event dates
       parameters:
+      - in: query
+        name: after
+        schema:
+          type: string
+          format: date
+        description: Exclusive lower bound (YYYY-MM-DD).
+        required: true
+      - in: query
+        name: before
+        schema:
+          type: string
+          format: date
+        description: Inclusive upper bound (YYYY-MM-DD).
+        required: true
       - in: path
         name: id
         schema:
@@ -402,14 +408,8 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  dates:
-                    type: array
-                    items:
-                      type: string
-                      format: date
-          description: Sorted list of event dates.
+                $ref: '#/components/schemas/FundingEventDates'
+          description: ''
   /api/v1/bank-accounts/{id}/funding-summary/:
     get:
       operationId: bank_accounts_funding_summary_retrieve
@@ -436,71 +436,20 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  schedules:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        schedule:
-                          type: string
-                        next_date:
-                          type: string
-                          format: date
-                        total_amount:
-                          type: string
-                        currency:
-                          type: string
-                        budget_count:
-                          type: integer
-                  total_amount:
-                    type: string
-                  currency:
-                    type: string
-          description: Per-schedule funding totals.
+                $ref: '#/components/schemas/FundingSummary'
+          description: ''
   /api/v1/bank-accounts/{id}/invitations/:
     get:
       operationId: bank_accounts_invitations_list
       description: Returns all pending invitations for this bank account.
       summary: List pending invitations for this account
       parameters:
-      - in: query
-        name: account_type
-        schema:
-          type: string
-          enum:
-          - C
-          - S
-          - X
-        description: |-
-          * `C` - Checking
-          * `S` - Savings
-          * `X` - Credit Card
       - in: path
         name: id
         schema:
           type: string
           format: uuid
         required: true
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       tags:
       - bank-accounts
       security:
@@ -511,7 +460,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedBankAccountInvitationList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/BankAccountInvitation'
           description: ''
   /api/v1/bank-accounts/{id}/invitations/{token}/cancel/:
     post:
@@ -650,23 +601,8 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  transfers:
-                    type: integer
-                  occurrences_completed:
-                    type: integer
-                  occurrences_partial:
-                    type: integer
-                  warnings:
-                    type: array
-                    items:
-                      type: string
-                  skipped_budgets:
-                    type: array
-                    items:
-                      type: string
-          description: Funding run result.
+                $ref: '#/components/schemas/FundingRunResult'
+          description: ''
         '409':
           description: Either another worker is currently processing this account
             (lock held), or there is nothing due or outstanding to run as of the supplied
@@ -981,7 +917,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Budget'
+                $ref: '#/components/schemas/BudgetUpdateResult'
           description: ''
     patch:
       operationId: budgets_partial_update
@@ -1016,7 +952,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Budget'
+                $ref: '#/components/schemas/BudgetUpdateResult'
           description: ''
     delete:
       operationId: budgets_destroy
@@ -1058,18 +994,6 @@ paths:
         required: true
       tags:
       - budgets
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BudgetRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/BudgetRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/BudgetRequest'
-        required: true
       security:
       - jwtAuth: []
       - apiKeyAuth: []
@@ -1086,19 +1010,6 @@ paths:
       description: Return all notification channels with the authenticated user's
         delivery preferences. Channels without a stored preference fall back to DAILY_MORNING.
       summary: List channel preferences
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       tags:
       - channel-preferences
       security:
@@ -1109,7 +1020,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedChannelPreferenceList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelPreference'
           description: ''
   /api/v1/channel-preferences/{channel}/:
     patch:
@@ -1149,7 +1062,7 @@ paths:
           description: ''
   /api/v1/currencies/:
     get:
-      operationId: currencies_retrieve
+      operationId: currencies_list
       description: Return all ISO 4217 currency codes supported by the system, sorted
         by code. Each entry includes the code, English name, and numeric ISO 4217
         code. Requires authentication.
@@ -1161,7 +1074,13 @@ paths:
       - apiKeyAuth: []
       responses:
         '200':
-          description: List of supported currencies.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Currency'
+          description: ''
   /api/v1/funding-occurrences/:
     get:
       operationId: funding_occurrences_list
@@ -1482,19 +1401,6 @@ paths:
         user's preferences. Kinds without a stored preference fall back to the registry
         default_delivery_mode.
       summary: List notification preferences
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       tags:
       - notification-preferences
       security:
@@ -1505,7 +1411,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedNotificationPreferenceList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationPreference'
           description: ''
   /api/v1/notification-preferences/{kind}/:
     patch:
@@ -2164,169 +2072,12 @@ paths:
         after reconciliation.'
       summary: Declare transaction splits
       parameters:
-      - in: query
-        name: bank_account
-        schema:
-          type: string
-          format: uuid
-      - in: query
-        name: budget
-        schema:
-          type: string
-          format: uuid
-      - in: query
-        name: category
-        schema:
-          type: string
-          format: uuid
-      - in: query
-        name: category_group
-        schema:
-          type: string
-      - in: query
-        name: date_from
-        schema:
-          type: string
-          format: date-time
-      - in: query
-        name: date_to
-        schema:
-          type: string
-          format: date-time
-      - in: query
-        name: has_details
-        schema:
-          type: boolean
       - in: path
         name: id
         schema:
           type: string
           format: uuid
         required: true
-      - in: query
-        name: merchant_category_code
-        schema:
-          type: string
-      - in: query
-        name: merchant_city
-        schema:
-          type: string
-      - in: query
-        name: merchant_intermediary
-        schema:
-          type: string
-      - in: query
-        name: merchant_name
-        schema:
-          type: string
-      - in: query
-        name: merchant_region
-        schema:
-          type: string
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - in: query
-        name: pending
-        schema:
-          type: boolean
-      - in: query
-        name: posted_date_from
-        schema:
-          type: string
-          format: date-time
-      - in: query
-        name: posted_date_to
-        schema:
-          type: string
-          format: date-time
-      - name: search
-        required: false
-        in: query
-        description: A search term.
-        schema:
-          type: string
-      - in: query
-        name: transaction_type
-        schema:
-          type: string
-          enum:
-          - ''
-          - ach
-          - ach_reversal
-          - adjustment
-          - atm_withdrawal
-          - balance_sweep
-          - bank_generated_credit
-          - bill_payment
-          - c2c
-          - check
-          - check_deposit
-          - courtesy_credit
-          - fee
-          - fx_order
-          - interest_credit
-          - migration_interbank_transfer
-          - pin_purchase
-          - protected_goal_account_transfer
-          - round-up_transfer
-          - shared_transfer
-          - signature_credit
-          - signature_purchase
-          - signature_return
-          - wire_transfer
-        description: |-
-          * `signature_purchase` - Signature Purchase
-          * `ach` - ACH
-          * `round-up_transfer` - Round-up Transfer
-          * `protected_goal_account_transfer` - Protected Goal Account Transfer
-          * `fee` - Fee
-          * `pin_purchase` - Pin Purchase
-          * `signature_credit` - Signature Credit
-          * `interest_credit` - Interest Credit
-          * `shared_transfer` - Shared Transfer
-          * `courtesy_credit` - Courtesy Credit
-          * `atm_withdrawal` - ATM Withdrawal
-          * `bill_payment` - Bill Payment
-          * `bank_generated_credit` - Bank Generated Credit
-          * `wire_transfer` - Wire Transfer
-          * `check_deposit` - Check Deposit
-          * `check` - Check
-          * `c2c` - c2c
-          * `migration_interbank_transfer` - Migration Interbank Transfer
-          * `balance_sweep` - Balance Sweep
-          * `ach_reversal` - ACH Reversal
-          * `adjustment` - Adjustment
-          * `signature_return` - Signature return
-          * `fx_order` - FX Order
-          * `` - --------
-      - in: query
-        name: unallocated
-        schema:
-          type: boolean
-      - in: query
-        name: uncategorized
-        schema:
-          type: boolean
-      - in: query
-        name: virtual_card_last4
-        schema:
-          type: string
       tags:
       - transactions
       requestBody:
@@ -2349,7 +2100,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedTransactionAllocationList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionAllocation'
           description: ''
   /api/v1/users/:
     get:
@@ -2756,25 +2509,6 @@ paths:
       description: Return all pending co-ownership invitations sent by the authenticated
         user, across all accounts.
       summary: List current user's outgoing pending invitations
-      parameters:
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       tags:
       - users
       security:
@@ -2785,7 +2519,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedBankAccountInvitationList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/BankAccountInvitation'
           description: ''
 components:
   schemas:
@@ -2907,6 +2643,17 @@ components:
       - prefix
       - revoked_at
       - uuid
+    AccessToken:
+      type: object
+      description: |-
+        Response body of the cookie-based token endpoints: the access token
+        only, since the refresh token travels in the httpOnly cookie.
+      properties:
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
     AccountTypeEnum:
       enum:
       - C
@@ -3310,34 +3057,14 @@ components:
             names (''{group} : {name}'').  Spend matching an entry is auto-routed
             to this budget.'
         next_funding:
-          type: object
-          additionalProperties: {}
+          allOf:
+          - $ref: '#/components/schemas/NextFunding'
           nullable: true
-          description: |-
-            Return the next scheduled funding event for this budget, or null.
-
-            Args:
-                obj: The Budget instance being serialized.
-
-            Returns:
-                Dict with 'date', 'amount', 'amount_currency', or None.
           readOnly: true
         next_recurrence:
           type: string
+          format: date
           nullable: true
-          description: |-
-            Return the date of the next recurrence (refresh) event, or null.
-
-            The recurrence_schedule's DTSTART is only the rule's anchor;
-            this field is the actual upcoming refresh date (first
-            occurrence after last_recurrence_on).  Only Recurring budgets
-            have one.
-
-            Args:
-                obj: The Budget instance being serialized.
-
-            Returns:
-                ISO date string, or None.
           readOnly: true
         funding_pace:
           nullable: true
@@ -3449,6 +3176,155 @@ components:
         * `R` - Recurring
         * `A` - Associated Fill-up Goal
         * `C` - Capped
+    BudgetUpdateResult:
+      type: object
+      description: |-
+        Response body of a budget update: the budget plus the warnings
+        the service emitted (e.g. recurrence boundaries missed while paused).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        bank_account:
+          type: string
+          format: uuid
+        balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+        balance_currency:
+          type: string
+          readOnly: true
+        funded_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          description: 'For Goal budgets: running net of all ITX credits minus debits.
+            Unused for other types.'
+        funded_amount_currency:
+          type: string
+          readOnly: true
+        target_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        target_balance_currency:
+          type: string
+          readOnly: true
+        funding_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        funding_amount_currency:
+          type: string
+          readOnly: true
+          nullable: true
+        budget_type:
+          $ref: '#/components/schemas/BudgetTypeEnum'
+        funding_type:
+          $ref: '#/components/schemas/FundingTypeEnum'
+        target_date:
+          type: string
+          format: date
+          nullable: true
+        fillup_goal:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        archived:
+          type: boolean
+          readOnly: true
+        archived_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        complete:
+          type: boolean
+          readOnly: true
+          description: True when this budget has reached its target and should not
+            be funded further.  Managed by signals and funding tasks; do not set manually.
+        paused:
+          type: boolean
+          description: A paused budget does not get automatically funded on its schedule.
+        funding_schedule:
+          type: string
+        recurrence_schedule:
+          type: string
+          nullable: true
+          description: 'Refresh cycle for Recurring budgets.  Restricted grammar:
+            a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional
+            INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes
+            on (e.g. ''DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY'' refreshes on
+            the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates
+            are rejected -- the anchor date is the only day-of-cycle control.  The
+            funding_schedule field is not restricted this way.'
+        memo:
+          type: string
+          nullable: true
+          maxLength: 512
+        auto_spend:
+          description: 'List of matcher strings; currently transaction-category full
+            names (''{group} : {name}'').  Spend matching an entry is auto-routed
+            to this budget.'
+        next_funding:
+          allOf:
+          - $ref: '#/components/schemas/NextFunding'
+          nullable: true
+          readOnly: true
+        next_recurrence:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+        funding_pace:
+          nullable: true
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/FundingPaceEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        modified_at:
+          type: string
+          format: date-time
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - archived
+      - archived_at
+      - balance
+      - balance_currency
+      - bank_account
+      - complete
+      - created_at
+      - fillup_goal
+      - funded_amount
+      - funded_amount_currency
+      - funding_amount_currency
+      - funding_pace
+      - id
+      - modified_at
+      - name
+      - next_funding
+      - next_recurrence
+      - target_balance
+      - target_balance_currency
+      - warnings
     ChangePasswordRequest:
       type: object
       description: |-
@@ -3494,6 +3370,22 @@ components:
       - channel
       - digest_frequency
       - display_name
+    Currency:
+      type: object
+      description: An ISO 4217 currency the system supports.
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        numeric:
+          type: string
+          nullable: true
+          description: ISO 4217 numeric code; null for historic currencies.
+      required:
+      - code
+      - name
+      - numeric
     DeliveryModeEnum:
       enum:
       - digest
@@ -3551,6 +3443,17 @@ components:
       required:
       - email
       - password
+    FundingEventDates:
+      type: object
+      description: Sorted dates on which an account has a funding event due.
+      properties:
+        dates:
+          type: array
+          items:
+            type: string
+            format: date
+      required:
+      - dates
     FundingEventOccurrence:
       type: object
       description: |-
@@ -3628,6 +3531,73 @@ components:
         * `ahead` - ahead
         * `on_track` - on_track
         * `behind` - behind
+    FundingRunResult:
+      type: object
+      description: What one `run-funding` call did.
+      properties:
+        transfers:
+          type: integer
+        occurrences_completed:
+          type: integer
+        occurrences_partial:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        skipped_budgets:
+          type: array
+          items:
+            type: string
+          description: Names of paused budgets the run skipped.
+      required:
+      - occurrences_completed
+      - occurrences_partial
+      - skipped_budgets
+      - transfers
+      - warnings
+    FundingScheduleTotal:
+      type: object
+      description: The next funding event's total for one funding schedule.
+      properties:
+        schedule:
+          type: string
+          description: The RRULE string.
+        next_date:
+          type: string
+          format: date
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        currency:
+          type: string
+        budget_count:
+          type: integer
+      required:
+      - budget_count
+      - currency
+      - next_date
+      - schedule
+      - total_amount
+    FundingSummary:
+      type: object
+      description: Per-schedule totals of an account's next funding events.
+      properties:
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/FundingScheduleTotal'
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        currency:
+          type: string
+      required:
+      - currency
+      - schedules
+      - total_amount
     FundingTypeEnum:
       enum:
       - D
@@ -3763,6 +3733,23 @@ components:
           minLength: 1
       required:
       - invitee_email
+    NextFunding:
+      type: object
+      description: The next scheduled funding event of a budget (read-only).
+      properties:
+        date:
+          type: string
+          format: date
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        amount_currency:
+          type: string
+      required:
+      - amount
+      - amount_currency
+      - date
     NotificationPreference:
       type: object
       description: |-
@@ -3813,29 +3800,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/APIKey'
-    PaginatedBankAccountInvitationList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/BankAccountInvitation'
     PaginatedBankAccountList:
       type: object
       required:
@@ -3905,29 +3869,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Budget'
-    PaginatedChannelPreferenceList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChannelPreference'
     PaginatedFundingEventOccurrenceList:
       type: object
       required:
@@ -3974,29 +3915,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InternalTransaction'
-    PaginatedNotificationPreferenceList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/NotificationPreference'
     PaginatedTransactionAllocationList:
       type: object
       required:
@@ -4553,25 +4471,6 @@ components:
       - is_pending
       - posted_date
       - raw_description
-    TokenRefresh:
-      type: object
-      properties:
-        access:
-          type: string
-          readOnly: true
-        refresh:
-          type: string
-      required:
-      - access
-      - refresh
-    TokenRefreshRequest:
-      type: object
-      properties:
-        refresh:
-          type: string
-          minLength: 1
-      required:
-      - refresh
     Transaction:
       type: object
       description: |-
@@ -4705,6 +4604,7 @@ components:
           type: string
           format: uuid
           readOnly: true
+          nullable: true
         bank_account_posted_balance:
           type: string
           format: decimal
@@ -4918,6 +4818,7 @@ components:
           type: string
           description: Owner username; null for a global category.
           readOnly: true
+          nullable: true
         archived:
           type: boolean
           readOnly: true
@@ -5250,9 +5151,8 @@ components:
             only.
         email:
           type: string
-          format: email
           readOnly: true
-          title: Email address
+          description: Login email address; blank for system accounts.
         name:
           type: string
           title: Name of User

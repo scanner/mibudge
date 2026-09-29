@@ -115,6 +115,8 @@ class BankAccountInvitationActions(viewsets.GenericViewSet):
         detail=True,
         methods=["get"],
         url_path="invitations",
+        pagination_class=None,
+        filter_backends=[],
         permission_classes=[
             IsAuthenticated,
             IsAccountOwner,

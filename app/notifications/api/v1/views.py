@@ -57,6 +57,7 @@ class NotificationPreferenceViewSet(AtomicWritesMixin, GenericViewSet):
 
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationPreferenceSerializer
+    pagination_class = None
     lookup_field = "kind"
     # Allow dots in kind strings (e.g. 'users.password_changed').
     lookup_value_regex = r"[^/]+"
@@ -149,6 +150,7 @@ class ChannelPreferenceViewSet(AtomicWritesMixin, GenericViewSet):
 
     permission_classes = [IsAuthenticated]
     serializer_class = ChannelPreferenceSerializer
+    pagination_class = None
     lookup_field = "channel"
 
     ####################################################################

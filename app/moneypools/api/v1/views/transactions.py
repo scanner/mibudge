@@ -198,7 +198,13 @@ class TransactionViewSet(
         request=TransactionSplitsSerializer,
         responses={200: TransactionAllocationSerializer(many=True)},
     )
-    @action(detail=True, methods=["post"], url_path="splits")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="splits",
+        pagination_class=None,
+        filter_backends=[],
+    )
     def splits(self, request: Request, id: str | None = None) -> Response:
         """Reconcile transaction allocations to match declared splits.
 

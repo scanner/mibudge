@@ -1,7 +1,8 @@
 """
 Serializers for shared reference data in the moneypools v1 API.
 
-Banks are read-only reference data managed through the admin.
+Banks are read-only reference data managed through the admin;
+currencies come from `moneyed`.
 """
 
 # 3rd party imports
@@ -31,3 +32,17 @@ class BankSerializer(serializers.ModelSerializer):
             "modified_at",
         ]
         read_only_fields = fields
+
+
+########################################################################
+########################################################################
+#
+class CurrencySerializer(serializers.Serializer):
+    """An ISO 4217 currency the system supports."""
+
+    code = serializers.CharField()
+    name = serializers.CharField()
+    numeric = serializers.CharField(
+        allow_null=True,
+        help_text="ISO 4217 numeric code; null for historic currencies.",
+    )

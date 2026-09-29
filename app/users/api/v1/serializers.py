@@ -111,6 +111,13 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # A plain string rather than `format: email`: system accounts such
+    # as the guardian anonymous user have a blank address.
+    #
+    email = serializers.CharField(
+        read_only=True,
+        help_text="Login email address; blank for system accounts.",
+    )
     has_usable_password = serializers.SerializerMethodField()
 
     def get_has_usable_password(self, obj: AbstractBaseUser) -> bool:

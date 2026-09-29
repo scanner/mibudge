@@ -22,6 +22,9 @@ $(ROOT_DIR)/deployment/local-dev-docker.env:
 	@cp $(ROOT_DIR)/deployment/dot-env.docker-dev $(ROOT_DIR)/deployment/local-dev-docker.env
 	@echo "Created deployment/local-dev-docker.env from deployment/dot-env.docker-dev"
 
+# mypy's Django plugin imports `config.settings`, which reads `.env`.
+lint: $(ROOT_DIR)/.env
+
 build:	## Build prod and dev Docker images
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target prod --tag mibudge:latest .
 	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg SALT_KEY="$(BUILD_SALT_KEY)" --target dev --tag mibudge:dev .

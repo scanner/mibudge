@@ -19,6 +19,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 # Project imports
+from tests.openapi_contract import SchemaCheckedAPIClient
 from users.models import APIKey, User
 
 pytestmark = pytest.mark.django_db
@@ -39,7 +40,7 @@ def header_client(authorization: str) -> APIClient:
     `APIKey` row that `APIKey.make` returns, so they mint the key
     themselves and pass the header here.
     """
-    client = APIClient()
+    client = SchemaCheckedAPIClient()
     client.credentials(HTTP_AUTHORIZATION=authorization)
     return client
 

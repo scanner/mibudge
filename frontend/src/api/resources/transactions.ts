@@ -50,8 +50,7 @@ export function transactionsResource(http: HttpClient) {
 
     // Replace the transaction's allocations with `splits` (budget id →
     // positive amount); the remainder goes to Unallocated.  Answers the
-    // resulting allocations as a plain array (the schema calls it a
-    // page).
+    // resulting allocations.
     //
     split(
       id: string,

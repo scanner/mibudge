@@ -40,6 +40,7 @@ from users.email_change import (
     confirm_request,
     revoke_request,
 )
+from users.serializers import AccessTokenSerializer
 
 # app imports
 #
@@ -157,6 +158,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 
     ####################################################################
     #
+    @extend_schema(responses={200: AccessTokenSerializer})
     def post(
         self, request: HttpRequest, *args: object, **kwargs: object
     ) -> Response:
@@ -188,6 +190,7 @@ class CookieTokenRefreshView(TokenRefreshView):
 
     ####################################################################
     #
+    @extend_schema(request=None, responses={200: AccessTokenSerializer})
     def post(
         self, request: HttpRequest, *args: object, **kwargs: object
     ) -> Response:
