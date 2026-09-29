@@ -1,0 +1,49 @@
+{
+  "summary": "One pending and one posted row, newest first",
+  "request": {
+    "scraped_at": "2026-09-29T08:15:00-07:00",
+    "ending_balance": "1432.18",
+    "transactions": [
+      {
+        "is_pending": true,
+        "posted_date": "2026-09-29T08:15:00-07:00",
+        "raw_description": "CORNER MARKET 09/28 PURCHASE",
+        "amount": "-18.25",
+        "transaction_type": "",
+        "running_balance": null
+      },
+      {
+        "is_pending": false,
+        "posted_date": "2026-09-28T00:00:00-07:00",
+        "raw_description": "BLUE BOTTLE COFFEE 09/27 PURCHASE",
+        "amount": "-6.50",
+        "transaction_type": "signature_purchase",
+        "running_balance": "1450.43"
+      }
+    ]
+  },
+  "response": {
+    "status": "200",
+    "summary": "The pending row replaced, the posted row new and needing details",
+    "body": {
+      "deleted_pending": 1,
+      "inserted_posted": 1,
+      "skipped_posted": 0,
+      "inserted_pending": 1,
+      "balance_mismatch": null,
+      "posting_order_mismatches": [],
+      "last_posted_through": "2026-09-28",
+      "new_transaction_ids": [
+        "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+        "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6e"
+      ],
+      "details_needed": [
+        {
+          "index": 1,
+          "transaction": "d3c2b1a0-9f8e-4d7c-8b6a-5f4e3d2c1b0a"
+        }
+      ]
+    }
+  },
+  "description": "On an account whose previous sync left one pending row and whose balance agrees with the bank's.  `details_needed[].index` points into the submitted `transactions` array; send those rows' details to `transaction-details`."
+}

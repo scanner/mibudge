@@ -1,0 +1,13 @@
+{
+  "summary": "$1800 rent, refreshed on the 1st, funded on the 1st and 15th",
+  "description": "A Recurring budget also gets an associated fill-up goal (`fillup_goal` in the response). The funding schedule fills the goal toward `target_balance` by the next `recurrence_schedule` date, when its balance moves into the budget.",
+  "request": {
+    "name": "Rent",
+    "bank_account": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+    "budget_type": "R",
+    "funding_type": "D",
+    "target_balance": "1800.00",
+    "funding_schedule": "DTSTART:20261001T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1,15",
+    "recurrence_schedule": "DTSTART:20261001T000000Z\nRRULE:FREQ=MONTHLY"
+  }
+}

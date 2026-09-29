@@ -1,0 +1,20 @@
+{
+  "summary": "The account after creating the Rent budget (see budgets_create)",
+  "response": {
+    "status": "200",
+    "summary": "Rent's fill-up goal gets $900.00 on the 1st",
+    "body": {
+      "schedules": [
+        {
+          "schedule": "DTSTART:20261001T000000Z\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1,15",
+          "next_date": "2026-10-01",
+          "total_amount": "900.00",
+          "currency": "USD",
+          "budget_count": 1
+        }
+      ],
+      "total_amount": "900.00",
+      "currency": "USD"
+    }
+  }
+}

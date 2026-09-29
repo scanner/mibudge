@@ -32,7 +32,9 @@ from openapi_core.templating.responses.exceptions import ResponseNotFound
 from openapi_core.testing import MockRequest, MockResponse
 from rest_framework.test import APIClient
 
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "openapi.yaml"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+SCHEMA_PATH = ROOT_DIR / "docs" / "openapi.yaml"
+EXAMPLES_DIR = ROOT_DIR / "examples"
 
 
 ####################################################################
@@ -62,12 +64,23 @@ def _nullable_refs(node: Any) -> None:
 ####################################################################
 #
 @cache
+def spec() -> dict:
+    """The API schema as a dict, loaded once per test session.
+
+    Callers must not modify it.
+    """
+    with SCHEMA_PATH.open() as f:
+        loaded = yaml.safe_load(f)
+    _nullable_refs(loaded)
+    return loaded
+
+
+####################################################################
+#
+@cache
 def openapi() -> OpenAPI:
     """The API schema, loaded once per test session."""
-    with SCHEMA_PATH.open() as f:
-        spec = yaml.safe_load(f)
-    _nullable_refs(spec)
-    return OpenAPI.from_dict(spec)
+    return OpenAPI.from_dict(spec())
 
 
 ####################################################################

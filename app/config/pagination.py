@@ -9,6 +9,7 @@ sensible default for UI pagination.
 """
 
 # 3rd party imports
+from django.conf import settings
 from rest_framework.pagination import PageNumberPagination
 
 
@@ -19,8 +20,9 @@ class FlexiblePageNumberPagination(PageNumberPagination):
     """Page-number pagination with client-controllable page size.
 
     Defaults to PAGE_SIZE from settings (100).  Clients may pass
-    ``?page_size=N`` to request up to ``max_page_size`` items per page.
+    ``?page_size=N`` to request up to `API_MAX_PAGE_SIZE` (settings) items
+    per page.
     """
 
     page_size_query_param = "page_size"
-    max_page_size = 500
+    max_page_size = settings.API_MAX_PAGE_SIZE

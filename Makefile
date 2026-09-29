@@ -114,7 +114,7 @@ api-schema: .venv docs	## Generate OpenAPI schema YAML into docs/openapi.yaml
 	@echo "OpenAPI schema written to docs/openapi.yaml"
 
 api-docs: api-schema	## Generate API markdown docs from OpenAPI schema
-	@$(UV_RUN) python app/scripts/generate_api_docs.py docs/openapi.yaml docs/api.md
+	@$(UV_RUN) python app/scripts/generate_api_docs.py docs/openapi.yaml examples docs/api.md
 	@echo "API docs written to docs/api.md"
 
 docs:

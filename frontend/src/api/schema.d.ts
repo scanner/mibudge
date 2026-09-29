@@ -2592,7 +2592,7 @@ export interface operations {
                     "application/json": components["schemas"]["AccessToken"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2610,7 +2610,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2637,7 +2637,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2674,7 +2674,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2715,7 +2715,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedTransactionAllocationList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2724,7 +2724,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2733,7 +2733,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2742,7 +2742,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2772,7 +2772,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionAllocation"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2781,7 +2781,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2790,7 +2790,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2831,7 +2831,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedBankAccountList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2840,7 +2840,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2849,7 +2849,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2858,7 +2858,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2892,7 +2892,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccount"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2901,7 +2901,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2910,7 +2910,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2940,7 +2940,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccount"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2949,7 +2949,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2958,7 +2958,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2994,7 +2994,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccount"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3003,7 +3003,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3012,7 +3012,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3021,7 +3021,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3050,7 +3050,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3059,7 +3059,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3068,7 +3068,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3104,7 +3104,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccount"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3113,7 +3113,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3122,7 +3122,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3131,7 +3131,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3175,7 +3175,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3184,7 +3184,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3193,7 +3193,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3223,7 +3223,7 @@ export interface operations {
                     "application/json": components["schemas"]["FundingSummary"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3232,7 +3232,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3241,7 +3241,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3271,7 +3271,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccountInvitation"][];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3280,7 +3280,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3289,7 +3289,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3298,7 +3298,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3338,7 +3338,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3365,7 +3365,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3400,7 +3400,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3409,7 +3409,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3418,7 +3418,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3427,7 +3427,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3482,7 +3482,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccount"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3491,7 +3491,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3500,7 +3500,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3509,7 +3509,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3549,7 +3549,7 @@ export interface operations {
                     "application/json": components["schemas"]["FundingRunResult"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3558,7 +3558,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3567,7 +3567,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3585,7 +3585,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3630,7 +3630,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScrapeSyncReport"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3639,7 +3639,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3648,7 +3648,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3657,7 +3657,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3693,7 +3693,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionDetailsReport"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3702,7 +3702,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3711,7 +3711,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3720,7 +3720,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3755,7 +3755,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedBankList"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3764,7 +3764,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3773,7 +3773,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3803,7 +3803,7 @@ export interface operations {
                     "application/json": components["schemas"]["Bank"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3812,7 +3812,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3821,7 +3821,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3868,7 +3868,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedBudgetList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3877,7 +3877,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3886,7 +3886,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3895,7 +3895,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3929,7 +3929,7 @@ export interface operations {
                     "application/json": components["schemas"]["Budget"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3938,7 +3938,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3947,7 +3947,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3977,7 +3977,7 @@ export interface operations {
                     "application/json": components["schemas"]["Budget"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3986,7 +3986,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3995,7 +3995,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4031,7 +4031,7 @@ export interface operations {
                     "application/json": components["schemas"]["BudgetUpdateResult"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4040,7 +4040,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4049,7 +4049,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4058,7 +4058,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4096,7 +4096,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4114,7 +4114,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4123,7 +4123,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4159,7 +4159,7 @@ export interface operations {
                     "application/json": components["schemas"]["BudgetUpdateResult"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4168,7 +4168,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4177,7 +4177,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4186,7 +4186,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4225,7 +4225,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4243,7 +4243,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4252,7 +4252,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4280,7 +4280,7 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelPreference"][];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4289,7 +4289,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4326,7 +4326,7 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelPreference"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4335,7 +4335,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4344,7 +4344,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4353,7 +4353,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4381,7 +4381,7 @@ export interface operations {
                     "application/json": components["schemas"]["Currency"][];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4390,7 +4390,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4443,7 +4443,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedFundingEventOccurrenceList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4452,7 +4452,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4461,7 +4461,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4470,7 +4470,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4500,7 +4500,7 @@ export interface operations {
                     "application/json": components["schemas"]["FundingEventOccurrence"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4509,7 +4509,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4518,7 +4518,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4559,7 +4559,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedInternalTransactionList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4568,7 +4568,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4577,7 +4577,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4586,7 +4586,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4620,7 +4620,7 @@ export interface operations {
                     "application/json": components["schemas"]["InternalTransaction"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4629,7 +4629,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4638,7 +4638,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4668,7 +4668,7 @@ export interface operations {
                     "application/json": components["schemas"]["InternalTransaction"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4677,7 +4677,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4686,7 +4686,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4716,7 +4716,7 @@ export interface operations {
                     "application/json": components["schemas"]["PublicInvitationDetail"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4734,7 +4734,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4772,7 +4772,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4790,7 +4790,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4828,7 +4828,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4846,7 +4846,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4874,7 +4874,7 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationPreference"][];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4883,7 +4883,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4919,7 +4919,7 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationPreference"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4928,7 +4928,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4937,7 +4937,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4946,7 +4946,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4991,7 +4991,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedTransactionCategoryList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5000,7 +5000,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5009,7 +5009,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5018,7 +5018,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5052,7 +5052,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionCategory"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5061,7 +5061,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5070,7 +5070,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5100,7 +5100,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionCategory"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5109,7 +5109,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5118,7 +5118,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5154,7 +5154,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionCategory"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5163,7 +5163,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5181,7 +5181,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5190,7 +5190,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5219,7 +5219,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5237,7 +5237,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5255,7 +5255,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5291,7 +5291,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionCategory"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5300,7 +5300,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5318,7 +5318,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5327,7 +5327,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5357,7 +5357,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionCategory"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5375,7 +5375,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5384,7 +5384,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5466,7 +5466,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedTransactionList"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5475,7 +5475,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5484,7 +5484,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5493,7 +5493,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5527,7 +5527,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transaction"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5536,7 +5536,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5545,7 +5545,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5575,7 +5575,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transaction"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5584,7 +5584,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5593,7 +5593,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5629,7 +5629,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transaction"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5638,7 +5638,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5647,7 +5647,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5656,7 +5656,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5685,7 +5685,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5694,7 +5694,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5703,7 +5703,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5739,7 +5739,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transaction"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5748,7 +5748,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5757,7 +5757,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5766,7 +5766,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5802,7 +5802,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transaction"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5811,7 +5811,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5820,7 +5820,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5829,7 +5829,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5865,7 +5865,7 @@ export interface operations {
                     "application/json": components["schemas"]["TransactionAllocation"][];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5874,7 +5874,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5883,7 +5883,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5892,7 +5892,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5927,7 +5927,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedUserList"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5936,7 +5936,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5945,7 +5945,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5954,7 +5954,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -5984,7 +5984,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5993,7 +5993,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6002,7 +6002,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6011,7 +6011,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6047,7 +6047,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6056,7 +6056,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6065,7 +6065,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6074,7 +6074,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6083,7 +6083,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6119,7 +6119,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6128,7 +6128,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6137,7 +6137,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6146,7 +6146,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6155,7 +6155,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6183,7 +6183,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6192,7 +6192,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6226,7 +6226,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6235,7 +6235,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6244,7 +6244,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6253,7 +6253,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6286,7 +6286,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedAPIKeyList"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6295,7 +6295,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6304,7 +6304,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid page. */
+            /** @description The requested `page` is past the last one. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6313,7 +6313,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6347,7 +6347,7 @@ export interface operations {
                     "application/json": components["schemas"]["APIKeyCreated"];
                 };
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6356,7 +6356,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6365,7 +6365,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6374,7 +6374,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6404,7 +6404,7 @@ export interface operations {
                     "application/json": components["schemas"]["APIKey"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6413,7 +6413,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6422,7 +6422,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6431,7 +6431,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6470,7 +6470,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6479,7 +6479,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6488,7 +6488,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No such object. */
+            /** @description No such object, or one the caller cannot see. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6497,7 +6497,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6530,7 +6530,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6539,7 +6539,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6566,7 +6566,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6605,7 +6605,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6623,7 +6623,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6662,7 +6662,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6671,7 +6671,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6704,7 +6704,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid input. */
+            /** @description Invalid input: a field error in the request body, or a bad filter value on a list. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6713,7 +6713,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationError"];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6722,7 +6722,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6731,7 +6731,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -6759,7 +6759,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankAccountInvitation"][];
                 };
             };
-            /** @description Missing or invalid credentials. */
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6768,7 +6768,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The credentials are not allowed to do this. */
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6777,7 +6777,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many requests. */
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
             429: {
                 headers: {
                     [name: string]: unknown;
