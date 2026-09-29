@@ -20,6 +20,7 @@ from rest_framework.test import APIClient
 # project imports
 import notifications.service as notifications_service
 from common.db import SQLITE_ENGINE, apply_sqlite_locking
+from tests.openapi_contract import SchemaCheckedAPIClient
 from tests.users.factories import UserFactory
 from users.models import APIKey, User
 
@@ -303,8 +304,12 @@ def user() -> User:
 #
 @pytest.fixture
 def api_client() -> APIClient:
-    """An unauthenticated DRF test client."""
-    return APIClient()
+    """An unauthenticated DRF test client.
+
+    Every client these fixtures build checks each API response it
+    receives against `docs/openapi.yaml` (`tests.openapi_contract`).
+    """
+    return SchemaCheckedAPIClient()
 
 
 ####################################################################
@@ -322,7 +327,7 @@ def make_auth_client() -> Callable[[User], APIClient]:
     """
 
     def _make(user: User) -> APIClient:
-        client = APIClient()
+        client = SchemaCheckedAPIClient()
         client.force_authenticate(user=user)
         return client
 
@@ -355,7 +360,7 @@ def make_api_key_client() -> Callable[..., APIClient]:
 
     def _make(user: User, name: str = "test key") -> APIClient:
         _, plaintext = APIKey.make(user, name)
-        client = APIClient()
+        client = SchemaCheckedAPIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Api-Key {plaintext}")
         return client
 

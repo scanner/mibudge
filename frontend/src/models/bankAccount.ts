@@ -144,11 +144,11 @@ export interface FundingSummary {
 export function fundingSummaryFromDto(dto: FundingSummaryDto): FundingSummary {
   const currency = dto.currency || DEFAULT_CURRENCY;
   return {
-    schedules: (dto.schedules ?? []).map((s) => ({
-      schedule: s.schedule ?? "",
+    schedules: dto.schedules.map((s) => ({
+      schedule: s.schedule,
       nextDate: toLocalDate(s.next_date),
       total: Money.of(s.total_amount, s.currency || currency),
-      budgetCount: s.budget_count ?? 0,
+      budgetCount: s.budget_count,
     })),
     total: Money.of(dto.total_amount, currency),
   };
@@ -169,11 +169,11 @@ export function fundingRunResultFromDto(
   dto: FundingRunResultDto,
 ): FundingRunResult {
   return {
-    transfers: dto.transfers ?? 0,
-    occurrencesCompleted: dto.occurrences_completed ?? 0,
-    occurrencesPartial: dto.occurrences_partial ?? 0,
-    warnings: dto.warnings ?? [],
-    skippedBudgets: dto.skipped_budgets ?? [],
+    transfers: dto.transfers,
+    occurrencesCompleted: dto.occurrences_completed,
+    occurrencesPartial: dto.occurrences_partial,
+    warnings: dto.warnings,
+    skippedBudgets: dto.skipped_budgets,
   };
 }
 

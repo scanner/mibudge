@@ -9,7 +9,6 @@ ISO 4217 currencies the system supports.
 import moneyed
 from django.db import transaction
 from drf_spectacular.utils import (
-    OpenApiResponse,
     extend_schema,
     extend_schema_view,
 )
@@ -24,7 +23,7 @@ from rest_framework.response import Response
 from common.views import AtomicWritesMixin
 from moneypools.models import Bank
 
-from ..serializers.reference import BankSerializer
+from ..serializers.reference import BankSerializer, CurrencySerializer
 
 
 ########################################################################
@@ -66,11 +65,7 @@ class BankViewSet(AtomicWritesMixin, viewsets.ReadOnlyModelViewSet):
         "sorted by code. Each entry includes the code, English name, "
         "and numeric ISO 4217 code. Requires authentication."
     ),
-    responses={
-        200: OpenApiResponse(
-            description="List of supported currencies.",
-        ),
-    },
+    responses={200: CurrencySerializer(many=True)},
 )
 # A read-only view: `ATOMIC_REQUESTS` would open a transaction, which
 # on SQLite takes the database write lock (see

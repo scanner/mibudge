@@ -158,11 +158,11 @@ each schema type:
 | Partial update body      | `<Thing>UpdateDto`       | `BudgetUpdateDto = Schemas["PatchedBudgetRequest"]` |
 | List query parameters    | `<Thing>ListQuery`       | `operations["budgets_list"]["parameters"]["query"]` |
 | Enum                     | `<Enum>Dto`              | `BudgetTypeDto = Schemas["BudgetTypeEnum"]`        |
-| Inline response          | from `operations[...]`   | `FundingSummaryDto`                                |
 
 `api/dto.ts` hand-writes a type only where the schema cannot express the
-response, and says why next to it. For example, `AccessTokenDto` exists
-because the token endpoints document no response body.
+response, and says why next to it. For example, `Page<T>` exists because
+the schema marks `next` / `previous` optional though the server always
+sends them.
 
 ---
 

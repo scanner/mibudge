@@ -2,9 +2,6 @@
 // Notification preferences per kind, and per-channel digest settings.
 // API layer.
 //
-// Both list endpoints answer a plain JSON array; the schema describes
-// them as paginated (a drf-spectacular annotation gap).
-//
 
 // app imports
 //

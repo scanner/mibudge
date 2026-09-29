@@ -534,7 +534,7 @@ export interface paths {
          * List supported currencies
          * @description Return all ISO 4217 currency codes supported by the system, sorted by code. Each entry includes the code, English name, and numeric ISO 4217 code. Requires authentication.
          */
-        get: operations["currencies_retrieve"];
+        get: operations["currencies_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1204,6 +1204,13 @@ export interface components {
             readonly key: string;
         };
         /**
+         * @description Response body of the cookie-based token endpoints: the access token
+         *     only, since the refresh token travels in the httpOnly cookie.
+         */
+        AccessToken: {
+            readonly access: string;
+        };
+        /**
          * @description * `C` - Checking
          *     * `S` - Savings
          *     * `X` - Credit Card
@@ -1407,32 +1414,8 @@ export interface components {
             memo?: string | null;
             /** @description List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget. */
             auto_spend?: unknown;
-            /**
-             * @description Return the next scheduled funding event for this budget, or null.
-             *
-             *     Args:
-             *         obj: The Budget instance being serialized.
-             *
-             *     Returns:
-             *         Dict with 'date', 'amount', 'amount_currency', or None.
-             */
-            readonly next_funding: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * @description Return the date of the next recurrence (refresh) event, or null.
-             *
-             *     The recurrence_schedule's DTSTART is only the rule's anchor;
-             *     this field is the actual upcoming refresh date (first
-             *     occurrence after last_recurrence_on).  Only Recurring budgets
-             *     have one.
-             *
-             *     Args:
-             *         obj: The Budget instance being serialized.
-             *
-             *     Returns:
-             *         ISO date string, or None.
-             */
+            readonly next_funding: components["schemas"]["NextFunding"] | null;
+            /** Format: date */
             readonly next_recurrence: string | null;
             readonly funding_pace: (components["schemas"]["FundingPaceEnum"] | components["schemas"]["NullEnum"]) | null;
             /** Format: date-time */
@@ -1481,6 +1464,60 @@ export interface components {
          */
         BudgetTypeEnum: "G" | "R" | "A" | "C";
         /**
+         * @description Response body of a budget update: the budget plus the warnings
+         *     the service emitted (e.g. recurrence boundaries missed while paused).
+         */
+        BudgetUpdateResult: {
+            /** Format: uuid */
+            readonly id: string;
+            name: string;
+            /** Format: uuid */
+            bank_account: string;
+            /** Format: decimal */
+            readonly balance: string;
+            readonly balance_currency: string;
+            /**
+             * Format: decimal
+             * @description For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
+             */
+            readonly funded_amount: string;
+            readonly funded_amount_currency: string;
+            /** Format: decimal */
+            target_balance: string;
+            readonly target_balance_currency: string;
+            /** Format: decimal */
+            funding_amount?: string | null;
+            readonly funding_amount_currency: string | null;
+            budget_type?: components["schemas"]["BudgetTypeEnum"];
+            funding_type?: components["schemas"]["FundingTypeEnum"];
+            /** Format: date */
+            target_date?: string | null;
+            /** Format: uuid */
+            readonly fillup_goal: string | null;
+            readonly archived: boolean;
+            /** Format: date-time */
+            readonly archived_at: string | null;
+            /** @description True when this budget has reached its target and should not be funded further.  Managed by signals and funding tasks; do not set manually. */
+            readonly complete: boolean;
+            /** @description A paused budget does not get automatically funded on its schedule. */
+            paused?: boolean;
+            funding_schedule?: string;
+            /** @description Refresh cycle for Recurring budgets.  Restricted grammar: a single RRULE whose FREQ is WEEKLY, MONTHLY, or YEARLY with an optional INTERVAL, plus an optional DTSTART that anchors the day the cycle refreshes on (e.g. 'DTSTART:20260708T000000Z RRULE:FREQ=MONTHLY' refreshes on the 8th of every month).  BY* parts, COUNT, UNTIL, and exception rules/dates are rejected -- the anchor date is the only day-of-cycle control.  The funding_schedule field is not restricted this way. */
+            recurrence_schedule?: string | null;
+            memo?: string | null;
+            /** @description List of matcher strings; currently transaction-category full names ('{group} : {name}').  Spend matching an entry is auto-routed to this budget. */
+            auto_spend?: unknown;
+            readonly next_funding: components["schemas"]["NextFunding"] | null;
+            /** Format: date */
+            readonly next_recurrence: string | null;
+            readonly funding_pace: (components["schemas"]["FundingPaceEnum"] | components["schemas"]["NullEnum"]) | null;
+            /** Format: date-time */
+            readonly created_at: string;
+            /** Format: date-time */
+            readonly modified_at: string;
+            readonly warnings: string[];
+        };
+        /**
          * @description Validate a password-change request.
          *
          *     Checks that the new password is strong enough (zxcvbn score >= 2)
@@ -1502,6 +1539,13 @@ export interface components {
             readonly channel: string;
             readonly display_name: string;
             digest_frequency: components["schemas"]["DigestFrequencyEnum"];
+        };
+        /** @description An ISO 4217 currency the system supports. */
+        Currency: {
+            code: string;
+            name: string;
+            /** @description ISO 4217 numeric code; null for historic currencies. */
+            numeric: string | null;
         };
         /**
          * @description * `digest` - Digest
@@ -1536,6 +1580,10 @@ export interface components {
         EmailTokenObtainPairRequest: {
             email: string;
             password: string;
+        };
+        /** @description Sorted dates on which an account has a funding event due. */
+        FundingEventDates: {
+            dates: string[];
         };
         /**
          * @description Read-only serializer for FundingEventOccurrence rows.
@@ -1581,6 +1629,33 @@ export interface components {
          * @enum {string}
          */
         FundingPaceEnum: "ahead" | "on_track" | "behind";
+        /** @description What one `run-funding` call did. */
+        FundingRunResult: {
+            transfers: number;
+            occurrences_completed: number;
+            occurrences_partial: number;
+            warnings: string[];
+            /** @description Names of paused budgets the run skipped. */
+            skipped_budgets: string[];
+        };
+        /** @description The next funding event's total for one funding schedule. */
+        FundingScheduleTotal: {
+            /** @description The RRULE string. */
+            schedule: string;
+            /** Format: date */
+            next_date: string;
+            /** Format: decimal */
+            total_amount: string;
+            currency: string;
+            budget_count: number;
+        };
+        /** @description Per-schedule totals of an account's next funding events. */
+        FundingSummary: {
+            schedules: components["schemas"]["FundingScheduleTotal"][];
+            /** Format: decimal */
+            total_amount: string;
+            currency: string;
+        };
         /**
          * @description * `D` - Target Date
          *     * `F` - Fixed Amount
@@ -1658,6 +1733,14 @@ export interface components {
             /** Format: email */
             invitee_email: string;
         };
+        /** @description The next scheduled funding event of a budget (read-only). */
+        NextFunding: {
+            /** Format: date */
+            date: string;
+            /** Format: decimal */
+            amount: string;
+            amount_currency: string;
+        };
         /**
          * @description Notification kind preference.
          *
@@ -1686,21 +1769,6 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["APIKey"][];
-        };
-        PaginatedBankAccountInvitationList: {
-            /** @example 123 */
-            count: number;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=4
-             */
-            next?: string | null;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=2
-             */
-            previous?: string | null;
-            results: components["schemas"]["BankAccountInvitation"][];
         };
         PaginatedBankAccountList: {
             /** @example 123 */
@@ -1747,21 +1815,6 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["Budget"][];
         };
-        PaginatedChannelPreferenceList: {
-            /** @example 123 */
-            count: number;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=4
-             */
-            next?: string | null;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=2
-             */
-            previous?: string | null;
-            results: components["schemas"]["ChannelPreference"][];
-        };
         PaginatedFundingEventOccurrenceList: {
             /** @example 123 */
             count: number;
@@ -1791,21 +1844,6 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["InternalTransaction"][];
-        };
-        PaginatedNotificationPreferenceList: {
-            /** @example 123 */
-            count: number;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=4
-             */
-            next?: string | null;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=2
-             */
-            previous?: string | null;
-            results: components["schemas"]["NotificationPreference"][];
         };
         PaginatedTransactionAllocationList: {
             /** @example 123 */
@@ -2131,13 +2169,6 @@ export interface components {
             /** Format: decimal */
             running_balance?: string | null;
         };
-        TokenRefresh: {
-            readonly access: string;
-            refresh: string;
-        };
-        TokenRefreshRequest: {
-            refresh: string;
-        };
         /**
          * @description Serializer for bank transactions.
          *
@@ -2193,7 +2224,7 @@ export interface components {
             readonly allocations: components["schemas"]["TransactionAllocation"][];
             bank_transaction_id?: string | null;
             /** Format: uuid */
-            readonly linked_transaction: string;
+            readonly linked_transaction: string | null;
             /**
              * Format: decimal
              * @description Posted Balance does not include pending debits.
@@ -2308,7 +2339,7 @@ export interface components {
             /** @description Canonical display form: '{group} : {name}'. */
             readonly full_name: string;
             /** @description Owner username; null for a global category. */
-            readonly owner: string;
+            readonly owner: string | null;
             /** @description Archived categories are hidden from pickers but remain valid on existing transactions and allocations. */
             readonly archived: boolean;
             /** Format: date-time */
@@ -2489,10 +2520,7 @@ export interface components {
         User: {
             /** @description Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only. */
             readonly username: string;
-            /**
-             * Email address
-             * Format: email
-             */
+            /** @description Login email address; blank for system accounts. */
             readonly email: string;
             /** Name of User */
             name?: string;
@@ -2545,12 +2573,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description No response body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AccessToken"];
+                };
             };
         };
     };
@@ -2579,20 +2608,14 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TokenRefreshRequest"];
-                "application/x-www-form-urlencoded": components["schemas"]["TokenRefreshRequest"];
-                "multipart/form-data": components["schemas"]["TokenRefreshRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenRefresh"];
+                    "application/json": components["schemas"]["AccessToken"];
                 };
             };
         };
@@ -2804,7 +2827,12 @@ export interface operations {
     };
     bank_accounts_funding_event_dates_retrieve: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Exclusive lower bound (YYYY-MM-DD). */
+                after: string;
+                /** @description Inclusive upper bound (YYYY-MM-DD). */
+                before: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -2813,15 +2841,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Sorted list of event dates. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        dates?: string[];
-                    };
+                    "application/json": components["schemas"]["FundingEventDates"];
                 };
             };
         };
@@ -2837,44 +2862,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Per-schedule funding totals. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        schedules?: {
-                            schedule?: string;
-                            /** Format: date */
-                            next_date?: string;
-                            total_amount?: string;
-                            currency?: string;
-                            budget_count?: number;
-                        }[];
-                        total_amount?: string;
-                        currency?: string;
-                    };
+                    "application/json": components["schemas"]["FundingSummary"];
                 };
             };
         };
     };
     bank_accounts_invitations_list: {
         parameters: {
-            query?: {
-                /**
-                 * @description * `C` - Checking
-                 *     * `S` - Savings
-                 *     * `X` - Credit Card
-                 */
-                account_type?: "C" | "S" | "X";
-                /** @description Which field to use when ordering the results. */
-                ordering?: string;
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
@@ -2888,7 +2888,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedBankAccountInvitationList"];
+                    "application/json": components["schemas"]["BankAccountInvitation"][];
                 };
             };
         };
@@ -2990,19 +2990,12 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Funding run result. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        transfers?: number;
-                        occurrences_completed?: number;
-                        occurrences_partial?: number;
-                        warnings?: string[];
-                        skipped_budgets?: string[];
-                    };
+                    "application/json": components["schemas"]["FundingRunResult"];
                 };
             };
             /** @description Either another worker is currently processing this account (lock held), or there is nothing due or outstanding to run as of the supplied date. */
@@ -3221,7 +3214,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Budget"];
+                    "application/json": components["schemas"]["BudgetUpdateResult"];
                 };
             };
         };
@@ -3268,7 +3261,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Budget"];
+                    "application/json": components["schemas"]["BudgetUpdateResult"];
                 };
             };
         };
@@ -3282,13 +3275,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BudgetRequest"];
-                "application/x-www-form-urlencoded": components["schemas"]["BudgetRequest"];
-                "multipart/form-data": components["schemas"]["BudgetRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {
@@ -3302,12 +3289,7 @@ export interface operations {
     };
     channel_preferences_list: {
         parameters: {
-            query?: {
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -3319,7 +3301,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedChannelPreferenceList"];
+                    "application/json": components["schemas"]["ChannelPreference"][];
                 };
             };
         };
@@ -3352,7 +3334,7 @@ export interface operations {
             };
         };
     };
-    currencies_retrieve: {
+    currencies_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -3361,12 +3343,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of supported currencies. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Currency"][];
+                };
             };
         };
     };
@@ -3604,12 +3587,7 @@ export interface operations {
     };
     notification_preferences_list: {
         parameters: {
-            query?: {
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -3621,7 +3599,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedNotificationPreferenceList"];
+                    "application/json": components["schemas"]["NotificationPreference"][];
                 };
             };
         };
@@ -4059,61 +4037,7 @@ export interface operations {
     };
     transactions_splits_create: {
         parameters: {
-            query?: {
-                bank_account?: string;
-                budget?: string;
-                category?: string;
-                category_group?: string;
-                date_from?: string;
-                date_to?: string;
-                has_details?: boolean;
-                merchant_category_code?: string;
-                merchant_city?: string;
-                merchant_intermediary?: string;
-                merchant_name?: string;
-                merchant_region?: string;
-                /** @description Which field to use when ordering the results. */
-                ordering?: string;
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-                pending?: boolean;
-                posted_date_from?: string;
-                posted_date_to?: string;
-                /** @description A search term. */
-                search?: string;
-                /**
-                 * @description * `signature_purchase` - Signature Purchase
-                 *     * `ach` - ACH
-                 *     * `round-up_transfer` - Round-up Transfer
-                 *     * `protected_goal_account_transfer` - Protected Goal Account Transfer
-                 *     * `fee` - Fee
-                 *     * `pin_purchase` - Pin Purchase
-                 *     * `signature_credit` - Signature Credit
-                 *     * `interest_credit` - Interest Credit
-                 *     * `shared_transfer` - Shared Transfer
-                 *     * `courtesy_credit` - Courtesy Credit
-                 *     * `atm_withdrawal` - ATM Withdrawal
-                 *     * `bill_payment` - Bill Payment
-                 *     * `bank_generated_credit` - Bank Generated Credit
-                 *     * `wire_transfer` - Wire Transfer
-                 *     * `check_deposit` - Check Deposit
-                 *     * `check` - Check
-                 *     * `c2c` - c2c
-                 *     * `migration_interbank_transfer` - Migration Interbank Transfer
-                 *     * `balance_sweep` - Balance Sweep
-                 *     * `ach_reversal` - ACH Reversal
-                 *     * `adjustment` - Adjustment
-                 *     * `signature_return` - Signature return
-                 *     * `fx_order` - FX Order
-                 *     * `` - --------
-                 */
-                transaction_type?: "" | "ach" | "ach_reversal" | "adjustment" | "atm_withdrawal" | "balance_sweep" | "bank_generated_credit" | "bill_payment" | "c2c" | "check" | "check_deposit" | "courtesy_credit" | "fee" | "fx_order" | "interest_credit" | "migration_interbank_transfer" | "pin_purchase" | "protected_goal_account_transfer" | "round-up_transfer" | "shared_transfer" | "signature_credit" | "signature_purchase" | "signature_return" | "wire_transfer";
-                unallocated?: boolean;
-                uncategorized?: boolean;
-                virtual_card_last4?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
@@ -4133,7 +4057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedTransactionAllocationList"];
+                    "application/json": components["schemas"]["TransactionAllocation"][];
                 };
             };
         };
@@ -4466,14 +4390,7 @@ export interface operations {
     };
     users_me_invitations_list: {
         parameters: {
-            query?: {
-                /** @description Which field to use when ordering the results. */
-                ordering?: string;
-                /** @description A page number within the paginated result set. */
-                page?: number;
-                /** @description Number of results to return per page. */
-                page_size?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -4485,7 +4402,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedBankAccountInvitationList"];
+                    "application/json": components["schemas"]["BankAccountInvitation"][];
                 };
             };
         };

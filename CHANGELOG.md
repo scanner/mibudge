@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The OpenAPI schema now describes the splits, invitation-list and notification/channel-preference endpoints as plain arrays (without phantom pagination or filter parameters), types `next_funding`, `next_recurrence` and the `run-funding`, `funding-summary`, `funding-event-dates` and `currencies` responses, documents the `after`/`before` parameters of `funding-event-dates`, the `warnings` on budget updates and the `{access}` body of `/api/token/` and `/api/token/refresh/`, no longer requires a body for budget `archive`, and marks `linked_transaction` and category `owner` nullable
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)
 - Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
 - Budget target dates, next-refresh dates and funding dates showed one day early in browsers west of UTC (a goal due Dec 14 read "Dec 13"); calendar dates now show the same day in every timezone. Transaction list date headers had the same problem when the browser's timezone differed from your profile timezone

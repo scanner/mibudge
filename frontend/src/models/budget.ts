@@ -71,19 +71,17 @@ export interface Budget extends BudgetFigures {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// `next_funding` is an untyped object in the schema; read the three
-// fields the server sends and drop the value when any is unusable.
-//
 function nextFundingFromDto(
   raw: BudgetDto["next_funding"],
   currency: string,
 ): NextFunding | null {
   if (!raw) return null;
-  const date = toLocalDate(typeof raw.date === "string" ? raw.date : null);
-  if (!date || typeof raw.amount !== "string") return null;
-  const amountCurrency =
-    typeof raw.amount_currency === "string" ? raw.amount_currency : currency;
-  return { date, amount: Money.of(raw.amount, amountCurrency) };
+  const date = toLocalDate(raw.date);
+  if (!date) return null;
+  return {
+    date,
+    amount: Money.of(raw.amount, raw.amount_currency || currency),
+  };
 }
 
 ////////////////////////////////////////////////////////////////////////

@@ -101,6 +101,7 @@ dev = [
     "pyopenssl>=26.0.0",
     "lupa>=2.8",
     "types-python-dateutil>=2.9.0.20260408",
+    "openapi-core>=0.23.1",
 ]
 
 importers-bofa = [

@@ -66,14 +66,13 @@ describe("budgetFromDto", () => {
     expect(b.archivedAt).toBeNull();
   });
 
-  // GIVEN: a `next_funding` object that is missing or malformed
+  // GIVEN: a `next_funding` that is null or carries an unusable date
   // WHEN:  the budget is mapped
   // THEN:  `nextFunding` is null rather than a half-filled value
   //
   it.each([
     [null],
-    [{ date: "not-a-date", amount: "1.00" }],
-    [{ date: "2026-09-30" }],
+    [{ date: "not-a-date", amount: "1.00", amount_currency: "USD" }],
   ])("drops next_funding %j", (next_funding) => {
     expect(budgetFromDto(makeBudget({ next_funding })).nextFunding).toBeNull();
   });

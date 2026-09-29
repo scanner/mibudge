@@ -5,6 +5,7 @@ from typing import Any
 # 3rd party imports
 #
 from django.contrib.auth import get_user_model
+from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 User = get_user_model()
@@ -31,3 +32,15 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         # simplejwt's validate() calls authenticate(**{self.username_field: value})
         # which routes to EmailBackend because ModelBackend ignores email= kwarg.
         return super().validate(attrs)
+
+
+########################################################################
+########################################################################
+#
+class AccessTokenSerializer(serializers.Serializer):
+    """
+    Response body of the cookie-based token endpoints: the access token
+    only, since the refresh token travels in the httpOnly cookie.
+    """
+
+    access = serializers.CharField(read_only=True)

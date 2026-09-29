@@ -1,11 +1,6 @@
 //
 // Bank-account co-owner invitations.  API layer.
 //
-// The two list endpoints answer a plain JSON array; the schema
-// describes them as paginated (a drf-spectacular annotation gap), so
-// the element type comes from the schema and the array is declared
-// here.
-//
 
 // app imports
 //

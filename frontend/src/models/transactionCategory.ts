@@ -29,7 +29,7 @@ export function transactionCategoryFromDto(
     name: dto.name,
     fullName: dto.full_name,
     // The schema marks this non-null; global rows come back `null`.
-    ownerId: dto.owner ?? null,
+    ownerId: dto.owner,
     archived: dto.archived,
   };
 }
