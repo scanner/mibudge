@@ -37,6 +37,27 @@ def _resolve_schema(schema: dict, components: dict) -> dict:
 
 ########################################################################
 #
+def _type_label(schema: dict) -> str:
+    """A short type name for an inline or referenced schema."""
+    if "$ref" in schema:
+        return _schema_ref_name(schema["$ref"])
+    for key in ("oneOf", "anyOf"):
+        if key in schema:
+            return " | ".join(_type_label(v) for v in schema[key])
+    match schema.get("type"):
+        case "array":
+            return f"array of {_type_label(schema.get('items', {}))}"
+        case "object" if isinstance(schema.get("additionalProperties"), dict):
+            values = _type_label(schema["additionalProperties"])
+            return f"map of {values}"
+        case None:
+            return "any"
+        case typ:
+            return typ
+
+
+########################################################################
+#
 def _format_schema_properties(
     schema: dict, components: dict, indent: int = 0
 ) -> list[str]:
@@ -51,8 +72,7 @@ def _format_schema_properties(
         if key in resolved:
             lines.append(f"{'  ' * indent}One of:")
             for variant in resolved[key]:
-                name = _schema_ref_name(variant.get("$ref", "?"))
-                lines.append(f"{'  ' * indent}- `{name}`")
+                lines.append(f"{'  ' * indent}- `{_type_label(variant)}`")
             return lines
 
     props = resolved.get("properties", {})

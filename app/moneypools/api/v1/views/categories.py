@@ -4,11 +4,7 @@ DRF viewset for transaction categories in the moneypools v1 API.
 
 # 3rd party imports
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import (
-    OpenApiResponse,
-    extend_schema,
-    extend_schema_view,
-)
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -18,11 +14,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.schema import error_response
 from common.views import AtomicWritesMixin
 from moneypools.models import TransactionCategory
 
 from ..filters import TransactionCategoryFilter
 from ..serializers.categories import TransactionCategorySerializer
+
+# Update, delete and archive answer 403 for a category the caller does
+# not own.
+#
+OWNER_ONLY = error_response(
+    "The category is global or owned by someone else; only its owner "
+    "may change it."
+)
 
 
 ########################################################################
@@ -61,6 +66,10 @@ from ..serializers.categories import TransactionCategorySerializer
             "Full update of a category.  Only the owner may update; "
             "global categories are managed via the admin."
         ),
+        responses={
+            200: TransactionCategorySerializer,
+            403: OWNER_ONLY,
+        },
     ),
     partial_update=extend_schema(
         summary="Partially update a transaction category",
@@ -68,6 +77,10 @@ from ..serializers.categories import TransactionCategorySerializer
             "Partial update of a category.  Only the owner may update; "
             "global categories are managed via the admin."
         ),
+        responses={
+            200: TransactionCategorySerializer,
+            403: OWNER_ONLY,
+        },
     ),
     destroy=extend_schema(
         summary="Delete a transaction category",
@@ -79,11 +92,10 @@ from ..serializers.categories import TransactionCategorySerializer
         ),
         responses={
             204: None,
-            409: OpenApiResponse(
-                description=(
-                    "The category is referenced by transactions or "
-                    "allocations; archive it instead."
-                ),
+            403: OWNER_ONLY,
+            409: error_response(
+                "The category is referenced by transactions or "
+                "allocations; archive it instead."
             ),
         },
     ),
@@ -174,7 +186,7 @@ class TransactionCategoryViewSet(AtomicWritesMixin, viewsets.ModelViewSet):
             "global categories are managed via the admin."
         ),
         request=None,
-        responses={200: TransactionCategorySerializer},
+        responses={200: TransactionCategorySerializer, 403: OWNER_ONLY},
     )
     @action(detail=True, methods=["post"], url_path="archive")
     def archive(self, request: Request, id: str | None = None) -> Response:

@@ -6,6 +6,7 @@ from drf_spectacular.utils import (
     extend_schema_view,
 )
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
@@ -89,7 +90,7 @@ class NotificationPreferenceViewSet(AtomicWritesMixin, GenericViewSet):
         """Upsert the user's delivery mode for a single notification kind."""
         kind_info = registry.get(kind)
         if kind_info is None:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            raise NotFound("Unknown notification kind.")
         if not kind_info.can_suppress:
             return Response(
                 {"detail": "This notification kind cannot be changed."},
@@ -181,8 +182,8 @@ class ChannelPreferenceViewSet(AtomicWritesMixin, GenericViewSet):
         """Upsert the user's preference for a single channel."""
         try:
             ch = Channel(channel)
-        except ValueError:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+        except ValueError as exc:
+            raise NotFound("Unknown notification channel.") from exc
         serializer = ChannelPreferenceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         ChannelPreference.objects.update_or_create(

@@ -224,9 +224,12 @@ def test_something(factory_cls) -> None: ...
   (parametrized: runs a test once with a JWT session and once with an
   API key; use it for endpoints machine credentials can reach). These
   clients are `tests.openapi_contract.SchemaCheckedAPIClient`, which
-  validates every `/api/` response against `docs/openapi.yaml` (statuses
-  the schema does not document are skipped), so run `make api-schema`
-  after an API change. Never build an `APIClient()` in a test. A module whose tests all act as one
+  validates every `/api/` response, errors included, against
+  `docs/openapi.yaml`: a status the schema does not document fails the
+  test. `common.schema.AutoSchema` declares each view's generic errors
+  (400/401/403/404/429); declare a view's other errors with
+  `common.schema.error_response` / `validation_error_response`, and run
+  `make api-schema` after an API change. Never build an `APIClient()` in a test. A module whose tests all act as one
   particular user overrides `user`, so `auth_client` follows it. The
   root conftest also pins email and invitation settings
   (`site_email_settings`, `invitation_limits`) for both invitation

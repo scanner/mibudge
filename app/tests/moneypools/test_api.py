@@ -205,6 +205,18 @@ class TestBankAPI:
 
     ####################################################################
     #
+    def test_list_page_out_of_range(self, auth_client: APIClient) -> None:
+        """
+        GIVEN: no banks beyond the first page
+        WHEN:  GET /api/v1/banks/?page=999
+        THEN:  404, a status the schema documents for the list
+        """
+        response = auth_client.get(reverse("api_v1:bank-list"), {"page": 999})
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    ####################################################################
+    #
     def test_retrieve_bank(
         self,
         auth_client: APIClient,

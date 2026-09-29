@@ -51,6 +51,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccessToken'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Wrong email or password.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/token/logout/:
     post:
       operationId: api_token_logout_create
@@ -67,6 +85,12 @@ paths:
       responses:
         '204':
           description: No response body
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/token/refresh/:
     post:
       operationId: api_token_refresh_create
@@ -86,6 +110,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccessToken'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No refresh cookie, or its token is invalid or expired.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/allocations/:
     get:
       operationId: allocations_list
@@ -151,6 +187,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTransactionAllocationList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/allocations/{id}/:
     get:
       operationId: allocations_retrieve
@@ -175,6 +235,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionAllocation'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/:
     get:
       operationId: bank_accounts_list
@@ -224,6 +302,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedBankAccountList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     post:
       operationId: bank_accounts_create
       description: Create a new bank account. The authenticated user is automatically
@@ -255,6 +357,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankAccount'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/:
     get:
       operationId: bank_accounts_retrieve
@@ -279,6 +399,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankAccount'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     put:
       operationId: bank_accounts_update
       description: Full update of a bank account. Only 'name' is mutable after creation
@@ -315,6 +453,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankAccount'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     patch:
       operationId: bank_accounts_partial_update
       description: Partial update of a bank account. Only 'name' is mutable after
@@ -350,6 +512,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankAccount'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     delete:
       operationId: bank_accounts_destroy
       description: Delete a bank account and all associated budgets, transactions,
@@ -370,6 +556,24 @@ paths:
       responses:
         '204':
           description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/funding-event-dates/:
     get:
       operationId: bank_accounts_funding_event_dates_retrieve
@@ -410,6 +614,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/FundingEventDates'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: '''after'' or ''before'' is missing or not a date.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/funding-summary/:
     get:
       operationId: bank_accounts_funding_summary_retrieve
@@ -438,6 +666,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/FundingSummary'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/invitations/:
     get:
       operationId: bank_accounts_invitations_list
@@ -464,6 +710,30 @@ paths:
                 items:
                   $ref: '#/components/schemas/BankAccountInvitation'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/invitations/{token}/cancel/:
     post:
       operationId: bank_accounts_invitations_cancel_create
@@ -491,6 +761,37 @@ paths:
       responses:
         '200':
           description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The invitation is no longer pending.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Only the invitation's sender may cancel it, or the credentials
+            are not interactive.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such account or invitation.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/invite/:
     post:
       operationId: bank_accounts_invite_create
@@ -528,6 +829,42 @@ paths:
       responses:
         '201':
           description: No response body
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The address is already an owner, or has a pending invitation.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many invitations to this address for this account.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
   /api/v1/bank-accounts/{id}/mark-imported/:
     post:
       operationId: bank_accounts_mark_imported_create
@@ -565,6 +902,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankAccount'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/run-funding/:
     post:
       operationId: bank_accounts_run_funding_create
@@ -604,9 +965,43 @@ paths:
                 $ref: '#/components/schemas/FundingRunResult'
           description: ''
         '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Either another worker is currently processing this account
             (lock held), or there is nothing due or outstanding to run as of the supplied
             date.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The funding system user is not configured.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/sync-scrape/:
     post:
       operationId: bank_accounts_sync_scrape_create
@@ -649,6 +1044,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScrapeSyncReport'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/bank-accounts/{id}/transaction-details/:
     post:
       operationId: bank_accounts_transaction_details_create
@@ -695,6 +1114,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionDetailsReport'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/banks/:
     get:
       operationId: banks_list
@@ -733,6 +1176,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedBankList'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/banks/{id}/:
     get:
       operationId: banks_retrieve
@@ -757,6 +1218,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Bank'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/budgets/:
     get:
       operationId: budgets_list
@@ -828,6 +1307,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedBudgetList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     post:
       operationId: budgets_create
       description: 'Create a new budget under a bank account. Required: name, bank_account
@@ -859,6 +1362,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Budget'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/budgets/{id}/:
     get:
       operationId: budgets_retrieve
@@ -883,6 +1404,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Budget'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     put:
       operationId: budgets_update
       description: Full update of a budget. bank_account and budget_type are immutable.
@@ -919,6 +1458,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/BudgetUpdateResult'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     patch:
       operationId: budgets_partial_update
       description: Partial update of a budget. bank_account and budget_type are immutable.
@@ -954,6 +1517,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/BudgetUpdateResult'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     delete:
       operationId: budgets_destroy
       description: Delete a budget and its fill-up goal. The unallocated budget cannot
@@ -977,6 +1564,36 @@ paths:
       responses:
         '204':
           description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: The budget has transaction allocations; archive it instead.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The unallocated budget cannot be deleted or archived.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/budgets/{id}/archive/:
     post:
       operationId: budgets_archive_create
@@ -1004,6 +1621,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Budget'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: The budget is already archived.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The unallocated budget cannot be deleted or archived.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/channel-preferences/:
     get:
       operationId: channel_preferences_list
@@ -1024,6 +1671,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/ChannelPreference'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/channel-preferences/{channel}/:
     patch:
       operationId: channel_preferences_partial_update
@@ -1060,6 +1719,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChannelPreference'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/currencies/:
     get:
       operationId: currencies_list
@@ -1081,6 +1764,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/Currency'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/funding-occurrences/:
     get:
       operationId: funding_occurrences_list
@@ -1169,6 +1864,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedFundingEventOccurrenceList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/funding-occurrences/{id}/:
     get:
       operationId: funding_occurrences_retrieve
@@ -1193,6 +1912,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/FundingEventOccurrence'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/internal-transactions/:
     get:
       operationId: internal_transactions_list
@@ -1261,6 +1998,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedInternalTransactionList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     post:
       operationId: internal_transactions_create
       description: 'Transfer money between two budgets in the same bank account. Required:
@@ -1292,6 +2053,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/InternalTransaction'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/internal-transactions/{id}/:
     get:
       operationId: internal_transactions_retrieve
@@ -1316,6 +2095,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/InternalTransaction'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/invitations/{token}/:
     get:
       operationId: invitations_retrieve
@@ -1343,6 +2140,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicInvitationDetail'
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invitation not found.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/invitations/{token}/accept/:
     post:
       operationId: invitations_accept_create
@@ -1366,9 +2181,29 @@ paths:
         '200':
           description: No response body
         '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Invitation expired, cancelled, or already resolved.
         '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Invitation not found.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/invitations/{token}/decline/:
     post:
       operationId: invitations_decline_create
@@ -1391,9 +2226,29 @@ paths:
         '200':
           description: No response body
         '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Invitation expired, cancelled, or already resolved.
         '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Invitation not found.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/notification-preferences/:
     get:
       operationId: notification_preferences_list
@@ -1415,6 +2270,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/NotificationPreference'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/notification-preferences/{kind}/:
     patch:
       operationId: notification_preferences_partial_update
@@ -1452,6 +2319,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationPreference'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transaction-categories/:
     get:
       operationId: transaction_categories_list
@@ -1518,6 +2409,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTransactionCategoryList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     post:
       operationId: transaction_categories_create
       description: Create a custom category owned by the authenticated user (global
@@ -1548,6 +2463,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionCategory'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transaction-categories/{id}/:
     get:
       operationId: transaction_categories_retrieve
@@ -1572,6 +2505,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionCategory'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     put:
       operationId: transaction_categories_update
       description: Full update of a category.  Only the owner may update; global categories
@@ -1608,6 +2559,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionCategory'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The category is global or owned by someone else; only its owner
+            may change it.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     patch:
       operationId: transaction_categories_partial_update
       description: Partial update of a category.  Only the owner may update; global
@@ -1643,6 +2625,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionCategory'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The category is global or owned by someone else; only its owner
+            may change it.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     delete:
       operationId: transaction_categories_destroy
       description: Delete a category.  Only the owner may delete; global categories
@@ -1664,9 +2677,38 @@ paths:
       responses:
         '204':
           description: No response body
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The category is global or owned by someone else; only its owner
+            may change it.
         '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: The category is referenced by transactions or allocations;
             archive it instead.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transaction-categories/{id}/archive/:
     post:
       operationId: transaction_categories_archive_create
@@ -1693,6 +2735,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionCategory'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The category is global or owned by someone else; only its owner
+            may change it.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transactions/:
     get:
       operationId: transactions_list
@@ -1874,6 +2941,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTransactionList'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     post:
       operationId: transactions_create
       description: 'Create a new bank transaction. Required: bank_account (UUID),
@@ -1905,6 +2996,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transactions/{id}/:
     get:
       operationId: transactions_retrieve
@@ -1930,6 +3039,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     put:
       operationId: transactions_update
       description: Full update of a transaction. Only transaction_type, memo, and
@@ -1966,6 +3093,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     patch:
       operationId: transactions_partial_update
       description: Partial update of a transaction. Only transaction_type, memo, and
@@ -2001,6 +3152,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     delete:
       operationId: transactions_destroy
       description: Delete a transaction. Balance changes are reversed by the pre_delete
@@ -2021,6 +3196,24 @@ paths:
       responses:
         '204':
           description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transactions/{id}/resolve-pending/:
     post:
       operationId: transactions_resolve_pending_create
@@ -2061,6 +3254,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transaction'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/transactions/{id}/splits/:
     post:
       operationId: transactions_splits_create
@@ -2104,6 +3321,30 @@ paths:
                 items:
                   $ref: '#/components/schemas/TransactionAllocation'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/:
     get:
       operationId: users_list
@@ -2140,6 +3381,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedUserList'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/{username}/:
     get:
       operationId: users_retrieve
@@ -2165,6 +3430,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     put:
       operationId: users_update
       description: Full update of a user profile. Restricted to staff/admin users.
@@ -2200,6 +3489,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     patch:
       operationId: users_partial_update
       description: Partial update of a user profile. Restricted to staff/admin users.
@@ -2235,6 +3554,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/:
     get:
       operationId: users_me_retrieve
@@ -2255,6 +3604,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     patch:
       operationId: users_me_partial_update
       description: GET returns the authenticated user's own profile. PATCH allows
@@ -2285,6 +3646,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/api-keys/:
     get:
       operationId: users_me_api_keys_list
@@ -2317,6 +3702,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedAPIKeyList'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Invalid page.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
     post:
       operationId: users_me_api_keys_create
       description: |-
@@ -2348,6 +3757,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIKeyCreated'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/api-keys/{uuid}/:
     get:
       operationId: users_me_api_keys_retrieve
@@ -2372,6 +3805,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIKey'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/api-keys/{uuid}/revoke/:
     post:
       operationId: users_me_api_keys_revoke_create
@@ -2397,6 +3854,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIKey'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The key is already revoked.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: No such object.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/change-email/:
     post:
       operationId: users_me_change_email_create
@@ -2425,6 +3912,38 @@ paths:
       responses:
         '201':
           description: No response body
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The account has no password yet, or the credentials are not
+            interactive.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: The address is taken ('new_email'), or a revocation window
+            is still open ('detail').
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/change-email/{token}/confirm/:
     post:
       operationId: users_me_change_email_confirm_create
@@ -2449,6 +3968,30 @@ paths:
       responses:
         '200':
           description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The link is unknown, expired, revoked or already used.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The address was taken meanwhile.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/change-email/{token}/revoke/:
     post:
       operationId: users_me_change_email_revoke_create
@@ -2475,6 +4018,24 @@ paths:
       responses:
         '200':
           description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The link is unknown, or its revocation window has closed.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/change-password/:
     post:
       operationId: users_me_change_password_create
@@ -2503,6 +4064,30 @@ paths:
       responses:
         '204':
           description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: Invalid input.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
   /api/v1/users/me/invitations/:
     get:
       operationId: users_me_invitations_list
@@ -2523,6 +4108,24 @@ paths:
                 items:
                   $ref: '#/components/schemas/BankAccountInvitation'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing or invalid credentials.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The credentials are not allowed to do this.
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Too many requests.
 components:
   schemas:
     APIKey:
@@ -3443,6 +5046,18 @@ components:
       required:
       - email
       - password
+    Error:
+      type: object
+      description: DRF's error body for everything but a validation failure.
+      properties:
+        detail:
+          type: string
+          description: Human-readable reason.
+        code:
+          type: string
+          description: Machine-readable reason, when given.
+      required:
+      - detail
     FundingEventDates:
       type: object
       description: Sorted dates on which an account has a funding event due.
@@ -5202,6 +6817,20 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+    ValidationError:
+      anyOf:
+      - type: object
+        additionalProperties:
+          anyOf:
+          - type: string
+          - type: array
+            items: {}
+          - type: object
+      - type: array
+        items:
+          type: string
+      description: Field name to messages (`non_field_errors` for errors not tied
+        to one field), or a list of messages.
   securitySchemes:
     apiKeyAuth:
       type: apiKey

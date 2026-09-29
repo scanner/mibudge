@@ -14,6 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Project imports
+from common.schema import error_response, validation_error_response
 from common.views import AtomicWritesMixin
 from moneypools.models import Budget
 from moneypools.permissions import (
@@ -27,6 +28,12 @@ from ..filters import BudgetFilter
 from ..serializers.budgets import (
     BudgetSerializer,
     BudgetUpdateResultSerializer,
+)
+
+# Delete and archive answer 403 for the account's unallocated budget.
+#
+UNALLOCATED_IS_FIXED = error_response(
+    "The unallocated budget cannot be deleted or archived."
 )
 
 
@@ -83,6 +90,13 @@ from ..serializers.budgets import (
             "other budgets are reversed on those budgets, and any "
             "remaining balance moves to the unallocated budget."
         ),
+        responses={
+            204: None,
+            400: validation_error_response(
+                "The budget has transaction allocations; archive it instead."
+            ),
+            403: UNALLOCATED_IS_FIXED,
+        },
     ),
 )
 class BudgetViewSet(
@@ -194,7 +208,11 @@ class BudgetViewSet(
             "to unallocated. The unallocated budget cannot be archived."
         ),
         request=None,
-        responses={200: BudgetSerializer},
+        responses={
+            200: BudgetSerializer,
+            400: validation_error_response("The budget is already archived."),
+            403: UNALLOCATED_IS_FIXED,
+        },
     )
     @action(detail=True, methods=["post"], url_path="archive")
     def archive(self, request: Request, id: str | None = None) -> Response:
