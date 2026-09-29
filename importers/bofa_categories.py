@@ -121,6 +121,7 @@ BOFA_CATEGORY_MAP: dict[str, str | None] = {
     ),
     "shopping & entertainment:hobbies": "Personal : Hobbies",
     "transportation:gasoline/fuel": "Transportation : Gas",
+    "transportation:public transportation": ("Transportation : Public Transit"),
     "travel:travel": "Travel : Other Travel",
     "uncategorized:uncategorized": "Uncategorized : Unknown",
     # BofA's placeholder for a transaction that has already POSTED but
