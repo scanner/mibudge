@@ -40,7 +40,10 @@ info:
 
     A money value is a decimal string plus a sibling currency code: `"amount":
     "-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
-    negative.  An omitted currency defaults to the bank account's.
+    negative.  Every amount is in its bank account's currency: in a request
+    the `<field>_currency` key is optional and defaults to the account's, and
+    any other currency is refused with 400 on that key.  A new bank account
+    takes its bank's default currency unless `currency` is given.
 
     ## Pagination
 
@@ -4562,12 +4565,6 @@ components:
   schemas:
     APIKey:
       type: object
-      description: |-
-        Read serializer for API keys.
-
-        Never exposes the key material -- only the displayable prefix.  The
-        plaintext key appears exactly once, in the creation response (see
-        APIKeyViewSet.create).
       properties:
         uuid:
           type: string
@@ -4609,12 +4606,6 @@ components:
       - uuid
     APIKeyCreateRequest:
       type: object
-      description: |-
-        Validate an API-key creation request.
-
-        ``expiry_days`` covers all the expiry presets (30 / 60 / 90 / 365 /
-        a specific number of days); null or omitted means the key never
-        expires.  The presets themselves are a UI concern.
       properties:
         name:
           type: string
@@ -4629,12 +4620,6 @@ components:
       - name
     APIKeyCreated:
       type: object
-      description: |-
-        Creation response -- the only place the plaintext key appears.
-
-        Exists to document the creation response shape in the OpenAPI
-        schema; the view assembles the payload itself.  ``key`` is never a
-        model field and cannot be recovered after this response.
       properties:
         uuid:
           type: string
@@ -4680,9 +4665,6 @@ components:
       - uuid
     AccessToken:
       type: object
-      description: |-
-        Response body of the cookie-based token endpoints: the access token
-        only, since the refresh token travels in the httpOnly cookie.
       properties:
         access:
           type: string
@@ -4701,10 +4683,6 @@ components:
         * `X` - Credit Card
     Bank:
       type: object
-      description: |-
-        Read-only serializer for banks.
-
-        Banks are shared reference data managed only through the admin.
       properties:
         id:
           type: string
@@ -4738,19 +4716,6 @@ components:
       - routing_number
     BankAccount:
       type: object
-      description: |-
-        Serializer for bank accounts.
-
-        On create the caller supplies name, bank (UUID), account_type,
-        account_number, and optionally currency and initial balances.
-        The view routes creation through BankAccountService which adds
-        the requesting user as owner and seeds the Unallocated budget.
-
-        After creation, name and account_number are updatable.  Currency,
-        account_type, bank, and balances are immutable once the account
-        exists.
-
-        Group assignment is not yet supported via the API.
       properties:
         id:
           type: string
@@ -4839,16 +4804,6 @@ components:
       - unallocated_budget
     BankAccountInvitation:
       type: object
-      description: |-
-        Read-only serializer for BankAccountInvitation rows.
-
-        ``token`` is included so the SPA can construct the cancel URL without a
-        separate lookup.  It is safe to expose to authenticated account owners
-        since they created the invitation and the cancel endpoint enforces that
-        only the sender may cancel.
-
-        ``bank_account_id`` and ``bank_account_name`` are included for the
-        cross-account listing on the user's settings page (me/invitations/).
       properties:
         id:
           type: string
@@ -4934,19 +4889,6 @@ components:
         * `expired` - Expired
     BankAccountRequest:
       type: object
-      description: |-
-        Serializer for bank accounts.
-
-        On create the caller supplies name, bank (UUID), account_type,
-        account_number, and optionally currency and initial balances.
-        The view routes creation through BankAccountService which adds
-        the requesting user as owner and seeds the Unallocated budget.
-
-        After creation, name and account_number are updatable.  Currency,
-        account_type, bank, and balances are immutable once the account
-        exists.
-
-        Group assignment is not yet supported via the API.
       properties:
         name:
           type: string
@@ -4970,10 +4912,18 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        posted_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `posted_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         available_balance:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        available_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `available_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         auto_funding_enabled:
           type: boolean
           description: When enabled (the default), scheduled funding and recurrence
@@ -4987,16 +4937,6 @@ components:
       - ''
     Budget:
       type: object
-      description: |-
-        Serializer for budgets.
-
-        On create the caller supplies bank_account (UUID) and budget
-        properties.  After creation, bank_account and budget_type are
-        immutable.  Balance is managed by signals and is always read-only.
-        The unallocated budget's name cannot be changed.
-
-        Currency is inherited from the bank account via the pre_save
-        signal and is not accepted from the client.
       properties:
         id:
           type: string
@@ -5088,9 +5028,11 @@ components:
           nullable: true
           maxLength: 512
         auto_spend:
-          description: 'List of matcher strings; currently transaction-category full
-            names (''{group} : {name}'').  Spend matching an entry is auto-routed
-            to this budget.'
+          type: array
+          items:
+            type: string
+          description: 'Transaction-category full names (''{group} : {name}'').  Spend
+            in a listed category is auto-routed to this budget.'
         next_funding:
           allOf:
           - $ref: '#/components/schemas/NextFunding'
@@ -5137,16 +5079,6 @@ components:
       - target_balance_currency
     BudgetRequest:
       type: object
-      description: |-
-        Serializer for budgets.
-
-        On create the caller supplies bank_account (UUID) and budget
-        properties.  After creation, bank_account and budget_type are
-        immutable.  Balance is managed by signals and is always read-only.
-        The unallocated budget's name cannot be changed.
-
-        Currency is inherited from the bank account via the pre_save
-        signal and is not accepted from the client.
       properties:
         name:
           type: string
@@ -5159,11 +5091,19 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        target_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `target_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         funding_amount:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           nullable: true
+        funding_amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `funding_amount`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -5192,9 +5132,12 @@ components:
           nullable: true
           maxLength: 512
         auto_spend:
-          description: 'List of matcher strings; currently transaction-category full
-            names (''{group} : {name}'').  Spend matching an entry is auto-routed
-            to this budget.'
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: 'Transaction-category full names (''{group} : {name}'').  Spend
+            in a listed category is auto-routed to this budget.'
       required:
       - bank_account
       - name
@@ -5213,9 +5156,6 @@ components:
         * `C` - Capped
     BudgetUpdateResult:
       type: object
-      description: |-
-        Response body of a budget update: the budget plus the warnings
-        the service emitted (e.g. recurrence boundaries missed while paused).
       properties:
         id:
           type: string
@@ -5307,9 +5247,11 @@ components:
           nullable: true
           maxLength: 512
         auto_spend:
-          description: 'List of matcher strings; currently transaction-category full
-            names (''{group} : {name}'').  Spend matching an entry is auto-routed
-            to this budget.'
+          type: array
+          items:
+            type: string
+          description: 'Transaction-category full names (''{group} : {name}'').  Spend
+            in a listed category is auto-routed to this budget.'
         next_funding:
           allOf:
           - $ref: '#/components/schemas/NextFunding'
@@ -5362,12 +5304,6 @@ components:
       - warnings
     ChangePasswordRequest:
       type: object
-      description: |-
-        Validate a password-change request.
-
-        Checks that the new password is strong enough (zxcvbn score >= 2)
-        and that the two new-password fields match.  Current-password
-        verification and the actual password update are handled in the view.
       properties:
         current_password:
           type: string
@@ -5387,11 +5323,6 @@ components:
       - new_password
     ChannelPreference:
       type: object
-      description: |-
-        Channel delivery preference.
-
-        Read: channel, display_name, digest_frequency.
-        Write (PATCH): digest_frequency only.
       properties:
         channel:
           type: string
@@ -5407,7 +5338,6 @@ components:
       - display_name
     Currency:
       type: object
-      description: An ISO 4217 currency the system supports.
       properties:
         code:
           type: string
@@ -5449,7 +5379,6 @@ components:
         * `weekly_sunday` - Weekly on Sunday
     EmailChangeRequestRequest:
       type: object
-      description: Validate a request to initiate an email-address change.
       properties:
         new_email:
           type: string
@@ -5459,13 +5388,6 @@ components:
       - new_email
     EmailTokenObtainPairRequest:
       type: object
-      description: |-
-        TokenObtainPairSerializer variant that uses ``email`` as the login
-        field instead of ``username``.
-
-        USERNAME_FIELD is kept as "username" so Django admin is unaffected;
-        we override ``username_field`` here so simplejwt presents an ``email``
-        field in the login payload and passes it to EmailBackend.authenticate().
       properties:
         email:
           type: string
@@ -5480,7 +5402,6 @@ components:
       - password
     Error:
       type: object
-      description: DRF's error body for everything but a validation failure.
       properties:
         detail:
           type: string
@@ -5492,7 +5413,6 @@ components:
       - detail
     FundingEventDates:
       type: object
-      description: Sorted dates on which an account has a funding event due.
       properties:
         dates:
           type: array
@@ -5503,11 +5423,6 @@ components:
       - dates
     FundingEventOccurrence:
       type: object
-      description: |-
-        Read-only serializer for FundingEventOccurrence rows.
-
-        Exposes the budget UUID as 'budget' rather than the internal pkid so
-        callers can cross-reference with the Budget endpoint.
       properties:
         id:
           type: string
@@ -5580,7 +5495,6 @@ components:
         * `behind` - behind
     FundingRunResult:
       type: object
-      description: What one `run-funding` call did.
       properties:
         transfers:
           type: integer
@@ -5605,7 +5519,6 @@ components:
       - warnings
     FundingScheduleTotal:
       type: object
-      description: The next funding event's total for one funding schedule.
       properties:
         schedule:
           type: string
@@ -5629,7 +5542,6 @@ components:
       - total_amount
     FundingSummary:
       type: object
-      description: Per-schedule totals of an account's next funding events.
       properties:
         schedules:
           type: array
@@ -5655,19 +5567,6 @@ components:
         * `F` - Fixed Amount
     InternalTransaction:
       type: object
-      description: |-
-        Serializer for internal transactions (budget-to-budget transfers).
-
-        Internal transactions are write-once: the API supports create and
-        read but not update or delete.  To reverse a transfer, create a
-        new internal transaction with the src and dst budgets swapped.
-
-        On create the caller supplies bank_account, amount, src_budget,
-        and dst_budget.  The view sets the actor to the requesting user.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         id:
           type: string
@@ -5735,19 +5634,6 @@ components:
       - src_budget_balance_currency
     InternalTransactionRequest:
       type: object
-      description: |-
-        Serializer for internal transactions (budget-to-budget transfers).
-
-        Internal transactions are write-once: the API supports create and
-        read but not update or delete.  To reverse a transfer, create a
-        new internal transaction with the src and dst budgets swapped.
-
-        On create the caller supplies bank_account, amount, src_budget,
-        and dst_budget.  The view sets the actor to the requesting user.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         bank_account:
           type: string
@@ -5756,6 +5642,10 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `amount`.  Optional: defaults to the
+            bank account''s currency, and any other currency is refused.'
         src_budget:
           type: string
           format: uuid
@@ -5772,7 +5662,6 @@ components:
       - src_budget
     InviteOwnerRequest:
       type: object
-      description: Write-only serializer for the invite-owner action.
       properties:
         invitee_email:
           type: string
@@ -5782,7 +5671,6 @@ components:
       - invitee_email
     NextFunding:
       type: object
-      description: The next scheduled funding event of a budget (read-only).
       properties:
         date:
           type: string
@@ -5799,11 +5687,6 @@ components:
       - date
     NotificationPreference:
       type: object
-      description: |-
-        Notification kind preference.
-
-        Read: kind, display_name, can_suppress, delivery_mode.
-        Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
       properties:
         kind:
           type: string
@@ -6056,19 +5939,6 @@ components:
             $ref: '#/components/schemas/User'
     PatchedBankAccountRequest:
       type: object
-      description: |-
-        Serializer for bank accounts.
-
-        On create the caller supplies name, bank (UUID), account_type,
-        account_number, and optionally currency and initial balances.
-        The view routes creation through BankAccountService which adds
-        the requesting user as owner and seeds the Unallocated budget.
-
-        After creation, name and account_number are updatable.  Currency,
-        account_type, bank, and balances are immutable once the account
-        exists.
-
-        Group assignment is not yet supported via the API.
       properties:
         name:
           type: string
@@ -6092,10 +5962,18 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        posted_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `posted_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         available_balance:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        available_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `available_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         auto_funding_enabled:
           type: boolean
           description: When enabled (the default), scheduled funding and recurrence
@@ -6103,16 +5981,6 @@ components:
             and drive funding entirely from the 'Run funding now' button.
     PatchedBudgetRequest:
       type: object
-      description: |-
-        Serializer for budgets.
-
-        On create the caller supplies bank_account (UUID) and budget
-        properties.  After creation, bank_account and budget_type are
-        immutable.  Balance is managed by signals and is always read-only.
-        The unallocated budget's name cannot be changed.
-
-        Currency is inherited from the bank account via the pre_save
-        signal and is not accepted from the client.
       properties:
         name:
           type: string
@@ -6125,11 +5993,19 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        target_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `target_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         funding_amount:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           nullable: true
+        funding_amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `funding_amount`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -6158,40 +6034,24 @@ components:
           nullable: true
           maxLength: 512
         auto_spend:
-          description: 'List of matcher strings; currently transaction-category full
-            names (''{group} : {name}'').  Spend matching an entry is auto-routed
-            to this budget.'
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: 'Transaction-category full names (''{group} : {name}'').  Spend
+            in a listed category is auto-routed to this budget.'
     PatchedChannelPreferenceRequest:
       type: object
-      description: |-
-        Channel delivery preference.
-
-        Read: channel, display_name, digest_frequency.
-        Write (PATCH): digest_frequency only.
       properties:
         digest_frequency:
           $ref: '#/components/schemas/DigestFrequencyEnum'
     PatchedNotificationPreferenceRequest:
       type: object
-      description: |-
-        Notification kind preference.
-
-        Read: kind, display_name, can_suppress, delivery_mode.
-        Write (PATCH): delivery_mode only (rejected for can_suppress=False kinds).
       properties:
         delivery_mode:
           $ref: '#/components/schemas/DeliveryModeEnum'
     PatchedTransactionCategoryRequest:
       type: object
-      description: |-
-        Serializer for transaction categories.
-
-        On create the caller supplies group and name; the view forces the
-        owner to the requesting user (global rows are managed via the
-        django-admin only).  Group and name are whitespace-normalized and
-        checked case-insensitively against the global rows and the user's
-        own rows for duplicates.  'archived' is toggled via the archive
-        action, not writable here.
       properties:
         group:
           type: string
@@ -6203,20 +6063,6 @@ components:
           maxLength: 64
     PatchedTransactionRequest:
       type: object
-      description: |-
-        Serializer for bank transactions.
-
-        On create the caller supplies bank_account, amount,
-        transaction_date, transaction_type, raw_description, and
-        optionally pending, memo, and description.
-
-        After creation only transaction_type, memo, and description are
-        updatable.  The view is responsible for creating the default
-        TransactionAllocation to the unallocated budget on create.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         bank_account:
           type: string
@@ -6225,6 +6071,10 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `amount`.  Optional: defaults to the
+            bank account''s currency, and any other currency is refused.'
         posted_date:
           type: string
           format: date-time
@@ -6295,15 +6145,6 @@ components:
           nullable: true
     PatchedUserRequest:
       type: object
-      description: |-
-        Serializer for user profiles.
-
-        The ``default_bank_account`` field is writable but constrained:
-        the bank account must be owned by the user being updated.  On
-        output it returns the UUID string (or null).
-
-        ``has_usable_password`` is read-only and used by the SPA to decide
-        whether to enable the change-email and change-password forms.
       properties:
         name:
           type: string
@@ -6319,12 +6160,6 @@ components:
           maxLength: 100
     PublicInvitationDetail:
       type: object
-      description: |-
-        Read-only serializer for the public invitation-detail endpoint.
-
-        Returns the minimum information needed to render the acceptance page
-        for API clients.  Owner names are intentionally minimal (display name
-        or email only) to limit PII exposure behind a bare token.
       properties:
         id:
           type: string
@@ -6368,11 +6203,6 @@ components:
       - status
     ResolvePendingRequest:
       type: object
-      description: |-
-        Input serializer for the resolve-pending action.
-
-        Validates the settled posted_date and optional final amount.
-        Requires ``transaction`` in the serializer context for sign validation.
       properties:
         posted_date:
           type: string
@@ -6382,17 +6212,14 @@ components:
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           nullable: true
+        amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `amount`.  Optional: defaults to the
+            bank account''s currency, and any other currency is refused.'
       required:
       - posted_date
     ScrapeSyncDetailsNeeded:
       type: object
-      description: |-
-        One posted scrape row still needing a transaction-details fetch.
-
-        `index` is the row's position in the SUBMITTED transactions array
-        (exact correlation back to the scraper's own rows); `transaction`
-        is the DB row the fetched details should be applied to via the
-        transaction-details action.
       properties:
         index:
           type: integer
@@ -6404,12 +6231,6 @@ components:
       - transaction
     ScrapeSyncReport:
       type: object
-      description: |-
-        Output serializer for the bank-account scrape-sync action.
-
-        Mirrors `service.sync_scrape.ScrapeSyncReport`.  Reports
-        everything the caller needs to summarise what changed and surface
-        validation warnings.
       properties:
         deleted_pending:
           type: integer
@@ -6453,12 +6274,6 @@ components:
       - skipped_posted
     ScrapeSyncRequest:
       type: object
-      description: |-
-        Input serializer for the bank-account scrape-sync action.
-
-        Validates a full bank-side snapshot for one account: when the
-        scrape was taken, the bank's ending available balance, and the
-        list of transactions (newest-first as the bank renders them).
       properties:
         scraped_at:
           type: string
@@ -6471,25 +6286,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScrapeSyncTransactionRequest'
+        ending_balance_currency:
+          type: string
+          description: 'ISO 4217 currency of `ending_balance`.  Optional: defaults
+            to the bank account''s currency, and any other currency is refused.'
       required:
       - ending_balance
       - scraped_at
       - transactions
     ScrapeSyncTransactionRequest:
       type: object
-      description: |-
-        One transaction in a scrape-sync payload.
-
-        Mirrors `service.sync_scrape.ScrapedTransaction`.  Pending rows
-        carry the scrape's local `posted_date` (banks typically render
-        pending rows without a real settlement date -- e.g. BofA shows
-        'Processing' in the date column -- and the scraper substitutes
-        the current local datetime).  Posted rows carry the bank-supplied
-        settlement datetime.  `transaction_date` is derived server-side
-        from the embedded MM/DD pattern in `raw_description`.
-
-        `running_balance` is optional and used only for the posting-order
-        sanity walk; never persisted.
       properties:
         is_pending:
           type: boolean
@@ -6513,6 +6319,10 @@ components:
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           nullable: true
+        amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `amount`.  Optional: defaults to the
+            bank account''s currency, and any other currency is refused.'
       required:
       - amount
       - is_pending
@@ -6520,20 +6330,6 @@ components:
       - raw_description
     Transaction:
       type: object
-      description: |-
-        Serializer for bank transactions.
-
-        On create the caller supplies bank_account, amount,
-        transaction_date, transaction_type, raw_description, and
-        optionally pending, memo, and description.
-
-        After creation only transaction_type, memo, and description are
-        updatable.  The view is responsible for creating the default
-        TransactionAllocation to the unallocated budget on create.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         id:
           type: string
@@ -6713,26 +6509,6 @@ components:
       - virtual_card_number
     TransactionAllocation:
       type: object
-      description: |-
-        Serializer for transaction allocations.
-
-        An allocation maps a portion of a transaction's amount to a budget.
-        On create the caller supplies transaction, amount, and optionally
-        budget (defaults to unallocated) and category.  After creation,
-        budget, category, and memo are updatable.
-
-        The serializer enforces two key constraints:
-
-        1. **Same-account restriction** -- the budget must belong to the
-           same bank account as the transaction.  Cross-account allocations
-           are rejected with a 400 error.
-        2. **Sum constraint** -- the total allocated amount across all
-           allocations for a transaction must not exceed the transaction
-           amount.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         id:
           type: string
@@ -6792,26 +6568,6 @@ components:
       - transaction
     TransactionAllocationRequest:
       type: object
-      description: |-
-        Serializer for transaction allocations.
-
-        An allocation maps a portion of a transaction's amount to a budget.
-        On create the caller supplies transaction, amount, and optionally
-        budget (defaults to unallocated) and category.  After creation,
-        budget, category, and memo are updatable.
-
-        The serializer enforces two key constraints:
-
-        1. **Same-account restriction** -- the budget must belong to the
-           same bank account as the transaction.  Cross-account allocations
-           are rejected with a 400 error.
-        2. **Sum constraint** -- the total allocated amount across all
-           allocations for a transaction must not exceed the transaction
-           amount.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         transaction:
           type: string
@@ -6824,6 +6580,10 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `amount`.  Optional: defaults to the
+            bank account''s currency, and any other currency is refused.'
         category:
           type: string
           format: uuid
@@ -6837,15 +6597,6 @@ components:
       - transaction
     TransactionCategory:
       type: object
-      description: |-
-        Serializer for transaction categories.
-
-        On create the caller supplies group and name; the view forces the
-        owner to the requesting user (global rows are managed via the
-        django-admin only).  Group and name are whitespace-normalized and
-        checked case-insensitively against the global rows and the user's
-        own rows for duplicates.  'archived' is toggled via the archive
-        action, not writable here.
       properties:
         id:
           type: string
@@ -6890,15 +6641,6 @@ components:
       - owner
     TransactionCategoryRequest:
       type: object
-      description: |-
-        Serializer for transaction categories.
-
-        On create the caller supplies group and name; the view forces the
-        owner to the requesting user (global rows are managed via the
-        django-admin only).  Group and name are whitespace-normalized and
-        checked case-insensitively against the global rows and the user's
-        own rows for duplicates.  'archived' is toggled via the archive
-        action, not writable here.
       properties:
         group:
           type: string
@@ -6913,17 +6655,6 @@ components:
       - name
     TransactionDetailsItemRequest:
       type: object
-      description: |-
-        One (transaction, raw details dict) pair to apply.
-
-        The details dict is stored verbatim on the transaction (it is the
-        provenance record); the service extracts the merchant columns from
-        it.  `category` is a mibudge category full name ('{group} :
-        {name}') -- the IMPORTER translates its provider's vocabulary
-        before submitting; mibudge carries no provider mappings.  The name
-        is resolved case-insensitively among the categories visible to the
-        caller; an unknown name yields a per-item warning and the
-        transaction stays unassigned.
       properties:
         transaction:
           type: string
@@ -6940,7 +6671,6 @@ components:
       - transaction
     TransactionDetailsReport:
       type: object
-      description: Output serializer for the bank-account transaction-details action.
       properties:
         applied:
           type: integer
@@ -6962,12 +6692,6 @@ components:
       - skipped_pending
     TransactionDetailsRequest:
       type: object
-      description: |-
-        Input serializer for the bank-account transaction-details action.
-
-        `overwrite` re-applies scraper-owned fields on rows already
-        enriched (location fields and an assigned category are still
-        never clobbered).
       properties:
         overwrite:
           type: boolean
@@ -6980,7 +6704,6 @@ components:
       - details
     TransactionDetailsResult:
       type: object
-      description: Per-item outcome of the transaction-details action.
       properties:
         transaction:
           type: string
@@ -7009,20 +6732,6 @@ components:
         * `not_found` - not_found
     TransactionRequest:
       type: object
-      description: |-
-        Serializer for bank transactions.
-
-        On create the caller supplies bank_account, amount,
-        transaction_date, transaction_type, raw_description, and
-        optionally pending, memo, and description.
-
-        After creation only transaction_type, memo, and description are
-        updatable.  The view is responsible for creating the default
-        TransactionAllocation to the unallocated budget on create.
-
-        The ``amount_currency`` is read from raw request data by
-        djmoney's ``MoneyField.get_value()`` -- no explicit currency
-        field declaration is needed.
       properties:
         bank_account:
           type: string
@@ -7031,6 +6740,10 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        amount_currency:
+          type: string
+          description: 'ISO 4217 currency of `amount`.  Optional: defaults to the
+            bank account''s currency, and any other currency is refused.'
         posted_date:
           type: string
           format: date-time
@@ -7107,16 +6820,6 @@ components:
       - transaction_type
     TransactionSplitsRequest:
       type: object
-      description: |-
-        Serializer for the declarative splits endpoint.
-
-        Accepts a dict mapping budget UUIDs to amounts.  The backend
-        reconciles existing allocations to match the declared state.
-        Any remainder goes to the unallocated budget.
-
-        All budgets must belong to the same bank account as the
-        transaction.  Cross-account budget references are rejected
-        with a 400 error.
       properties:
         splits:
           type: object
@@ -7181,15 +6884,6 @@ components:
         * `` - --------
     User:
       type: object
-      description: |-
-        Serializer for user profiles.
-
-        The ``default_bank_account`` field is writable but constrained:
-        the bank account must be owned by the user being updated.  On
-        output it returns the UUID string (or null).
-
-        ``has_usable_password`` is read-only and used by the SPA to decide
-        whether to enable the change-email and change-password forms.
       properties:
         username:
           type: string
@@ -7227,15 +6921,6 @@ components:
       - username
     UserRequest:
       type: object
-      description: |-
-        Serializer for user profiles.
-
-        The ``default_bank_account`` field is writable but constrained:
-        the bank account must be owned by the user being updated.  On
-        output it returns the UUID string (or null).
-
-        ``has_usable_password`` is read-only and used by the SPA to decide
-        whether to enable the change-email and change-password forms.
       properties:
         name:
           type: string

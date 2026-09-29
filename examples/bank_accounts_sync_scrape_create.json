@@ -3,12 +3,14 @@
   "request": {
     "scraped_at": "2026-09-29T08:15:00-07:00",
     "ending_balance": "1432.18",
+    "ending_balance_currency": "USD",
     "transactions": [
       {
         "is_pending": true,
         "posted_date": "2026-09-29T08:15:00-07:00",
         "raw_description": "CORNER MARKET 09/28 PURCHASE",
         "amount": "-18.25",
+        "amount_currency": "USD",
         "transaction_type": "",
         "running_balance": null
       },
@@ -17,6 +19,7 @@
         "posted_date": "2026-09-28T00:00:00-07:00",
         "raw_description": "BLUE BOTTLE COFFEE 09/27 PURCHASE",
         "amount": "-6.50",
+        "amount_currency": "USD",
         "transaction_type": "signature_purchase",
         "running_balance": "1450.43"
       }

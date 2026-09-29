@@ -12,6 +12,9 @@ account outside the caller's ownership.  The object-level
 the primary create-path ownership check (see
 `moneypools.permissions.IsAccountOwner` for the full layering).
 
+`CategoryNamesField` is a JSON list of transaction-category full names,
+documented in the schema as a list of strings.
+
 This module imports no other serializer module, so every serializer
 module can depend on it without creating an import cycle.
 """
@@ -19,6 +22,7 @@ module can depend on it without creating an import cycle.
 # 3rd party imports
 import recurrence
 from django.db.models import QuerySet
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 # Project imports
@@ -127,3 +131,15 @@ class OwnedBankAccountField(serializers.SlugRelatedField):
         if user is None or not user.is_authenticated:
             return BankAccount.objects.none()
         return BankAccount.objects.filter(owners=user)
+
+
+########################################################################
+########################################################################
+#
+@extend_schema_field(serializers.ListField(child=serializers.CharField()))
+class CategoryNamesField(serializers.JSONField):
+    """A JSON list of transaction-category full names ('{group} : {name}').
+
+    Stored as JSON; the owning serializer validates and canonicalizes the
+    entries.  Documented as a list of strings.
+    """

@@ -501,7 +501,10 @@ there.
 
 A money value is a decimal string plus a sibling currency code: `"amount":
 "-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
-negative.  An omitted currency defaults to the bank account's.
+negative.  Every amount is in its bank account's currency: in a request
+the `<field>_currency` key is optional and defaults to the account's, and
+any other currency is refused with 400 on that key.  A new bank account
+takes its bank's default currency unless `currency` is given.
 
 ## Pagination
 

@@ -45,10 +45,11 @@ def create(
 ) -> BankAccount:
     """Create a bank account, add owners, and seed the Unallocated budget.
 
-    Fires bank_account_pre_save (currency alignment) then creates the
-    "Unallocated" budget whose initial balance matches the account's
-    available_balance, back-linking unallocated_budget_id without
-    triggering an extra save signal on the account.
+    An account created without a `currency` takes its bank's default
+    currency.  Fires bank_account_pre_save (currency alignment) then
+    creates the "Unallocated" budget whose initial balance matches the
+    account's available_balance, back-linking unallocated_budget_id
+    without triggering an extra save signal on the account.
 
     Args:
         bank: The Bank this account belongs to.
@@ -61,6 +62,8 @@ def create(
     Returns:
         The saved BankAccount instance with unallocated_budget set.
     """
+    if not kwargs.get("currency"):
+        kwargs["currency"] = bank.default_currency
     with db_transaction.atomic():
         account = BankAccount(
             bank=bank,

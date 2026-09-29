@@ -30,6 +30,7 @@ from typing import Any
 
 # 3rd party imports
 from django_filters.rest_framework import DjangoFilterBackend
+from djmoney.contrib.django_rest_framework import MoneyField as DRFMoneyField
 from drf_spectacular.extensions import OpenApiSerializerExtension
 from drf_spectacular.openapi import AutoSchema as SpectacularAutoSchema
 from drf_spectacular.utils import OpenApiResponse
@@ -127,7 +128,45 @@ def validation_error_response(description: str) -> OpenApiResponse:
 ########################################################################
 #
 class AutoSchema(SpectacularAutoSchema):
-    """drf-spectacular's `AutoSchema` plus each view's generic errors."""
+    """drf-spectacular's `AutoSchema` plus each view's generic errors.
+
+    It also documents the `<field>_currency` request key djmoney's
+    `MoneyField` reads beside each writable money field (see
+    `moneypools.api.v1.serializers.money`), and leaves serializer
+    docstrings -- notes for developers of this code -- out of the
+    component descriptions; endpoint descriptions and field `help_text`
+    carry the client-facing text.
+    """
+
+    ####################################################################
+    #
+    def _map_basic_serializer(self, serializer: Any, direction: Any) -> dict:
+        schema = super()._map_basic_serializer(serializer, direction)
+        schema.pop("description", None)
+        if direction != "request":
+            return schema
+        properties = schema.setdefault("properties", {})
+        required = schema.get("required", [])
+        for field in serializer.fields.values():
+            if not isinstance(field, DRFMoneyField) or field.read_only:
+                continue
+            name = f"{field.field_name}_currency"
+            # A model serializer lists it as a read-only response field,
+            # which the request component would drop.
+            #
+            if name in properties and not properties[name].get("readOnly"):
+                continue
+            if name in required:
+                required.remove(name)
+            properties[name] = {
+                "type": "string",
+                "description": (
+                    f"ISO 4217 currency of `{field.field_name}`.  "
+                    "Optional: defaults to the bank account's "
+                    "currency, and any other currency is refused."
+                ),
+            }
+        return schema
 
     ####################################################################
     #

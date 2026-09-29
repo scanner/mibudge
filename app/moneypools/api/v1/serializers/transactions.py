@@ -27,12 +27,13 @@ from moneypools.models import (
 
 from .allocations import TransactionAllocationSerializer
 from .fields import OwnedBankAccountField
+from .money import AccountCurrencyMixin
 
 
 ########################################################################
 ########################################################################
 #
-class TransactionSerializer(serializers.ModelSerializer):
+class TransactionSerializer(AccountCurrencyMixin, serializers.ModelSerializer):
     """Serializer for bank transactions.
 
     On create the caller supplies bank_account, amount,
@@ -198,6 +199,15 @@ class TransactionSerializer(serializers.ModelSerializer):
     def get_category_full_name(self, obj: Transaction) -> str | None:
         """Return the category's '{group} : {name}' display form, or null."""
         return obj.category.full_name if obj.category is not None else None
+
+    ####################################################################
+    #
+    def account_currency(self, attrs: dict) -> str | None:
+        """The currency of the transaction's bank account."""
+        account = attrs.get("bank_account") or getattr(
+            self.instance, "bank_account", None
+        )
+        return account.currency if account is not None else None
 
     ####################################################################
     #
@@ -400,7 +410,7 @@ class TransactionSplitsSerializer(serializers.Serializer):
 ########################################################################
 ########################################################################
 #
-class ResolvePendingSerializer(serializers.Serializer):
+class ResolvePendingSerializer(AccountCurrencyMixin, serializers.Serializer):
     """Input serializer for the resolve-pending action.
 
     Validates the settled posted_date and optional final amount.
@@ -441,4 +451,11 @@ class ResolvePendingSerializer(serializers.Serializer):
                         )
                     }
                 )
-        return attrs
+        return super().validate(attrs)
+
+    ####################################################################
+    #
+    def account_currency(self, attrs: dict) -> str | None:
+        """The currency of the pending transaction's bank account."""
+        transaction = self.context.get("transaction")
+        return transaction.bank_account.currency if transaction else None

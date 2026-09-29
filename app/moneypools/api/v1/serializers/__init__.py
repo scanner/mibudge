@@ -34,6 +34,7 @@ from .bank_accounts import BankAccountSerializer
 from .budgets import BudgetSerializer, BudgetUpdateResultSerializer
 from .categories import TransactionCategorySerializer
 from .fields import (
+    CategoryNamesField,
     OwnedBankAccountField,
     RecurrenceSerializerField,
 )
@@ -69,6 +70,7 @@ from .transactions import (
 
 __all__ = [
     "RecurrenceSerializerField",
+    "CategoryNamesField",
     "BankSerializer",
     "CurrencySerializer",
     "BankAccountSerializer",

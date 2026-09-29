@@ -39,7 +39,10 @@ there.
 
 A money value is a decimal string plus a sibling currency code: `"amount":
 "-45.99"` with `"amount_currency": "USD"` (ISO 4217).  Debits are
-negative.  An omitted currency defaults to the bank account's.
+negative.  Every amount is in its bank account's currency: in a request
+the `<field>_currency` key is optional and defaults to the account's, and
+any other currency is refused with 400 on that key.  A new bank account
+takes its bank's default currency unless `currency` is given.
 
 ## Pagination
 
@@ -225,7 +228,9 @@ Common responses: `401` · `404` · `429`
   "transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
   "amount": "125.00",               // decimal · required
-  "amount_currency": "USD",         // string · read-only
+  // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
+  // and any other currency is refused.
+  "amount_currency": "USD",         // string · optional
   "budget_balance": "125.00",       // decimal · read-only
   "budget_balance_currency": "USD",  // string · read-only
   "category": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
@@ -540,7 +545,10 @@ Send:
 {
   "scraped_at": "2026-09-29T14:00:00Z",  // date-time · required
   "ending_balance": "125.00",       // decimal · required
-  "transactions": [{...}]           // array of ScrapeSyncTransaction · required
+  "transactions": [{...}],          // array of ScrapeSyncTransaction · required
+  // ISO 4217 currency of `ending_balance`. Optional: defaults to the bank account's
+  // currency, and any other currency is refused.
+  "ending_balance_currency": "USD"  // string · optional
 }
 ```
 
@@ -552,12 +560,14 @@ Nested objects: [ScrapeSyncTransaction](#scrapesynctransaction-object).
 {
   "scraped_at": "2026-09-29T08:15:00-07:00",
   "ending_balance": "1432.18",
+  "ending_balance_currency": "USD",
   "transactions": [
     {
       "is_pending": true,
       "posted_date": "2026-09-29T08:15:00-07:00",
       "raw_description": "CORNER MARKET 09/28 PURCHASE",
       "amount": "-18.25",
+      "amount_currency": "USD",
       "transaction_type": "",
       "running_balance": null
     },
@@ -566,6 +576,7 @@ Nested objects: [ScrapeSyncTransaction](#scrapesynctransaction-object).
       "posted_date": "2026-09-28T00:00:00-07:00",
       "raw_description": "BLUE BOTTLE COFFEE 09/27 PURCHASE",
       "amount": "-6.50",
+      "amount_currency": "USD",
       "transaction_type": "signature_purchase",
       "running_balance": "1450.43"
     }
@@ -710,9 +721,13 @@ Common responses: `400` · `401` · `404` · `429`
   // ISO 4217 currency code (e.g. USD, EUR, GBP).
   "currency": "USD",                // string · optional
   "posted_balance": "125.00",       // decimal · optional
-  "posted_balance_currency": "USD",  // string · read-only
+  // ISO 4217 currency of `posted_balance`. Optional: defaults to the bank account's
+  // currency, and any other currency is refused.
+  "posted_balance_currency": "USD",  // string · optional
   "available_balance": "125.00",    // decimal · optional
-  "available_balance_currency": "USD",  // string · read-only
+  // ISO 4217 currency of `available_balance`. Optional: defaults to the bank account's
+  // currency, and any other currency is refused.
+  "available_balance_currency": "USD",  // string · optional
   "unallocated_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · read-only
   // When enabled (the default), scheduled funding and recurrence events run
   // automatically for this account. Disable to opt out of automation and drive funding
@@ -781,7 +796,10 @@ Common responses: `400` · `401` · `404` · `429`
   "raw_description": "string",      // string · required
   "amount": "125.00",               // decimal · required
   "transaction_type": "string",     // string · optional
-  "running_balance": "125.00"       // decimal | null · optional
+  "running_balance": "125.00",      // decimal | null · optional
+  // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
+  // and any other currency is refused.
+  "amount_currency": "USD"          // string · optional
 }
 ```
 
@@ -991,9 +1009,13 @@ Common responses: `401` · `404` · `429`
   "funded_amount": "125.00",        // decimal · read-only
   "funded_amount_currency": "USD",  // string · read-only
   "target_balance": "125.00",       // decimal · required
-  "target_balance_currency": "USD",  // string · read-only
+  // ISO 4217 currency of `target_balance`. Optional: defaults to the bank account's
+  // currency, and any other currency is refused.
+  "target_balance_currency": "USD",  // string · optional
   "funding_amount": "125.00",       // decimal | null · optional
-  "funding_amount_currency": "USD",  // string | null · read-only
+  // ISO 4217 currency of `funding_amount`. Optional: defaults to the bank account's
+  // currency, and any other currency is refused.
+  "funding_amount_currency": "USD",  // string | null · optional
   // "G" Goal, "R" Recurring, "A" Associated Fill-up Goal, "C" Capped
   "budget_type": "G",               // enum · optional
   // "D" Target Date, "F" Fixed Amount
@@ -1016,9 +1038,9 @@ Common responses: `401` · `404` · `429`
   // control. The funding_schedule field is not restricted this way.
   "recurrence_schedule": "string",  // string | null · optional
   "memo": "string",                 // string | null · optional
-  // List of matcher strings; currently transaction-category full names ('{group} :
-  // {name}'). Spend matching an entry is auto-routed to this budget.
-  "auto_spend": null,               // any · optional
+  // Transaction-category full names ('{group} : {name}'). Spend in a listed category is
+  // auto-routed to this budget.
+  "auto_spend": ["string"],         // array of string · optional
   "next_funding": {...},            // NextFunding | null · read-only
   "next_recurrence": "2026-09-29",  // date | null · read-only
   // "ahead", "on_track", "behind"
@@ -1266,7 +1288,9 @@ Common responses: `401` · `404` · `429`
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
   "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "amount": "125.00",               // decimal · required
-  "amount_currency": "USD",         // string · read-only
+  // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
+  // and any other currency is refused.
+  "amount_currency": "USD",         // string · optional
   "src_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "dst_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "actor": 0,                       // integer · read-only
@@ -1631,7 +1655,10 @@ Send:
 ```jsonc
 {
   "posted_date": "2026-09-29T14:00:00Z",  // date-time · required
-  "amount": "125.00"                // decimal | null · optional
+  "amount": "125.00",               // decimal | null · optional
+  // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
+  // and any other currency is refused.
+  "amount_currency": "USD"          // string · optional
 }
 ```
 
@@ -1719,7 +1746,9 @@ Common responses: `400` · `401` · `404` · `429`
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · read-only
   "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "amount": "125.00",               // decimal · required
-  "amount_currency": "USD",         // string · read-only
+  // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
+  // and any other currency is refused.
+  "amount_currency": "USD",         // string · optional
   "party": "string",                // string | null · read-only
   "posted_date": "2026-09-29T14:00:00Z",  // date-time · required
   "transaction_date": "2026-09-29T14:00:00Z",  // date-time | null · optional
