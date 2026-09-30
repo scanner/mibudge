@@ -20,7 +20,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.filters import OrderingFilter
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 
 # Project imports
 from common.views import AtomicWritesMixin
@@ -31,6 +31,7 @@ from moneypools.permissions import (
     IsAccountOwner,
 )
 from moneypools.service import bank_account as bank_account_svc
+from users.permissions import RequiresInteractiveAuth
 
 from ..serializers.bank_accounts import BankAccountSerializer
 from .funding import BankAccountFundingActions
@@ -83,7 +84,8 @@ from .invitations import BankAccountInvitationActions
         summary="Delete a bank account",
         description=(
             "Delete a bank account and all associated budgets, "
-            "transactions, and allocations."
+            "transactions, and allocations. Requires an interactive "
+            "login session; API keys get 403."
         ),
     ),
 )
@@ -108,6 +110,20 @@ class BankAccountViewSet(
     filterset_fields = ["account_type"]
     ordering_fields = ["name", "created_at"]
     ordering = ["name"]
+
+    ####################################################################
+    #
+    def get_permissions(self) -> list[BasePermission]:
+        """Add `RequiresInteractiveAuth` for `destroy`.
+
+        Deleting a bank account cascades through everything in it, so
+        machine credentials may not do it.  With API-key scopes this
+        becomes a scope the key's creator can grant.
+        """
+        permissions = super().get_permissions()
+        if self.action == "destroy":
+            permissions.append(RequiresInteractiveAuth())
+        return permissions
 
     ####################################################################
     #
