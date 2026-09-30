@@ -1053,6 +1053,104 @@ class TestBudgetAPI:
         )
         check.equal(fillup.name, "Eating Out Fill-up", "named after parent")
 
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "fields,error_key",
+        [
+            ({"budget_type": "R", "funding_type": "F"}, "funding_type"),
+            ({"budget_type": "C", "funding_type": "D"}, "funding_type"),
+            ({"budget_type": "C"}, "funding_type"),
+            (
+                {
+                    "budget_type": "R",
+                    "funding_type": "D",
+                    "target_date": "2027-01-01",
+                },
+                "target_date",
+            ),
+            (
+                {
+                    "budget_type": "C",
+                    "funding_type": "F",
+                    "funding_amount": "50.00",
+                    "target_date": "2027-01-01",
+                },
+                "target_date",
+            ),
+        ],
+        ids=[
+            "recurring-fixed-amount",
+            "capped-target-date-funding",
+            "capped-default-funding",
+            "recurring-target-date",
+            "capped-target-date",
+        ],
+    )
+    def test_create_rejects_type_combination(
+        self,
+        auth_client: APIClient,
+        account: BankAccount,
+        fields: dict[str, str],
+        error_key: str,
+    ) -> None:
+        """
+        GIVEN: an owned bank account
+        WHEN:  POST /api/v1/budgets/ with a budget type and funding
+               type or target date the budget type does not allow
+        THEN:  the response is 400 naming the offending field
+        """
+        response = auth_client.post(
+            reverse("api_v1:budget-list"),
+            {
+                "name": "Mismatched",
+                "bank_account": str(account.id),
+                "target_balance": "300.00",
+                **fields,
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert error_key in response.data
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "change,error_key",
+        [
+            ({"funding_type": "F"}, "funding_type"),
+            ({"target_date": "2027-01-01"}, "target_date"),
+        ],
+        ids=["fixed-amount", "target-date"],
+    )
+    def test_update_recurring_rejects_type_combination(
+        self,
+        auth_client: APIClient,
+        account: BankAccount,
+        make_budget: Callable[..., Budget],
+        change: dict[str, str],
+        error_key: str,
+    ) -> None:
+        """
+        GIVEN: a Recurring budget
+        WHEN:  PATCH gives it fixed-amount funding or a target date
+        THEN:  the response is 400 naming the offending field
+        """
+        budget = make_budget(
+            account,
+            budget_type=Budget.BudgetType.RECURRING,
+            funding_type=Budget.FundingType.TARGET_DATE,
+            target_balance=Money(300, "USD"),
+        )
+
+        response = auth_client.patch(
+            reverse("api_v1:budget-detail", kwargs={"id": budget.id}),
+            change,
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert error_key in response.data
+
 
 ########################################################################
 ########################################################################
