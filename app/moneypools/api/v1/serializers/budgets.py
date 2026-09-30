@@ -5,8 +5,12 @@ Serializer for budgets (virtual envelopes) in the moneypools v1 API.
 invariants and exposes the derived funding fields.
 """
 
+# system imports
+from typing import Any, cast
+
 # 3rd party imports
 import recurrence
+from django.db.models import Field
 from djmoney.contrib.django_rest_framework import MoneyField as DRFMoneyField
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -442,6 +446,60 @@ class BudgetSerializer(BankAccountCurrencyMixin, serializers.ModelSerializer):
                     "Cannot rename the unallocated budget."
                 )
         return value
+
+    ####################################################################
+    #
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Enforce the budget-type rules the database constraints check.
+
+        Recurring budgets use TARGET_DATE funding, Capped budgets use
+        FIXED_AMOUNT funding, and neither has a target_date (the
+        `Budget.Meta` CHECK constraints).  Each field is the request's
+        value, else the budget's current one on update, else the model
+        default on create -- the same default `perform_create` applies.
+
+        Args:
+            attrs: The field-validated request data.
+
+        Returns:
+            The validated data.
+
+        Raises:
+            ValidationError: Keyed by the field that breaks a rule.
+        """
+        attrs = super().validate(attrs)
+
+        def value(field: str) -> Any:
+            if field in attrs:
+                return attrs[field]
+            if self.instance is not None:
+                return getattr(self.instance, field)
+            model_field = cast(Field, Budget._meta.get_field(field))
+            return model_field.get_default()
+
+        BT = Budget.BudgetType
+        FT = Budget.FundingType
+        budget_type = value("budget_type")
+        funding_type = value("funding_type")
+        errors: dict[str, str] = {}
+
+        match budget_type:
+            case BT.RECURRING if funding_type != FT.TARGET_DATE:
+                errors["funding_type"] = (
+                    "Recurring budgets must use TARGET_DATE funding."
+                )
+            case BT.CAPPED if funding_type != FT.FIXED_AMOUNT:
+                errors["funding_type"] = (
+                    "Capped budgets must use FIXED_AMOUNT funding."
+                )
+        if budget_type in (BT.RECURRING, BT.CAPPED) and value("target_date"):
+            errors["target_date"] = (
+                f"{BT(budget_type).label} budgets must not have a target_date."
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
 
 
 ########################################################################

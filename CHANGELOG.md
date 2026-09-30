@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Creating or editing a budget with a funding type or target date its budget type does not allow (Recurring with fixed-amount funding, Capped with target-date funding, a target date on either) answers 400 naming the field instead of a 500
 - Money amounts always take their bank account's currency: an omitted `<field>_currency` now means the bank account's currency rather than the server default, a different currency is refused with 400 (it was silently overwritten, stored, or failed with a 500 when amounts were added up), and budgets keep every amount in the bank account's currency
 - A bank account created without `currency` takes its bank's default currency, as documented, instead of the server default
 - The OpenAPI schema documents every endpoint's error responses (`Error` for `{"detail": ...}` bodies, `ValidationError` for field errors), and the notification/channel preference endpoints answer an unknown kind or channel with a `{"detail": ...}` 404 instead of an empty body
