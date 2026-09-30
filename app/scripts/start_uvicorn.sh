@@ -14,7 +14,9 @@ wait-for-it --service "${REDIS_HOST:-redis}:${REDIS_PORT:-6379}" -- echo "Redis 
 cd /app
 
 # NOTE: the socket is only reachable by the nginx inside this container, so
-# its X-Forwarded-* headers are trusted unconditionally.
+# its X-Forwarded-* headers are trusted unconditionally.  Django's
+# ClientAddressMiddleware then sets the client address from X-Forwarded-For
+# using DJANGO_TRUSTED_PROXY_COUNT.
 exec uvicorn config.asgi:application \
     --uds /tmp/uvicorn.sock \
     --workers "${WEB_CONCURRENCY:-4}" \

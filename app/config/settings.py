@@ -195,6 +195,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # MIDDLEWARE
 # ------------------------------------------------------------------------------
 MIDDLEWARE = [
+    "common.middleware.ClientAddressMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -309,6 +310,15 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = env.bool(
         "DJANGO_SECURE_CONTENT_TYPE_NOSNIFF", default=True
     )
+
+# How many reverse proxies front this deployment, each appending to
+# X-Forwarded-For.  `common.middleware.ClientAddressMiddleware` takes the
+# client's address from that many entries from the end of the header;
+# anything further left is client-supplied.  0 leaves REMOTE_ADDR as the
+# server reported it, which is right only when nothing proxies in front
+# of Django.
+#
+TRUSTED_PROXY_COUNT = env.int("DJANGO_TRUSTED_PROXY_COUNT", default=0)
 
 # EMAIL
 # ------------------------------------------------------------------------------
@@ -442,6 +452,9 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": API_THROTTLE_RATES,
+    # Throttle on REMOTE_ADDR, which ClientAddressMiddleware has already
+    # resolved.  Left unset, DRF keys on the raw X-Forwarded-For header.
+    "NUM_PROXIES": 0,
     "DEFAULT_PAGINATION_CLASS": "config.pagination.FlexiblePageNumberPagination",
     "PAGE_SIZE": API_PAGE_SIZE,
     "DEFAULT_SCHEMA_CLASS": "common.schema.AutoSchema",
