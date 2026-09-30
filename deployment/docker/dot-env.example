@@ -18,6 +18,13 @@ SITE_DISPLAY_NAME=MiBudge
 # Security
 # ------------------------------------------------------------------------------
 DJANGO_SECURE_SSL_REDIRECT=True
+# Number of reverse proxies in front of Django that append to
+# X-Forwarded-For, counting the nginx inside the web container.  One
+# TLS proxy on the host in front of the container is 2; add one for
+# each further proxy (a load balancer in front of that proxy makes 3).
+# Too low makes a proxy's address stand in for every client; too high
+# lets clients pick their own address for rate limiting.
+DJANGO_TRUSTED_PROXY_COUNT=2
 
 # Email
 # ------------------------------------------------------------------------------
