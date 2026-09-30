@@ -319,11 +319,11 @@ Common responses: `400` · `401` · `404` · `429`
 
 **Delete a bank account.**
 
-Delete a bank account and all associated budgets, transactions, and allocations.
+Delete a bank account and all associated budgets, transactions, and allocations. Requires an interactive login session; API keys get 403.
 
 **204** -- no body.
 
-Common responses: `401` · `404` · `429`
+Common responses: `401` · `403` · `404` · `429`
 
 #### `GET /api/v1/bank-accounts/{id}/funding-event-dates/`
 

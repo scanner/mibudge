@@ -175,7 +175,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a bank account
-         * @description Delete a bank account and all associated budgets, transactions, and allocations.
+         * @description Delete a bank account and all associated budgets, transactions, and allocations. Requires an interactive login session; API keys get 403.
          */
         delete: operations["bank_accounts_destroy"];
         options?: never;
@@ -2652,6 +2652,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

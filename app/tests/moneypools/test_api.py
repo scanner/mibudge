@@ -416,6 +416,42 @@ class TestBankAccountAPI:
         account.refresh_from_db()
         assert account.name == "Renamed Account"
 
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "any_auth_client,expected_status,remains",
+        [
+            ("jwt", status.HTTP_204_NO_CONTENT, False),
+            ("api_key", status.HTTP_403_FORBIDDEN, True),
+        ],
+        ids=["session-deletes", "api-key-denied"],
+        indirect=["any_auth_client"],
+    )
+    def test_delete(
+        self,
+        any_auth_client: APIClient,
+        account: BankAccount,
+        expected_status: int,
+        remains: bool,
+    ) -> None:
+        """
+        GIVEN: an owned bank account
+        WHEN:  DELETE /api/v1/bank-accounts/<uuid>/ with an interactive
+               session or with an API key
+        THEN:  the session deletes it; the API key is refused with 403
+               and the bank account is untouched
+        """
+        response = any_auth_client.delete(
+            reverse("api_v1:bankaccount-detail", kwargs={"id": account.id})
+        )
+
+        check.equal(response.status_code, expected_status, "status")
+        check.equal(
+            BankAccount.objects.filter(pkid=account.pkid).exists(),
+            remains,
+            "bank account kept only when refused",
+        )
+
 
 ########################################################################
 ########################################################################
