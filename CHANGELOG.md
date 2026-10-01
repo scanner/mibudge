@@ -82,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Changing your password signs out every other session (the device you changed it on stays signed in), and completing a password reset signs out every session. The reset email lists your active API keys so you can revoke any you do not recognise; requesting a reset changes nothing until the emailed link is used
+- Changing your password signs out every other session (the device you changed it on stays signed in), and completing a password reset signs out every session. The reset email lists your active API keys so you can revoke any you do not recognise; requesting a reset changes nothing until the emailed link is used. A newly invited user setting their first password gets a welcome page with a sign-in link instead
 - Cancelling a confirmed email change (account takeover recovery) now also revokes every API key, and the security alert says how many were revoked
 - Cancelling an email change before it is confirmed now signs out every session, as the old-address email already promised, and the security alert lists your active API keys so you can revoke any you do not recognise
 - API keys can no longer delete a bank account (which deletes everything in it); `DELETE /api/v1/bank-accounts/{id}/` now requires an interactive login and answers 403 to an API key

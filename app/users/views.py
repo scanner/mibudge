@@ -1,10 +1,11 @@
 # system imports
 #
 from datetime import timedelta
-from typing import cast
+from typing import Any, cast
 
 # 3rd party imports
 #
+from allauth.account.views import PasswordResetFromKeyDoneView
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -42,6 +43,7 @@ from users.email_change import (
     revoke_request,
 )
 from users.serializers import AccessTokenSerializer
+from users.signals import FIRST_PASSWORD_SESSION_KEY
 
 # app imports
 #
@@ -110,6 +112,30 @@ class UserRedirectView(LoginRequiredMixin, RedirectView):
 
 
 user_redirect_view = UserRedirectView.as_view()
+
+
+########################################################################
+########################################################################
+#
+class FirstPasswordAwareResetDoneView(PasswordResetFromKeyDoneView):
+    """allauth's reset-complete page, which welcomes a first password.
+
+    `users.signals.on_password_reset` marks the session when the
+    password just set was the user's first (an invitee's).  The mark is
+    read once, so a reload shows the generic page.
+    """
+
+    ####################################################################
+    #
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context["first_password"] = self.request.session.pop(
+            FIRST_PASSWORD_SESSION_KEY, False
+        )
+        return context
+
+
+password_reset_from_key_done_view = FirstPasswordAwareResetDoneView.as_view()
 
 
 ########################################################################

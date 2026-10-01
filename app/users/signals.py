@@ -23,6 +23,10 @@ from users.sessions import api_key_summaries, end_all_sessions
 
 logger = logging.getLogger(__name__)
 
+# Session key marking that the password just set from a reset link was
+# the user's first; the reset-complete page reads it once.
+FIRST_PASSWORD_SESSION_KEY = "users.first_password"
+
 
 ########################################################################
 ########################################################################
@@ -71,10 +75,12 @@ def on_password_reset(sender, request, user, **kwargs) -> None:
     notification lists the user's active API keys so the owner can
     revoke any they do not recognise.  An invitee setting their first
     password (`AccountAdapter.set_password` marks it) gets no
-    notification.
+    notification; their browser session is marked instead, so the
+    reset-complete page welcomes them.
     """
     end_all_sessions(user)
     if getattr(user, "first_password", False):
+        request.session[FIRST_PASSWORD_SESSION_KEY] = True
         logger.debug("first password set for user %s", user.pk)
         return
     notify(

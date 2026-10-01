@@ -15,6 +15,7 @@ from users.views import (
     cookie_token_logout_view,
     cookie_token_obtain_pair_view,
     cookie_token_refresh_view,
+    password_reset_from_key_done_view,
 )
 
 urlpatterns = [
@@ -56,7 +57,7 @@ urlpatterns = [
                 ),
                 path(
                     "password/reset/key/done/",
-                    allauth_views.password_reset_from_key_done,
+                    password_reset_from_key_done_view,
                     name="account_reset_password_from_key_done",
                 ),
                 path(
