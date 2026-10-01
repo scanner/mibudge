@@ -16,7 +16,8 @@ confirms. At the latest, it will expire on:
   {{ revoke_by_latest }}
 
 Cancelling will:
-  - Revert your email address if the change already went through
+  - Revert your email address and revoke every API key, if the change
+    already went through
   - Sign out all active sessions
   - Send a security notice to both addresses
 

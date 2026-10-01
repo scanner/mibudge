@@ -29,13 +29,13 @@ import BaseCard from "@/components/base/BaseCard.vue";
         Email change cancelled
       </h1>
       <p class="mb-6 text-body-sm text-fg-muted">
-        The email address change on your account has been cancelled. Your
-        original address is still active.
+        The email address change on your account has been cancelled, and all
+        active sessions have been signed out.
       </p>
       <p class="mb-6 text-meta text-fg-subtle">
         If the change had already been confirmed, your email address has been
-        restored and all active sessions have been signed out. A security notice
-        was sent to both addresses.
+        restored and your API keys have been revoked. Otherwise review your API
+        keys after signing in. A security notice was sent to both addresses.
       </p>
       <BaseButton as="a" href="/app/login/" block> Sign in </BaseButton>
     </BaseCard>

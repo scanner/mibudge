@@ -336,8 +336,8 @@ def email_change_revoke_view(
     """Process a 'this wasn't me' revocation link and redirect to the SPA.
 
     Called when a user clicks the revocation link sent to their old email
-    address.  On success the email is reverted, all sessions are
-    invalidated, and the browser is sent to the 'revoked' SPA result page.
+    address.  On success all sessions are invalidated, a confirmed change
+    is reverted, and the browser is sent to the 'revoked' SPA result page.
     """
     try:
         revoke_request(token)

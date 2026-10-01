@@ -61,3 +61,11 @@ def api_keys_in_every_state(user: User) -> dict[str, APIKey]:
         user, "expired importer", expires_at=timezone.now() - timedelta(days=1)
     )
     return {"active": active, "revoked": revoked, "expired": expired}
+
+
+####################################################################
+#
+@pytest.fixture
+def active_keys(request: pytest.FixtureRequest, user: User) -> list[APIKey]:
+    """`request.param` active API keys for `user`."""
+    return [APIKey.make(user, f"importer {n}")[0] for n in range(request.param)]

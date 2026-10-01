@@ -13,9 +13,9 @@ Flow A -- email change accepted
 
 Flow B -- 'this wasn't me' revocation
   B1. Pre-confirmation: revoke before new address confirms
-      -> email unchanged, sessions unaffected
+      -> email unchanged, all sessions killed, API keys listed for review
   B2. Post-confirmation: revoke after new address confirms
-      -> email reverted, all sessions killed
+      -> email reverted, all sessions killed, API keys revoked
 
 Session invalidation is verified by checking whether outstanding
 refresh tokens still produce a 200 from the token-refresh endpoint
@@ -42,6 +42,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 # Project imports
 #
+from notifications.channels.email import EmailChannel
 from notifications.models import Notification
 from tests.users.session_checks import session_valid
 from users.models import APIKey, EmailChangeRequest, User
@@ -436,8 +437,8 @@ class TestFlowA:
 class TestFlowB1:
     """Flow B sub-case 1: revoked before confirmation.
 
-    The request was caught early -- the email was never changed, so
-    no session invalidation is needed.
+    The request was caught early -- the email was never changed, but
+    whoever requested it was signed in, so every session ends.
     """
 
     ####################################################################
@@ -455,7 +456,7 @@ class TestFlowB1:
         GIVEN: a pending (unconfirmed) EmailChangeRequest to an attacker's
                address; RT-A and RT-B held
         WHEN:  POST revoke/
-        THEN:  200; User.email unchanged; RT-A and RT-B still valid;
+        THEN:  200; User.email unchanged; RT-A and RT-B both invalid;
                security alert sent to both old and new addresses;
                a new change request is immediately allowed
         """
@@ -476,9 +477,8 @@ class TestFlowB1:
         check.is_not_none(ecr.revoked_at, "request revoked")
         check.is_none(ecr.confirmed_at, "and never confirmed")
         check.equal(alice.email, old_email, "address unchanged")
-        # No session invalidation -- the email never changed
-        check.is_true(session_valid(rt_a), "session A still valid")
-        check.is_true(session_valid(rt_b), "session B still valid")
+        check.is_false(session_valid(rt_a), "session A killed")
+        check.is_false(session_valid(rt_b), "session B killed")
         check.is_true(
             _sent_to(mailoutbox, new_email),
             "security alert emailed to the attacker's address",
@@ -645,8 +645,9 @@ class TestRevocationRecovery:
                active API key
         WHEN:  the request is revoked
         THEN:  the API key is revoked only if the change had been
-               confirmed (the account was taken over), and the
-               security alert says how many keys went
+               confirmed (the account was taken over); the security
+               alert says how many keys went and lists the ones still
+               active for review
         """
         response = auth_client.post(_revoke_url(ecr.token))
 
@@ -661,6 +662,54 @@ class TestRevocationRecovery:
             alert.context["revoked_api_keys"],
             int(keys_revoked),
             "alert counts the revoked key",
+        )
+        check.equal(
+            [k["name"] for k in alert.context["api_keys"]],
+            [] if keys_revoked else [active.name],
+            "alert lists the keys still active",
+        )
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "active_keys,lists_keys",
+        [(2, True), (0, False)],
+        ids=["with-keys", "no-keys"],
+        indirect=["active_keys"],
+    )
+    def test_unconfirmed_alert_asks_owner_to_review_keys(
+        self,
+        auth_client: APIClient,
+        active_keys: list[APIKey],
+        pending_ecr: EmailChangeRequest,
+        old_email: str,
+        mailoutbox: list[EmailMessage],
+        lists_keys: bool,
+    ) -> None:
+        """
+        GIVEN: a pending email change, with or without active API keys
+        WHEN:  the request is revoked and the owner's alert is sent
+        THEN:  the alert asks the owner to review their API keys and
+               names each one, only when there are any
+        """
+        auth_client.post(_revoke_url(pending_ecr.token))
+        mailoutbox.clear()
+
+        EmailChannel().send(
+            Notification.objects.get(
+                user=pending_ecr.user, kind=EMAIL_CHANGE_SECURITY_ALERT
+            )
+        )
+
+        assert [m.to for m in mailoutbox] == [[old_email]]
+        body = mailoutbox[0].body
+        check.equal(
+            "Revoke any you do not recognise" in body, lists_keys, "asks"
+        )
+        check.equal(
+            [key.name in body for key in active_keys],
+            [True] * len(active_keys),
+            "names every active key",
         )
 
     ####################################################################

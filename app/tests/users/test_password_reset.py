@@ -88,14 +88,6 @@ def complete_reset(
     return _complete
 
 
-####################################################################
-#
-@pytest.fixture
-def active_keys(request: pytest.FixtureRequest, user: User) -> list[APIKey]:
-    """`request.param` active API keys for `user`."""
-    return [APIKey.make(user, f"importer {n}")[0] for n in range(request.param)]
-
-
 ########################################################################
 ########################################################################
 #
