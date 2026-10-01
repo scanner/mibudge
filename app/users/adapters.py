@@ -82,8 +82,9 @@ class AccountAdapter(DefaultAccountAdapter):
 
         An invitee sets their first password through the reset flow.
         `users.signals.on_password_reset` reads `first_password` (on
-        this same instance, which allauth passes on to the signal) and
-        sends no "password reset" email for it.
+        this same instance, which allauth passes on to the signal),
+        sends no "password reset" email for it, and marks the session
+        so the reset-complete page welcomes the invitee.
 
         Args:
             user: The user whose password is set.

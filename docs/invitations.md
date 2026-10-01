@@ -90,7 +90,8 @@ accepted.
 On acceptance, the service activates the account and calls
 `trigger_password_reset()`, which sends an allauth password-reset email
 so the invitee sets their first password through the normal
-one-time-link flow. Acceptance never issues a session or a password
+one-time-link flow; the page they land on afterwards welcomes them and
+links to sign-in. Acceptance never issues a session or a password
 directly -- proving control of the email inbox (twice: the invitation
 link, then the reset link) is the entire trust chain.
 

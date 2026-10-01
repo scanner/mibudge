@@ -71,10 +71,14 @@ def reset_link(
 @pytest.fixture
 def complete_reset(
     reset_link: str, client: Client, mock_send_notification_now: MagicMock
-) -> Callable[[], None]:
-    """Return a callable that follows the reset link and sets a password."""
+) -> Callable[[], str]:
+    """Return a callable that follows the reset link and sets a password.
 
-    def _complete() -> None:
+    The callable returns the reset-complete page's path, where allauth
+    redirects once the password is set.
+    """
+
+    def _complete() -> str:
         # allauth moves the key from the URL into the session and
         # redirects to the set-password form.
         form = client.get(reset_link)
@@ -84,6 +88,7 @@ def complete_reset(
             {"password1": NEW_PASSWORD, "password2": NEW_PASSWORD},
         )
         assert done.status_code == 302
+        return done["Location"]
 
     return _complete
 
@@ -120,7 +125,7 @@ class TestPasswordReset:
         self,
         user: User,
         api_keys_in_every_state: dict[str, APIKey],
-        complete_reset: Callable[[], None],
+        complete_reset: Callable[[], str],
     ) -> None:
         """
         GIVEN: a signed-in user with API keys that are active, revoked
@@ -159,7 +164,7 @@ class TestPasswordReset:
         self,
         user: User,
         active_keys: list[APIKey],
-        complete_reset: Callable[[], None],
+        complete_reset: Callable[[], str],
         mailoutbox: list[EmailMessage],
         lists_keys: bool,
     ) -> None:
@@ -190,7 +195,7 @@ class TestPasswordReset:
     #
     @pytest.mark.parametrize("reset_user", ["invitee"], indirect=True)
     def test_first_password_sends_no_notification(
-        self, reset_user: User, complete_reset: Callable[[], None]
+        self, reset_user: User, complete_reset: Callable[[], str]
     ) -> None:
         """
         GIVEN: an invitee with no usable password yet
@@ -204,3 +209,34 @@ class TestPasswordReset:
         assert not Notification.objects.filter(
             user=reset_user, kind=PASSWORD_CHANGED
         ).exists()
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "reset_user,heading",
+        [("owner", "Change Password"), ("invitee", "Welcome to mibudge")],
+        indirect=["reset_user"],
+    )
+    def test_complete_page_welcomes_first_password_once(
+        self,
+        reset_user: User,
+        complete_reset: Callable[[], str],
+        client: Client,
+        heading: str,
+    ) -> None:
+        """
+        GIVEN: an existing owner, or an invitee with no usable password
+        WHEN:  they set a password through the reset link and land on
+               the reset-complete page, then reload it
+        THEN:  the owner sees the password-changed page; the invitee is
+               welcomed, and a reload shows the password-changed page
+        """
+        done_page = complete_reset()
+
+        first = client.get(done_page)
+        reload = client.get(done_page)
+
+        check.is_in(heading, first.content.decode(), "first visit")
+        check.is_in(
+            "Change Password", reload.content.decode(), "reload is generic"
+        )
