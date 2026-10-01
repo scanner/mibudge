@@ -115,7 +115,7 @@ user_redirect_view = UserRedirectView.as_view()
 ########################################################################
 ########################################################################
 #
-def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     """Attach the httpOnly refresh cookie to ``response``."""
     lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
     response.set_cookie(
@@ -180,7 +180,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
         ):
             refresh = response.data.pop("refresh", None)
             if refresh:
-                _set_refresh_cookie(response, refresh)
+                set_refresh_cookie(response, refresh)
         return response
 
 
@@ -235,7 +235,7 @@ class CookieTokenRefreshView(TokenRefreshView):
 
         if "refresh" in validated:
             # Rotation produced a new refresh token -- update the cookie.
-            _set_refresh_cookie(response, validated["refresh"])
+            set_refresh_cookie(response, validated["refresh"])
 
         return response
 

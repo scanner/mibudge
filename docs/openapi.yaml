@@ -4305,6 +4305,49 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
           x-common-response: true
+  /api/v1/users/me/api-keys/revoke-all/:
+    post:
+      operationId: users_me_api_keys_revoke_all_create
+      description: Revoke all of the current user's active API keys at once, e.g.
+        after a suspected account takeover.  Revoked keys stop authenticating immediately
+        and remain listed for audit purposes.  Revocation cannot be undone.  Returns
+        how many keys were revoked; 0 when none were active.
+      summary: Revoke every API key
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyRevokeAll'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Missing, invalid or expired credentials.  Sent even to public
+            endpoints when a bad credential is given.
+          x-common-response: true
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'The credentials may not use this endpoint: it is staff-only,
+            or it needs an interactive login and got an API key.'
+          x-common-response: true
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
   /api/v1/users/me/change-email/:
     post:
       operationId: users_me_change_email_create
@@ -4471,10 +4514,10 @@ paths:
   /api/v1/users/me/change-password/:
     post:
       operationId: users_me_change_password_create
-      description: Change the authenticated user's password. Requires the current
-        password for verification. The new password must score at least 2 on the zxcvbn
-        scale. Existing JWT tokens remain valid; the caller may silently refresh as
-        normal -- no forced re-login is imposed.
+      description: |-
+        Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale.
+
+        Every other session ends: its refresh token is revoked, and its access token stops working when it expires (at most 60 minutes).  The caller stays signed in with a new refresh cookie set on this response.  API keys are not affected.
       summary: Change current user's password
       tags:
       - users
@@ -4672,6 +4715,14 @@ components:
       - prefix
       - revoked_at
       - uuid
+    APIKeyRevokeAll:
+      type: object
+      properties:
+        revoked:
+          type: integer
+          readOnly: true
+      required:
+      - revoked
     AccessToken:
       type: object
       properties:

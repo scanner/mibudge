@@ -45,6 +45,15 @@ export function createdApiKeyFromDto(dto: ApiKeyCreatedDto): CreatedApiKey {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// A key authenticates while it is neither revoked nor past its expiry.
+//
+export function isApiKeyActive(key: ApiKey, now: Date = new Date()): boolean {
+  if (key.revokedAt !== null) return false;
+  return key.expiresAt === null || Date.parse(key.expiresAt) > now.getTime();
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // `expiryDays: null` creates a key that never expires.
 //
 export function apiKeyToCreateDto(

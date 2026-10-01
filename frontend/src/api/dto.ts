@@ -66,6 +66,7 @@ export type FundingRunResultDto = Schemas["FundingRunResult"];
 export type ApiKeyDto = Schemas["APIKey"];
 export type ApiKeyCreatedDto = Schemas["APIKeyCreated"];
 export type ApiKeyCreateDto = Schemas["APIKeyCreateRequest"];
+export type ApiKeyRevokeAllDto = Schemas["APIKeyRevokeAll"];
 
 export type NotificationPreferenceDto = Schemas["NotificationPreference"];
 export type ChannelPreferenceDto = Schemas["ChannelPreference"];

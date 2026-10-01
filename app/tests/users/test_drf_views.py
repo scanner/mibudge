@@ -11,11 +11,14 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_check as check
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # app imports
 #
+from tests.users.session_checks import session_valid
 from users.api.v1.views import UserViewSet
-from users.models import User
+from users.models import APIKey, User
+from users.views import REFRESH_COOKIE_NAME
 
 pytestmark = pytest.mark.django_db
 
@@ -208,6 +211,38 @@ class TestPasswordChange:
             1,
             "notification dispatched",
         )
+
+    ####################################################################
+    #
+    def test_ends_other_sessions_keeps_caller_and_api_keys(
+        self,
+        user: User,
+        auth_client: APIClient,
+        api_keys_in_every_state: dict[str, APIKey],
+        mock_send_notification_now: MagicMock,
+    ) -> None:
+        """
+        GIVEN: a user signed in on two other devices, with an active
+               API key
+        WHEN:  the password is changed
+        THEN:  both other sessions end, the response sets a refresh
+               cookie that still works, and the API key stays active
+        """
+        other_sessions = [RefreshToken.for_user(user) for _ in range(2)]
+
+        response = auth_client.post(self.URL, _change_pw_payload())
+
+        assert response.status_code == 204
+        new_cookie = response.cookies[REFRESH_COOKIE_NAME].value
+        check.equal(
+            [session_valid(s) for s in other_sessions],
+            [False, False],
+            "other sessions ended",
+        )
+        check.is_true(session_valid(new_cookie), "caller stays signed in")
+        active = api_keys_in_every_state["active"]
+        active.refresh_from_db()
+        check.is_true(active.is_active, "API key untouched")
 
     ####################################################################
     #

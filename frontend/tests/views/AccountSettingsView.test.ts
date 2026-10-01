@@ -117,6 +117,97 @@ describe("AccountSettingsView", () => {
     expect(wrapper.text()).toContain("Revoked");
   });
 
+  // GIVEN: two active API keys and one already revoked
+  // WHEN:  the user asks to revoke all keys and confirms
+  // THEN:  the confirmation counts the two active keys
+  //  AND:  one revoke-all request is sent and every row shows revoked
+  //
+  it("revokes every active API key after confirmation", async () => {
+    let revoked = false;
+    const keys = [
+      makeApiKey({ name: "importer a" }),
+      makeApiKey({ name: "importer b" }),
+      makeApiKey({ name: "old", revoked_at: "2026-09-01T12:00:00Z" }),
+    ];
+    server.use(
+      http.get("/api/v1/users/me/api-keys/", () =>
+        HttpResponse.json(
+          makePage(
+            keys.map((k) =>
+              revoked && !k.revoked_at
+                ? { ...k, revoked_at: "2026-09-02T12:00:00Z" }
+                : k,
+            ),
+          ),
+        ),
+      ),
+      http.post("/api/v1/users/me/api-keys/revoke-all/", () => {
+        revoked = true;
+        return HttpResponse.json({ revoked: 2 });
+      }),
+    );
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+
+    await button(wrapper, "Revoke all keys").trigger("click");
+    const dialog = document.body.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("Revoke all 2 active API keys?");
+    Array.from(dialog.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Revoke all")!
+      .click();
+    await flushPromises();
+
+    expect(
+      await requestsTo("POST", "/api/v1/users/me/api-keys/revoke-all/"),
+    ).toHaveLength(1);
+    expect(wrapper.text().match(/Revoked/g)).toHaveLength(3);
+  });
+
+  // GIVEN: an active API key
+  // WHEN:  the user asks to revoke all keys, then cancels
+  // THEN:  no request is sent
+  //
+  it("sends nothing when revoke-all is cancelled", async () => {
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+
+    await button(wrapper, "Revoke all keys").trigger("click");
+    Array.from(document.body.querySelectorAll('[role="dialog"] button'))
+      .find((b) => b.textContent?.trim() === "Cancel")!
+      .dispatchEvent(new MouseEvent("click"));
+    await flushPromises();
+
+    expect(
+      await requestsTo("POST", "/api/v1/users/me/api-keys/revoke-all/"),
+    ).toHaveLength(0);
+  });
+
+  // GIVEN: API keys that are all revoked or expired
+  // WHEN:  the settings page opens
+  // THEN:  revoke-all is disabled
+  //
+  it("disables revoke-all when no key is active", async () => {
+    server.use(
+      http.get("/api/v1/users/me/api-keys/", () =>
+        HttpResponse.json(
+          makePage([
+            makeApiKey({ revoked_at: "2026-09-01T12:00:00Z" }),
+            makeApiKey({ expires_at: "2020-01-01T00:00:00Z" }),
+          ]),
+        ),
+      ),
+    );
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+
+    expect(
+      button(wrapper, "Revoke all keys").attributes("disabled"),
+    ).toBeDefined();
+  });
+
   // GIVEN: a custom expiry that is not a number of days
   // WHEN:  the key is created
   // THEN:  it is refused before any request

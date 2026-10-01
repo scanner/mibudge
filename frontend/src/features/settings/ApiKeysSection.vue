@@ -2,8 +2,8 @@
 //
 // ApiKeysSection — create, list and revoke API keys.  Feature component
 // (settings); state and requests live in `useApiKeys`.  A new key's
-// plaintext is shown once, in a banner, until dismissed.  Revoking asks
-// for confirmation because it cannot be undone.
+// plaintext is shown once, in a banner, until dismissed.  Revoking one
+// key or all of them asks for confirmation because it cannot be undone.
 //
 
 // app imports
@@ -35,10 +35,14 @@ const {
   createError,
   revokeTarget,
   revokingId,
+  activeCount,
+  confirmingRevokeAll,
+  revokingAll,
   create,
   copyNewKey,
   dismissNewKey,
   revoke,
+  revokeAll,
 } = useApiKeys();
 
 function mediumDate(iso: string): string {
@@ -220,6 +224,18 @@ function mediumDate(iso: string): string {
         </BaseListRow>
       </ul>
     </div>
+
+    <div v-if="!loading && keys.length > 0" class="mt-3 flex justify-end">
+      <BaseButton
+        variant="secondary"
+        size="sm"
+        :disabled="activeCount === 0"
+        :loading="revokingAll"
+        @click="confirmingRevokeAll = true"
+      >
+        {{ revokingAll ? "Revoking…" : "Revoke all keys" }}
+      </BaseButton>
+    </div>
   </section>
 
   <ConfirmSheet
@@ -229,5 +245,14 @@ function mediumDate(iso: string): string {
     confirm-label="Revoke"
     @cancel="revokeTarget = null"
     @confirm="revokeTarget && revoke(revokeTarget)"
+  />
+
+  <ConfirmSheet
+    :open="confirmingRevokeAll"
+    :title="`Revoke all ${activeCount} active API ${activeCount === 1 ? 'key' : 'keys'}?`"
+    message="Every importer and service using them will immediately lose access, and you will need to create new keys for them. This cannot be undone."
+    confirm-label="Revoke all"
+    @cancel="confirmingRevokeAll = false"
+    @confirm="revokeAll"
   />
 </template>

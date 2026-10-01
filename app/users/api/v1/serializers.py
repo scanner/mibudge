@@ -231,3 +231,12 @@ class APIKeyCreatedSerializer(APIKeySerializer):
     class Meta(APIKeySerializer.Meta):
         fields = [*APIKeySerializer.Meta.fields, "key"]
         read_only_fields = fields
+
+
+########################################################################
+########################################################################
+#
+class APIKeyRevokeAllSerializer(serializers.Serializer):
+    """Revoke-all response: how many active API keys were revoked."""
+
+    revoked = serializers.IntegerField(read_only=True)

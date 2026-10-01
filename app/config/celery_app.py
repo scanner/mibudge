@@ -78,6 +78,10 @@ MANAGED_PERIODIC_TASKS: dict = {
         "task": "users.tasks.notify_expiring_api_keys",
         "schedule": {"crontab": {"minute": "0", "hour": "15"}},
     },
+    "Flush expired JWT tokens": {
+        "task": "users.tasks.flush_expired_tokens",
+        "schedule": {"crontab": {"minute": "17", "hour": "5"}},
+    },
 }
 
 

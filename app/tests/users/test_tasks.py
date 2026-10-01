@@ -4,6 +4,7 @@
 #
 from collections.abc import Callable
 from datetime import timedelta
+from typing import cast
 
 # 3rd party imports
 #
@@ -13,13 +14,19 @@ from celery.result import EagerResult
 from django.conf import LazySettings
 from django.utils import timezone
 from freezegun import freeze_time
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # app imports
 #
 from notifications.models import Notification
 from users.models import APIKey, User
 from users.notification_kinds import API_KEY_EXPIRING
-from users.tasks import get_users_count, notify_expiring_api_keys
+from users.tasks import (
+    flush_expired_tokens,
+    get_users_count,
+    notify_expiring_api_keys,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -154,3 +161,34 @@ class TestNotifyExpiringApiKeys:
         notify_expiring_api_keys()
 
         assert not Notification.objects.filter(kind=API_KEY_EXPIRING).exists()
+
+
+########################################################################
+########################################################################
+#
+class TestFlushExpiredTokens:
+    """Tests for the flush_expired_tokens Celery task."""
+
+    ####################################################################
+    #
+    def test_removes_only_expired_tokens(
+        self, user: User, settings: LazySettings
+    ) -> None:
+        """
+        GIVEN: one refresh token issued long enough ago to have expired,
+               and one issued now
+        WHEN:  flush_expired_tokens() runs
+        THEN:  only the current token is left
+        """
+        lifetime = cast(
+            timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
+        )
+        with freeze_time(timezone.now() - lifetime - timedelta(days=1)):
+            RefreshToken.for_user(user)
+        current = RefreshToken.for_user(user)
+
+        flush_expired_tokens()
+
+        assert list(OutstandingToken.objects.values_list("jti", flat=True)) == [
+            current["jti"]
+        ]

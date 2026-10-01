@@ -44,6 +44,37 @@ servers) is planned as the next phase of machine authentication.
   The allauth templates are plain Django-rendered pages -- they do not use
   the SPA shell.
 
+### Password change, reset and recovery
+
+Each path that replaces a credential ends the sessions that could belong
+to someone else. Ending a session blacklists its refresh token; its access
+token stops working when it expires, within 60 minutes.
+
+- **Password change** (`POST /api/v1/users/me/change-password/`): every
+  other session ends. The request that changed the password gets a new
+  refresh cookie on its 204, so that tab stays signed in. API keys are
+  untouched: they are separate credentials, managed on the API-keys screen.
+- **Password reset** (allauth, `/accounts/password/reset/`): completing a
+  reset from the emailed link ends every session. Requesting a reset
+  changes nothing, since anyone can request one for any address. API keys
+  keep working after a reset, so the reset-complete page and the
+  "password reset" email tell the owner to review them, and the email
+  lists each active key (name, prefix, created, last used) with a link to
+  revoke any, or all, of them. An invitee setting their first password through
+  this flow gets no "password reset" email.
+- **Email-change revocation** (takeover recovery; see
+  [`email-change.md`](email-change.md)): revoking a confirmed change ends
+  every session and revokes every active API key, and the security alert
+  says how many keys went.
+
+The owner keeps a way back in against someone who knows only the password:
+the reset link goes to the owner's email address, a completed reset ends
+the other party's sessions, and a password change does not affect an open
+email-change revocation link.
+
+Expired refresh tokens and their blacklist rows are deleted daily by
+`users.tasks.flush_expired_tokens`.
+
 ### Passwordless accounts
 
 Users created via the invitation flows (bank-account co-ownership or
@@ -83,6 +114,7 @@ Settings -> API keys):
 | `GET /api/v1/users/me/api-keys/`                | List your keys (active, expired, and revoked)   |
 | `GET /api/v1/users/me/api-keys/{uuid}/`         | Retrieve one key                                 |
 | `POST /api/v1/users/me/api-keys/{uuid}/revoke/` | Permanently revoke a key                         |
+| `POST /api/v1/users/me/api-keys/revoke-all/`    | Revoke every active key at once                  |
 
 - **Expiry**: `expiry_days` sets the key lifetime in days (UI presets:
   30 / 60 / 90 / 365, or any custom number); omit it for a key that never
@@ -124,6 +156,7 @@ accounts, budgets, transactions, allocations, funding, ...) but are
 **denied** on user/security endpoints:
 
 - password change, email change
+- deleting a bank account (it deletes everything in the bank account)
 - co-ownership invitations (send, list, cancel)
 - user management (`/api/v1/users/`, including `PATCH /users/me/`)
 - API-key management itself (a key cannot mint or revoke keys)

@@ -146,7 +146,8 @@ password (created by invitation) is told how to set one first.
 
 **Security & Notifications** (`/app/account/settings/`,
 `AccountSettingsView`): change password; API keys (create, shown once;
-revoke with confirmation); notification delivery per kind and the email
+revoke one, or all active keys at once, with confirmation; "Revoke all
+keys" is disabled when none is active); notification delivery per kind and the email
 digest frequency; pending co-owner invitations the user sent, across
 accounts.
 
@@ -178,7 +179,7 @@ budget is created with the account.
 - **Changes that save immediately** (toggles, preferences) show the new
   value at once and fall back to the saved value if the server refuses.
 - **Confirmation:** an action that cannot be undone (deleting a bank
-  account, archiving a budget, revoking an API key, sending a co-owner
+  account, archiving a budget, revoking one or all API keys, sending a co-owner
   invitation) asks first in a `ConfirmSheet`. One that is easily redone
   (removing a transaction from a budget, removing a split, cancelling an
   invitation) acts at once.

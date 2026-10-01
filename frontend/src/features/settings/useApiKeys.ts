@@ -1,6 +1,6 @@
 //
-// `useApiKeys`: list, create and revoke the user's API keys.  Feature
-// composable (settings).
+// `useApiKeys`: list, create and revoke the user's API keys, one at a
+// time or all at once.  Feature composable (settings).
 //
 // A new key's plaintext is kept in `justCreated` until the user
 // dismisses it; the server never returns it again.  Revoked and expired
@@ -22,6 +22,7 @@ import {
   apiKeyFromDto,
   apiKeyToCreateDto,
   createdApiKeyFromDto,
+  isApiKeyActive,
 } from "@/models/apiKey";
 
 ////////////////////////////////////////////////////////////////////////
@@ -70,6 +71,12 @@ export function useApiKeys() {
 
   const revokeTarget = ref<ApiKey | null>(null);
   const revokingId = ref<string | null>(null);
+
+  const activeCount = computed(
+    () => keys.value.filter((k) => isApiKeyActive(k)).length,
+  );
+  const confirmingRevokeAll = ref(false);
+  const revokingAll = ref(false);
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -146,6 +153,24 @@ export function useApiKeys() {
     }
   }
 
+  ////////////////////////////////////////////////////////////////////
+  //
+  // The server revokes every active key; reload so each row shows its
+  // revocation time.
+  //
+  async function revokeAll(): Promise<void> {
+    confirmingRevokeAll.value = false;
+    revokingAll.value = true;
+    try {
+      await api.apiKeys.revokeAll();
+      await load();
+    } catch (err) {
+      error.value = describeError(err, "Failed to revoke API keys.");
+    } finally {
+      revokingAll.value = false;
+    }
+  }
+
   return {
     keys,
     loading,
@@ -159,9 +184,13 @@ export function useApiKeys() {
     createError: computed(() => createErrors.formError.value),
     revokeTarget,
     revokingId,
+    activeCount,
+    confirmingRevokeAll,
+    revokingAll,
     create,
     copyNewKey,
     dismissNewKey,
     revoke,
+    revokeAll,
   };
 }

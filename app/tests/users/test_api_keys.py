@@ -246,6 +246,31 @@ class TestAPIKeyManagementAPI:
         check.is_not_none(first.data["revoked_at"], "and records when")
         check.equal(second.status_code, 400, "second revoke is refused")
 
+    ####################################################################
+    #
+    def test_revoke_all(
+        self,
+        auth_client: APIClient,
+        api_keys_in_every_state: dict[str, APIKey],
+    ):
+        """
+        GIVEN: API keys that are active, revoked and expired
+        WHEN:  POST .../revoke-all/ is called, twice
+        THEN:  the first call revokes the active key and reports 1;
+               the second finds nothing left and reports 0
+        """
+        url = reverse("api_v1:api-key-revoke-all")
+
+        first = auth_client.post(url)
+        second = auth_client.post(url)
+
+        active = api_keys_in_every_state["active"]
+        active.refresh_from_db()
+        check.equal(first.status_code, 200, "succeeds")
+        check.equal(first.data, {"revoked": 1}, "counts the active key")
+        check.is_true(active.is_revoked, "active key revoked")
+        check.equal(second.data, {"revoked": 0}, "second call is a no-op")
+
 
 ########################################################################
 ########################################################################
@@ -265,6 +290,7 @@ class TestRequiresInteractiveAuth:
             ("get", "api_v1:user-my-invitations", 403),
             ("get", "api_v1:api-key-list", 403),
             ("post", "api_v1:api-key-list", 403),
+            ("post", "api_v1:api-key-revoke-all", 403),
             # Profile reads + budgeting domain: allowed.
             ("get", "api_v1:user-me", 200),
             ("get", "api_v1:bank-list", 200),

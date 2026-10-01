@@ -73,6 +73,12 @@ const rows: Row[] = [
     method: "POST",
     path: `/users/me/api-keys/${ID}/revoke/`,
   },
+  {
+    name: "apiKeys.revokeAll",
+    call: () => api.apiKeys.revokeAll(),
+    method: "POST",
+    path: "/users/me/api-keys/revoke-all/",
+  },
   // bankAccounts.ts
   {
     name: "bankAccounts.list",

@@ -26,6 +26,14 @@
       <p style="margin:0 0 12px;color:#1a1a1a;">
         <strong>Sessions:</strong> All active sessions have been signed out.
       </p>
+      {% if revoked_api_keys %}
+      <p style="margin:0 0 12px;color:#1a1a1a;">
+        <strong>API keys:</strong> Your {{ revoked_api_keys }} active API
+        key{{ revoked_api_keys|pluralize }}
+        {{ revoked_api_keys|pluralize:"has,have" }} been revoked. Create new
+        ones for your importers and other services.
+      </p>
+      {% endif %}
       <a href="{{ site_url }}/app/login/"
         style="display:inline-block;background-color:#1d4ed8;color:#ffffff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:4px;text-decoration:none;">
         Log in again

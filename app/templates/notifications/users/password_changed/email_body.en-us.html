@@ -1,7 +1,37 @@
 {% load tz %}
-<h2 style="margin:0;margin-bottom:12px;font-size:16px;color:#1a1a1a;">Your password was changed</h2>
+<h2 style="margin:0;margin-bottom:12px;font-size:16px;color:#1a1a1a;">Your password was {% if reset %}reset{% else %}changed{% endif %}</h2>
 <p style="margin:0;margin-bottom:12px;color:#374151;">
-  Your mibudge password was changed on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
+  Your mibudge password was {% if reset %}reset{% else %}changed{% endif %} on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
+</p>
+{% if reset %}
+<p style="margin:0;margin-bottom:20px;color:#374151;">
+  Every session has been signed out; sign in again with your new password.
+</p>
+{% if api_keys %}
+<p style="margin:0;margin-bottom:8px;color:#b91c1c;font-weight:bold;">
+  If you reset your password because someone else may have had it, review your API keys.
+</p>
+<p style="margin:0;margin-bottom:8px;color:#374151;">
+  Anyone with your password could have created one, and API keys keep
+  working after a password reset. Your active API keys are:
+</p>
+<ul style="margin:0;margin-bottom:12px;padding-left:20px;color:#374151;">
+  {% for key in api_keys %}
+  <li><strong>{{ key.name }}</strong> ({{ key.prefix }}&hellip;) created {{ key.created }}, last used {{ key.last_used }}</li>
+  {% endfor %}
+</ul>
+<p style="margin:0;margin-bottom:20px;color:#374151;">
+  Revoke any you do not recognise, or revoke them all, at
+  <a href="{{ site_url }}/app/account/settings/" style="color:#1d4ed8;">{{ site_url }}/app/account/settings/</a>
+</p>
+{% endif %}
+<p style="margin:0;font-size:13px;color:#374151;">
+  If you did not reset your password, someone may have access to your
+  email inbox. Contact <a href="mailto:{{ support_email }}" style="color:#1d4ed8;">{{ support_email }}</a> to report the incident.
+</p>
+{% else %}
+<p style="margin:0;margin-bottom:12px;color:#374151;">
+  All your other sessions have been signed out.
 </p>
 <p style="margin:0;margin-bottom:20px;color:#374151;">
   If you made this change, no action is needed.
@@ -15,3 +45,4 @@
 <p style="margin:0;font-size:13px;color:#374151;">
   Then contact <a href="mailto:{{ support_email }}" style="color:#1d4ed8;">{{ support_email }}</a> to report the incident.
 </p>
+{% endif %}

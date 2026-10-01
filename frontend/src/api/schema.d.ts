@@ -1037,6 +1037,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/api-keys/revoke-all/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke every API key
+         * @description Revoke all of the current user's active API keys at once, e.g. after a suspected account takeover.  Revoked keys stop authenticating immediately and remain listed for audit purposes.  Revocation cannot be undone.  Returns how many keys were revoked; 0 when none were active.
+         */
+        post: operations["users_me_api_keys_revoke_all_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me/change-email/": {
         parameters: {
             query?: never;
@@ -1114,7 +1134,9 @@ export interface paths {
         put?: never;
         /**
          * Change current user's password
-         * @description Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale. Existing JWT tokens remain valid; the caller may silently refresh as normal -- no forced re-login is imposed.
+         * @description Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale.
+         *
+         *     Every other session ends: its refresh token is revoked, and its access token stops working when it expires (at most 60 minutes).  The caller stays signed in with a new refresh cookie set on this response.  API keys are not affected.
          */
         post: operations["users_me_change_password_create"];
         delete?: never;
@@ -1181,6 +1203,9 @@ export interface components {
             /** Format: date-time */
             readonly created_at: string;
             readonly key: string;
+        };
+        APIKeyRevokeAll: {
+            readonly revoked: number;
         };
         AccessToken: {
             readonly access: string;
@@ -6099,6 +6124,52 @@ export interface operations {
             };
             /** @description No such object, or one the caller cannot see. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    users_me_api_keys_revoke_all_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyRevokeAll"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials.  Sent even to public endpoints when a bad credential is given. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The credentials may not use this endpoint: it is staff-only, or it needs an interactive login and got an API key. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
