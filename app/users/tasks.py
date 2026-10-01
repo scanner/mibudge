@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 # 3rd party imports
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.utils import timezone
 from django.utils.dateformat import format as django_date_format
 
@@ -96,3 +97,16 @@ def notify_expiring_api_keys() -> None:
             "notify_expiring_api_keys: %d expiring key(s) notified.",
             notified,
         )
+
+
+########################################################################
+########################################################################
+#
+@celery_app.task(ignore_result=True)
+def flush_expired_tokens() -> None:
+    """Delete expired JWT refresh tokens and their blacklist entries.
+
+    Every refresh adds a blacklisted token row (refresh tokens rotate),
+    so the tables grow until expired rows are flushed.
+    """
+    call_command("flushexpiredtokens")

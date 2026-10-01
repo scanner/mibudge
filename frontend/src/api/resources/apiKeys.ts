@@ -11,6 +11,7 @@ import type {
   ApiKeyCreateDto,
   ApiKeyCreatedDto,
   ApiKeyDto,
+  ApiKeyRevokeAllDto,
   Page,
 } from "@/api/dto";
 import type { HttpClient } from "@/api/http";
@@ -30,6 +31,11 @@ export function apiKeysResource(http: HttpClient) {
 
     revoke(uuid: string): Promise<ApiKeyDto> {
       return http.post(`${V1}/users/me/api-keys/${uuid}/revoke/`);
+    },
+
+    // Revokes every active key; answers how many it revoked.
+    revokeAll(): Promise<ApiKeyRevokeAllDto> {
+      return http.post(`${V1}/users/me/api-keys/revoke-all/`);
     },
   };
 }

@@ -65,10 +65,6 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.dateformat import format as django_date_format
-from rest_framework_simplejwt.token_blacklist.models import (
-    BlacklistedToken,
-    OutstandingToken,
-)
 
 # Project imports
 #
@@ -78,6 +74,7 @@ from users.notification_kinds import (
     EMAIL_CHANGE_REQUESTED,
     EMAIL_CHANGE_SECURITY_ALERT,
 )
+from users.sessions import end_all_sessions, revoke_all_api_keys
 
 if TYPE_CHECKING:
     from users.models import User
@@ -269,19 +266,25 @@ def revoke_request(token: str) -> EmailChangeRequest:
 
     ecr.revoke()
 
+    revoked_keys = 0
     if was_confirmed:
         user.email = ecr.old_email
         user.username = ecr.old_email
         user.save(update_fields=["email", "username"])
-        _invalidate_all_sessions(user)
+        end_all_sessions(user)
+        revoked_keys = revoke_all_api_keys(user)
 
-    _send_security_alerts(ecr, was_confirmed=was_confirmed)
+    _send_security_alerts(
+        ecr, was_confirmed=was_confirmed, revoked_api_keys=revoked_keys
+    )
 
     logger.info(
-        "email_change: request %s revoked for user %s (was_confirmed=%s)",
+        "email_change: request %s revoked for user %s (was_confirmed=%s, "
+        "revoked %d API key(s))",
         ecr.token[:8],
         user.pk,
         was_confirmed,
+        revoked_keys,
     )
     return ecr
 
@@ -297,27 +300,6 @@ def _get_or_raise(token: str) -> EmailChangeRequest:
         )
     except EmailChangeRequest.DoesNotExist:
         raise TokenNotFoundError(token) from None
-
-
-########################################################################
-########################################################################
-#
-def _invalidate_all_sessions(user: "User") -> None:
-    """Blacklist every outstanding JWT refresh token for the user.
-
-    After this call, all active access tokens will fail to refresh within
-    their remaining lifetime (up to 60 minutes), and no new access tokens
-    can be obtained with any existing refresh token.
-    """
-    tokens = OutstandingToken.objects.filter(user=user)
-    for token in tokens:
-        BlacklistedToken.objects.get_or_create(token=token)
-
-    logger.info(
-        "email_change: invalidated %d session(s) for user %s",
-        tokens.count(),
-        user.pk,
-    )
 
 
 ########################################################################
@@ -516,7 +498,7 @@ def _send_security_alert_to_new_email(ecr: EmailChangeRequest) -> None:
 ########################################################################
 #
 def _send_security_alerts(
-    ecr: EmailChangeRequest, *, was_confirmed: bool
+    ecr: EmailChangeRequest, *, was_confirmed: bool, revoked_api_keys: int
 ) -> None:
     """Send security alert emails to both old and new addresses on revocation."""
     user = ecr.user
@@ -527,6 +509,7 @@ def _send_security_alerts(
             "old_email": ecr.old_email,
             "new_email": ecr.new_email,
             "was_confirmed": was_confirmed,
+            "revoked_api_keys": revoked_api_keys,
         },
     )
     _send_security_alert_to_new_email(ecr)

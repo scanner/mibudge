@@ -1,1 +1,1 @@
-mibudge: your password has been changed
+mibudge: your password has been {% if reset %}reset{% else %}changed{% endif %}

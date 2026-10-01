@@ -44,10 +44,14 @@ from users.permissions import (
     RequiresInteractiveAuth,
     RequiresInteractiveAuthForWrites,
 )
+from users.serializers import EmailTokenObtainPairSerializer
+from users.sessions import revoke_all_api_keys
+from users.views import set_refresh_cookie
 
 from .serializers import (
     APIKeyCreatedSerializer,
     APIKeyCreateSerializer,
+    APIKeyRevokeAllSerializer,
     APIKeySerializer,
     ChangePasswordSerializer,
     EmailChangeRequestSerializer,
@@ -149,9 +153,11 @@ class UserViewSet(
         description=(
             "Change the authenticated user's password. "
             "Requires the current password for verification. "
-            "The new password must score at least 2 on the zxcvbn scale. "
-            "Existing JWT tokens remain valid; the caller may silently refresh "
-            "as normal -- no forced re-login is imposed."
+            "The new password must score at least 2 on the zxcvbn scale.\n\n"
+            "Every other session ends: its refresh token is revoked, and "
+            "its access token stops working when it expires (at most "
+            "60 minutes).  The caller stays signed in with a new refresh "
+            "cookie set on this response.  API keys are not affected."
         ),
         request=ChangePasswordSerializer,
         responses={204: None},
@@ -189,14 +195,18 @@ class UserViewSet(
             )
         allauth_change_password(user, serializer.validated_data["new_password"])
         # allauth's change_password() only sets the password; it does not
-        # dispatch the signal.  We dispatch it here so the notification
-        # handler in users/signals.py fires.
+        # dispatch the signal.  We dispatch it here so the handler in
+        # users/signals.py ends every session and notifies; the fresh
+        # cookie below then keeps this caller signed in.
         password_changed.send(
             sender=user.__class__,
             request=request,
             user=user,
         )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        refresh = EmailTokenObtainPairSerializer.get_token(user)
+        set_refresh_cookie(response, str(refresh))
+        return response
 
     ####################################################################
     #
@@ -516,3 +526,23 @@ class APIKeyViewSet(
             )
         api_key.revoke()
         return Response(APIKeySerializer(api_key).data)
+
+    ####################################################################
+    #
+    @extend_schema(
+        summary="Revoke every API key",
+        description=(
+            "Revoke all of the current user's active API keys at once, "
+            "e.g. after a suspected account takeover.  Revoked keys stop "
+            "authenticating immediately and remain listed for audit "
+            "purposes.  Revocation cannot be undone.  Returns how many "
+            "keys were revoked; 0 when none were active."
+        ),
+        request=None,
+        responses={200: APIKeyRevokeAllSerializer},
+    )
+    @action(detail=False, methods=["POST"], url_path="revoke-all")
+    def revoke_all(self, request):
+        """Revoke every active API key of the current user."""
+        revoked = revoke_all_api_keys(request.user)
+        return Response({"revoked": revoked})

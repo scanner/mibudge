@@ -38,7 +38,7 @@ they were on vacation when it happened.
          └─► 7-day revocation window opens
 
  revoke  ──► (post-confirm) email reverted, all sessions invalidated,
-             security alerts to BOTH addresses
+             all API keys revoked, security alerts to BOTH addresses
 ```
 
 1. **Request** (`create_request()`): the authenticated user submits
@@ -54,7 +54,8 @@ they were on vacation when it happened.
    or up to `EMAIL_CHANGE_REVOCATION_DAYS` (7 days) after it, the
    revoke link cancels the change. Post-confirmation revocation
    reverts `email`/`username` to the old address, **invalidates every
-   active session**, and sends security alerts to both addresses.
+   active session**, **revokes every active API key**, and sends
+   security alerts to both addresses.
 
 The key property: **the revoke link stays valid for 7 days *after* an
 attacker confirms the change**. Rotating the email does not lock the
@@ -99,13 +100,18 @@ expired** -- token expiry should stop the change from being applied,
 never stop the owner from cancelling it. After confirmation it works
 until `revocable_until`.
 
-### Session invalidation on revocation
+### Session and API-key invalidation on revocation
 
 Post-confirmation revocation blacklists every outstanding JWT refresh
-token for the user (`_invalidate_all_sessions()` in
-[`app/users/email_change.py`](../app/users/email_change.py)). The
-attacker's hijacked session dies as soon as its short-lived access
-token expires (≤ 60 minutes) and cannot be refreshed. Alerts go to
+token for the user and revokes every active API key
+(`end_all_sessions()` and `revoke_all_api_keys()` in
+[`app/users/sessions.py`](../app/users/sessions.py)). The attacker's
+hijacked session dies as soon as its short-lived access token expires
+(≤ 60 minutes) and cannot be refreshed, and any API key minted during
+the takeover stops working at once; the owner's alert says how many
+keys were revoked, so they know to create new ones for their
+importers. A password change does not close the revocation window, so
+an attacker who changes the password cannot take the link away. Alerts go to
 *both* addresses -- the old one so the owner knows the revert
 succeeded, the new one because a real person may sit behind it (e.g.
 a typo'd address) and should know their address was involved.

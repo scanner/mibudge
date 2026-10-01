@@ -1962,6 +1962,24 @@ Errors:
 
 Common responses: `401` · `403` · `404` · `429`
 
+#### `POST /api/v1/users/me/api-keys/revoke-all/`
+
+**Revoke every API key.**
+
+Revoke all of the current user's active API keys at once, e.g. after a suspected account takeover.  Revoked keys stop authenticating immediately and remain listed for audit purposes.  Revocation cannot be undone.  Returns how many keys were revoked; 0 when none were active.
+
+**200**
+
+Returns:
+
+```jsonc
+{
+  "revoked": 0                      // integer
+}
+```
+
+Common responses: `401` · `403` · `429`
+
 #### `POST /api/v1/users/me/change-email/`
 
 **Request an email address change.**
@@ -2032,7 +2050,9 @@ Common responses: `401` · `429`
 
 **Change current user's password.**
 
-Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale. Existing JWT tokens remain valid; the caller may silently refresh as normal -- no forced re-login is imposed.
+Change the authenticated user's password. Requires the current password for verification. The new password must score at least 2 on the zxcvbn scale.
+
+Every other session ends: its refresh token is revoked, and its access token stops working when it expires (at most 60 minutes).  The caller stays signed in with a new refresh cookie set on this response.  API keys are not affected.
 
 Send:
 

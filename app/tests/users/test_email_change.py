@@ -43,12 +43,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 # Project imports
 #
 from notifications.models import Notification
-from users.models import EmailChangeRequest, User
+from tests.users.session_checks import session_valid
+from users.models import APIKey, EmailChangeRequest, User
 from users.notification_kinds import (
     EMAIL_CHANGE_REQUESTED,
     EMAIL_CHANGE_SECURITY_ALERT,
 )
-from users.views import REFRESH_COOKIE_NAME
 
 # Every flow here queues notifications, which need the Celery send
 # patched out.
@@ -65,7 +65,6 @@ pytestmark = [
 #
 CHANGE_EMAIL_URL = reverse("api_v1:user-change-email")
 TOKEN_OBTAIN_URL = reverse("token-obtain")
-TOKEN_REFRESH_URL = reverse("token-refresh")
 
 
 ####################################################################
@@ -78,15 +77,6 @@ def _confirm_url(token: str) -> str:
 #
 def _revoke_url(token: str) -> str:
     return reverse("api_v1:user-change-email-revoke", kwargs={"token": token})
-
-
-####################################################################
-#
-def _session_valid(refresh: RefreshToken) -> bool:
-    """True if the refresh token still produces an access token."""
-    client = Client()
-    client.cookies[REFRESH_COOKIE_NAME] = str(refresh)
-    return client.post(TOKEN_REFRESH_URL).status_code == status.HTTP_200_OK
 
 
 ####################################################################
@@ -225,7 +215,7 @@ class TestFlowA:
             ).exists(),
             "old address notified via the notification system",
         )
-        check.is_true(_session_valid(rt_a), "existing session unaffected")
+        check.is_true(session_valid(rt_a), "existing session unaffected")
 
     ####################################################################
     #
@@ -261,7 +251,7 @@ class TestFlowA:
             "revocation window opens",
         )
         check.equal(len(mailoutbox), 0, "confirmation itself sends no email")
-        check.is_true(_session_valid(rt_a), "existing session unaffected")
+        check.is_true(session_valid(rt_a), "existing session unaffected")
 
     ####################################################################
     #
@@ -487,8 +477,8 @@ class TestFlowB1:
         check.is_none(ecr.confirmed_at, "and never confirmed")
         check.equal(alice.email, old_email, "address unchanged")
         # No session invalidation -- the email never changed
-        check.is_true(_session_valid(rt_a), "session A still valid")
-        check.is_true(_session_valid(rt_b), "session B still valid")
+        check.is_true(session_valid(rt_a), "session A still valid")
+        check.is_true(session_valid(rt_b), "session B still valid")
         check.is_true(
             _sent_to(mailoutbox, new_email),
             "security alert emailed to the attacker's address",
@@ -552,8 +542,8 @@ class TestFlowB2:
         alice.refresh_from_db()
         assert alice.email == new_email
         # Both sessions remain valid immediately after confirmation
-        assert _session_valid(rt_a)
-        assert _session_valid(rt_b)
+        assert session_valid(rt_a)
+        assert session_valid(rt_b)
 
         ecr.refresh_from_db()
         assert ecr.confirmed_at is not None
@@ -569,8 +559,8 @@ class TestFlowB2:
         check.equal(alice.email, old_email, "address reverted")
         check.equal(alice.username, old_email, "username reverted")
         check.is_not_none(ecr.revoked_at, "request revoked")
-        check.is_false(_session_valid(rt_a), "session A killed")
-        check.is_false(_session_valid(rt_b), "session B killed")
+        check.is_false(session_valid(rt_a), "session A killed")
+        check.is_false(session_valid(rt_b), "session B killed")
         check.is_true(
             _sent_to(mailoutbox, new_email),
             "security alert emailed to the attacker's address",
@@ -619,3 +609,88 @@ class TestFlowB2:
 
         check.equal(response.status_code, status.HTTP_200_OK, "login works")
         check.is_in("access", response.json(), "and issues an access token")
+
+
+####################################################################
+#
+@pytest.fixture
+def ecr(request: pytest.FixtureRequest) -> EmailChangeRequest:
+    """The change request named by the indirect parametrize."""
+    return request.getfixturevalue(request.param)
+
+
+########################################################################
+########################################################################
+#
+class TestRevocationRecovery:
+    """Revocation as takeover recovery: API keys and password changes."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "ecr,keys_revoked",
+        [("pending_ecr", False), ("confirmed_ecr", True)],
+        ids=["before-confirmation", "after-confirmation"],
+        indirect=["ecr"],
+    )
+    def test_revocation_revokes_api_keys_once_confirmed(
+        self,
+        auth_client: APIClient,
+        api_keys_in_every_state: dict[str, APIKey],
+        ecr: EmailChangeRequest,
+        keys_revoked: bool,
+    ) -> None:
+        """
+        GIVEN: an email change request, pending or confirmed, and an
+               active API key
+        WHEN:  the request is revoked
+        THEN:  the API key is revoked only if the change had been
+               confirmed (the account was taken over), and the
+               security alert says how many keys went
+        """
+        response = auth_client.post(_revoke_url(ecr.token))
+
+        assert response.status_code == status.HTTP_200_OK
+        active = api_keys_in_every_state["active"]
+        active.refresh_from_db()
+        alert = Notification.objects.get(
+            user=ecr.user, kind=EMAIL_CHANGE_SECURITY_ALERT
+        )
+        check.equal(active.is_revoked, keys_revoked, "API key revoked")
+        check.equal(
+            alert.context["revoked_api_keys"],
+            int(keys_revoked),
+            "alert counts the revoked key",
+        )
+
+    ####################################################################
+    #
+    def test_password_change_keeps_revocation_link(
+        self,
+        auth_client: APIClient,
+        confirmed_ecr: EmailChangeRequest,
+        known_password: str,
+        old_email: str,
+    ) -> None:
+        """
+        GIVEN: a confirmed email change to an attacker's address
+        WHEN:  the attacker, who knows the password, changes it, and
+               the owner then follows the revocation link
+        THEN:  the revocation still restores the owner's address
+        """
+        new_password = "an-attacker-chose-this-one-42!"
+        changed = auth_client.post(
+            reverse("api_v1:user-change-password"),
+            {
+                "current_password": known_password,
+                "new_password": new_password,
+                "confirm_password": new_password,
+            },
+        )
+        assert changed.status_code == status.HTTP_204_NO_CONTENT
+
+        response = auth_client.post(_revoke_url(confirmed_ecr.token))
+
+        confirmed_ecr.user.refresh_from_db()
+        check.equal(response.status_code, status.HTTP_200_OK, "revoked")
+        check.equal(confirmed_ecr.user.email, old_email, "address restored")

@@ -1,14 +1,16 @@
 # system imports
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 # 3rd party imports
 import pytest
 from django.test import RequestFactory
+from django.utils import timezone
 from pytest_factoryboy import register
 
 # Project imports
-from users.models import User
+from users.models import APIKey, User
 
 from .factories import UserInvitationFactory
 
@@ -41,3 +43,21 @@ def make_view(rf: RequestFactory) -> Callable[..., Any]:
         return view
 
     return _make
+
+
+####################################################################
+#
+@pytest.fixture
+def api_keys_in_every_state(user: User) -> dict[str, APIKey]:
+    """API keys for `user`: one active, one revoked, one expired.
+
+    Only the active key counts as live -- it is the one a password
+    reset lists and revoke-all revokes.
+    """
+    active, _ = APIKey.make(user, "active importer")
+    revoked, _ = APIKey.make(user, "revoked importer")
+    revoked.revoke()
+    expired, _ = APIKey.make(
+        user, "expired importer", expires_at=timezone.now() - timedelta(days=1)
+    )
+    return {"active": active, "revoked": revoked, "expired": expired}

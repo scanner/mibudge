@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- "Revoke all keys" in Security & Notifications settings revokes every active API key at once, after a confirmation that says how many (`POST /api/v1/users/me/api-keys/revoke-all/`)
 - Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use -- archive instead). See `docs/transaction-categories.md`
 - Transactions and their splits each carry a category; a split inherits the transaction's category when it's created and can then be changed independently
 - Category hints from bank imports are translated into your categories by the importer (built-in BofA mapping plus a `--category-map` overlay file for newly discovered categories); categories the importer cannot map are reported at the end of each run and their transactions left unassigned for you to categorize
@@ -81,6 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Changing your password signs out every other session (the device you changed it on stays signed in), and completing a password reset signs out every session. The reset email lists your active API keys so you can revoke any you do not recognise; requesting a reset changes nothing until the emailed link is used
+- Cancelling a confirmed email change (account takeover recovery) now also revokes every API key, and the security alert says how many were revoked
 - API keys can no longer delete a bank account (which deletes everything in it); `DELETE /api/v1/bank-accounts/{id}/` now requires an interactive login and answers 403 to an API key
 - Rate limits identify anonymous clients by the address the deployment's own proxies report, so a client can no longer get a fresh limit by sending its own `X-Forwarded-For`; set `DJANGO_TRUSTED_PROXY_COUNT` to the number of reverse proxies in front of Django (see `deployment/docker/dot-env.example`)
 - Signing out now ends the session on the server: `POST /api/token/logout/` revokes the refresh token and clears its cookie, so reloading the page or reopening the app no longer signs you straight back in

@@ -77,6 +77,21 @@ class AccountAdapter(DefaultAccountAdapter):
         """
         return _rebase_on_site_url(super().get_reset_password_from_key_url(key))
 
+    def set_password(self, user: Any, password: str) -> None:
+        """Set the password, marking `user` when it is their first one.
+
+        An invitee sets their first password through the reset flow.
+        `users.signals.on_password_reset` reads `first_password` (on
+        this same instance, which allauth passes on to the signal) and
+        sends no "password reset" email for it.
+
+        Args:
+            user: The user whose password is set.
+            password: The new password.
+        """
+        user.first_password = not user.has_usable_password()
+        super().set_password(user, password)
+
 
 class SocialAccountAdapter(DefaultSocialAccountAdapter):
     """Adapter for OAuth social logins (Google, GitHub, etc.).

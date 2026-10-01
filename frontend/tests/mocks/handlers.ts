@@ -93,6 +93,7 @@ export const handlers = [
       201,
     ),
   ),
+  http.post(`${API}/users/me/api-keys/revoke-all/`, () => json({ revoked: 1 })),
   http.post(`${API}/users/me/api-keys/:uuid/revoke/`, ({ params }) =>
     json(
       makeApiKey({

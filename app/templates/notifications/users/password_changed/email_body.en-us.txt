@@ -1,4 +1,20 @@
-{% load tz %}Your mibudge password was changed on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
+{% load tz %}Your mibudge password was {% if reset %}reset{% else %}changed{% endif %} on {% timezone notification.user.timezone %}{{ notification.created_at|date:"F j, Y \a\t g:i A e" }}{% endtimezone %}.
+{% if reset %}
+Every session has been signed out; sign in again with your new password.
+{% if api_keys %}
+If you reset your password because someone else may have had it, review
+your API keys: anyone with your password could have created one, and API
+keys keep working after a password reset. Your active API keys are:
+{% for key in api_keys %}
+  - {{ key.name }} ({{ key.prefix }}...) created {{ key.created }}, last used {{ key.last_used }}{% endfor %}
+
+Revoke any you do not recognise, or revoke them all, at:
+{{ site_url }}/app/account/settings/
+{% endif %}
+If you did not reset your password, someone may have access to your email
+inbox. Contact {{ support_email }} to report the incident.
+{% else %}
+All your other sessions have been signed out.
 
 If you made this change, no action is needed.
 
@@ -6,3 +22,4 @@ If you did not make this change, reset your password immediately:
 {{ site_url }}/app/account/settings/
 
 Then contact {{ support_email }} to report the incident.
+{% endif %}

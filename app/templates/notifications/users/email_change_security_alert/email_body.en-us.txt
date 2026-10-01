@@ -7,6 +7,9 @@ has been restored:
 
   Email address: {{ old_email }}
   All active sessions have been signed out.
+{% if revoked_api_keys %}  Your {{ revoked_api_keys }} active API key{{ revoked_api_keys|pluralize }} {{ revoked_api_keys|pluralize:"has,have" }} been revoked. Create
+  new ones for your importers and other services.
+{% endif %}
 
 Please log in again at {{ site_url }}/app/login/
 {% else %}
