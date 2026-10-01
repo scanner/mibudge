@@ -37,8 +37,9 @@ they were on vacation when it happened.
  confirm ──► User.email/username updated
          └─► 7-day revocation window opens
 
- revoke  ──► (post-confirm) email reverted, all sessions invalidated,
-             all API keys revoked, security alerts to BOTH addresses
+ revoke  ──► all sessions invalidated, security alerts to BOTH addresses
+         ├─► (pre-confirm)  alert lists active API keys for review
+         └─► (post-confirm) email reverted, all API keys revoked
 ```
 
 1. **Request** (`create_request()`): the authenticated user submits
@@ -52,10 +53,11 @@ they were on vacation when it happened.
    revocation window opens.
 3. **Revoke** (`revoke_request()`): at any point before confirmation,
    or up to `EMAIL_CHANGE_REVOCATION_DAYS` (7 days) after it, the
-   revoke link cancels the change. Post-confirmation revocation
-   reverts `email`/`username` to the old address, **invalidates every
-   active session**, **revokes every active API key**, and sends
-   security alerts to both addresses.
+   revoke link cancels the change. Every revocation **invalidates
+   every active session** and sends security alerts to both addresses.
+   Post-confirmation revocation also reverts `email`/`username` to the
+   old address and **revokes every active API key**; before
+   confirmation the owner's alert lists the active API keys to review.
 
 The key property: **the revoke link stays valid for 7 days *after* an
 attacker confirms the change**. Rotating the email does not lock the
@@ -102,16 +104,22 @@ until `revocable_until`.
 
 ### Session and API-key invalidation on revocation
 
-Post-confirmation revocation blacklists every outstanding JWT refresh
-token for the user and revokes every active API key
-(`end_all_sessions()` and `revoke_all_api_keys()` in
-[`app/users/sessions.py`](../app/users/sessions.py)). The attacker's
-hijacked session dies as soon as its short-lived access token expires
-(≤ 60 minutes) and cannot be refreshed, and any API key minted during
-the takeover stops working at once; the owner's alert says how many
-keys were revoked, so they know to create new ones for their
-importers. A password change does not close the revocation window, so
-an attacker who changes the password cannot take the link away. Alerts go to
+Every revocation blacklists every outstanding JWT refresh token for
+the user (`end_all_sessions()` in
+[`app/users/sessions.py`](../app/users/sessions.py)): whoever requested
+the change was signed in, confirmed or not. Their session dies as soon
+as its short-lived access token expires (≤ 60 minutes) and cannot be
+refreshed.
+
+Post-confirmation revocation also revokes every active API key
+(`revoke_all_api_keys()`), so any key minted during the takeover stops
+working at once; the owner's alert says how many keys were revoked, so
+they know to create new ones for their importers. Before confirmation
+API keys keep working, as after a password reset: the owner's alert
+lists each active key (name, prefix, created, last used, newest first)
+with a link to revoke any, or all, of them. A password change does not
+close the revocation window, so an attacker who changes the password
+cannot take the link away. Alerts go to
 *both* addresses -- the old one so the owner knows the revert
 succeeded, the new one because a real person may sit behind it (e.g.
 a typo'd address) and should know their address was involved.

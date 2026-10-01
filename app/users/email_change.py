@@ -74,7 +74,11 @@ from users.notification_kinds import (
     EMAIL_CHANGE_REQUESTED,
     EMAIL_CHANGE_SECURITY_ALERT,
 )
-from users.sessions import end_all_sessions, revoke_all_api_keys
+from users.sessions import (
+    api_key_summaries,
+    end_all_sessions,
+    revoke_all_api_keys,
+)
 
 if TYPE_CHECKING:
     from users.models import User
@@ -238,10 +242,14 @@ def revoke_request(token: str) -> EmailChangeRequest:
     """Revoke an email-change request via the 'this wasn't me' link.
 
     Works both before and after confirmation, provided the revocation
-    window has not closed.  On post-confirmation revocation:
+    window has not closed.  Every revocation ends all of the user's
+    sessions (JWT refresh tokens), since whoever requested the change
+    was signed in, and sends a security alert to both the old and new
+    addresses.  On post-confirmation revocation also:
       - User.email / User.username are reverted to old_email.
-      - All active sessions (JWT refresh tokens) are invalidated.
-      - A security alert is sent to both the old and new addresses.
+      - Every active API key is revoked.
+    Before confirmation API keys keep working; the alert lists them for
+    the owner to review.
 
     Args:
         token: The token from the notification email's revoke link.
@@ -271,8 +279,8 @@ def revoke_request(token: str) -> EmailChangeRequest:
         user.email = ecr.old_email
         user.username = ecr.old_email
         user.save(update_fields=["email", "username"])
-        end_all_sessions(user)
         revoked_keys = revoke_all_api_keys(user)
+    end_all_sessions(user)
 
     _send_security_alerts(
         ecr, was_confirmed=was_confirmed, revoked_api_keys=revoked_keys
@@ -500,7 +508,12 @@ def _send_security_alert_to_new_email(ecr: EmailChangeRequest) -> None:
 def _send_security_alerts(
     ecr: EmailChangeRequest, *, was_confirmed: bool, revoked_api_keys: int
 ) -> None:
-    """Send security alert emails to both old and new addresses on revocation."""
+    """Send security alert emails to both old and new addresses on revocation.
+
+    The owner's alert lists the API keys still active, so after an
+    unconfirmed revocation the owner can revoke any they do not
+    recognise.
+    """
     user = ecr.user
     notify(
         user,
@@ -510,6 +523,7 @@ def _send_security_alerts(
             "new_email": ecr.new_email,
             "was_confirmed": was_confirmed,
             "revoked_api_keys": revoked_api_keys,
+            "api_keys": api_key_summaries(user),
         },
     )
     _send_security_alert_to_new_email(ecr)

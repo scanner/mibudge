@@ -63,9 +63,11 @@ token stops working when it expires, within 60 minutes.
   revoke any, or all, of them. An invitee setting their first password through
   this flow gets no "password reset" email.
 - **Email-change revocation** (takeover recovery; see
-  [`email-change.md`](email-change.md)): revoking a confirmed change ends
-  every session and revokes every active API key, and the security alert
-  says how many keys went.
+  [`email-change.md`](email-change.md)): revoking a change ends every
+  session. Revoking a confirmed change also revokes every active API key,
+  and the security alert says how many keys went; revoking an unconfirmed
+  one leaves the keys working and the alert lists them for review, as the
+  "password reset" email does.
 
 The owner keeps a way back in against someone who knows only the password:
 the reset link goes to the owner's email address, a completed reset ends

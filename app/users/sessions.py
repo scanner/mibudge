@@ -11,7 +11,9 @@ credentials, revoked explicitly.  Callers:
 - completed password reset: `end_all_sessions`, and the reset
   notification lists `api_key_summaries` for the owner to review
   (`users.signals`);
-- email-change revocation: both (`users.email_change`);
+- email-change revocation: `end_all_sessions` always; once the change
+  was confirmed `revoke_all_api_keys` too, otherwise the alert lists
+  `api_key_summaries` (`users.email_change`);
 - the revoke-all endpoint: `revoke_all_api_keys`.
 """
 

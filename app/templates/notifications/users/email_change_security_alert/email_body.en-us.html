@@ -42,11 +42,35 @@
   </tr>
 </table>
 {% else %}
-<p style="margin:0 0 20px;color:#374151;">
+<p style="margin:0 0 12px;color:#374151;">
   The pending request to change your email to
   <strong>{{ new_email }}</strong> was cancelled before it could take
-  effect. No changes were made to your account.
+  effect. Your email address is unchanged. Whoever asked for the change
+  was signed in to your account, so all active sessions have been signed
+  out.
 </p>
+{% if api_keys %}
+<p style="margin:0 0 8px;color:#b91c1c;font-weight:bold;">
+  Review your API keys.
+</p>
+<p style="margin:0 0 8px;color:#374151;">
+  API keys keep working after a cancelled request, and anyone signed in
+  to your account could have created one. Your active API keys are:
+</p>
+<ul style="margin:0 0 12px;padding-left:20px;color:#374151;">
+  {% for key in api_keys %}
+  <li><strong>{{ key.name }}</strong> ({{ key.prefix }}&hellip;) created {{ key.created }}, last used {{ key.last_used }}</li>
+  {% endfor %}
+</ul>
+<p style="margin:0 0 12px;color:#374151;">
+  Revoke any you do not recognise, or revoke them all, at
+  <a href="{{ site_url }}/app/account/settings/" style="color:#1d4ed8;">{{ site_url }}/app/account/settings/</a>
+</p>
+{% endif %}
+<a href="{{ site_url }}/app/login/"
+  style="display:inline-block;background-color:#1d4ed8;color:#ffffff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:4px;text-decoration:none;margin:0 0 20px;">
+  Log in again
+</a>
 {% endif %}
 
 <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">
