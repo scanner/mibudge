@@ -425,16 +425,25 @@ SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
 API_PAGE_SIZE = 100
 API_MAX_PAGE_SIZE = 500
 
-# Rate limits. 'user' is sized to accommodate bulk imports: a year of
-# statements across several accounts can easily exceed several thousand
-# POSTs in a few minutes. The per-minute 'burst' scope (applied
-# selectively on write endpoints via ScopedRateThrottle on specific views
-# if needed) keeps runaway clients bounded without capping normal import
-# workflows. Review these numbers once real usage data is available.
+# Rate limits, each overridable as `DJANGO_THROTTLE_<SCOPE>` (e.g.
+# `DJANGO_THROTTLE_LOGIN=5/min`).  'anon' and 'user' apply to every
+# view; 'user' is sized for bulk imports, which can send several
+# thousand requests in a few minutes.  The credential scopes come from
+# `users.throttling`: login per client address, per submitted email and
+# per known browser; password change per user; token refresh per client
+# address, in place of 'anon'.
 #
 API_THROTTLE_RATES = {
-    "anon": "100/hour",
-    "user": "20000/hour",
+    scope: env(f"DJANGO_THROTTLE_{scope.upper()}", default=default)
+    for scope, default in (
+        ("anon", "100/hour"),
+        ("user", "20000/hour"),
+        ("login", "10/min"),
+        ("login_email", "20/hour"),
+        ("login_device", "20/hour"),
+        ("password_change", "10/hour"),
+        ("token_refresh", "60/min"),
+    )
 }
 
 REST_FRAMEWORK = {
@@ -539,8 +548,18 @@ Requests are rate-limited per caller:
 - **Authenticated** (access token or API key): \
 {API_THROTTLE_RATES["user"]} per user.  All of a \
 user's API keys and sessions share the one budget.
-- **Anonymous** (login, token refresh, the public endpoints): \
+- **Anonymous** (login and the public endpoints): \
 {API_THROTTLE_RATES["anon"]} per client address.
+- **Login** (`POST /api/token/`), on top of the anonymous limit: \
+{API_THROTTLE_RATES["login"]} per client address, and \
+{API_THROTTLE_RATES["login_email"]} per email address.  A browser that \
+has signed in to that email before carries a device cookie, and its \
+attempts count against a separate {API_THROTTLE_RATES["login_device"]} \
+instead of the per-email limit.
+- **Token refresh** (`POST /api/token/refresh/`): \
+{API_THROTTLE_RATES["token_refresh"]} per client address.
+- **Password change**: {API_THROTTLE_RATES["password_change"]} per user, \
+on top of the authenticated limit.
 
 Over the limit a request answers 429 with a `Retry-After` header giving
 the seconds to wait.  A throttled request was refused before it ran, so

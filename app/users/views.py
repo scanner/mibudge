@@ -19,6 +19,7 @@ from django.views.generic import DetailView, RedirectView, UpdateView
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.settings import api_settings
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import (
     TokenBlacklistView,
@@ -44,6 +45,14 @@ from users.email_change import (
 )
 from users.serializers import AccessTokenSerializer
 from users.signals import FIRST_PASSWORD_SESSION_KEY
+from users.throttling import (
+    LoginDeviceRateThrottle,
+    LoginEmailRateThrottle,
+    LoginRateThrottle,
+    LoginThrottled,
+    TokenRefreshRateThrottle,
+    set_login_device_cookie,
+)
 
 # app imports
 #
@@ -186,7 +195,30 @@ class CookieTokenObtainPairView(TokenObtainPairView):
     access token (kept in memory); the refresh token is a
     Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
     and that the browser sends automatically to /api/token/refresh/.
+
+    A successful login also sets a login device cookie, so this
+    browser's later attempts against the same email count against a
+    limit of their own instead of the per-email one.
     """
+
+    throttle_classes = [
+        *api_settings.DEFAULT_THROTTLE_CLASSES,
+        LoginRateThrottle,
+        LoginEmailRateThrottle,
+        LoginDeviceRateThrottle,
+    ]
+
+    ####################################################################
+    #
+    def throttled(self, request: HttpRequest, wait: float | None) -> None:
+        raise LoginThrottled(wait)
+
+    ####################################################################
+    #
+    def get_serializer(self, *args: Any, **kwargs: Any) -> Any:
+        # Kept so `post` can reach the authenticated user.
+        self.login_serializer = super().get_serializer(*args, **kwargs)
+        return self.login_serializer
 
     ####################################################################
     #
@@ -207,6 +239,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
             refresh = response.data.pop("refresh", None)
             if refresh:
                 set_refresh_cookie(response, refresh)
+            set_login_device_cookie(response, self.login_serializer.user)
         return response
 
 
@@ -224,7 +257,13 @@ class CookieTokenRefreshView(TokenRefreshView):
     On success, returns {"access": "<new_access_token>"} in JSON.
     When token rotation is enabled, also rotates the refresh cookie so
     the 14-day sliding window resets with each use.
+
+    Refreshes have their own per-address limit in place of the
+    anonymous one, so page loads and sign-in attempts do not share a
+    budget.
     """
+
+    throttle_classes = [TokenRefreshRateThrottle]
 
     ####################################################################
     #

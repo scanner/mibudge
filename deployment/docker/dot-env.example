@@ -25,6 +25,15 @@ DJANGO_SECURE_SSL_REDIRECT=True
 # Too low makes a proxy's address stand in for every client; too high
 # lets clients pick their own address for rate limiting.
 DJANGO_TRUSTED_PROXY_COUNT=2
+# Rate limits, as <count>/<sec|min|hour|day>.  Defaults shown; set only
+# the ones to change.  See docs/authentication.md for the login scopes.
+# DJANGO_THROTTLE_ANON=100/hour
+# DJANGO_THROTTLE_USER=20000/hour
+# DJANGO_THROTTLE_LOGIN=10/min
+# DJANGO_THROTTLE_LOGIN_EMAIL=20/hour
+# DJANGO_THROTTLE_LOGIN_DEVICE=20/hour
+# DJANGO_THROTTLE_PASSWORD_CHANGE=10/hour
+# DJANGO_THROTTLE_TOKEN_REFRESH=60/min
 
 # Email
 # ------------------------------------------------------------------------------
