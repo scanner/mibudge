@@ -11,6 +11,7 @@ import py
 import pytest
 import redis
 from django.conf import LazySettings
+from django.core.cache import cache
 from django.db import connections
 from fakeredis import FakeConnection, FakeServer
 from pytest_factoryboy import register
@@ -188,6 +189,11 @@ def use_fakeredis(
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
+    # Every LocMemCache with the default location shares one store, so
+    # it is emptied per test; throttle history would otherwise carry
+    # over between tests.
+    #
+    cache.clear()
 
     yield redis.StrictRedis(connection_pool=fake_pool)
 

@@ -21,6 +21,7 @@ from rest_framework.mixins import (
 )
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.settings import api_settings
 from rest_framework.viewsets import GenericViewSet
 
 from common.schema import error_response, validation_error_response
@@ -46,6 +47,7 @@ from users.permissions import (
 )
 from users.serializers import EmailTokenObtainPairSerializer
 from users.sessions import revoke_all_api_keys
+from users.throttling import PasswordChangeRateThrottle
 from users.views import set_refresh_cookie
 
 from .serializers import (
@@ -167,6 +169,10 @@ class UserViewSet(
         methods=["POST"],
         url_path="me/change-password",
         permission_classes=[IsAuthenticated, RequiresInteractiveAuth],
+        throttle_classes=[
+            *api_settings.DEFAULT_THROTTLE_CLASSES,
+            PasswordChangeRateThrottle,
+        ],
     )
     def change_password(self, request):
         """Change the authenticated user's password.

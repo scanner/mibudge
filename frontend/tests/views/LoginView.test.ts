@@ -114,6 +114,28 @@ describe("LoginView", () => {
   });
 
   // GIVEN: the login page
+  // WHEN:  the server refuses the attempt with 429 (too many attempts)
+  // THEN:  the server's message, which says how long to wait, is shown
+  //
+  it("shows the server's message on 429", async () => {
+    server.use(
+      http.post("/api/token/", () =>
+        HttpResponse.json(
+          { detail: "Too many sign-in attempts. Try again in 42 seconds." },
+          { status: 429, headers: { "Retry-After": "42" } },
+        ),
+      ),
+    );
+    const { wrapper } = await mountWithApp(LoginView, { route: "/login/" });
+
+    await submit(wrapper);
+
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      "Too many sign-in attempts. Try again in 42 seconds.",
+    );
+  });
+
+  // GIVEN: the login page
   // WHEN:  the token endpoint fails with a server error
   // THEN:  a generic retry message is shown
   //

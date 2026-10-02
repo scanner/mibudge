@@ -82,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Sign-in is rate-limited per client address and per email address, so password guessing is slowed even when spread across many addresses; a browser that has signed in to that email before has its own limit, so someone guessing cannot lock you out of it. Password changes are limited per user and token refreshes per address. Over a limit the request answers 429 and the sign-in page says how long to wait. Rates are set with `DJANGO_THROTTLE_<SCOPE>` (see `deployment/docker/dot-env.example`)
 - Changing your password signs out every other session (the device you changed it on stays signed in), and completing a password reset signs out every session. The reset email lists your active API keys so you can revoke any you do not recognise; requesting a reset changes nothing until the emailed link is used. A newly invited user setting their first password gets a welcome page with a sign-in link instead
 - Cancelling a confirmed email change (account takeover recovery) now also revokes every API key, and the security alert says how many were revoked
 - Cancelling an email change before it is confirmed now signs out every session, as the old-address email already promised, and the security alert lists your active API keys so you can revoke any you do not recognise
