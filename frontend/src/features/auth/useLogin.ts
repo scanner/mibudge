@@ -3,8 +3,9 @@
 //
 // On success it loads the user and the account context (sharing one
 // `/users/me/` request), then replaces the login route with the path
-// in `?next=`, or the overview.  A 401 means bad credentials; any
-// other failure gets a generic retry message.
+// in `?next=`, or the overview.  A 401 means bad credentials; a 429
+// shows the server's "too many attempts" message, which says how long
+// to wait; any other failure gets a generic retry message.
 //
 
 // 3rd party imports
@@ -41,9 +42,14 @@ export function useLogin() {
         typeof route.query.next === "string" ? route.query.next : null;
       void router.replace(next ?? { name: "overview" });
     } catch (err) {
-      errorMessage.value = isApiError(err, 401)
-        ? "Incorrect email or password."
-        : "Unable to sign in. Please try again.";
+      if (isApiError(err, 401)) {
+        errorMessage.value = "Incorrect email or password.";
+      } else if (isApiError(err, 429)) {
+        errorMessage.value =
+          err.serverMessage ?? "Too many sign-in attempts. Try again later.";
+      } else {
+        errorMessage.value = "Unable to sign in. Please try again.";
+      }
     } finally {
       submitting.value = false;
     }

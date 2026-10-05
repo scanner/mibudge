@@ -78,6 +78,36 @@ email-change revocation link.
 Expired refresh tokens and their blacklist rows are deleted daily by
 `users.tasks.flush_expired_tokens`.
 
+### Rate limits on credentials
+
+The throttles in [`app/users/throttling.py`](../app/users/throttling.py)
+slow password guessing; a throttled request answers 429 with
+`Retry-After`. Rates are `REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']`,
+each overridable as `DJANGO_THROTTLE_<SCOPE>`.
+
+| Scope | Applies to | Keyed on | Default |
+|-------|------------|----------|---------|
+| `login` | `POST /api/token/` | client address | 10/min |
+| `login_email` | `POST /api/token/`, browsers new to the email | submitted email (hashed) | 20/hour |
+| `login_device` | `POST /api/token/`, browsers that signed in to the email before | device cookie | 20/hour |
+| `password_change` | `POST /api/v1/users/me/change-password/` | user | 10/hour |
+| `token_refresh` | `POST /api/token/refresh/` | client address | 60/min |
+
+Login also stays under the general `anon` limit, and password change
+under `user`. Token refresh has `token_refresh` in place of `anon`, so
+page loads and sign-in attempts do not draw on one budget.
+
+The per-email limit caps guessing from any number of addresses. A
+successful login sets the `login_device` cookie (signed, httpOnly,
+`SameSite=Strict`, path `/api/token/`, one year), naming the user and
+bound to their current password. Attempts that present a valid cookie
+for the submitted email count against that browser's own limit
+instead, so someone guessing at an email cannot lock its owner out of
+a browser they already use; only a browser that has never signed in
+waits for the per-email window. Changing or resetting the password
+invalidates every device cookie, as does changing the email. Signing
+out keeps the cookie: it marks the browser, not the session.
+
 ### Passwordless accounts
 
 Users created via the invitation flows (bank-account co-ownership or

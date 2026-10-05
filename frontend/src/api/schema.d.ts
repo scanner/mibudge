@@ -34,6 +34,10 @@ export interface paths {
          *     access token (kept in memory); the refresh token is a
          *     Secure/HttpOnly/SameSite=Strict cookie that JS cannot read,
          *     and that the browser sends automatically to /api/token/refresh/.
+         *
+         *     A successful login also sets a login device cookie, so this
+         *     browser's later attempts against the same email count against a
+         *     limit of their own instead of the per-email one.
          */
         post: operations["api_token_create"];
         delete?: never;
@@ -83,6 +87,10 @@ export interface paths {
          *     On success, returns {"access": "<new_access_token>"} in JSON.
          *     When token rotation is enabled, also rotates the refresh cookie so
          *     the 14-day sliding window resets with each use.
+         *
+         *     Refreshes have their own per-address limit in place of the
+         *     anonymous one, so page loads and sign-in attempts do not share a
+         *     budget.
          */
         post: operations["api_token_refresh_create"];
         delete?: never;
