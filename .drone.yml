@@ -22,11 +22,10 @@ steps:
     environment:
       PYTHONUNBUFFERED: 1
       UV_LINK_MODE: copy
-      # mypy-django initializes Django settings at plugin load time, so mypy
-      # requires the same env vars as the test runner.
-      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
-      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
     commands:
+      # Fresh throwaway key and salt for each run.  mypy-django loads
+      # Django settings at plugin start, so lint needs them as tests do.
+      - export DJANGO_SECRET_KEY=$$(openssl rand -hex 32) SALT_KEY=$$(openssl rand -hex 32)
       - pip install uv
       - uv sync --frozen
       - uv run ruff check .
@@ -60,10 +59,8 @@ steps:
       PYTHONUNBUFFERED: 1
       UV_LINK_MODE: copy
       DEBUG: "true"
-      # Dummy key for CI -- tests run against SQLite, no real secrets needed
-      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
-      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
     commands:
+      - export DJANGO_SECRET_KEY=$$(openssl rand -hex 32) SALT_KEY=$$(openssl rand -hex 32)
       - pip install uv
       - uv run pytest --cov=moneypools --cov=users --cov-report=term-missing:skip-covered --durations=20
 
@@ -85,10 +82,9 @@ steps:
       PYTHONUNBUFFERED: 1
       UV_LINK_MODE: copy
       DEBUG: "true"
-      DJANGO_SECRET_KEY: "drone-ci-not-a-real-secret-key-for-testing-only"
-      SALT_KEY: "drone-ci-not-a-real-salt-key-for-testing-only"
       MIBUDGE_TEST_DATABASE_URL: "postgres://mibudge:mibudge@postgres:5432/mibudge"
     commands:
+      - export DJANGO_SECRET_KEY=$$(openssl rand -hex 32) SALT_KEY=$$(openssl rand -hex 32)
       - pip install uv
       - uv run wait-for-it --service postgres:5432 --timeout 60 -- echo "Postgres available"
       - uv run pytest -m "postgres or concurrency" -v
@@ -136,9 +132,6 @@ depends_on:
 steps:
   - name: Build prod
     image: plugins/docker
-    environment:
-      SALT_KEY:
-        from_secret: BUILD_SALT_KEY
     settings:
       username:
         from_secret: GHCR_USER
@@ -148,14 +141,9 @@ steps:
       registry: ghcr.io
       auto_tag: true
       target: prod
-      build_args_from_env:
-        - SALT_KEY
 
   - name: Build dev
     image: plugins/docker
-    environment:
-      SALT_KEY:
-        from_secret: BUILD_SALT_KEY
     settings:
       username:
         from_secret: GHCR_USER
@@ -166,14 +154,9 @@ steps:
       auto_tag: true
       auto_tag_suffix: dev
       target: dev
-      build_args_from_env:
-        - SALT_KEY
 
   - name: Build prod (Docker Hub)
     image: plugins/docker
-    environment:
-      SALT_KEY:
-        from_secret: BUILD_SALT_KEY
     settings:
       username:
         from_secret: DOCKERHUB_USER
@@ -182,14 +165,9 @@ steps:
       repo: scanner/mibudge
       auto_tag: true
       target: prod
-      build_args_from_env:
-        - SALT_KEY
 
   - name: Build dev (Docker Hub)
     image: plugins/docker
-    environment:
-      SALT_KEY:
-        from_secret: BUILD_SALT_KEY
     settings:
       username:
         from_secret: DOCKERHUB_USER
@@ -199,8 +177,6 @@ steps:
       auto_tag: true
       auto_tag_suffix: dev
       target: dev
-      build_args_from_env:
-        - SALT_KEY
 
 trigger:
   event:
