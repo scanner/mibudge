@@ -1,25 +1,19 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { existsSync, readFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 
-// The main Django dev server is served over HTTPS (via the reverse proxy
-// using the repo-level mkcert certs in deployment/ssl/).  Browsers block
-// mixed content, so the Vite dev server must also be HTTPS -- reuse the
-// same mkcert cert/key so the browser's existing trust carries over.
-// In CI the certs don't exist, so fall back to plain HTTP for the dev server.
-// Cert files are prefixed with the hostname so multiple machines sharing a
-// filesystem each maintain independent certs.  Falls back to unprefixed names
-// for prod or simple single-host setups.
-const host = hostname()
-const sslDir = fileURLToPath(new URL('../deployment/ssl', import.meta.url))
-const resolveSslPath = (stem: string) => {
-  const prefixed = `${sslDir}/${host}-${stem}`
-  return existsSync(prefixed) ? prefixed : `${sslDir}/${stem}`
-}
-const sslCert = resolveSslPath('ssl_crt.pem')
-const sslKey = resolveSslPath('ssl_key.pem')
+// The Django dev server is HTTPS, with this host's mkcert certificate from
+// deployment/ssl/<DEV_HOSTNAME>-ssl_{crt,key}.pem.  Browsers block mixed
+// content, so the Vite dev server serves HTTPS with the same certificate.
+// DEV_HOSTNAME comes from the repository's .env (see deployment/README.md).
+// Where the certificate does not exist, as in CI, Vite serves plain HTTP.
+const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+const devHostname =
+  loadEnv('development', repoRoot, 'DEV_HOSTNAME').DEV_HOSTNAME ?? hostname()
+const sslCert = `${repoRoot}deployment/ssl/${devHostname}-ssl_crt.pem`
+const sslKey = `${repoRoot}deployment/ssl/${devHostname}-ssl_key.pem`
 const httpsConfig =
   existsSync(sslCert) && existsSync(sslKey)
     ? { cert: readFileSync(sslCert), key: readFileSync(sslKey) }

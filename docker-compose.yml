@@ -1,4 +1,25 @@
+# Local development stack.  `make up` builds the dev image, creates .env
+# from deployment/dot-env.dev and this host's mkcert certificate, and
+# starts these services.
+#
+# Every app container loads the repository's .env, then `x-dev-env`
+# overrides the values that differ inside the docker network: the service
+# hostnames, and the path of this host's TLS certificate under
+# deployment/ssl/.
+#
 #name: mibudge
+
+x-dev-env: &dev-env
+  DATABASE_URL: postgres://debug:debug@postgres:5432/mibudge
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  EMAIL_HOST: mailpit
+  EMAIL_PORT: 1025
+  DEV_TLS_CERT_FILE: "/mnt/ssl/${DEV_HOSTNAME:?.env has no DEV_HOSTNAME; see deployment/README.md}-ssl_crt.pem"
+  DEV_TLS_KEY_FILE: "/mnt/ssl/${DEV_HOSTNAME}-ssl_key.pem"
+  TZ: ${TIME_ZONE:-America/Los_Angeles}
+
 volumes:
   local_postgres_data: {}
   local_redis_data: {}
@@ -14,9 +35,8 @@ services:
         condition: service_healthy
     volumes:
       - ./app:/app:z
-    env_file: deployment/local-dev-docker.env
-    environment:
-      TZ: ${TIME_ZONE:-America/Los_Angeles}
+    env_file: .env
+    environment: *dev-env
     command: python /app/manage.py migrate
 
   backend: &backend
@@ -33,11 +53,9 @@ services:
         condition: service_started
     volumes:
       - ./app:/app:z
-      - "${HOST_SSL_DIR}:/mnt/ssl:ro"
-    env_file: deployment/local-dev-docker.env
-    environment:
-      ALLOWED_HOSTS: "${HOSTNAME},localhost,0.0.0.0,127.0.0.1"
-      TZ: ${TIME_ZONE:-America/Los_Angeles}
+      - ./deployment/ssl:/mnt/ssl:ro
+    env_file: .env
+    environment: *dev-env
     ports:
       - "8000:8000"
     command: /app/scripts/start_dev.sh
@@ -51,8 +69,7 @@ services:
       - "6432:5432"
     volumes:
       - local_postgres_data:/var/lib/postgresql/data
-      - "${HOST_DB_BACKUPS_DIR}:/backups:z"
-    env_file: deployment/local-dev-docker.env
+      - ./deployment/db_backups:/backups:z
     # Pin PGDATA to the conventional path. postgres:18-alpine's default
     # is /var/lib/postgresql/18/docker -- a version-scoped subpath --
     # which would not receive the named volume mounted below, so all
@@ -62,8 +79,11 @@ services:
     #
     environment:
       PGDATA: /var/lib/postgresql/data
+      POSTGRES_DB: mibudge
+      POSTGRES_USER: debug
+      POSTGRES_PASSWORD: debug
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-debug} -d ${POSTGRES_DB:-mibudge}"]
+      test: ["CMD-SHELL", "pg_isready -U debug -d mibudge"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -71,6 +91,7 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     ports:
+      - "1025:1025"
       - "8025:8025"
 
   redis:

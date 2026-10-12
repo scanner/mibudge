@@ -1,63 +1,59 @@
-# mibudge local shell environment
-# Copied to .env by `make env`  (run once; edit .env after if needed)
+# mibudge local development environment.
 #
-# PURPOSE: this file is read by tools that run OUTSIDE docker-compose --
-# `uv run manage.py`, `pytest`, linters, `make api-schema`, etc.
-# It points at the published ports on localhost, not docker-internal hostnames.
+# `make env` (and `make up`, `make test`, `make lint`) writes this file to
+# .env at the repository root when .env does not exist, replacing @HOSTNAME@
+# with this machine's `hostname`.  .env belongs to one host: keep it out of
+# any file sync shared between machines.
 #
-# For docker-compose itself, see deployment/local-dev-docker.env which uses
-# docker-internal hostnames (postgres, redis) and internal port numbers.
+# One .env serves both ways of running the code:
+#   - Tools on the host (`uv run manage.py`, pytest, mypy) read it through
+#     config/settings.py and reach the services on their published
+#     localhost ports.
+#   - docker compose loads it into every app container and overrides the
+#     service URLs with the docker-internal hostnames (see the root
+#     docker-compose.yml).
 #
-# All values below are safe defaults for local development.
-# In production every variable must be set explicitly -- see
-# deployment/dot-env.example.
+# Add your own per-host settings (importer paths, 1Password URLs, ...) at
+# the bottom; `make env` never overwrites an existing .env.
+
+# This host
+# ------------------------------------------------------------------------------
+# The TLS certificate for this host is deployment/ssl/<DEV_HOSTNAME>-ssl_crt.pem
+# (and -ssl_key.pem), created by `make certs` with mkcert.
+DEV_HOSTNAME=@HOSTNAME@
+SITE_URL=https://@HOSTNAME@:8000
+ALLOWED_HOSTS=@HOSTNAME@,localhost,127.0.0.1,0.0.0.0
 
 # General
 # ------------------------------------------------------------------------------
 DEBUG=True
-DJANGO_SECRET_KEY=local-dev-secret-key-change-in-production
+DJANGO_SECRET_KEY=local-dev-secret-key-not-for-production
 DJANGO_ADMIN_URL=admin/
-ADMINISTRATIVE_EMAIL_ADDRESS=admin@mibudge.apricot.com
+ADMINISTRATIVE_EMAIL_ADDRESS=admin@example.com
 TIME_ZONE=America/Los_Angeles
-SITE_URL=http://myhostname.local:8000
-SITE_NAME=mibudge
 
-# PostgreSQL
-# docker-compose publishes postgres on localhost:6432 (avoids the system port)
+# django-fernet-encrypted-fields: salt for the field encryption key.
+SALT_KEY=local-dev-salt-key-not-for-production
+
+# PostgreSQL (published on localhost:6432)
 # ------------------------------------------------------------------------------
 DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge
 
-# Redis
-# docker-compose publishes redis on localhost:7379 (avoids the system port)
+# Redis (published on localhost:7379)
 # ------------------------------------------------------------------------------
 REDIS_URL=redis://localhost:7379/0
 CELERY_BROKER_URL=redis://localhost:7379/1
 CELERY_RESULT_BACKEND=redis://localhost:7379/2
+CELERY_FLOWER_USER=debug
+CELERY_FLOWER_PASSWORD=debug
 
-# Email -- Mailpit (published on localhost:1025; no auth needed)
+# Email: Mailpit (SMTP on localhost:1025, web UI on http://localhost:8025)
 # ------------------------------------------------------------------------------
 EMAIL_HOST=localhost
 EMAIL_PORT=1025
 EMAIL_USE_TLS=False
 
-# SSL Certificates (local dev TLS)
-# ------------------------------------------------------------------------------
-# `make certs` generates hostname-prefixed cert files in deployment/ssl/ so
-# that multiple machines sharing the same filesystem each have their own cert.
-# Set these to the filenames (not full paths) within deployment/ssl/.
-# If unset, the dev server falls back to ssl_crt.pem / ssl_key.pem.
-#
-# Example — replace with the output of `hostname`:
-# SSL_CERT_FILE=mylaptop.local-ssl_crt.pem
-# SSL_KEY_FILE=mylaptop.local-ssl_key.pem
-
-# django-fernet-encrypted-fields
-# ------------------------------------------------------------------------------
-# Used to derive encryption keys for sensitive fields (e.g. account numbers).
-# In production use a strong random value and NEVER commit it.
-SALT_KEY=local-dev-salt-key-change-in-production
-
-# Sentry (disabled by default)
+# Sentry (off unless set)
 # ------------------------------------------------------------------------------
 # SENTRY_DSN=
 # SENTRY_TRACES_SAMPLE_RATE=0.0

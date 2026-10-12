@@ -1,21 +1,31 @@
 # -*- Mode: Makefile -*-
 ROOT_DIR := $(shell git rev-parse --show-toplevel)
-HOSTNAME := $(shell hostname)
+# This host's name: DEV_HOSTNAME from .env once it exists, so the
+# certificate, compose and Vite agree even if `hostname` later changes.
+DEV_HOSTNAME := $(or $(shell sed -n 's/^DEV_HOSTNAME=//p' $(ROOT_DIR)/.env 2>/dev/null),$(shell hostname))
+SSL_DIR := $(ROOT_DIR)/deployment/ssl
 include $(ROOT_DIR)/Make.rules
 
 DOCKER_BUILDKIT := 1
 
-.PHONY: clean purge test test-frontend logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+.PHONY: check-env certs dirs dbs ssl clean purge test test-frontend logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
 
-env: $(ROOT_DIR)/.env $(ROOT_DIR)/deployment/local-dev-docker.env	## Generate .env and deployment/local-dev-docker.env from their templates
+env: $(ROOT_DIR)/.env	## Create this host's .env from deployment/dot-env.dev (never overwrites)
 
 $(ROOT_DIR)/.env:
-	@cp $(ROOT_DIR)/deployment/dot-env.dev $(ROOT_DIR)/.env
-	@echo "Created .env from deployment/dot-env.dev"
+	@sed 's/@HOSTNAME@/$(DEV_HOSTNAME)/g' $(ROOT_DIR)/deployment/dot-env.dev > $@
+	@echo "Created .env for $(DEV_HOSTNAME) from deployment/dot-env.dev"
 
-$(ROOT_DIR)/deployment/local-dev-docker.env:
-	@cp $(ROOT_DIR)/deployment/dot-env.docker-dev $(ROOT_DIR)/deployment/local-dev-docker.env
-	@echo "Created deployment/local-dev-docker.env from deployment/dot-env.docker-dev"
+# Refuse to start the stack with a .env from before deployment/dot-env.dev
+# gained DEV_HOSTNAME.
+check-env: $(ROOT_DIR)/.env
+	@grep -q '^DEV_HOSTNAME=' $(ROOT_DIR)/.env || { \
+	    echo ".env predates DEV_HOSTNAME. Regenerate it, then copy back any"; \
+	    echo "settings of your own:  mv .env .env.old && make env"; \
+	    exit 1; }
+	@if [ -e $(ROOT_DIR)/deployment/local-dev-docker.env ]; then \
+	    echo "NOTE: deployment/local-dev-docker.env is no longer used; delete it."; \
+	fi
 
 # mypy's Django plugin imports `config.settings`, which reads `.env`.
 lint: $(ROOT_DIR)/.env
@@ -30,16 +40,48 @@ dbs:
 	@mkdir -p $(ROOT_DIR)/deployment/db_backups
 
 ssl:
-	@mkdir -p $(ROOT_DIR)/deployment/ssl
+	@mkdir -p $(SSL_DIR)
 
-deployment/ssl/$(HOSTNAME)-ssl_key.pem deployment/ssl/$(HOSTNAME)-ssl_crt.pem: | ssl
-	@mkcert -key-file $(ROOT_DIR)/deployment/ssl/$(HOSTNAME)-ssl_key.pem \
-                -cert-file $(ROOT_DIR)/deployment/ssl/$(HOSTNAME)-ssl_crt.pem \
-                $(HOSTNAME) localhost 127.0.0.1 ::1
+CERT_FILE := $(SSL_DIR)/$(DEV_HOSTNAME)-ssl_crt.pem
+KEY_FILE := $(SSL_DIR)/$(DEV_HOSTNAME)-ssl_key.pem
+CERT_RENEW_DAYS := 30
 
-certs: ssl deployment/ssl/$(HOSTNAME)-ssl_key.pem deployment/ssl/$(HOSTNAME)-ssl_crt.pem	## uses `mkcert` to create certificates for local development.
+# Create this host's certificate when it is missing, expires within
+# CERT_RENEW_DAYS, or was not signed by this machine's mkcert CA (checked by
+# signature: every mkcert CA a user creates on one host has the same name).
+# The dev server reads the certificate at startup, so a running backend is
+# restarted to load a new one.  File sync may not keep file modes, so every
+# host's key in deployment/ssl/ is made readable by its owner only.
+# NOTE: The dev container (uid 900) can read an owner-only key because Docker
+#       Desktop on macOS presents bind-mounted files as owned by the container
+#       user.  Native Docker on Linux keeps the host uid, so a Linux dev host
+#       would need the dev containers to run as the host user.
+certs: | ssl	## Create or renew this host's TLS certificate in deployment/ssl/ with mkcert
+	@ca="$$(mkcert -CAROOT)/rootCA.pem"; \
+	if [ ! -f "$$ca" ]; then \
+	    echo "No mkcert CA at $$ca -- run 'mkcert -install' first."; exit 1; \
+	fi; \
+	reason=""; \
+	if [ ! -f $(CERT_FILE) ] || [ ! -f $(KEY_FILE) ]; then \
+	    reason="none exists"; \
+	elif ! openssl x509 -noout -checkend $$(( $(CERT_RENEW_DAYS) * 86400 )) \
+	        -in $(CERT_FILE) > /dev/null; then \
+	    reason="it expires within $(CERT_RENEW_DAYS) days"; \
+	elif ! openssl verify -CAfile "$$ca" $(CERT_FILE) > /dev/null 2>&1; then \
+	    reason="this machine's mkcert CA did not sign it"; \
+	fi; \
+	if [ -n "$$reason" ]; then \
+	    echo "Creating the TLS certificate for $(DEV_HOSTNAME): $$reason"; \
+	    mkcert -key-file $(KEY_FILE) -cert-file $(CERT_FILE) \
+	        $(DEV_HOSTNAME) localhost 127.0.0.1 ::1 || exit 1; \
+	    if [ -n "$$(docker compose ps --quiet backend 2> /dev/null)" ]; then \
+	        echo "Restarting backend to load the new certificate"; \
+	        docker compose restart backend; \
+	    fi; \
+	fi; \
+	chmod 600 $(SSL_DIR)/*-ssl_key.pem
 
-up-backend: build dirs certs	## Build the backend stack and bring it up detached (everything except the foreground Vite dev server)
+up-backend: check-env build dirs certs	## Build the backend stack and bring it up detached (everything except the foreground Vite dev server)
 	@docker compose up --remove-orphans --detach
 
 up: up-backend	## Bring up the backend stack, then run Vite in the foreground

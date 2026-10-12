@@ -18,7 +18,7 @@
 # External networks that must exist before starting this stack:
 #   postgres_net     -- created by the postgres-docker-compose stack
 #   redis_network    -- created by the redis stack
-#   telegraf_network -- created by the monitoring stack (remove if not used)
+# README.md shows how to run Postgres and Redis in this stack instead.
 name: mibudge
 
 secrets:
@@ -53,7 +53,6 @@ x-base: &base
   networks:
     - postgres_net
     - redis_network
-    - telegraf_network
 
 services:
   migrate:
@@ -92,7 +91,4 @@ networks:
     external: true
   redis_network:
     name: redis_network
-    external: true
-  telegraf_network:
-    name: telegraf_network
     external: true
