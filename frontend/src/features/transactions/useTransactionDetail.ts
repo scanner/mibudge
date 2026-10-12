@@ -14,6 +14,14 @@
 // balances everywhere (including the top bar's Unallocated) are
 // current.
 //
+// The shown transaction refreshes in the background when the bank
+// account's transactions may have changed (`stores/invalidation.ts`),
+// so a pending transaction that posted or a co-owner's split shows.
+// The description and memo keep text typed here and not yet saved, and
+// an answer is dropped when this page saved, split or uploaded while it
+// was in flight.  A transaction the refresh finds gone (a bank sync
+// replaces pending transactions) shows the error a missing link does.
+//
 // A failed autosave, split or upload leaves a message naming what was
 // not saved, with the server's reason (`descriptionError`,
 // `memoError`, `splitError`, `attachmentError`); each clears when the
@@ -27,7 +35,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 // app imports
 //
 import { api } from "@/api";
-import { describeError } from "@/api/errors";
+import { ApiError, describeError } from "@/api/errors";
 import { useDebouncedAutosave } from "@/composables/useDebouncedAutosave";
 import { useResource } from "@/composables/useResource";
 import type { Allocation } from "@/models/allocation";
@@ -44,6 +52,7 @@ import {
 } from "@/models/transaction";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 
 ////////////////////////////////////////////////////////////////////////
@@ -67,6 +76,8 @@ export function useTransactionDetail(id: () => string) {
   const memo = ref("");
   const attachmentError = ref<string | null>(null);
   const splitError = ref<string | null>(null);
+  // Set when a background refresh finds the transaction gone.
+  const goneError = ref<string | null>(null);
 
   const resource = useResource(
     id,
@@ -86,6 +97,7 @@ export function useTransactionDetail(id: () => string) {
     memo.value = tx?.memo ?? "";
     attachmentError.value = null;
     splitError.value = null;
+    goneError.value = null;
   });
 
   // Apply a text or attachment save's answer only while it is still the
@@ -93,6 +105,23 @@ export function useTransactionDetail(id: () => string) {
   // sets them, and a save answered before a split lands carries the
   // older ones.
   //
+  // Every write this page makes to the transaction runs through
+  // `tracked`, so a background refresh can tell it raced one.
+  //
+  let writes = 0;
+  let writesInFlight = 0;
+
+  async function tracked<R>(request: () => Promise<R>): Promise<R> {
+    writes++;
+    writesInFlight++;
+    try {
+      return await request();
+    } finally {
+      writesInFlight--;
+      writes++;
+    }
+  }
+
   function applyIfCurrent(txId: string, updated: Transaction): void {
     const current = transaction.value;
     if (txId === id() && current?.id === txId)
@@ -120,9 +149,11 @@ export function useTransactionDetail(id: () => string) {
     async (txId: string, value: string) => {
       if (value === transaction.value?.description) return;
       try {
-        const dto = await api.transactions.update(
-          txId,
-          transactionToUpdateDto({ description: value }),
+        const dto = await tracked(() =>
+          api.transactions.update(
+            txId,
+            transactionToUpdateDto({ description: value }),
+          ),
         );
         applyIfCurrent(txId, transactionFromDto(dto));
       } catch (err) {
@@ -139,9 +170,11 @@ export function useTransactionDetail(id: () => string) {
     async (txId: string, value: string) => {
       if ((value || null) === (transaction.value?.memo ?? null)) return;
       try {
-        const dto = await api.transactions.update(
-          txId,
-          transactionToUpdateDto({ memo: value }),
+        const dto = await tracked(() =>
+          api.transactions.update(
+            txId,
+            transactionToUpdateDto({ memo: value }),
+          ),
         );
         applyIfCurrent(txId, transactionFromDto(dto));
       } catch (err) {
@@ -215,9 +248,9 @@ export function useTransactionDetail(id: () => string) {
     splitError.value = null;
     let updated: Allocation[];
     try {
-      updated = (await api.transactions.split(tx.id, splits)).map(
-        allocationFromDto,
-      );
+      updated = (
+        await tracked(() => api.transactions.split(tx.id, splits))
+      ).map(allocationFromDto);
     } catch (err) {
       if (tx.id !== id()) return;
       splitError.value = `Couldn't save the split: ${describeError(err, "save failed.")}`;
@@ -258,7 +291,9 @@ export function useTransactionDetail(id: () => string) {
     const txId = id();
     attachmentError.value = null;
     try {
-      const dto = await api.transactions.uploadAttachment(txId, field, file);
+      const dto = await tracked(() =>
+        api.transactions.uploadAttachment(txId, field, file),
+      );
       applyIfCurrent(txId, transactionFromDto(dto));
     } catch (err) {
       if (txId !== id()) return;
@@ -269,13 +304,62 @@ export function useTransactionDetail(id: () => string) {
 
   ////////////////////////////////////////////////////////////////////
   //
+  // Background refresh.  Skipped while a write is in flight (its answer
+  // is newer), and dropped if one started meanwhile.
+  //
+  async function refresh(): Promise<void> {
+    const txId = id();
+    const shown = transaction.value;
+    if (!shown || shown.id !== txId || writesInFlight > 0) return;
+    const started = writes;
+    let fresh: Transaction;
+    try {
+      fresh = transactionFromDto(await api.transactions.get(txId));
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 404 &&
+        txId === id() &&
+        transaction.value?.id === txId
+      ) {
+        descriptionSave.cancel();
+        memoSave.cancel();
+        transaction.value = null;
+        goneError.value = describeError(err, "Failed to load transaction.");
+      }
+      return;
+    }
+    const current = transaction.value;
+    if (txId !== id() || current?.id !== txId || writes !== started) return;
+    if (
+      !descriptionSave.pending.value &&
+      description.value === current.description
+    )
+      description.value = fresh.description;
+    if (!memoSave.pending.value && memo.value === (current.memo ?? ""))
+      memo.value = fresh.memo ?? "";
+    transaction.value = fresh;
+  }
+
+  const invalidation = useInvalidationStore();
+  invalidation.onInvalidate(
+    () => accountInterest(transaction.value?.bankAccountId, ["transactions"]),
+    refresh,
+  );
+  invalidation.onInvalidate(
+    () => accountInterest(transaction.value?.bankAccountId, ["budgets"]),
+    () => budgets.refreshAccount(transaction.value!.bankAccountId),
+  );
+
+  ////////////////////////////////////////////////////////////////////
+  //
   const prevId = computed(() => nav.prevId(id()));
   const nextId = computed(() => nav.nextId(id()));
 
   return {
     transaction,
     loading: resource.loading,
-    error: resource.error,
+    error: computed(() => goneError.value ?? resource.error.value),
     description,
     memo,
     onDescriptionInput: () => descriptionSave.schedule(description.value),

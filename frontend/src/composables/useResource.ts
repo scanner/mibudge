@@ -5,7 +5,9 @@
 // `key` is a getter (a route param, the active account id); while it
 // returns `null` / `undefined` the resource is reset and nothing loads.
 // Built on `useAsync`, so a response for an old key never overwrites
-// the data for the current one.
+// the data for the current one.  `reload()` loads again with the
+// loading state shown; `refresh()` loads again in the background,
+// keeping the shown data (see `useAsync`).
 //
 
 // 3rd party imports
@@ -19,9 +21,14 @@ import { useAsync } from "@/composables/useAsync";
 
 ////////////////////////////////////////////////////////////////////////
 //
-export interface UseResource<T> extends Omit<UseAsync<T, []>, "run"> {
+export interface UseResource<T> extends Omit<
+  UseAsync<T, []>,
+  "run" | "refresh"
+> {
   // Load again for the current key.
   reload: () => Promise<T | undefined>;
+  // Load again for the current key, keeping the shown data.
+  refresh: () => Promise<T | undefined>;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -42,6 +49,12 @@ export function useResource<K, T>(
     return state.run(k);
   }
 
+  function refresh(): Promise<T | undefined> {
+    const k = key();
+    if (k === null || k === undefined) return Promise.resolve(undefined);
+    return state.refresh(k);
+  }
+
   watch(key, () => void reload(), { immediate: true });
 
   return {
@@ -50,5 +63,6 @@ export function useResource<K, T>(
     loading: state.loading,
     reset: state.reset,
     reload,
+    refresh,
   };
 }

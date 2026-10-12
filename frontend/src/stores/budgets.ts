@@ -10,7 +10,8 @@
 // `refreshAccount(accountId)` refetches an account's budgets after an
 // operation that moves money between them on the server (splits,
 // funding runs); `invalidate(ids)` drops entries so the next read
-// refetches.
+// refetches.  Writes follow `createWriteOrder`: a fetch answer older
+// than a record's last mutation or fetch is not written.
 //
 
 // 3rd party imports
@@ -33,6 +34,7 @@ import {
 import type { TransferInput } from "@/models/internalTransaction";
 import { transferToCreateDto } from "@/models/internalTransaction";
 import { createSessionGuard } from "@/stores/reset";
+import { createWriteOrder } from "@/stores/writeOrder";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -70,11 +72,21 @@ export const useBudgetsStore = defineStore("budgets", () => {
   //
   const guard = createSessionGuard();
   const whileCurrent = guard.whileCurrent;
+  const order = createWriteOrder();
+
+  // Write a fetched budget, unless a newer answer for it is cached.
+  //
+  function putFetched(ticket: number) {
+    const put = whileCurrent(upsert);
+    return (budget: Budget) => {
+      if (order.accept(budget.id, ticket)) put(budget);
+    };
+  }
 
   ////////////////////////////////////////////////////////////////////
   //
   async function fetchOne(id: string): Promise<Budget> {
-    const put = whileCurrent(upsert);
+    const put = putFetched(order.ticket());
     const budget = budgetFromDto(await api.budgets.get(id));
     put(budget);
     return budget;
@@ -85,7 +97,7 @@ export const useBudgetsStore = defineStore("budgets", () => {
   // Fetch every page of a filtered list and cache the results.
   //
   async function fetchList(query?: BudgetListQuery): Promise<Budget[]> {
-    const put = whileCurrent(upsert);
+    const put = putFetched(order.ticket());
     loading.value = true;
     error.value = null;
     try {
@@ -112,6 +124,7 @@ export const useBudgetsStore = defineStore("budgets", () => {
     const budget = budgetFromDto(
       await api.budgets.create(budgetToCreateDto(input)),
     );
+    order.written(budget.id);
     put(budget);
     return budget;
   }
@@ -119,7 +132,9 @@ export const useBudgetsStore = defineStore("budgets", () => {
   async function update(id: string, input: BudgetInput): Promise<Budget> {
     const put = whileCurrent(upsert);
     const budget = budgetFromDto(
-      await api.budgets.update(id, budgetToUpdateDto(input)),
+      await order.mutating([id], () =>
+        api.budgets.update(id, budgetToUpdateDto(input)),
+      ),
     );
     put(budget);
     return budget;
@@ -131,7 +146,9 @@ export const useBudgetsStore = defineStore("budgets", () => {
   //
   async function archive(id: string): Promise<Budget> {
     const started = guard.current();
-    const budget = budgetFromDto(await api.budgets.archive(id));
+    const budget = budgetFromDto(
+      await order.mutating([id], () => api.budgets.archive(id)),
+    );
     if (!guard.isCurrent(started)) return budget;
     upsert(budget);
     await refreshAccount(budget.bankAccountId).catch(() => undefined);
@@ -142,7 +159,9 @@ export const useBudgetsStore = defineStore("budgets", () => {
   //
   async function transfer(input: TransferInput): Promise<void> {
     const started = guard.current();
-    await api.internalTransactions.create(transferToCreateDto(input));
+    await order.mutating([input.srcBudgetId, input.dstBudgetId], () =>
+      api.internalTransactions.create(transferToCreateDto(input)),
+    );
     if (!guard.isCurrent(started)) return;
     await Promise.all([
       fetchOne(input.srcBudgetId),
@@ -164,6 +183,7 @@ export const useBudgetsStore = defineStore("budgets", () => {
 
   function reset(): void {
     guard.bump();
+    order.clear();
     cache.value.clear();
     loading.value = false;
     error.value = null;

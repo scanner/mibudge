@@ -10,6 +10,12 @@
 // loads the active account's Unallocated budget, and handles back
 // navigation and account switching.
 //
+// It keeps the shell's own data current through the invalidation
+// signal (`stores/invalidation.ts`): the bank-account list when any
+// account may have changed, the Unallocated budget when the active
+// account's budgets may have.  Pulling down from the top (touch) or
+// the SideNav's Refresh button signals everything now.
+//
 
 // 3rd party imports
 //
@@ -19,12 +25,15 @@ import { useRoute, useRouter } from "vue-router";
 // app imports
 //
 import BottomNav from "@/components/layout/BottomNav.vue";
+import PullIndicator from "@/components/layout/PullIndicator.vue";
 import SideNav from "@/components/layout/SideNav.vue";
 import TopBar from "@/components/layout/TopBar.vue";
 import AccountSwitcher from "@/components/shared/AccountSwitcher.vue";
+import { usePullToRefresh } from "@/composables/usePullToRefresh";
 import type { AppRouteName } from "@/router/types";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -68,6 +77,34 @@ watch(
 
 ////////////////////////////////////////////////////////////////////////
 //
+const invalidation = useInvalidationStore();
+
+invalidation.onInvalidate(
+  () => ({ kinds: ["bankAccounts"] }),
+  () => ctx.refresh(),
+);
+invalidation.onInvalidate(
+  () => accountInterest(ctx.activeBankAccountId, ["budgets"]),
+  () => {
+    const id = ctx.unallocatedBudgetId;
+    return id ? budgets.fetchOne(id) : undefined;
+  },
+);
+
+const pull = usePullToRefresh(() => invalidation.invalidate());
+const buttonRefreshing = ref(false);
+
+async function refreshNow() {
+  buttonRefreshing.value = true;
+  try {
+    await invalidation.invalidate();
+  } finally {
+    buttonRefreshing.value = false;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // A detail page shows one record of the active account.  Switching
 // accounts there moves to that section's list for the new account.
 //
@@ -92,7 +129,10 @@ function manageAccounts() {
 
 <template>
   <div class="flex min-h-screen bg-canvas">
-    <SideNav />
+    <SideNav
+      :refreshing="buttonRefreshing || pull.refreshing.value"
+      @refresh="refreshNow"
+    />
     <div class="flex min-w-0 flex-1 flex-col">
       <TopBar
         :account="ctx.activeBankAccount"
@@ -105,6 +145,11 @@ function manageAccounts() {
           <slot name="action" />
         </template>
       </TopBar>
+      <PullIndicator
+        :distance="pull.distance.value"
+        :ready="pull.ready.value"
+        :refreshing="pull.refreshing.value"
+      />
       <main class="flex-1 px-page-x pb-4">
         <slot />
       </main>

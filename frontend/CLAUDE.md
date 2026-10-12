@@ -51,6 +51,14 @@ and why is in [../docs/spa/styling.md](../docs/spa/styling.md).
   `useOptimistic` (`src/composables/useOptimistic.ts`), keyed by the
   record it edits; never hand-roll a pending value. See "Settings that
   save on change" in `docs/spa/state.md`.
+- **A page's data load subscribes for refresh.** A feature composable
+  that loads what a page shows also calls
+  `useInvalidationStore().onInvalidate(interest, refresh)`, naming the
+  bank account and kinds it shows, and refreshes in the background
+  (`useResource().refresh()`, `useInfiniteList().refresh()`), never
+  with a reload that shows the loading state. A refresh must not
+  overwrite text the user is typing. See "Keeping shown data current"
+  in `docs/spa/state.md`.
 
 ## After a change
 

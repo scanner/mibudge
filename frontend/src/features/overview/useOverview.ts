@@ -5,7 +5,8 @@
 // (overview).
 //
 // Reloads when the active account changes; a response for the
-// previous account is ignored.
+// previous account is ignored.  Refreshes in the background when its
+// budgets or transactions may have changed (`stores/invalidation.ts`).
 //
 
 // 3rd party imports
@@ -24,6 +25,7 @@ import type { Transaction } from "@/models/transaction";
 import { transactionFromDto } from "@/models/transaction";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -65,6 +67,11 @@ export function useOverview() {
       };
     },
     { errorMessage: "Failed to load overview." },
+  );
+
+  useInvalidationStore().onInvalidate(
+    () => accountInterest(ctx.activeBankAccountId, ["budgets", "transactions"]),
+    resource.refresh,
   );
 
   ////////////////////////////////////////////////////////////////////

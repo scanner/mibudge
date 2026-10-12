@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 //
 import type { BankAccountDto, BudgetDto } from "@/api/dto";
 import { useAccountContextStore } from "@/stores/accountContext";
+import { useInvalidationStore } from "@/stores/invalidation";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import TransactionsView from "@/views/TransactionsView.vue";
 import { mountWithApp, withAccounts, withAuth } from "../helpers";
@@ -180,6 +181,88 @@ describe("TransactionsView", () => {
     });
 
     await vi.waitFor(() => expect(wrapper.text()).toContain("HTTP 500"));
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("TransactionsView background refresh", () => {
+  beforeEach(() => {
+    withAuth();
+  });
+
+  // GIVEN: a list scrolled two pages deep
+  // WHEN:  a new transaction arrives on the server and the page
+  //        refreshes in the background
+  // THEN:  the loaded rows stay on screen (no loading skeleton) while
+  //        it runs
+  //  AND:  afterwards the new row is on top and every loaded row is
+  //        still listed
+  //
+  it("refreshes a scrolled list in place", async () => {
+    const account = makeBankAccount();
+    withAccounts([account]);
+    const tx = (party: string, date: string) =>
+      makeTransaction({
+        bank_account: account.id,
+        party,
+        transaction_date: date,
+      });
+    let rows = [
+      tx("Older", "2026-10-02T12:00:00Z"),
+      tx("Oldest", "2026-10-01T12:00:00Z"),
+    ];
+    let gate: Promise<void> = Promise.resolve();
+    // One row per page, except when the refresh asks for a page size.
+    server.use(
+      http.get("/api/v1/transactions/", async ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.has("page_size")) {
+          await gate;
+          return HttpResponse.json(makePage(rows));
+        }
+        const n = Number(url.searchParams.get("page") ?? "1");
+        const next =
+          n < rows.length
+            ? `http://localhost/api/v1/transactions/?bank_account=${account.id}&page=${n + 1}`
+            : null;
+        return HttpResponse.json(makePage([rows[n - 1]], { next }));
+      }),
+    );
+    const { wrapper } = await mountWithApp(TransactionsView, {
+      route: "/transactions/",
+    });
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Older"));
+    // No IntersectionObserver in happy-dom; changing the filter asks for
+    // the next page the way reaching the sentinel does.
+    const chip = (label: string) =>
+      wrapper.findAll("button").find((b) => b.text() === label)!;
+    await chip("Pending").trigger("click");
+    await chip("All").trigger("click");
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Oldest"));
+
+    rows = [tx("Newest", "2026-10-03T12:00:00Z"), ...rows];
+    let release!: () => void;
+    gate = new Promise<void>((resolve) => (release = resolve));
+    const refresh = useInvalidationStore().invalidate({
+      bankAccountId: account.id,
+      kinds: ["transactions"],
+    });
+    await flushPromises();
+    expect
+      .soft(wrapper.find(".animate-pulse").exists(), "no skeleton")
+      .toBe(false);
+    expect.soft(wrapper.text(), "rows stay meanwhile").toContain("Oldest");
+    release();
+    await refresh;
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect.soft(text, "new row").toContain("Newest");
+    expect
+      .soft(text.indexOf("Newest") < text.indexOf("Older"), "on top")
+      .toBe(true);
+    expect.soft(text, "loaded rows kept").toContain("Oldest");
   });
 });
 

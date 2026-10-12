@@ -160,3 +160,118 @@ describe("useResource", () => {
     expect(resource.data.value).toBe(2);
   });
 });
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("refresh", () => {
+  // GIVEN: loaded data on screen
+  // WHEN:  it refreshes in the background
+  // THEN:  the data stays and `loading` stays false until the new
+  //        result replaces it
+  //
+  it("keeps the shown data while it runs", async () => {
+    let next = deferred<number>();
+    const state = useAsync(() => next.promise);
+    const first = state.run();
+    next.resolve(1);
+    await first;
+
+    next = deferred<number>();
+    const refresh = state.refresh();
+    expect.soft(state.loading.value, "loading stays false").toBe(false);
+    expect.soft(state.data.value, "the old data stays meanwhile").toBe(1);
+    next.resolve(2);
+    await refresh;
+    expect.soft(state.data.value, "the new result replaces it").toBe(2);
+  });
+
+  // GIVEN: data shown after a failed load
+  // WHEN:  a refresh succeeds, fails, or finds the record gone
+  // THEN:  success clears the error; a failure keeps data and error;
+  //        a gone record (404) clears the data and says why
+  //
+  it.each<[string, Error | null, number | undefined, string | null]>([
+    ["succeeds", null, 2, null],
+    ["fails", new Error("offline"), 1, "first error"],
+    [
+      "finds the record gone",
+      new ApiError(404, JSON.stringify({ detail: "Not found." })),
+      undefined,
+      "Not found.",
+    ],
+  ])(
+    "a refresh that %s",
+    async (_name, failure, expectedData, expectedError) => {
+      let call = 0;
+      const state = useAsync(async () => {
+        call++;
+        if (call === 1) return 1;
+        if (call === 2)
+          throw new ApiError(500, JSON.stringify({ detail: "first error" }));
+        if (failure) throw failure;
+        return 2;
+      });
+      await state.run();
+      // A failed `run` leaves the data and records the error.
+      await state.run();
+
+      await state.refresh();
+
+      expect.soft(state.data.value, "data").toBe(expectedData);
+      expect.soft(state.error.value, "error").toBe(expectedError);
+    },
+  );
+
+  // GIVEN: a refresh in flight
+  // WHEN:  a `run` for a new input starts and finishes first
+  // THEN:  the late refresh answer is dropped
+  //
+  it("loses to a later run", async () => {
+    const answers = [deferred<string>(), deferred<string>()];
+    let call = 0;
+    const state = useAsync(() => answers[call++].promise);
+
+    const refresh = state.refresh();
+    const run = state.run();
+    answers[1].resolve("run");
+    await run;
+    answers[0].resolve("refresh");
+    await refresh;
+
+    expect(state.data.value).toBe("run");
+  });
+
+  // GIVEN: a `run` in flight
+  // WHEN:  a refresh is asked for
+  // THEN:  nothing extra is fetched (the load in flight is current)
+  //
+  it("does nothing while a run is in flight", async () => {
+    const d = deferred<number>();
+    let calls = 0;
+    const state = useAsync(() => {
+      calls++;
+      return d.promise;
+    });
+
+    const run = state.run();
+    await state.refresh();
+    d.resolve(1);
+    await run;
+
+    expect(calls).toBe(1);
+  });
+
+  // GIVEN: a resource with no key
+  // WHEN:  it refreshes
+  // THEN:  nothing loads
+  //
+  it("useResource does nothing without a key", async () => {
+    let calls = 0;
+    const resource = useResource(
+      () => null,
+      async () => ++calls,
+    );
+    await resource.refresh();
+    expect(calls).toBe(0);
+  });
+});

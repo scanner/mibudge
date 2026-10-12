@@ -9,6 +9,7 @@
 // 3rd party imports
 //
 import { createTestingPinia } from "@pinia/testing";
+import { flushPromises } from "@vue/test-utils";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
 
@@ -19,7 +20,7 @@ import { bankAccountFromDto } from "@/models/bankAccount";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 import { mountWithApp, withAccounts, withAuth } from "../../helpers";
-import { makeBankAccount, makeBudget } from "../../mocks/factories";
+import { makeBankAccount, makeBudget, makePage } from "../../mocks/factories";
 import { requestsTo, server } from "../../mocks/server";
 
 ////////////////////////////////////////////////////////////////////////
@@ -175,5 +176,42 @@ describe("account switcher", () => {
     await vi.waitFor(() =>
       expect(router.currentRoute.value.name).toBe("account"),
     );
+  });
+
+  // GIVEN: the shell on a wide screen
+  // WHEN:  the user presses Refresh in the side navigation
+  // THEN:  the bank-account list and the active account's Unallocated
+  //        budget are fetched again
+  //
+  it("refreshes the shell's data on request", async () => {
+    withAuth();
+    const account = makeBankAccount();
+    withAccounts([account]);
+    const unallocated = makeBudget({ id: account.unallocated_budget! });
+    server.use(
+      http.get(`/api/v1/budgets/${unallocated.id}/`, () =>
+        HttpResponse.json(unallocated),
+      ),
+      http.get("/api/v1/bank-accounts/", () =>
+        HttpResponse.json(makePage([account])),
+      ),
+    );
+    const { wrapper } = await mountWithApp(AppShell, { route: "/budgets/" });
+    const before = (
+      await requestsTo("GET", `/api/v1/budgets/${unallocated.id}/`)
+    ).length;
+
+    await wrapper.get('aside button[aria-label="Refresh"]').trigger("click");
+    await flushPromises();
+
+    expect
+      .soft(await requestsTo("GET", "/api/v1/bank-accounts/"), "account list")
+      .toHaveLength(1);
+    expect
+      .soft(
+        (await requestsTo("GET", `/api/v1/budgets/${unallocated.id}/`)).length,
+        "unallocated budget",
+      )
+      .toBe(before + 1);
   });
 });

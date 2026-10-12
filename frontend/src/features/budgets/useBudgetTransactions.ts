@@ -6,7 +6,10 @@
 // Pages come from `GET /api/v1/transactions/?budget=<id>` through
 // `useInfiniteList`, each row carrying all of its allocations (a split
 // shows every budget).  Everything reloads when the budget id changes,
-// and a page for a previous id is dropped.  Search matches the loaded
+// and a page for a previous id is dropped.  The loaded rows (and the
+// transfers, when shown) refresh in the background when the bank
+// account's transactions may have changed (`stores/invalidation.ts`).
+// Search matches the loaded
 // rows at once and asks the server for older matches after a pause
 // (`useMergedSearch`).
 //
@@ -35,6 +38,7 @@ import type { Transaction } from "@/models/transaction";
 import { transactionFromDto } from "@/models/transaction";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 import { useSessionStore } from "@/stores/session";
 
 ////////////////////////////////////////////////////////////////////////
@@ -55,9 +59,13 @@ export function useBudgetTransactions(budgetId: () => string) {
   ////////////////////////////////////////////////////////////////////
   //
   const list = useInfiniteList(
-    async () =>
+    async (pageSize) =>
       pageFromDto(
-        await api.transactions.list({ budget: budgetId(), ordering: ORDERING }),
+        await api.transactions.list({
+          budget: budgetId(),
+          ordering: ORDERING,
+          ...(pageSize ? { page_size: pageSize } : {}),
+        }),
         transactionFromDto,
       ),
     async (url) =>
@@ -100,6 +108,14 @@ export function useBudgetTransactions(budgetId: () => string) {
   function toggleTransfers(): void {
     showTransfers.value = !showTransfers.value;
   }
+
+  useInvalidationStore().onInvalidate(
+    () =>
+      accountInterest(budgets.byId(budgetId())?.bankAccountId, [
+        "transactions",
+      ]),
+    () => Promise.all([list.refresh(), transfers.refresh()]),
+  );
 
   ////////////////////////////////////////////////////////////////////
   //

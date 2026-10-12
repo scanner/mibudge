@@ -15,7 +15,11 @@ each layer may import.
    It loads the page's data (through a store, or `api` + a mapper),
    exposes it as computed refs, and holds the page's actions. Use
    `useResource(key, loader)` so a key change reloads and a stale
-   response is dropped.
+   response is dropped. When the data can change on the server (bank
+   accounts, budgets, transactions), subscribe with
+   `useInvalidationStore().onInvalidate(interest, resource.refresh)` so
+   the page refreshes when it may be stale
+   ([state.md](state.md#keeping-shown-data-current)).
 3. **Components.** Build presentational pieces in
    `components/<section>/` (props in, events out). Anything that needs a
    store, `api` or the router is a container, and goes in

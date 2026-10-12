@@ -30,6 +30,12 @@ go from a screen to its source.
 (`/app/budgets/`), Transactions (`/app/transactions/`), Account
 (`/app/account/`).
 
+**Refresh:** pulling down from the top of any signed-in screen on a
+touch screen, or the Refresh button below the SideNav's tabs, refetches
+what the screen shows. A spinner shows under the TopBar (or in the
+button) until it is done. Returning to the tab after a minute away
+does the same without asking.
+
 **Account switcher** (`components/shared/AccountSwitcher.vue`): a sheet
 listing the user's bank accounts with their balances; the active one is
 checked. Choosing one makes it the active account, and every screen

@@ -5,7 +5,9 @@
 //
 // The account is read from the bank-accounts store, so a rename shows
 // in the account switcher and the top bar at once.  Loads follow the
-// `id` getter; a response for a previous id is ignored.
+// `id` getter; a response for a previous id is ignored.  Refreshes in
+// the background when the account or its budgets may have changed
+// (`stores/invalidation.ts`).
 //
 // A failed toggle or delete sets `autoFundingError` / `deleteError`
 // with the server's message when it sent one.  The bank's name is
@@ -25,10 +27,10 @@ import { useOptimistic } from "@/composables/useOptimistic";
 import { useResource } from "@/composables/useResource";
 import { formatInstantDate } from "@/domain/dates";
 import { bankFromDto } from "@/models/bank";
-import { budgetFromDto } from "@/models/budget";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -50,12 +52,10 @@ export function useBankAccountDetail(id: () => string) {
   const resource = useResource(
     id,
     async (accountId: string): Promise<Loaded> => {
-      const [account, budgetPage] = await Promise.all([
+      const [account, list] = await Promise.all([
         accounts.fetchOne(accountId),
-        api.budgets.list({ bank_account: accountId }),
+        budgets.fetchList({ bank_account: accountId }),
       ]);
-      const list = budgetPage.results.map(budgetFromDto);
-      for (const b of list) budgets.upsert(b);
       const bankName = await api.banks
         .get(account.bankId)
         .then((dto) => bankFromDto(dto).name)
@@ -70,6 +70,11 @@ export function useBankAccountDetail(id: () => string) {
       };
     },
     { errorMessage: "Failed to load account." },
+  );
+
+  useInvalidationStore().onInvalidate(
+    () => accountInterest(id(), ["bankAccounts", "budgets"]),
+    resource.refresh,
   );
 
   const account = computed(() => accounts.byId(resource.data.value?.id));

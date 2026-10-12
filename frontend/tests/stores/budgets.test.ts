@@ -6,7 +6,7 @@
 // 3rd party imports
 //
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // app imports
 //
@@ -204,5 +204,73 @@ describe("mutations", () => {
     expect(store.byId(created.id)?.name).toBe("Trip");
     expect(store.forAccount("acct").map((b) => b.id)).toContain(created.id);
     expect(store.names.get(created.id)).toBe("Trip");
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("write order", () => {
+  // GIVEN: a list fetch sent before an edit of one of its budgets
+  // WHEN:  the edit lands first and the list answers afterwards with
+  //        the budget as it was
+  // THEN:  the cache keeps the edit
+  //
+  it("keeps an edit over an older list answer", async () => {
+    withAuth();
+    const before = makeBudget({ name: "Rent", bank_account: "acct" });
+    let answerList!: () => void;
+    server.use(
+      http.get(
+        "/api/v1/budgets/",
+        () =>
+          new Promise<Response>((resolve) => {
+            answerList = () => resolve(HttpResponse.json(makePage([before])));
+          }),
+      ),
+      http.patch(`/api/v1/budgets/${before.id}/`, () =>
+        HttpResponse.json({ ...before, name: "Housing" }),
+      ),
+    );
+    const store = useBudgetsStore();
+
+    const list = store.refreshAccount("acct");
+    await vi.waitFor(() => expect(answerList).toBeDefined());
+    await store.update(before.id, { name: "Housing" });
+    answerList();
+    await list;
+
+    expect(store.byId(before.id)?.name).toBe("Housing");
+  });
+
+  // GIVEN: two fetches of one budget
+  // WHEN:  the later one is answered first
+  // THEN:  the earlier one's late answer is not written
+  //
+  it("keeps the newer of two fetches", async () => {
+    withAuth();
+    const budget = makeBudget({ name: "Old" });
+    const answers: ((name: string) => void)[] = [];
+    server.use(
+      http.get(
+        `/api/v1/budgets/${budget.id}/`,
+        () =>
+          new Promise<Response>((resolve) => {
+            answers.push((name) =>
+              resolve(HttpResponse.json({ ...budget, name })),
+            );
+          }),
+      ),
+    );
+    const store = useBudgetsStore();
+
+    const first = store.fetchOne(budget.id);
+    const second = store.fetchOne(budget.id);
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]("New");
+    await second;
+    answers[0]("Old");
+    await first;
+
+    expect(store.byId(budget.id)?.name).toBe("New");
   });
 });

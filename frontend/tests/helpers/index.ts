@@ -5,5 +5,6 @@
 export { withAccounts } from "./accounts";
 export { TEST_TOKEN, expire, respondOnce401, withAuth } from "./auth";
 export { mountWithApp } from "./mount";
+export { setPageVisibility } from "./visibility";
 export { withSetup } from "./withSetup";
 export type { MountWithAppOptions } from "./mount";
