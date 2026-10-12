@@ -215,7 +215,7 @@ make test
 
 # make test runs on SQLite (including the concurrency tests).  To also
 # run the concurrency and Postgres-only tests against the compose
-# Postgres on localhost:6432 (credentials in deployment/dot-env.dev);
+# Postgres on localhost:6432 (user and password debug/debug);
 # --wait returns once the Postgres healthcheck passes:
 docker compose up -d --wait postgres
 MIBUDGE_TEST_DATABASE_URL=postgres://debug:debug@localhost:6432/mibudge \
@@ -252,31 +252,14 @@ make uv-upgrade       # Upgrade all dependencies
 
 ### Environment
 
-Local dev uses **two** env files with distinct purposes:
-
-| File                                           | Read by                                                                | Contains                                   |
-|------------------------------------------------|------------------------------------------------------------------------|--------------------------------------------|
-| `.env` (repo root, gitignored)                 | Local shell -- `uv run manage.py`, `pytest`, linters, `make api-schema` | `localhost` URLs with published ports      |
-| `deployment/local-dev-docker.env` (gitignored) | docker-compose (`env_file:`)                                           | Docker-internal hostnames and port numbers |
-
-The split lets you run `app/manage.py` directly from the native shell without docker-execing into a container, while docker-compose services still talk to each other over the docker network.
-
-**Published ports** (docker → localhost):
-
-| Service      | docker-internal | localhost        |
-|--------------|-----------------|------------------|
-| PostgreSQL   | `postgres:5432` | `localhost:6432` |
-| Redis        | `redis:6379`    | `localhost:7379` |
-| Mailpit SMTP | `mailpit:1025`  | `localhost:1025` |
-
-**First-time setup:**
-
-```bash
-# Create .env from the template (only needed once; edit after if needed)
-make env
-```
-
-`make env` generates both files from their committed templates if they do not already exist: `deployment/dot-env.dev` → `.env`, and `deployment/dot-env.docker-dev` → `deployment/local-dev-docker.env`. The defaults in both templates work without any edits for a standard local dev setup.
+Local development uses one `.env` at the repo root, created for each host
+from `deployment/dot-env.dev` by `make up` (or `make env`). Tools on the host
+and the docker compose services both read it; compose overrides the service
+URLs with docker-internal hostnames. Each host also gets its own mkcert TLS
+certificate in `deployment/ssl/`. See [`deployment/README.md`](deployment/README.md)
+for the details, including running from a checkout shared between machines,
+and [`deployment/production/README.md`](deployment/production/README.md) for
+production.
 
 ### Email
 

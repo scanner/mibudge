@@ -273,8 +273,8 @@ tags
 
 mibudge/media/
 
-deployment/docker/secrets/*
-!deployment/docker/secrets/.gitkeep
+deployment/production/secrets/*
+!deployment/production/secrets/.gitkeep
 
 .pytest_cache/
 

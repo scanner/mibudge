@@ -337,9 +337,6 @@ The mypy config disables the `django-manager-missing` error due to a `django-mon
 
 ### Environment
 
-Local dev uses **two** env files:
+Local dev uses **one** env file, `.env` at the repo root (gitignored, one per host, never synced between machines). `make env` (also run by `make up`, `make test`, `make lint`) creates it from `deployment/dot-env.dev`, substituting this host's name for `@HOSTNAME@` (`DEV_HOSTNAME`, `SITE_URL`, `ALLOWED_HOSTS`). Its URLs use `localhost` with the published ports (postgres `localhost:6432`, redis `localhost:7379`, mailpit `localhost:1025`) for tools run on the host; `docker-compose.yml` loads it with `env_file: .env` and overrides the service URLs with docker-internal hostnames in its `x-dev-env` block. `make certs` creates `deployment/ssl/<DEV_HOSTNAME>-ssl_{crt,key}.pem` with mkcert; that directory is shared by every host using the checkout, and compose and Vite both pick the certificate by `DEV_HOSTNAME`. A container-only value goes in `x-dev-env`; a default every host's `.env` should start with goes in `deployment/dot-env.dev` (existing `.env` files are never rewritten, so say in the PR when a new key is required).
 
-- **`.env`** (repo root, gitignored) -- read by the local shell (`uv run manage.py`, `pytest`, linters). Uses `localhost` with published ports: postgres on `localhost:6432`, redis on `localhost:7379`. Generate with `make env` (copies `deployment/dot-env.dev`).
-- **`deployment/local-dev-docker.env`** (gitignored) -- read by docker-compose via `env_file:`. Uses docker-internal hostnames (`postgres`, `redis`) and internal port numbers. Generate with `make env` (copies `deployment/dot-env.docker-dev`).
-
-Key variables (both files): `DEBUG`, `DJANGO_SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `SALT_KEY`.
+Production: `deployment/production/` (compose file, `dot-env.example`, `secrets/`, README). See `deployment/README.md`.

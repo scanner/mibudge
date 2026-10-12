@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Local development uses one `.env` per host, created from `deployment/dot-env.dev` by `make up`, and a per-host mkcert certificate in `deployment/ssl/`, so several machines can share one checkout. `deployment/local-dev-docker.env` and `HOST_SSL_DIR` are no longer used; regenerate an existing `.env` with `mv .env .env.old && make env`. See `deployment/README.md`
+- The production deployment template moved to `deployment/production/`; its Celery broker and results use their own Redis databases, and it no longer requires a `telegraf_network`
 - The API reference (`docs/api.md`) is rewritten for client developers: common responses, pagination and throttling (with how to pace a throttled client) are described once, bodies are commented JSON with each field's type, shared objects are defined once and linked, and complex endpoints have worked examples
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - SPA look: text and controls meet WCAG AA contrast (darker primary and destructive buttons, stronger input borders and muted text), one button shape, and consistent sizes, spacing and padding throughout; text honours the browser's text-size setting, and phone inputs no longer zoom the page when focused
@@ -50,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The production `.env` example sets `ALLOWED_HOSTS`; it named `DJANGO_ALLOWED_HOSTS`, which the server ignores, so a deployment following it rejected every request to its own host name
 - Creating or editing a budget with a funding type or target date its budget type does not allow (Recurring with fixed-amount funding, Capped with target-date funding, a target date on either) answers 400 naming the field instead of a 500
 - Money amounts always take their bank account's currency: an omitted `<field>_currency` now means the bank account's currency rather than the server default, a different currency is refused with 400 (it was silently overwritten, stored, or failed with a 500 when amounts were added up), and budgets keep every amount in the bank account's currency
 - A bank account created without `currency` takes its bank's default currency, as documented, instead of the server default
@@ -82,13 +85,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Sign-in is rate-limited per client address and per email address, so password guessing is slowed even when spread across many addresses; a browser that has signed in to that email before has its own limit, so someone guessing cannot lock you out of it. Password changes are limited per user and token refreshes per address. Over a limit the request answers 429 and the sign-in page says how long to wait. Rates are set with `DJANGO_THROTTLE_<SCOPE>` (see `deployment/docker/dot-env.example`)
+- Sign-in is rate-limited per client address and per email address, so password guessing is slowed even when spread across many addresses; a browser that has signed in to that email before has its own limit, so someone guessing cannot lock you out of it. Password changes are limited per user and token refreshes per address. Over a limit the request answers 429 and the sign-in page says how long to wait. Rates are set with `DJANGO_THROTTLE_<SCOPE>` (see `deployment/production/dot-env.example`)
 - Changing your password signs out every other session (the device you changed it on stays signed in), and completing a password reset signs out every session. The reset email lists your active API keys so you can revoke any you do not recognise; requesting a reset changes nothing until the emailed link is used. A newly invited user setting their first password gets a welcome page with a sign-in link instead
 - Cancelling a confirmed email change (account takeover recovery) now also revokes every API key, and the security alert says how many were revoked
 - Cancelling an email change before it is confirmed now signs out every session, as the old-address email already promised, and the security alert lists your active API keys so you can revoke any you do not recognise
 - API keys can no longer delete a bank account (which deletes everything in it); `DELETE /api/v1/bank-accounts/{id}/` now requires an interactive login and answers 403 to an API key
 - Published Docker images no longer carry a build-time `SALT_KEY` in their layer history; building an image needs no secret (`docker build` takes no `SALT_KEY` build argument)
-- Rate limits identify anonymous clients by the address the deployment's own proxies report, so a client can no longer get a fresh limit by sending its own `X-Forwarded-For`; set `DJANGO_TRUSTED_PROXY_COUNT` to the number of reverse proxies in front of Django (see `deployment/docker/dot-env.example`)
+- Rate limits identify anonymous clients by the address the deployment's own proxies report, so a client can no longer get a fresh limit by sending its own `X-Forwarded-For`; set `DJANGO_TRUSTED_PROXY_COUNT` to the number of reverse proxies in front of Django (see `deployment/production/dot-env.example`)
 - Signing out now ends the session on the server: `POST /api/token/logout/` revokes the refresh token and clears its cookie, so reloading the page or reopening the app no longer signs you straight back in
 - Creating a budget, transaction or internal transaction checked only that the named bank account existed, not that you owned it, so any logged-in user or API key that knew another account's UUID could create objects in it and change its balances. The `bank_account` field on these create endpoints now accepts only accounts you own (an account you do not own gets the same 400 "does not exist" error as a nonexistent one), and the views re-check ownership of every account-owned object in the request before creating anything. A budget's `fillup_goal` is now read-only in the API; the budget service manages it
 
