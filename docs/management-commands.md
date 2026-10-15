@@ -32,6 +32,7 @@ These commands require direct access to the Django application -- they are not e
 | `define_budgets`             | Create or update budgets from a YAML file         | Budget setup       |
 | `extract_budgets`            | Export budget definitions to YAML                 | Budget setup       |
 | `clear_budget`               | Zero out a budget (dev and correction only)       | Data correction    |
+| `simulate_bank_activity`     | Generate simulated bank accounts and transactions | Development data   |
 
 ---
 
@@ -307,3 +308,18 @@ When run with a TTY, prompts for confirmation before executing.
 | `--account PATTERN` | Restrict budget search to this account |
 | `--execute` | Actually perform the operation (default is dry-run) |
 | `--delete` | Also delete the budget row after clearing |
+
+---
+
+## Development data
+
+### simulate_bank_activity
+
+Simulates banks, bank accounts and realistic transactions for a development instance, and steps a simulated clock forward day by day, running budget funding on the simulated dates. See [simulator.md](simulator.md) for walkthroughs, the scenario file reference and what to avoid during a simulation.
+
+```bash
+uv run python app/manage.py simulate_bank_activity init sim.yaml --owner admin@example.com
+uv run python app/manage.py simulate_bank_activity fill sim.yaml
+uv run python app/manage.py simulate_bank_activity advance sim.yaml 1d
+uv run python app/manage.py simulate_bank_activity reset sim.yaml
+```

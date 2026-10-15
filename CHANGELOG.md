@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `simulate_bank_activity` management command simulates banks, bank accounts and realistic transactions for a development instance (split paychecks, bills, card spending, pending purchases that later post, transfers within and between banks, credit card payments, interest, Federal Reserve holidays), from an editable scenario file, and steps a simulated clock forward day by day, running budget funding on the simulated dates
 - "Revoke all keys" in Security & Notifications settings revokes every active API key at once, after a confirmation that says how many (`POST /api/v1/users/me/api-keys/revoke-all/`)
 - Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use -- archive instead). See `docs/transaction-categories.md`
 - Transactions and their splits each carry a category; a split inherits the transaction's category when it's created and can then be changed independently

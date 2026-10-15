@@ -1,0 +1,311 @@
+# Scenario for 'manage.py simulate_bank_activity'.
+#
+# Written by 'simulate_bank_activity init'; edit it freely.  The names
+# were made up by Faker; the amounts, schedules and patterns are a
+# reasonable starting point to tweak.
+#
+#   fill FILE            create the bank accounts and simulate start..clock
+#   advance FILE 1d      move the clock on (also 2w, --to 15, --to DATE),
+#                        syncing and funding budgets one day at a time
+#   reset FILE           delete the simulated bank accounts
+#
+# Every transaction is a pure function of this file and its date, so
+# after editing anything but 'clock', run 'reset' then 'fill' (which
+# replays history up to the current clock).
+#
+# Amounts are strings in the bank account's currency; '[min, max]' picks
+# a value in that range, weighted towards the low end.  Categories are
+# mibudge category full names ("Group : Name").  A date that is not a
+# business day (weekend or Federal Reserve holiday) moves: paydays to the
+# business day before, ACH debits and settlement to the business day
+# after.
+
+seed: $seed
+
+# The mibudge user who owns the simulated bank accounts (must exist).
+owner: $owner
+
+# The first simulated day.
+start: $start
+
+# The simulated "today".  The simulator rewrites this line as it
+# advances; keep it a single 'clock: YYYY-MM-DD' line.  It can never be
+# later than the real today.
+clock: $clock
+
+# Banks and their bank accounts.  'key' is how the rest of this file
+# refers to a bank account; 'name' is what mibudge shows.  An
+# 'account_number' must be unique across the database, and its last four
+# digits are how transfers between bank accounts get linked.
+banks:
+  - name: $bank
+    accounts:
+      - key: checking
+        name: Everyday Checking
+        type: checking
+        account_number: $checking_number
+        opening_balance: "2400.00"
+
+      - key: bills
+        name: Bills Checking
+        type: checking
+        account_number: $bills_number
+        opening_balance: "1200.00"
+
+      - key: savings
+        name: Savings
+        type: savings
+        account_number: $savings_number
+        opening_balance: "6000.00"
+        # Annual percentage yield, credited on the last day of each month.
+        interest_apy: "0.50"
+
+      # The statement closes on 'statement_day'; its balance is paid in
+      # full on the next 'payment_day' from the bank account 'pay_from'.
+      - key: card
+        name: Rewards Card
+        type: credit_card
+        account_number: $card_number
+        statement_day: 22
+        payment_day: 15
+        pay_from: checking
+
+  - name: $card_bank
+    accounts:
+      # A card at another bank.  Its payment shows up in checking as the
+      # issuer's e-payment, which names no account number, so
+      # 'link_aliases' is how mibudge links the two sides.
+      - key: travel_card
+        name: Travel Card
+        type: credit_card
+        account_number: $travel_card_number
+        link_aliases: [$card_bank_alias]
+        statement_day: 5
+        payment_day: 28
+        pay_from: checking
+
+  - name: $online_bank
+    accounts:
+      - key: hysa
+        name: High-Yield Savings
+        type: savings
+        account_number: $hysa_number
+        opening_balance: "5000.00"
+        interest_apy: "4.10"
+
+# Paychecks.  'schedule' is 'semimonthly' (the 15th and the last day of
+# the month) or 'biweekly' (every 14 days from 'anchor', a date).
+# 'deposits' splits the net pay: every entry but one names an amount,
+# and the entry with 'remainder: true' gets the rest.
+paychecks:
+  - employer: $employer
+    schedule: semimonthly
+    net_amount: "2650.00"
+    deposits:
+      - account: checking
+        remainder: true
+      - account: bills
+        amount: "1200.00"
+      - account: savings
+        amount: "150.00"
+
+# Monthly moves between your own bank accounts.  Between banks the money
+# arrives 'lag_days' [min, max] later; mibudge links the two sides when
+# they are at most three days apart.
+transfers:
+  - from: checking
+    to: savings
+    amount: "100.00"
+    day: 1
+  - from: checking
+    to: hysa
+    amount: "200.00"
+    day: 2
+    lag_days: [1, 1]
+
+# Monthly bills.  'method' is 'ach' (posts that day) or 'card' (a card
+# charge like any purchase: pending first, then posted).
+bills:
+  - payee: $landlord
+    amount: "1850.00"
+    day: 1
+    account: bills
+    method: ach
+    category: "Home : Rent"
+  - payee: $power
+    amount: ["70.00", "160.00"]
+    day: 9
+    account: bills
+    method: ach
+    category: "Utilities : Electricity"
+  - payee: $water
+    amount: ["35.00", "65.00"]
+    day: 18
+    account: bills
+    method: ach
+    category: "Utilities : Water & Sewer"
+  - payee: $insurer
+    amount: "142.50"
+    day: 5
+    account: bills
+    method: ach
+    category: "Transportation : Auto Insurance"
+  - payee: $phone_co
+    amount: "65.00"
+    day: 12
+    account: card
+    method: card
+    category: "Utilities : Phone"
+    city: $phone_number_1
+    state: $state
+    mcc: "4814"
+  - payee: $isp
+    amount: "70.00"
+    day: 20
+    account: card
+    method: card
+    category: "Utilities : Internet"
+    city: $phone_number_2
+    state: $state
+    mcc: "4899"
+  - payee: $streaming
+    amount: "15.49"
+    day: 7
+    account: travel_card
+    method: card
+    category: "Culture : TV"
+    city: $phone_number_3
+    state: CA
+    mcc: "4899"
+  - payee: $gym
+    amount: "39.00"
+    day: 3
+    account: checking
+    method: card
+    category: "Sports & Fitness : Memberships"
+    city: $city
+    state: $state
+    mcc: "7997"
+
+# Everyday spending.  Each entry happens on average 'per_week' times a
+# week, spread over the days in 'weekdays' by weight (default: every
+# day, a little busier at the weekend), at one of its merchants, charged
+# to one of 'accounts' (weights).  'settle_days' [min, max] is how long
+# a purchase stays pending (0 to 4 days, then rolled to a business day).
+# 'tip' makes the posted amount larger than the pending authorization,
+# the way a restaurant tip does.  'refund_rate' is the chance a purchase
+# is refunded a few days later.  'kind' is 'purchase' (the default),
+# 'atm' (cash, posts at once) or 'zelle' (pay a person, posts at once).
+spending:
+  - name: groceries
+    category: "Food & Drink : Groceries"
+    per_week: 2.0
+    amount: ["30.00", "190.00"]
+    accounts: {card: 3, checking: 1}
+    refund_rate: 0.02
+    merchants:
+$grocers
+  - name: coffee
+    category: "Food & Drink : Coffee & Tea"
+    per_week: 3.0
+    weekdays: {mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 0.5}
+    amount: ["4.25", "11.50"]
+    accounts: {card: 1, checking: 1}
+    settle_days: [1, 2]
+    merchants:
+$cafes
+  - name: lunch out
+    category: "Food & Drink : Restaurants"
+    per_week: 1.5
+    weekdays: {mon: 1, tue: 1, wed: 1, thu: 1, fri: 1.5}
+    amount: ["12.00", "26.00"]
+    accounts: {card: 1}
+    tip: [0.15, 0.20]
+    merchants:
+$lunch
+  - name: dinner out
+    category: "Food & Drink : Restaurants"
+    per_week: 1.0
+    weekdays: {fri: 1, sat: 2, sun: 1}
+    amount: ["40.00", "110.00"]
+    accounts: {travel_card: 2, card: 1}
+    tip: [0.18, 0.22]
+    merchants:
+$dinner
+  - name: delivery
+    category: "Food & Drink : Fast Food"
+    per_week: 0.6
+    amount: ["22.00", "55.00"]
+    accounts: {card: 1}
+    settle_days: [1, 2]
+    merchants:
+$delivery
+  - name: gas
+    category: "Transportation : Gas"
+    per_week: 0.9
+    amount: ["38.00", "72.00"]
+    accounts: {card: 1}
+    settle_days: [1, 2]
+    merchants:
+$gas
+  - name: household
+    category: "Home : Home Supplies"
+    per_week: 0.6
+    amount: ["12.00", "140.00"]
+    accounts: {card: 2, checking: 1}
+    refund_rate: 0.05
+    merchants:
+$household
+  - name: pharmacy
+    category: "Health & Medical : Pharmacies"
+    per_week: 0.3
+    amount: ["8.00", "60.00"]
+    accounts: {card: 1}
+    settle_days: [1, 2]
+    merchants:
+$pharmacy
+  - name: online shopping
+    category: "Uncategorized : Other Shopping"
+    per_week: 0.8
+    amount: ["9.00", "220.00"]
+    accounts: {travel_card: 1, card: 1}
+    settle_days: [1, 4]
+    refund_rate: 0.08
+    merchants:
+$online
+  - name: rideshare
+    category: "Transportation : Taxis & Rideshare"
+    per_week: 0.4
+    weekdays: {fri: 1, sat: 1}
+    amount: ["11.00", "38.00"]
+    accounts: {travel_card: 1}
+    settle_days: [1, 2]
+    tip: [0.10, 0.20]
+    merchants:
+$rideshare
+  # A wide pool of places visited now and then, so new merchants keep
+  # turning up in the history.
+  - name: now and then
+    category: "Uncategorized : Other Shopping"
+    per_week: 1.0
+    amount: ["8.00", "90.00"]
+    accounts: {card: 2, checking: 1}
+    merchants:
+$occasional
+  - name: cash
+    kind: atm
+    category: "Uncategorized : Cash"
+    per_week: 0.25
+    amount: ["40.00", "200.00"]
+    round_to: "20.00"
+    accounts: {checking: 1}
+    merchants:
+      - {name: $atm, city: $city, state: $state}
+  - name: friends
+    kind: zelle
+    category: "Financial : Money Transfers"
+    per_week: 0.3
+    amount: ["15.00", "120.00"]
+    accounts: {checking: 1}
+    merchants:
+$friends
