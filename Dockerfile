@@ -1,4 +1,6 @@
-ARG PYTHON_VERSION=3.13
+# NOTE: Keep the default in sync with .python-version; `make build` and the
+# Drone image build pass it explicitly.
+ARG PYTHON_VERSION=3.13.16
 
 ########################################################################
 #

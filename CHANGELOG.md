@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The production template's `VERSION` names a release (`0.3.0`); published images have no `latest` tag. `docs/releasing.md` describes versions, release tags and the published images
+- `.python-version` is checked in and names the project's Python version (3.13.16), which CI tests on and release images are built with; `make lint` installs a pre-commit hook that runs through `uv run`, so one checkout shared by several machines works on each of them
 - Local development uses one `.env` per host, created from `deployment/dot-env.dev` by `make up`, and a per-host mkcert certificate in `deployment/ssl/`, so several machines can share one checkout. `deployment/local-dev-docker.env` and `HOST_SSL_DIR` are no longer used; regenerate an existing `.env` with `mv .env .env.old && make env`. See `deployment/README.md`
 - The production deployment template moved to `deployment/production/`; its Celery broker and results use their own Redis databases, and it no longer requires a `telegraf_network`
 - The API reference (`docs/api.md`) is rewritten for client developers: common responses, pagination and throttling (with how to pace a throttled client) are described once, bodies are commented JSON with each field's type, shared objects are defined once and linked, and complex endpoints have worked examples
