@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 //
 import App from "@/App.vue";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
+import { useInvalidationStore } from "@/stores/invalidation";
 import { mountWithApp, withAccounts, withAuth } from "../helpers";
 import {
   makeBank,
@@ -241,6 +242,42 @@ describe("BankAccountDetailView", () => {
       { auto_funding_enabled: false },
       { auto_funding_enabled: true },
     ]);
+  });
+
+  // GIVEN: automatic funding on, and the user's switch-off in flight
+  // WHEN:  the page refreshes in the background, the switch-off lands,
+  //        and only then the refresh answers with the old setting
+  // THEN:  the switch shows off throughout, and stays off
+  //
+  it("keeps a pending toggle through a background refresh", async () => {
+    let releasePatch!: () => void;
+    let releaseGet: (() => void) | null = null;
+    const { wrapper } = await open();
+    server.use(
+      http.patch(`/api/v1/bank-accounts/${account.id}/`, async () => {
+        await new Promise<void>((release) => (releasePatch = release));
+        return HttpResponse.json({ ...account, auto_funding_enabled: false });
+      }),
+      http.get(`/api/v1/bank-accounts/${account.id}/`, async () => {
+        await new Promise<void>((release) => (releaseGet = release));
+        return HttpResponse.json({ ...account, auto_funding_enabled: true });
+      }),
+    );
+    const toggle = wrapper.get('input[type="checkbox"]');
+    const checked = () => (toggle.element as HTMLInputElement).checked;
+
+    await toggle.setValue(false);
+    await vi.waitFor(() => expect(releasePatch).toBeDefined());
+    const refresh = useInvalidationStore().invalidate();
+    await vi.waitFor(() => expect(releaseGet).not.toBeNull());
+    expect.soft(checked(), "pending change shown").toBe(false);
+    releasePatch();
+    await flushPromises();
+    releaseGet!();
+    await refresh;
+    await flushPromises();
+
+    expect.soft(checked(), "change kept after the late answer").toBe(false);
   });
 
   // GIVEN: the account page

@@ -11,6 +11,8 @@
 //      returning user skips the login screen, and load the user and the
 //      account context (one shared `/users/me/` request).
 //   4. Install the router (its guard reads the session) and mount.
+//   5. Refetch the shown data when the page comes back into view or
+//      online (`useRefreshOnReturn`).
 //
 
 // 3rd party imports
@@ -22,6 +24,7 @@ import { createApp } from "vue";
 //
 import App from "./App.vue";
 import { initApi } from "./api";
+import { useRefreshOnReturn } from "./features/shell/useRefreshOnReturn";
 import { createAppRouter, redirectToLogin } from "./router";
 import { useAccountContextStore } from "./stores/accountContext";
 import { resetPlugin } from "./stores/reset";
@@ -52,6 +55,7 @@ async function bootstrap() {
 
   app.use(router);
   app.mount("#app");
+  useRefreshOnReturn();
 }
 
 void bootstrap();

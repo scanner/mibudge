@@ -6,11 +6,12 @@
 // 3rd party imports
 //
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // app imports
 //
 import { Money } from "@/domain/money";
+import { bankAccountFromDto } from "@/models/bankAccount";
 import { useBankAccountsStore } from "@/stores/bankAccounts";
 import { withAuth } from "../helpers";
 import { makeBankAccount, makePage } from "../mocks/factories";
@@ -75,5 +76,118 @@ describe("bank accounts store", () => {
 
     store.reset();
     expect(store.all).toEqual([]);
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
+describe("write order", () => {
+  // GIVEN: a list refresh sent while an update of an account is in
+  //        flight
+  // WHEN:  the update lands first and the refresh answers afterwards
+  //        with the account as it was
+  // THEN:  the account keeps the update; the rest of the list is
+  //        refreshed
+  //
+  it("keeps an update over an older list answer", async () => {
+    withAuth();
+    const account = makeBankAccount({ auto_funding_enabled: false });
+    const other = makeBankAccount({ name: "Savings" });
+    let answerList!: () => void;
+    let answerPatch!: () => void;
+    server.use(
+      http.get(
+        "/api/v1/bank-accounts/",
+        () =>
+          new Promise<Response>((resolve) => {
+            answerList = () =>
+              resolve(
+                HttpResponse.json(
+                  makePage([account, { ...other, name: "Rainy day" }]),
+                ),
+              );
+          }),
+      ),
+      http.patch(
+        `/api/v1/bank-accounts/${account.id}/`,
+        () =>
+          new Promise<Response>((resolve) => {
+            answerPatch = () =>
+              resolve(
+                HttpResponse.json({ ...account, auto_funding_enabled: true }),
+              );
+          }),
+      ),
+    );
+    const store = useBankAccountsStore();
+
+    const update = store.update(account.id, { autoFundingEnabled: true });
+    await vi.waitFor(() => expect(answerPatch).toBeDefined());
+    const refresh = store.refresh();
+    await vi.waitFor(() => expect(answerList).toBeDefined());
+    answerPatch();
+    await update;
+    answerList();
+    await refresh;
+
+    expect
+      .soft(store.byId(account.id)?.autoFundingEnabled, "update kept")
+      .toBe(true);
+    expect
+      .soft(store.byId(other.id)?.name, "others refreshed")
+      .toBe("Rainy day");
+  });
+
+  // GIVEN: a list refresh sent before a bank account is deleted
+  // WHEN:  the delete lands first and the refresh answers afterwards
+  //        with the bank account still listed
+  // THEN:  the deleted bank account stays gone
+  //
+  it("keeps a deleted bank account gone", async () => {
+    withAuth();
+    const [kept, deleted] = [makeBankAccount(), makeBankAccount()];
+    const store = useBankAccountsStore();
+    store.setAll([kept, deleted].map(bankAccountFromDto));
+    let answerList!: () => void;
+    server.use(
+      http.get(
+        "/api/v1/bank-accounts/",
+        () =>
+          new Promise<Response>((resolve) => {
+            answerList = () =>
+              resolve(HttpResponse.json(makePage([kept, deleted])));
+          }),
+      ),
+      http.delete(
+        `/api/v1/bank-accounts/${deleted.id}/`,
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+
+    const refresh = store.refresh();
+    await vi.waitFor(() => expect(answerList).toBeDefined());
+    await store.remove(deleted.id);
+    answerList();
+    await refresh;
+
+    expect(store.all.map((a) => a.id)).toEqual([kept.id]);
+  });
+
+  // GIVEN: no list request in flight
+  // WHEN:  two list refreshes are asked for at once
+  // THEN:  one request is sent
+  //
+  it("shares one request between concurrent refreshes", async () => {
+    withAuth();
+    server.use(
+      http.get("/api/v1/bank-accounts/", () =>
+        HttpResponse.json(makePage([makeBankAccount()])),
+      ),
+    );
+    const store = useBankAccountsStore();
+
+    await Promise.all([store.refresh(), store.refresh()]);
+
+    expect(await requestsTo("GET", "/api/v1/bank-accounts/")).toHaveLength(1);
   });
 });

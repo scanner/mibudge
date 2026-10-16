@@ -68,6 +68,7 @@ frontend/
                           #   withAuth, expire, respondOnce401 (auth.ts)
                           #   withAccounts (accounts.ts)
                           #   mountWithApp (mount.ts), withSetup (withSetup.ts)
+                          #   setPageVisibility (visibility.ts)
     domain/               # tests for src/domain/
     api/                  # tests for src/api/
     models/               # tests for src/models/
@@ -93,7 +94,7 @@ Test APIs are imported explicitly (`import { describe, expect, it } from
 |---------------------------------|------------------------------------------------------------|
 | `conftest.py`                   | `tests/setup.ts` (runs before every test file)             |
 | factory-boy factories           | `tests/mocks/factories.ts` (`makeBudget({...})`)           |
-| fixtures                        | `tests/helpers/` (`withAuth()`, `withAccounts()`, `mountWithApp()`, `withSetup()`) |
+| fixtures                        | `tests/helpers/` (`withAuth()`, `withAccounts()`, `mountWithApp()`, `withSetup()`, `setPageVisibility()`) |
 | `@pytest.mark.parametrize`      | `it.each([...])` / `describe.each([...])`                  |
 | freezegun                       | `vi.useFakeTimers()` + `vi.setSystemTime(...)`             |
 | `pytest.mark.xfail(strict=True)`| `it.fails(...)`                                            |

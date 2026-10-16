@@ -5,6 +5,8 @@
 // Budgets are fetched through the budgets store and read back from it,
 // so edits made elsewhere show without reloading.  Reloads when the
 // account changes; a response for the previous account is ignored.
+// Refreshes in the background when the account's budgets may have
+// changed (`stores/invalidation.ts`).
 //
 
 // 3rd party imports
@@ -20,6 +22,7 @@ import { fillupIndex } from "@/models/budget";
 import type { FundingSummary } from "@/models/bankAccount";
 import { fundingSummaryFromDto } from "@/models/bankAccount";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -50,6 +53,11 @@ export function useBudgetList(accountId: () => string | null) {
       };
     },
     { errorMessage: "Failed to load budgets." },
+  );
+
+  useInvalidationStore().onInvalidate(
+    () => accountInterest(accountId(), ["budgets"]),
+    resource.refresh,
   );
 
   // Includes fill-up goals (type `A`); callers attach them to their

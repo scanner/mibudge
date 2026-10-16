@@ -36,6 +36,14 @@
     margin: 0;
   }
 
+  /*
+   * Pulling down at the top of the page refreshes the shown data
+   * (`usePullToRefresh`), not the whole page.
+   */
+  html {
+    overscroll-behavior-y: contain;
+  }
+
   h1,
   h2,
   h3,

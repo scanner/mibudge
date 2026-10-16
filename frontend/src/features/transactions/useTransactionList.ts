@@ -12,6 +12,9 @@
 //   rows.
 // - Search matches the loaded (filtered) rows at once and asks the
 //   server for older matches after a pause (`useMergedSearch`).
+// - The loaded rows (and the transfers, when shown) refresh in the
+//   background when the account's transactions may have changed, and
+//   the budget names when its budgets may have (`stores/invalidation.ts`).
 // - The transaction-nav store receives the ids of the rows on screen,
 //   in display order, so the detail view's previous / next follow the
 //   active filter and search.  The filter and search themselves are
@@ -39,6 +42,7 @@ import type { Transaction } from "@/models/transaction";
 import { transactionFromDto } from "@/models/transaction";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 import { useSessionStore } from "@/stores/session";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 
@@ -77,7 +81,7 @@ export function useTransactionList() {
 
   // The list query for the active account and filter.
   //
-  function listQuery(extra: { search?: string } = {}) {
+  function listQuery(extra: { search?: string; page_size?: number } = {}) {
     return {
       bank_account: accountId.value!,
       ordering: ORDERING,
@@ -89,8 +93,13 @@ export function useTransactionList() {
   ////////////////////////////////////////////////////////////////////
   //
   const list = useInfiniteList(
-    async () =>
-      pageFromDto(await api.transactions.list(listQuery()), transactionFromDto),
+    async (pageSize) =>
+      pageFromDto(
+        await api.transactions.list(
+          listQuery(pageSize ? { page_size: pageSize } : {}),
+        ),
+        transactionFromDto,
+      ),
     async (url) =>
       pageFromDto(
         await api.pages.fetchPage<TransactionDto>(url),
@@ -186,6 +195,16 @@ export function useTransactionList() {
     // Budget names for the rows; a failure leaves the cached names.
     void budgets.refreshAccount(id).catch(() => undefined);
   }
+
+  const invalidation = useInvalidationStore();
+  invalidation.onInvalidate(
+    () => accountInterest(accountId.value, ["transactions"]),
+    () => Promise.all([list.refresh(), transfers.refresh()]),
+  );
+  invalidation.onInvalidate(
+    () => accountInterest(accountId.value, ["budgets"]),
+    () => budgets.refreshAccount(accountId.value!),
+  );
 
   watch(accountId, reload, { immediate: true });
   watch(visibleIds, (ids) => nav.setIds(ids), { immediate: true });

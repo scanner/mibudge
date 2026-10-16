@@ -6,7 +6,9 @@
 // it, so every change made anywhere (a transfer, an edit, a split)
 // shows here without reloading.  The load follows the `id` getter: a
 // route reused with a new id loads the new budget, and a response for
-// the previous id is ignored.
+// the previous id is ignored.  Refreshes in the background when the
+// budget's bank account's budgets may have changed
+// (`stores/invalidation.ts`).
 //
 
 // 3rd party imports
@@ -19,6 +21,7 @@ import { describeError } from "@/api/errors";
 import { useResource } from "@/composables/useResource";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -46,6 +49,11 @@ export function useBudgetDetail(id: () => string) {
     () => !!budget.value && budget.value.id === ctx.unallocatedBudgetId,
   );
   const accountName = computed(() => ctx.activeBankAccount?.name);
+
+  useInvalidationStore().onInvalidate(
+    () => accountInterest(budget.value?.bankAccountId, ["budgets"]),
+    resource.refresh,
+  );
 
   ////////////////////////////////////////////////////////////////////
   //

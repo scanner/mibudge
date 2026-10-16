@@ -4,12 +4,18 @@
 // the main content; collapses to icon-only on tablet (md..lg) and
 // expands to icon + label on desktop (≥lg).
 //
+// Below the tabs, a Refresh button emits `refresh`; while `refreshing`
+// it is disabled and its icon spins.  It is styled as one more nav row
+// (a `Base*` button would not match the tabs beside it).  Touch screens also pull down to
+// refresh (see AppShell).
+//
 
 // 3rd party imports
 //
 import {
   IconLayoutGrid,
   IconList,
+  IconRefresh,
   IconUser,
   IconWallet,
 } from "@tabler/icons-vue";
@@ -26,6 +32,12 @@ interface TabDef {
   icon: Component;
   to: { name: AppRouteName };
 }
+
+defineProps<{ refreshing: boolean }>();
+
+const emit = defineEmits<{
+  (event: "refresh"): void;
+}>();
 
 const tabs: TabDef[] = [
   { label: "Overview", icon: IconLayoutGrid, to: { name: "overview" } },
@@ -55,6 +67,19 @@ const tabs: TabDef[] = [
         <component :is="tab.icon" class="h-5 w-5 flex-none" />
         <span class="hidden lg:inline">{{ tab.label }}</span>
       </router-link>
+      <button
+        type="button"
+        class="tap-target flex items-center gap-3 rounded-control px-3 py-2 text-body-sm text-fg-muted hover:bg-surface-sunken"
+        aria-label="Refresh"
+        :disabled="refreshing"
+        @click="emit('refresh')"
+      >
+        <IconRefresh
+          class="h-5 w-5 flex-none"
+          :class="refreshing ? 'animate-spin' : ''"
+        />
+        <span class="hidden lg:inline">Refresh</span>
+      </button>
     </nav>
   </aside>
 </template>

@@ -19,8 +19,10 @@ holds models from `models/`, never DTOs, and defines `reset()`.
 | `accountContext`    | `stores/accountContext.ts` | Which account the user is looking at: `activeBankAccountId`, `activeBankAccount`, `unallocatedBudgetId`. `init()` picks the account: the one stored for this tab, else the user's default, else the first. `refresh()` moves off a deleted account. The choice persists per tab in `sessionStorage`. |
 | `budgets`           | `stores/budgets.ts`        | Budgets keyed by id. `fetchOne`, `fetchList` (every page), `refreshAccount`, `create`, `update`, `archive`, `transfer`; read with `byId`, `forAccount`, `names`. |
 | `transactionNav`    | `stores/transactionNav.ts` | The ids of the rows the transaction list last showed, so the detail page can step to the previous or next row. It also keeps the list's search and filter across a visit to the detail page. |
+| `invalidation`      | `stores/invalidation.ts`   | The signal that data may have changed on the server, and the subscribers that refetch what they show. `invalidate(scope)`, `pageShown(hiddenMs)`, `onInvalidate(interest, refresh)`. See [Keeping shown data current](#keeping-shown-data-current). |
 
-`stores/reset.ts` is not a store. It holds the reset plugin (below).
+`stores/reset.ts` and `stores/writeOrder.ts` are not stores. They hold
+the reset plugin (below) and the caches' write order.
 
 ---
 
@@ -62,6 +64,16 @@ The entity caches (`bankAccounts`, `budgets`) follow the same rules:
 
   Use it when you know data changed but nothing is on screen to refetch
   it now.
+- **Answers are written in order.** The `budgets` and `bankAccounts`
+  caches write through `createWriteOrder()` (`stores/writeOrder.ts`).
+  A fetch takes a ticket before it sends its request and writes a
+  record only if no newer answer for it is cached. A mutation marks
+  its records as in flight, and on success as written at the moment
+  it landed. So a fetch answered before a save landed, or before a
+  later fetch was answered, never puts an older value back on screen.
+  The bank-account list's membership follows the same rule: a list
+  answer older than the last create or remove is dropped, and
+  concurrent list loads share one request.
 - **Loads are guarded against stale responses.** Anything keyed on the
   active account or a route param loads through `useResource` /
   `useAsync` (see [composables](#store-vs-composable-vs-local-state)).
@@ -71,6 +83,93 @@ The entity caches (`bankAccounts`, `budgets`) follow the same rules:
 A store does not hold loading or error state for a single page. The
 budgets store's `loading` / `error` describe its last list fetch;
 per-page state comes from `useResource` in the feature composable.
+
+---
+
+## Keeping shown data current
+
+Data changes on the server without this tab doing anything: a bank
+sync posts pending transactions, a funding run moves money between
+budgets, a co-owner edits from another browser, an importer adds
+transactions. The SPA keeps what is on screen current with one
+signal, `stores/invalidation.ts`, which has sources on one side and
+subscribers on the other.
+
+```
+ sources                         signal                      subscribers
+ ───────                         ──────                      ───────────
+ page shown after 60s hidden ─┐                          ┌─► AppShell: account list,
+ network back online ─────────┤                          │   Unallocated budget
+ pull to refresh / Refresh ───┼─► invalidate(scope) ─────┼─► useOverview, useBudgetList, ...
+ server events (one day) ─────┘    coalesce per tick,    └─► each refetches what it shows
+                                   hold while hidden         through its store or load
+```
+
+- **A signal says what may have changed, never the data.** A scope
+  names a bank account and kinds of data: `bankAccounts` (bank account
+  records, balances), `budgets` (budget records, balances, funding
+  summaries) and `transactions` (transactions, their allocations,
+  transfers). An omitted field means every value, so
+  `invalidate()` means everything. A source that knows more sends a
+  narrower scope, and fewer subscribers refetch.
+- **Subscribers say what they show.** A feature composable that loads
+  a page's data subscribes with
+  `onInvalidate(interest, refresh)`. `interest()` returns the bank
+  account and kinds the page shows (`accountInterest(id, kinds)`), or
+  `null` while it shows nothing. The subscription ends with the
+  component that made it. `refresh` reloads through the same store
+  actions and loads the page used to load, in the background.
+- **Signals coalesce, and wait while the page is hidden.** Signals
+  raised in the same tick run each matching subscriber once. A signal
+  raised while the page is hidden is held and flushed when the page is
+  shown again, so nothing is fetched for a page no one is looking at.
+  `invalidate()` resolves once the refreshes it started have settled,
+  which is when the pull-to-refresh spinner stops.
+- **The sources.** `main.ts` calls `useRefreshOnReturn()`
+  (`features/shell/`), which connects `usePageReturn` to the store:
+  the page shown again after at least `STALE_AFTER_MS` (60 seconds)
+  hidden signals everything (`pageShown`), and so does the network
+  coming back. The user signals everything on demand by pulling down
+  from the top of the page on a touch screen (`usePullToRefresh`; not
+  inside an open sheet) or with the Refresh button in the side
+  navigation. `overscroll-behavior-y: contain` on `html` keeps the
+  browser's own pull-to-refresh from reloading the page. A server event
+  stream calls `invalidate()` with narrow scopes; with it, the
+  shown-again refresh is the fallback for missed events and its
+  threshold can grow.
+- **A background refresh keeps the page on screen.**
+  `useResource().refresh()` and `useInfiniteList().refresh()` leave
+  `loading` false and the shown data in place, and replace it when
+  the answer arrives. A failed refresh keeps the shown data and shows
+  no error; the next signal tries again. A 404 is the exception: the
+  record is gone (a bank sync replaces pending transactions, a
+  co-owner deletes a bank account), so the page shows the error it
+  would show on opening a link to a missing record. A refresh loses
+  to a load for a new key (an account switch, a route param), like any
+  stale response.
+- **A scrolled list refreshes as deep as it was scrolled.**
+  `useInfiniteList().refresh()` asks for the loaded rows plus
+  headroom in one page (following `next` past the server's largest
+  page) and swaps them in at once. Rows are keyed by id where they
+  are rendered, so a changed row updates in place, a new one appears
+  above and a deleted one disappears. Rows are not matched by id
+  across the swap, because a bank sync gives pending transactions new
+  ids. The reader's place in the list is held by the browser's scroll
+  anchoring, which keeps the rows on screen still when rows are
+  inserted above them.
+- **Edits in progress survive a refresh.** An optimistic setting
+  shows its pending value until its request lands, and the write
+  order keeps that request's answer over an older refresh answer. On
+  the transaction detail page a refresh updates the transaction but
+  leaves the description and memo alone while they hold text not yet
+  saved, and drops its answer if the page saved, split or uploaded
+  meanwhile. Forms copy their record when they open, so a refresh
+  does not reset them.
+
+Store actions named `invalidate` (`budgets.invalidate(ids)`,
+`bankAccounts.invalidate()`) are a different tool: they mark cached
+data stale for the next read, without fetching or signalling
+anyone.
 
 ---
 

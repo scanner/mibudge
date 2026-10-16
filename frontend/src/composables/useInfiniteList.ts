@@ -9,6 +9,17 @@
 // arrives for an older generation (e.g. the previous bank account) is
 // dropped.
 //
+// `refresh()` reloads in the background as deep as the list has been
+// scrolled: it asks `fetchFirst(pageSize)` for the loaded rows plus
+// `REFRESH_HEADROOM` (so rows that arrived since do not push loaded
+// ones out), following `next` past the server's largest page, and
+// swaps them in at once.  The rows are keyed by id where they are rendered,
+// so a changed row updates in place, a new one appears above, and the
+// reader's place in the list holds.  `loading` stays false, and a
+// failed refresh keeps the shown rows.  A refresh is a new generation
+// too, so a `loadMore()` in flight is dropped (the refresh covers its
+// rows), and a `reload()` started later wins.
+//
 // `error` is a failed first page (the list is then empty);
 // `loadMoreError` is a failed later page (the loaded rows stay, and the
 // caller offers `loadMore()` again).
@@ -37,6 +48,11 @@ import type { ModelPage } from "@/models/page";
 //
 const NEAR_VIEWPORT_PX = 200;
 
+// The server's largest page (`API_MAX_PAGE_SIZE`).
+const MAX_PAGE_SIZE = 500;
+// Room for rows that arrived since the list loaded.
+const REFRESH_HEADROOM = 50;
+
 export interface UseInfiniteListOptions {
   errorMessage?: string;
 }
@@ -50,6 +66,7 @@ export interface UseInfiniteList<T> {
   loadMoreError: ComputedRef<string | null>;
   sentinel: Ref<HTMLElement | null>;
   reload: () => Promise<void>;
+  refresh: () => Promise<void>;
   loadMore: () => Promise<void>;
   // Clear the list without loading (e.g. no account selected).
   clear: () => void;
@@ -58,7 +75,9 @@ export interface UseInfiniteList<T> {
 ////////////////////////////////////////////////////////////////////////
 //
 export function useInfiniteList<T>(
-  fetchFirst: () => Promise<ModelPage<T>>,
+  // `pageSize` is set only by `refresh()`; omitted, the server's
+  // default applies.
+  fetchFirst: (pageSize?: number) => Promise<ModelPage<T>>,
   fetchNext: (url: string) => Promise<ModelPage<T>>,
   options: UseInfiniteListOptions = {},
 ): UseInfiniteList<T> {
@@ -103,6 +122,35 @@ export function useInfiniteList<T>(
     } finally {
       if (current === generation) loading.value = false;
     }
+  }
+
+  async function refresh(): Promise<void> {
+    if (loading.value) return;
+    const depth = items.value.length;
+    const current = ++generation;
+    loadingMore.value = false;
+    try {
+      let page = await fetchFirst(
+        Math.min(depth + REFRESH_HEADROOM, MAX_PAGE_SIZE),
+      );
+      const rows = [...page.results];
+      while (page.next && rows.length < depth) {
+        if (current !== generation) return;
+        page = await fetchNext(page.next);
+        rows.push(...page.results);
+      }
+      if (current !== generation) return;
+      items.value = rows;
+      nextUrl.value = page.next;
+      error.value = null;
+      loadMoreError.value = null;
+    } catch {
+      return;
+    }
+    // New rows push old ones past the end; a list scrolled to its end
+    // loads them again.
+    await nextTick();
+    if (current === generation && sentinelNearViewport()) void loadMore();
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -170,6 +218,7 @@ export function useInfiniteList<T>(
     loadMoreError: computed(() => loadMoreError.value),
     sentinel,
     reload,
+    refresh,
     loadMore,
     clear,
   };

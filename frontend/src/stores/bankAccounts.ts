@@ -6,7 +6,10 @@
 // the next `loadAll()` refetches, and `refresh()` refetches now.
 // Mutations (create, update, remove) go through here so every reader
 // -- the account switcher, the top bar, the account pages -- sees the
-// change.
+// change.  Writes follow `createWriteOrder`: a fetch answer older than
+// an account's last mutation or fetch keeps the cached account, and a
+// list answer older than the last create or remove is dropped whole.
+// Concurrent list loads share one request.
 //
 
 // 3rd party imports
@@ -28,6 +31,7 @@ import {
   bankAccountToUpdateDto,
 } from "@/models/bankAccount";
 import { createSessionGuard } from "@/stores/reset";
+import { createWriteOrder } from "@/stores/writeOrder";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -64,6 +68,10 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   //
   const guard = createSessionGuard();
   const whileCurrent = guard.whileCurrent;
+  const order = createWriteOrder();
+  // The ticket of the newest change to which accounts are listed.
+  let listWrittenAt = 0;
+  let listRequest: Promise<BankAccount[]> | null = null;
 
   ////////////////////////////////////////////////////////////////////
   //
@@ -71,9 +79,21 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   //
   async function loadAll(force = false): Promise<BankAccount[]> {
     if (loaded.value && !force) return accounts.value;
+    listRequest ??= fetchAll().finally(() => {
+      listRequest = null;
+    });
+    return listRequest;
+  }
+
+  async function fetchAll(): Promise<BankAccount[]> {
+    const ticket = order.ticket();
     const put = whileCurrent(setAll);
     const first = await api.bankAccounts.list();
-    put((await api.pages.all(first)).map(bankAccountFromDto));
+    const list = (await api.pages.all(first)).map(bankAccountFromDto);
+    if (ticket < listWrittenAt) return accounts.value;
+    listWrittenAt = ticket;
+    // An account with a newer answer cached keeps it.
+    put(list.map((a) => (order.accept(a.id, ticket) ? a : (byId(a.id) ?? a))));
     return accounts.value;
   }
 
@@ -88,9 +108,10 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   ////////////////////////////////////////////////////////////////////
   //
   async function fetchOne(id: string): Promise<BankAccount> {
+    const ticket = order.ticket();
     const put = whileCurrent(upsert);
     const account = bankAccountFromDto(await api.bankAccounts.get(id));
-    put(account);
+    if (order.accept(id, ticket)) put(account);
     return account;
   }
 
@@ -99,6 +120,8 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
     const account = bankAccountFromDto(
       await api.bankAccounts.create(bankAccountToCreateDto(input)),
     );
+    order.written(account.id);
+    listWrittenAt = order.ticket();
     put(account);
     return account;
   }
@@ -109,7 +132,9 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   ): Promise<BankAccount> {
     const put = whileCurrent(upsert);
     const account = bankAccountFromDto(
-      await api.bankAccounts.update(id, bankAccountToUpdateDto(patch)),
+      await order.mutating([id], () =>
+        api.bankAccounts.update(id, bankAccountToUpdateDto(patch)),
+      ),
     );
     put(account);
     return account;
@@ -117,6 +142,7 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
 
   async function remove(id: string): Promise<void> {
     await api.bankAccounts.remove(id);
+    listWrittenAt = order.ticket();
     accounts.value = accounts.value.filter((a) => a.id !== id);
   }
 
@@ -124,6 +150,9 @@ export const useBankAccountsStore = defineStore("bankAccounts", () => {
   //
   function reset(): void {
     guard.bump();
+    order.clear();
+    listWrittenAt = 0;
+    listRequest = null;
     accounts.value = [];
     loaded.value = false;
   }

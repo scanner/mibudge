@@ -9,9 +9,17 @@
 // (an account switch, a route param change).
 //
 // Returns readonly state refs (`data`, `error`, `loading`) and the
-// actions `run` and `reset`.  `error` is a message for the UI (see
-// `describeError`); `run` resolves to the result, or `undefined` when
-// the call failed or was superseded.
+// actions `run`, `refresh` and `reset`.  `error` is a message for the
+// UI (see `describeError`); `run` resolves to the result, or
+// `undefined` when the call failed or was superseded.
+//
+// `refresh` reloads in the background: the shown `data` stays and
+// `loading` stays false while it runs.  Its result replaces `data` and
+// clears `error`; a failure leaves both as they were, except a 404:
+// the record is gone, so `data` is reset and `error` set, as when the
+// first load finds nothing.  It joins the
+// same generations as `run`, so a `run` started later wins, and it does
+// nothing while a `run` is in flight (that load is already current).
 //
 
 // 3rd party imports
@@ -21,7 +29,7 @@ import type { ComputedRef } from "vue";
 
 // app imports
 //
-import { describeError } from "@/api/errors";
+import { ApiError, describeError } from "@/api/errors";
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -37,6 +45,7 @@ export interface UseAsync<T, A extends unknown[]> {
   error: ComputedRef<string | null>;
   loading: ComputedRef<boolean>;
   run: (...args: A) => Promise<T | undefined>;
+  refresh: (...args: A) => Promise<T | undefined>;
   reset: () => void;
 }
 
@@ -69,6 +78,28 @@ export function useAsync<T, A extends unknown[] = []>(
     }
   }
 
+  async function refresh(...args: A): Promise<T | undefined> {
+    if (loading.value) return undefined;
+    const current = ++generation;
+    try {
+      const result = await fn(...args);
+      if (current !== generation) return undefined;
+      data.value = result;
+      error.value = null;
+      return result;
+    } catch (err) {
+      if (
+        current === generation &&
+        err instanceof ApiError &&
+        err.status === 404
+      ) {
+        data.value = options.initial;
+        error.value = describeError(err, options.errorMessage);
+      }
+      return undefined;
+    }
+  }
+
   function reset(): void {
     generation++;
     data.value = options.initial;
@@ -81,6 +112,7 @@ export function useAsync<T, A extends unknown[] = []>(
     error: computed(() => error.value),
     loading: computed(() => loading.value),
     run,
+    refresh,
     reset,
   };
 }

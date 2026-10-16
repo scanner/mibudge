@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // app imports
 //
 import App from "@/App.vue";
+import { useInvalidationStore } from "@/stores/invalidation";
 import { useTransactionNavStore } from "@/stores/transactionNav";
 import { mountWithApp, withAccounts, withAuth } from "../helpers";
 import {
@@ -129,6 +130,77 @@ describe("TransactionDetailView", () => {
     expect(
       (wrapper.get('input[type="text"]').element as HTMLInputElement).value,
     ).toBe("Rent");
+  });
+
+  // GIVEN: a transaction whose description the user is typing, not yet
+  //        saved, and whose memo is untouched
+  // WHEN:  a co-owner changed both on the server and the page refreshes
+  //        in the background
+  // THEN:  the typed description stays, and the memo shows the
+  //        co-owner's text
+  //
+  it("keeps unsaved typing through a background refresh", async () => {
+    const tx = makeTransaction({
+      bank_account: account.id,
+      description: "Coffee",
+      memo: null,
+      pending: false,
+    });
+    serveTransactions([tx]);
+    const { wrapper } = await openApp(`/transactions/${tx.id}/`);
+    await wrapper.get('input[type="text"]').setValue("Coffee with Sam");
+
+    server.use(
+      http.get(`/api/v1/transactions/${tx.id}/`, () =>
+        HttpResponse.json({
+          ...tx,
+          description: "Coffee shop",
+          memo: "Split with Ana",
+        }),
+      ),
+    );
+    await useInvalidationStore().invalidate({ kinds: ["transactions"] });
+    await flushPromises();
+
+    expect
+      .soft(
+        (wrapper.get('input[type="text"]').element as HTMLInputElement).value,
+        "typed description kept",
+      )
+      .toBe("Coffee with Sam");
+    expect
+      .soft(
+        (wrapper.get("textarea").element as HTMLTextAreaElement).value,
+        "memo refreshed",
+      )
+      .toBe("Split with Ana");
+  });
+
+  // GIVEN: a pending transaction's detail page
+  // WHEN:  a bank sync replaced it and the page refreshes in the
+  //        background
+  // THEN:  the page says the transaction is gone instead of showing it
+  //
+  it("shows a transaction gone after a refresh", async () => {
+    const tx = makeTransaction({
+      bank_account: account.id,
+      party: "Corner Cafe",
+      pending: true,
+    });
+    serveTransactions([tx]);
+    const { wrapper } = await openApp(`/transactions/${tx.id}/`);
+    expect(wrapper.text()).toContain("Corner Cafe");
+
+    server.use(
+      http.get(`/api/v1/transactions/${tx.id}/`, () =>
+        HttpResponse.json({ detail: "Not found." }, { status: 404 }),
+      ),
+    );
+    await useInvalidationStore().invalidate({ kinds: ["transactions"] });
+    await flushPromises();
+
+    expect.soft(wrapper.text(), "says why").toContain("Not found.");
+    expect.soft(wrapper.text(), "no stale record").not.toContain("Corner Cafe");
   });
 
   // GIVEN: a transaction on "Household", whose only allocation is
