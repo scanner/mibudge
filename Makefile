@@ -8,7 +8,7 @@ include $(ROOT_DIR)/Make.rules
 
 DOCKER_BUILDKIT := 1
 
-.PHONY: check-env certs dirs dbs ssl clean purge test test-frontend logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs help
+.PHONY: check-env certs dirs dbs ssl clean purge test test-frontend logs migrate makemigrations createadmin manage_shell shell restart down up up-backend build env uv-sync uv-lock uv-add uv-add-dev uv-upgrade api-schema api-docs tag publish-tag help
 
 env: $(ROOT_DIR)/.env	## Create this host's .env from deployment/dot-env.dev (never overwrites)
 
@@ -30,9 +30,9 @@ check-env: $(ROOT_DIR)/.env
 # mypy's Django plugin imports `config.settings`, which reads `.env`.
 lint: $(ROOT_DIR)/.env
 
-build:	## Build prod and dev Docker images
-	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --target prod --tag mibudge:latest .
-	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --target dev --tag mibudge:dev .
+build: version	## Build prod and dev Docker images, tagged with the version
+	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg VERSION="$(VERSION)" --target prod --tag mibudge:$(VERSION) --tag mibudge:latest .
+	@COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker build --build-arg PYTHON_VERSION="$(PYTHON_VERSION)" --build-arg VERSION="$(VERSION)" --target dev --tag mibudge:$(VERSION)-dev --tag mibudge:dev .
 
 dirs: dbs ssl     ## Make the local directories for dbs, ssl, etc.
 
@@ -156,6 +156,17 @@ api-docs: api-schema	## Generate API markdown docs from OpenAPI schema
 
 docs:
 	@mkdir -p $(ROOT_DIR)/docs
+
+tag: version	## Sign and tag HEAD with the version in pyproject.toml
+	@if git rev-parse "$(VERSION)" >/dev/null 2>&1; then \
+	    echo "Tag '$(VERSION)' already exists (skipping 'git tag')"; \
+	else \
+	    git tag --sign "$(VERSION)" -m "Version $(VERSION)"; \
+	    echo "Tagged with '$(VERSION)'"; \
+	fi
+
+publish-tag: tag	## Tag (if not already tagged) and push that one tag to origin
+	@git push origin tag $(VERSION)
 
 help:	## Show this help.
 	@grep -hE '^[A-Za-z0-9_ \-]*?:.*##.*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'

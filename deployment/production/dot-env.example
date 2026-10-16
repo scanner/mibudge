@@ -72,5 +72,6 @@ CELERY_RESULT_BACKEND=redis://redis:6379/2
 
 # Image
 # ------------------------------------------------------------------------------
-VERSION=latest
+# The release to run (see docs/releasing.md); images have no "latest" tag.
+VERSION=0.3.0
 PORT=8000

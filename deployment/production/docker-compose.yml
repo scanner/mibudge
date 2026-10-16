@@ -3,7 +3,7 @@
 # write the five secret files under secrets/, then: docker compose up -d
 #
 # Required variables in .env:
-#   VERSION   -- image tag to pull (e.g. "1.2.3" or "latest")
+#   VERSION   -- release to pull (e.g. "0.3.0"; there is no "latest" tag)
 #   PORT      -- localhost port the reverse proxy connects to (default 8000)
 #
 # Required secret files under secrets/ (one value per file, no trailing newline):
