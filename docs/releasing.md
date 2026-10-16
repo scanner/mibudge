@@ -42,6 +42,8 @@ production template's `VERSION` does (`deployment/production/`).
      from the previous release.
    - Set `version = "X.Y.Z"` in `pyproject.toml` and run `uv lock`, which
      updates the project's own entry in `uv.lock`.
+   - Set `VERSION=X.Y.Z` in `deployment/production/dot-env.example`, so the
+     production template names the newest release.
    - Say in the CHANGELOG when a release has migrations, so a deployer knows
      whether going back to the previous release needs a database restore.
 2. Merge it, update a local `main`, and run `make publish-tag`. It signs the
