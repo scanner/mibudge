@@ -71,5 +71,21 @@ A release can be cut from a commit that `main` has moved past:
 ## Rolling back
 
 Deploy the previous version. A release with no migrations rolls back by
-changing the version alone; one with migrations needs the database restored
-from a backup taken before the upgrade (see `deployment/production/README.md`).
+changing the version alone.
+
+A release with migrations rolls back in two steps, because the compose
+stack's `migrate` service only migrates forward: an older image does not have
+the newer migration files, so starting it leaves the schema where it is.
+
+1. With the release you are leaving still deployed, reverse its migrations:
+   `docker compose run --rm migrate python /app/manage.py migrate <app>
+   <migration>`, naming each changed app's last migration in the release you
+   are going back to (the CHANGELOG says which releases have migrations).
+2. Set `VERSION` to the previous release and `docker compose up -d`.
+
+This works when every reversed migration has a reverse operation; schema
+changes do, and `RunPython`/`RunSQL` migrations do when written with reverse
+code. Reversing a migration that dropped a column or deleted rows does not
+bring that data back. When a migration can't be reversed, or the data it
+removed is needed, restore the database from a backup taken before the
+upgrade instead.

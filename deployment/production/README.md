@@ -236,15 +236,29 @@ the web and worker services start.
 
 ## 7. Rollback
 
-Edit `.env` to the previous version, then restart:
+If the release you are leaving has no migrations, edit `.env` to the previous
+version, then restart:
 
 ```sh
 # In .env: VERSION=1.2.2
 docker compose up -d
 ```
 
-If the new version included irreversible migrations, restore from a database
-backup before rolling back the image.
+The `migrate` service only migrates forward, so a release with migrations
+needs them reversed first, while it is still the deployed version:
+
+```sh
+# Still on the newer release: migrate each changed app back to its last
+# migration in the release you are returning to.
+docker compose run --rm migrate python /app/manage.py migrate <app> <migration>
+# In .env: VERSION=1.2.2
+docker compose up -d
+```
+
+Reversing a migration that dropped a column or deleted rows does not bring
+that data back, and some migrations cannot be reversed at all; then restore
+the database from a backup taken before the upgrade instead. See
+[`docs/releasing.md`](../../docs/releasing.md#rolling-back).
 
 ---
 

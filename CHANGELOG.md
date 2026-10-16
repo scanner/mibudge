@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The production deployment guide's rollback steps reverse a release's migrations with that release's image before switching to the previous version; the `migrate` service only migrates forward, so starting an older image left the newer schema in place
 - Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
 - When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on
 - A SQLite database now opens every transaction with `BEGIN IMMEDIATE`, so two concurrent writers wait for each other instead of the second failing with "database is locked"; the test suite uses a SQLite file with the same setting and runs the concurrency tests on both SQLite and Postgres
