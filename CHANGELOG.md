@@ -12,16 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The SPA keeps open pages current: returning to a tab after a minute away, or coming back online, refetches what the page shows in the background (no flashing, scrolled lists stay as deep as you scrolled, edits in progress are kept, and a record that has gone away says so), and pulling down from the top of the page or pressing Refresh in the side navigation refetches it on demand
 - `simulate_bank_activity` management command simulates banks, bank accounts and realistic transactions for a development instance (split paychecks, bills, card spending, pending purchases that later post, transfers within and between banks, credit card payments, interest, Federal Reserve holidays), from an editable scenario file, and steps a simulated clock forward day by day, running budget funding on the simulated dates
 - "Revoke all keys" in Security & Notifications settings revokes every active API key at once, after a confirmation that says how many (`POST /api/v1/users/me/api-keys/revoke-all/`)
-- Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use -- archive instead). See `docs/transaction-categories.md`
-- Transactions and their splits each carry a category; a split inherits the transaction's category when it's created and can then be changed independently
-- Category hints from bank imports are translated into your categories by the importer (built-in BofA mapping plus a `--category-map` overlay file for newly discovered categories); categories the importer cannot map are reported at the end of each run and their transactions left unassigned for you to categorize
-- Transactions can carry merchant details: merchant name, structured location (street address, city, region, country, and map coordinates -- the location fields are user-editable so you can refine or supply a merchant's actual address), the ISO 18245 merchant category code, and the masked virtual card number used. New transaction filters: `merchant_name`, `merchant_city`, `merchant_region`, `merchant_category_code`, `virtual_card_last4`, `has_details`
-- Purchases routed through a payment platform (Square, Toast, DoorDash, and others) now show the real store instead of the platform's card-network prefix, with the platform itself recorded separately and noted in the description ("Blue Bottle Coffee -- Menlo Park, CA (Restaurants, via DoorDash)"); filter transactions by platform with `merchant_intermediary`. The platform list is admin-editable and reorderable, so a newly observed platform needs no code release. `reenrich_merchant_identity` refreshes already-enriched transactions from their stored details with no re-scrape
-- The BofA live importer enriches posted transactions from BofA's per-transaction detail dialog: the importer-mapped category auto-categorizes the transaction (and its unassigned splits), and the display description becomes "Merchant -- City, ST (Category)". Detail fetches are budgeted (`--details-limit`, default 30 dialog opens per run) and each merchant is fetched only once per run -- its other transactions get a free provenance-marked copy -- so a backfill converges over a couple of weeks of runs without tripping BofA's rate limits
 - Transaction list and detail responses embed each transaction's allocations, and `GET /api/v1/transactions/` takes `budget` (transactions with an allocation to that budget) and `unallocated` (true: nothing assigned to a real budget) filters, so a budget's transactions page from the server in one request
-- `POST /api/v1/bank-accounts/{id}/transaction-details/` applies scraped detail records; `sync-scrape` responses report `details_needed` so importers know exactly which rows still need enrichment
-- Saved scrape files (format v3) include fetched details and `import_bofa_saved` replays them; `--save-only --details-all` captures every detail dialog for offline import
-- Editing a transaction's description now marks it user-edited, so detail enrichment never overwrites your text
 - SPA test harness: Vitest + happy-dom with an MSW mock REST API, DTO factories, auth and mounting fixtures, and tests for the transport, auth/token lifecycle, stores, API modules, utilities, router guard and views. `pnpm test` / `pnpm test:coverage` (coverage thresholds on `src/api`, `src/composables`, `src/domain`, `src/models`, `src/stores`), `make test-frontend`, and a Drone `frontend tests` step. See `docs/spa/testing.md`
 - SPA TypeScript types for the REST API are generated from `docs/openapi.yaml` (`pnpm gen:api-types`, openapi-typescript); the Drone `frontend lint` step fails when `frontend/src/api/schema.d.ts` is out of date
 - SPA "page not found" screen for unknown `/app/...` paths, instead of a blank page
@@ -33,27 +24,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The production template's `VERSION` names a release (`0.3.0`); published images have no `latest` tag. `docs/releasing.md` describes versions, release tags and the published images
 - Local development uses one `.env` per host, created from `deployment/dot-env.dev` by `make up`, and a per-host mkcert certificate in `deployment/ssl/`, so several machines can share one checkout. `deployment/local-dev-docker.env` and `HOST_SSL_DIR` are no longer used; regenerate an existing `.env` with `mv .env .env.old && make env`. See `deployment/README.md`
 - The production deployment template moved to `deployment/production/`; its Celery broker and results use their own Redis databases, and it no longer requires a `telegraf_network`
 - The API reference (`docs/api.md`) is rewritten for client developers: common responses, pagination and throttling (with how to pace a throttled client) are described once, bodies are commented JSON with each field's type, shared objects are defined once and linked, and complex endpoints have worked examples
-- Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - SPA look: text and controls meet WCAG AA contrast (darker primary and destructive buttons, stronger input borders and muted text), one button shape, and consistent sizes, spacing and padding throughout; text honours the browser's text-size setting, and phone inputs no longer zoom the page when focused
 - SPA dates display in one consistent format everywhere, set in a single place so it can become a user preference
 - SPA transaction lists load page by page with each row's budgets included: a budget's transactions scroll in as needed, and the "Unallocated" filter covers the account's whole history instead of only the loaded rows
-- `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
 - Internal: split moneypools API views and serializers into per-domain modules
 
 ### Removed
 
 - The SPA's "Last 30 days" transaction filter; the list already starts at today and loads older transactions as you scroll
 - Internal: the SPA is restructured into layers -- pure domain rules (money, dates, schedules, budget status), an HTTP transport and per-resource API modules, domain models mapped from the API's wire format, Pinia entity caches, shared composables, and per-section feature modules -- and the five largest views are split into route shells of under 300 lines. No visual changes except the date fix below
+
+### Fixed
+
 - Signing out now clears every cached bank account, budget, allocation and list position in the tab, so nothing from the previous session is shown to the next person to sign in
 - When your session expires mid-use, the SPA now returns you to the sign-in page and, after signing in, back to the page you were on
 - A SQLite database now opens every transaction with `BEGIN IMMEDIATE`, so two concurrent writers wait for each other instead of the second failing with "database is locked"; the test suite uses a SQLite file with the same setting and runs the concurrency tests on both SQLite and Postgres
 - API read requests (GET/HEAD) no longer run inside a database transaction; writes still run each request in one, rolled back on any error. On SQLite, reads therefore no longer wait for, or block, a request that is writing
-
-### Fixed
-
 - The production `.env` example sets `ALLOWED_HOSTS`; it named `DJANGO_ALLOWED_HOSTS`, which the server ignores, so a deployment following it rejected every request to its own host name
 - Creating or editing a budget with a funding type or target date its budget type does not allow (Recurring with fixed-amount funding, Capped with target-date funding, a target date on either) answers 400 naming the field instead of a 500
 - Money amounts always take their bank account's currency: an omitted `<field>_currency` now means the bank account's currency rather than the server default, a different currency is refused with 400 (it was silently overwritten, stored, or failed with a 500 when amounts were added up), and budgets keep every amount in the bank account's currency
@@ -61,7 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The OpenAPI schema documents every endpoint's error responses (`Error` for `{"detail": ...}` bodies, `ValidationError` for field errors), and the notification/channel preference endpoints answer an unknown kind or channel with a `{"detail": ...}` 404 instead of an empty body
 - The OpenAPI schema now describes the splits, invitation-list and notification/channel-preference endpoints as plain arrays (without phantom pagination or filter parameters), types `next_funding`, `next_recurrence` and the `run-funding`, `funding-summary`, `funding-event-dates` and `currencies` responses, documents the `after`/`before` parameters of `funding-event-dates`, the `warnings` on budget updates and the `{access}` body of `/api/token/` and `/api/token/refresh/`, no longer requires a body for budget `archive`, and marks `linked_transaction` and category `owner` nullable
 - Creating a budget without `funding_type` or `budget_type` returned a 500; the omitted fields now take the model defaults (Goal, Target Date)
-- Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
 - Budget target dates, next-refresh dates and funding dates showed one day early in browsers west of UTC (a goal due Dec 14 read "Dec 13"); calendar dates now show the same day in every timezone. Transaction list date headers had the same problem when the browser's timezone differed from your profile timezone
 - Editing a transaction's description or memo and then quickly stepping to the next transaction could save the text onto the next transaction
 - Clearing a transaction's memo did not save
@@ -92,10 +81,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cancelling a confirmed email change (account takeover recovery) now also revokes every API key, and the security alert says how many were revoked
 - Cancelling an email change before it is confirmed now signs out every session, as the old-address email already promised, and the security alert lists your active API keys so you can revoke any you do not recognise
 - API keys can no longer delete a bank account (which deletes everything in it); `DELETE /api/v1/bank-accounts/{id}/` now requires an interactive login and answers 403 to an API key
-- Published Docker images no longer carry a build-time `SALT_KEY` in their layer history; building an image needs no secret (`docker build` takes no `SALT_KEY` build argument)
 - Rate limits identify anonymous clients by the address the deployment's own proxies report, so a client can no longer get a fresh limit by sending its own `X-Forwarded-For`; set `DJANGO_TRUSTED_PROXY_COUNT` to the number of reverse proxies in front of Django (see `deployment/production/dot-env.example`)
 - Signing out now ends the session on the server: `POST /api/token/logout/` revokes the refresh token and clears its cookie, so reloading the page or reopening the app no longer signs you straight back in
 - Creating a budget, transaction or internal transaction checked only that the named bank account existed, not that you owned it, so any logged-in user or API key that knew another account's UUID could create objects in it and change its balances. The `bank_account` field on these create endpoints now accepts only accounts you own (an account you do not own gets the same 400 "does not exist" error as a nonexistent one), and the views re-check ownership of every account-owned object in the request before creating anything. A budget's `fillup_goal` is now read-only in the API; the budget service manages it
+
+## [0.3.0] - 2026-07-24
+
+### Added
+
+- Transaction categories are now a shared, extensible model instead of a fixed enum: a global base set everyone shares, plus custom categories you can create that are visible to anyone you co-own a bank account with. Managed at `/api/v1/transaction-categories/` (create, rename, archive; delete is blocked while a category is still in use -- archive instead). See `docs/transaction-categories.md`
+- Transactions and their splits each carry a category; a split inherits the transaction's category when it's created and can then be changed independently
+- Category hints from bank imports are translated into your categories by the importer (built-in BofA mapping plus a `--category-map` overlay file for newly discovered categories); categories the importer cannot map are reported at the end of each run and their transactions left unassigned for you to categorize
+- Transactions can carry merchant details: merchant name, structured location (street address, city, region, country, and map coordinates -- the location fields are user-editable so you can refine or supply a merchant's actual address), the ISO 18245 merchant category code, and the masked virtual card number used. New transaction filters: `merchant_name`, `merchant_city`, `merchant_region`, `merchant_category_code`, `virtual_card_last4`, `has_details`
+- Purchases routed through a payment platform (Square, Toast, DoorDash, and others) now show the real store instead of the platform's card-network prefix, with the platform itself recorded separately and noted in the description ("Blue Bottle Coffee -- Menlo Park, CA (Restaurants, via DoorDash)"); filter transactions by platform with `merchant_intermediary`. The platform list is admin-editable and reorderable, so a newly observed platform needs no code release. `reenrich_merchant_identity` refreshes already-enriched transactions from their stored details with no re-scrape
+- The BofA live importer enriches posted transactions from BofA's per-transaction detail dialog: the importer-mapped category auto-categorizes the transaction (and its unassigned splits), and the display description becomes "Merchant -- City, ST (Category)". Detail fetches are budgeted (`--details-limit`, default 30 dialog opens per run) and each merchant is fetched only once per run -- its other transactions get a free provenance-marked copy -- so a backfill converges over a couple of weeks of runs without tripping BofA's rate limits
+- `POST /api/v1/bank-accounts/{id}/transaction-details/` applies scraped detail records; `sync-scrape` responses report `details_needed` so importers know exactly which rows still need enrichment
+- Saved scrape files (format v3) include fetched details and `import_bofa_saved` replays them; `--save-only --details-all` captures every detail dialog for offline import
+- Editing a transaction's description now marks it user-edited, so detail enrichment never overwrites your text
+
+### Changed
+
+- Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
+- `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
+- Release images are published to `ghcr.io/scanner/mibudge` tagged with their version (`0.3.0`, and `0.3.0-dev` for the development image) and labelled with it (`org.opencontainers.image.version`); `make build` tags local images the same way, and `make publish-tag` signs and pushes a release tag. Images are no longer published to Docker Hub
+
+### Fixed
+
+- Password-reset emails (including the set-your-first-password email sent when a new invitee accepts an invitation) linked to the deployment's internal hostname instead of `SITE_URL`; allauth-generated URLs are now rooted at `SITE_URL` like all other emailed links
+
+### Security
+
+- Published Docker images no longer carry a build-time `SALT_KEY` in their layer history; building an image needs no secret (`docker build` takes no `SALT_KEY` build argument)
 
 ## [0.2.0] - 2026-07-12
 
@@ -166,6 +182,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/scanner/mibudge/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/scanner/mibudge/releases/tag/v0.1.0
+[Unreleased]: https://github.com/scanner/mibudge/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/scanner/mibudge/compare/0.2.0...0.3.0
+[0.2.0]: https://github.com/scanner/mibudge/compare/0.1.1...0.2.0
+[0.1.1]: https://github.com/scanner/mibudge/compare/0.1.0...0.1.1
+[0.1.0]: https://github.com/scanner/mibudge/releases/tag/0.1.0

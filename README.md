@@ -346,6 +346,7 @@ The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backen
 | [`docs/importers.md`](docs/importers.md)                     | Bank statement import tools                                                |
 | [`docs/management-commands.md`](docs/management-commands.md) | Django management commands                                                 |
 | [`docs/simulator.md`](docs/simulator.md)                     | Bank activity simulator: development data and simulated-time walkthroughs  |
+| [`docs/releasing.md`](docs/releasing.md)                     | Versions, release tags, published images, making and rolling back releases |
 | [`app/notifications/README.md`](app/notifications/README.md) | Notification service: kind registration, digest mechanics, adding channels |
 
 ## License

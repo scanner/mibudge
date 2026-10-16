@@ -60,6 +60,10 @@ FROM python:${PYTHON_VERSION}-slim AS dev
 LABEL org.opencontainers.image.source=https://github.com/scanner/mibudge
 LABEL org.opencontainers.image.description="mibudge Personal Budgeting Service (Development)"
 
+# The release version, set by `make build` and the Drone tag build.
+ARG VERSION=unknown
+LABEL org.opencontainers.image.version=$VERSION
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
@@ -127,6 +131,10 @@ FROM python:${PYTHON_VERSION}-slim AS prod
 
 LABEL org.opencontainers.image.source=https://github.com/scanner/mibudge
 LABEL org.opencontainers.image.description="mibudge Personal Budgeting Service"
+
+# The release version, set by `make build` and the Drone tag build.
+ARG VERSION=unknown
+LABEL org.opencontainers.image.version=$VERSION
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
