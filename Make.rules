@@ -39,3 +39,10 @@ ruff-format: .ruff_formatted
 
 mypy: .venv
 	@$(UV_RUN) mypy app/ importers/
+
+# Set the Make variable `VERSION` to the version in pyproject.toml
+version: .venv	## Print the project version from pyproject.toml
+	$(eval VERSION := $(shell $(UV_RUN) python -c "import tomllib; print(tomllib.load(open('$(ROOT_DIR)/pyproject.toml', 'rb'))['project']['version'])"))
+	@echo "Version: $(VERSION)"
+
+.PHONY: version

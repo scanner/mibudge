@@ -60,6 +60,10 @@ FROM python:${PYTHON_VERSION}-slim AS dev
 LABEL org.opencontainers.image.source=https://github.com/scanner/mibudge
 LABEL org.opencontainers.image.description="mibudge Personal Budgeting Service (Development)"
 
+# The release version, set by `make build` and the Drone tag build.
+ARG VERSION=unknown
+LABEL org.opencontainers.image.version=$VERSION
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
@@ -128,6 +132,10 @@ FROM python:${PYTHON_VERSION}-slim AS prod
 LABEL org.opencontainers.image.source=https://github.com/scanner/mibudge
 LABEL org.opencontainers.image.description="mibudge Personal Budgeting Service"
 
+# The release version, set by `make build` and the Drone tag build.
+ARG VERSION=unknown
+LABEL org.opencontainers.image.version=$VERSION
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
@@ -160,12 +168,12 @@ COPY ./app ./
 # so the frontend dist must land at /frontend/dist for collectstatic to find it.
 COPY --from=frontend-builder /frontend/dist /frontend/dist
 
-# Provided at build time so collectstatic can load settings.
-# Never written to ENV so it is not present at runtime.
-ARG SALT_KEY
-
-# Collect static files (Django app + built frontend assets) and pre-compile bytecode
-RUN DJANGO_VITE_DEV_MODE=False /venv/bin/python /app/manage.py collectstatic --no-input && \
+# Collect static files (Django app + built frontend assets) and pre-compile
+# bytecode.  collectstatic encrypts nothing; the key and salt set on this RUN
+# only let settings load, and the real ones are injected at runtime.
+RUN DJANGO_VITE_DEV_MODE=False \
+    DJANGO_SECRET_KEY=collectstatic-only SALT_KEY=collectstatic-only \
+    /venv/bin/python /app/manage.py collectstatic --no-input && \
     /venv/bin/python -m compileall /venv
 
 # Install nginx and supervisord configuration

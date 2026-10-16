@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-07-24
 
 ### Added
 
@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Transaction and allocation APIs expose `category` (a category UUID) with a read-only `category_full_name`; transactions can be filtered by `category`, `category_group`, and `uncategorized`. **Breaking:** the allocation `category` filter now takes a category UUID instead of the old enum string
 - `Budget.auto_spend` entries are validated against the categories visible to you and stored as canonical `"{group} : {name}"` names
+- Release images are published to `ghcr.io/scanner/mibudge` tagged with their version (`0.3.0`, and `0.3.0-dev` for the development image) and labelled with it (`org.opencontainers.image.version`); `make build` tags local images the same way, and `make publish-tag` signs and pushes a release tag. Images are no longer published to Docker Hub
+
+### Security
+
+- Published Docker images no longer carry a build-time `SALT_KEY` in their layer history; building an image needs no secret (`docker build` takes no `SALT_KEY` build argument)
 
 ### Fixed
 
@@ -97,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/scanner/mibudge/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/scanner/mibudge/releases/tag/v0.1.0
+[0.3.0]: https://github.com/scanner/mibudge/compare/0.2.0...0.3.0
+[0.2.0]: https://github.com/scanner/mibudge/compare/0.1.1...0.2.0
+[0.1.1]: https://github.com/scanner/mibudge/compare/0.1.0...0.1.1
+[0.1.0]: https://github.com/scanner/mibudge/releases/tag/0.1.0
