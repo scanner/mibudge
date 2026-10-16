@@ -207,6 +207,10 @@ make manage_shell
 # Run migrations (in container)
 make migrate
 
+# Create a superuser to sign in with at /app/login/:
+# admin@example.com / testpass1234
+make createadmin
+
 # Make new migrations (runs locally via uv)
 make makemigrations
 
@@ -227,6 +231,33 @@ make lint
 # See all available commands
 make help
 ```
+
+### Simulated bank data
+
+A fresh development instance has no bank data. The bank activity simulator
+makes some: it acts as a fake bank, generating realistic transactions for
+simulated bank accounts and feeding them through the same path as the live
+bank importer. The simulated bank accounts belong to an existing user, here
+the one `make createadmin` creates:
+
+```bash
+make createadmin
+uv run python app/manage.py simulate_bank_activity init sim.yaml --owner admin@example.com
+uv run python app/manage.py simulate_bank_activity fill sim.yaml
+```
+
+Sign in at `/app/login/` as `admin@example.com` / `testpass1234` to see them.
+
+That gives three months of history at three banks. To watch budgets fill and
+reset as time passes, start the clock in the past and move it forward a day
+or a week at a time:
+
+```bash
+uv run python app/manage.py simulate_bank_activity advance sim.yaml 1d
+```
+
+See [docs/simulator.md](docs/simulator.md) for walkthroughs, the scenario file
+reference and what to avoid while a simulation is running.
 
 ### Frontend development
 
@@ -314,6 +345,7 @@ The SMTP settings (`EMAIL_HOST` etc.) are ignored when using an API-based backen
 | [`docs/funding.md`](docs/funding.md)                         | Budget funding engine: rules, invariants, test scenarios                   |
 | [`docs/importers.md`](docs/importers.md)                     | Bank statement import tools                                                |
 | [`docs/management-commands.md`](docs/management-commands.md) | Django management commands                                                 |
+| [`docs/simulator.md`](docs/simulator.md)                     | Bank activity simulator: development data and simulated-time walkthroughs  |
 | [`app/notifications/README.md`](app/notifications/README.md) | Notification service: kind registration, digest mechanics, adding channels |
 
 ## License

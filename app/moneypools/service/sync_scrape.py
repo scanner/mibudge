@@ -232,6 +232,7 @@ class ScrapeSyncReport:
 def sync_scrape(
     bank_account: BankAccount,
     payload: ScrapeSyncPayload,
+    notify: bool = True,
 ) -> ScrapeSyncReport:
     """Reconcile a BankAccount against a scrape snapshot.
 
@@ -246,6 +247,9 @@ def sync_scrape(
             otherwise.
         payload: The scrape snapshot.  All amounts must use the
             account's currency.
+        notify: Send the owners the import notifications (complete,
+            error, new transactions, balance mismatch).  The bank
+            activity simulator turns them off for its initial fill.
 
     Returns:
         A `ScrapeSyncReport` summarising what changed and any
@@ -284,16 +288,20 @@ def sync_scrape(
                         bank_account, unalloc, payload, account_currency
                     )
     except Exception as exc:
-        notify_for(
-            bank_account,
-            IMPORT_ERROR,
-            {
-                "account_name": bank_account.name,
-                "account_id": str(bank_account.id),
-                "error": str(exc),
-            },
-        )
+        if notify:
+            notify_for(
+                bank_account,
+                IMPORT_ERROR,
+                {
+                    "account_name": bank_account.name,
+                    "account_id": str(bank_account.id),
+                    "error": str(exc),
+                },
+            )
         raise
+
+    if not notify:
+        return report
 
     # Pending transactions that are no longer pending after this sync.
     # deleted_pending counts all old pending rows wiped; inserted_pending
