@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-16
+
 ### Added
 
 - The SPA keeps open pages current: returning to a tab after a minute away, or coming back online, refetches what the page shows in the background (no flashing, scrolled lists stay as deep as you scrolled, edits in progress are kept, and a record that has gone away says so), and pulling down from the top of the page or pressing Refresh in the side navigation refetches it on demand
@@ -22,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA transaction lists load page by page with each row's budgets included: a budget's transactions scroll in as needed, and the "Unallocated" filter covers the bank account's whole history instead of only the loaded rows
 - SPA dates display in one consistent format everywhere, set in a single place so it can become a user preference
 - The API reference (`docs/api.md`) is rewritten for client developers: common responses, pagination and throttling (with how to pace a throttled client) are described once, bodies are commented JSON with each field's type, shared objects are defined once and linked, and complex endpoints have worked examples. The OpenAPI schema documents every endpoint's error responses
-- The production deployment template moved to `deployment/production/`; its Celery broker and results use their own Redis databases, and it no longer requires a `telegraf_network`. Its `VERSION` names a release (`0.3.0`): published images have no `latest` tag. `docs/releasing.md` describes versions, release tags and the published images
+- The production deployment template moved to `deployment/production/`; its Celery broker and results use their own Redis databases, and it no longer requires a `telegraf_network`. Its `VERSION` names a release (`0.4.0`): published images have no `latest` tag. `docs/releasing.md` describes versions, release tags and the published images
 - Local development uses one `.env` per host, created from `deployment/dot-env.dev` by `make up`, and a per-host mkcert certificate in `deployment/ssl/`, so several machines can share one checkout. `deployment/local-dev-docker.env` and `HOST_SSL_DIR` are no longer used; regenerate an existing `.env` with `mv .env .env.old && make env`. See `deployment/README.md`
 - `.python-version` is checked in and names the project's Python version (3.13.16), which CI tests on and release images are built with; `make lint` installs a pre-commit hook that runs through `uv run`, so it works on every machine sharing a checkout
 - SPA development: a Vitest test suite against a mock REST API (`pnpm test`, `make test-frontend`; see `docs/spa/testing.md`), API types generated from `docs/openapi.yaml` (`pnpm gen:api-types`), oxlint and a design-token style check (`pnpm lint`, `pnpm lint:styles`), all run in CI and pre-commit, and architecture, state, component and screen documentation in `docs/spa/`
@@ -161,7 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.0...HEAD
+[0.4.0]: https://github.com/scanner/mibudge/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/scanner/mibudge/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/scanner/mibudge/compare/0.1.1...0.2.0
 [0.1.1]: https://github.com/scanner/mibudge/compare/0.1.0...0.1.1
