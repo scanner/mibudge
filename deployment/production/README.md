@@ -1,7 +1,9 @@
-# mibudge — Docker Compose Deployment
+# mibudge — Production Deployment (Docker Compose)
 
-This directory contains the deployment template for running mibudge via Docker
-Compose in integration, staging, and production environments.
+This directory is a complete deployment of mibudge with Docker Compose, for
+production, staging or integration hosts. Copy it to the host, fill in `.env`
+and `secrets/`, and start it. Nothing here is used by local development (see
+[`../README.md`](../README.md)).
 
 The stack pulls a pre-built image from GHCR (`ghcr.io/scanner/mibudge`) and
 expects PostgreSQL and Redis to be available, either as external services
@@ -12,7 +14,7 @@ connected via Docker networks or bundled into this Compose file.
 ## Directory layout
 
 ```
-deployment/docker/
+deployment/production/
   docker-compose.yml    # app stack (web, celeryworker, celerybeat, migrate)
   dot-env.example       # non-secret config template — copy to .env
   secrets/              # credential files (gitignored except .gitkeep)
@@ -101,22 +103,33 @@ Both networks must exist before starting the app stack.
 
 ### Option B — Bundled services
 
-Add Postgres and Redis directly to `docker-compose.yml`. Replace the two
-external network definitions at the bottom of the file with:
+Run Postgres and Redis inside this stack. Add a secret file for the database
+password, using the same password as in `secrets/database_url`:
+
+```sh
+printf 'YOURPASSWORD' > secrets/postgres_password
+```
+
+Then make these changes to `docker-compose.yml`. Under `secrets:`, add:
 
 ```yaml
-volumes:
-  postgres_data: {}
-  redis_data: {}
+  postgres_password:
+    file: ./secrets/postgres_password
+```
 
-# In services, add:
+Under `services:`, add:
+
+```yaml
   postgres:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: mibudge
-      POSTGRES_USER_FILE: /run/secrets/db_username
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_USER: mibudge
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      PGDATA: /var/lib/postgresql/data
+    secrets:
+      - postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks: [postgres_net]
@@ -138,35 +151,40 @@ volumes:
       interval: 5s
       timeout: 3s
       retries: 5
+```
 
-# Replace the external network definitions with:
+Give `migrate` a `depends_on` so it waits for both (`web` and the Celery
+services already wait for `migrate`):
+
+```yaml
+  migrate:
+    <<: *base
+    restart: "no"
+    command: python /app/manage.py migrate --no-input
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+```
+
+Replace the `networks:` section at the bottom with networks this stack owns,
+and add the volumes:
+
+```yaml
 networks:
   postgres_net:
   redis_network:
-  telegraf_network:
-    name: telegraf_network
-    external: true
+
+volumes:
+  postgres_data: {}
+  redis_data: {}
 ```
 
-When using bundled Postgres, update `secrets/database_url` to use the
-docker-internal hostname:
-
-```
-postgres://mibudge:YOURPASSWORD@postgres:5432/mibudge
-```
-
-And update `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` in `.env`
-to `redis://redis:6379/{0,1,2}`.
-
-Also add `depends_on` to `migrate`, `web`, `celeryworker`, and `celerybeat`:
-
-```yaml
-depends_on:
-  postgres:
-    condition: service_healthy
-  redis:
-    condition: service_healthy
-```
+With bundled services, `secrets/database_url` is
+`postgres://mibudge:YOURPASSWORD@postgres:5432/mibudge`, and the Redis
+settings in `.env` stay as `dot-env.example` has them
+(`redis://redis:6379/0`, `/1` and `/2`).
 
 ---
 

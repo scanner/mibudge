@@ -1400,6 +1400,61 @@ class TestSyncScrapeNotifications:
         # Queued for the digest, not sent immediately.
         check.is_none(n.log_entry, "queued for digest")
 
+    ####################################################################
+    #
+    @pytest.mark.usefixtures("import_complete_opt_in")
+    def test_notify_false_sends_nothing(
+        self, empty_account: BankAccount, user: User
+    ) -> None:
+        """
+        GIVEN: an owner opted in to IMPORT_COMPLETE, and a scrape with a
+               new posted row and a balance mismatch
+        WHEN:  sync_scrape runs with notify=False
+        THEN:  no notification is created
+        """
+        payload = _payload(
+            ending_balance=Decimal("-99.00"),
+            transactions=[
+                _stx(
+                    pending=False,
+                    posted_date=datetime(2026, 5, 18, 0, 0, tzinfo=UTC),
+                    raw_description="NEW TX",
+                    amount=Decimal("-25.00"),
+                ),
+            ],
+        )
+
+        sync_scrape_svc.sync_scrape(empty_account, payload, notify=False)
+
+        assert not Notification.objects.filter(user=user).exists()
+
+    ####################################################################
+    #
+    def test_notify_false_sends_no_import_error(
+        self,
+        empty_account: BankAccount,
+        user: User,
+        mocker: MockerFixture,
+    ) -> None:
+        """
+        GIVEN: _sync_scrape_locked raises an unexpected exception
+        WHEN:  sync_scrape runs with notify=False
+        THEN:  the exception is re-raised and no IMPORT_ERROR is created
+        """
+        mocker.patch(
+            "moneypools.service.sync_scrape._sync_scrape_locked",
+            side_effect=RuntimeError("scraper failed"),
+        )
+
+        with pytest.raises(RuntimeError):
+            sync_scrape_svc.sync_scrape(
+                empty_account,
+                _payload(ending_balance=Decimal("0"), transactions=[]),
+                notify=False,
+            )
+
+        assert not Notification.objects.filter(user=user).exists()
+
 
 ########################################################################
 ########################################################################
