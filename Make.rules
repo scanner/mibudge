@@ -1,11 +1,17 @@
 # -*- Mode: Makefile -*-
 
 UV_RUN := uv run
-PYTHON_VERSION := $(shell grep 'requires-python' $(ROOT_DIR)/pyproject.toml | grep -oE '[0-9]+\.[0-9]+')
+PYTHON_VERSION := $(shell cat $(ROOT_DIR)/.python-version)
 
-.git/hooks/pre-commit .git/hooks/pre-push: .venv
-	@$(UV_RUN) pre-commit install
-	@touch .git/hooks/pre-commit .git/hooks/pre-push
+# The hook runs pre-commit through `uv run`, so it uses the `.venv` of
+# whichever machine it runs on; `.git/hooks` is shared by every machine
+# that syncs the checkout, so it holds no interpreter path.
+#
+.git/hooks/pre-commit: Make.rules
+	@printf '%s\n' '#!/usr/bin/env bash' \
+	  'exec uv run --quiet pre-commit hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$$(cd "$$(dirname "$$0")" && pwd)" -- "$$@"' > $@
+	@chmod +x $@
+	@echo "pre-commit hook installed"
 
 clean::
 	@find $(ROOT_DIR) -name \*~ -exec rm '{}' +
@@ -13,9 +19,6 @@ clean::
 	@find $(ROOT_DIR) -name __pycache__ -prune -exec rm -fr '{}' +
 	@rm -rf build dist *.egg-info .ruff_cache .mypy_cache
 	@rm -rf .venv
-
-$(ROOT_DIR)/.python-version: $(ROOT_DIR)/pyproject.toml
-	@echo $(PYTHON_VERSION) > $@
 
 $(ROOT_DIR)/.venv: pyproject.toml uv.lock $(ROOT_DIR)/.python-version
 	@uv sync

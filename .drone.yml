@@ -14,8 +14,8 @@ volumes:
 
 steps:
   - name: python lint
-    # NOTE: Keep this version in sync with requires-python in pyproject.toml
-    image: "python:3.13.12"
+    # NOTE: Keep this version in sync with .python-version
+    image: "python:3.13.16"
     volumes:
       - name: python-venv
         path: /drone/src/.venv
@@ -49,7 +49,7 @@ steps:
       - pnpm type-check
 
   - name: python tests
-    image: "python:3.13.12"
+    image: "python:3.13.16"
     depends_on:
       - python lint
     volumes:
@@ -72,7 +72,7 @@ steps:
     # accepts TCP connections, as app/scripts/start_uvicorn.sh does; the
     # postgres image's init server listens on a Unix socket only, so the
     # port opens when the real server is up.
-    image: "python:3.13.12"
+    image: "python:3.13.16"
     depends_on:
       - python lint
     volumes:
@@ -142,6 +142,8 @@ steps:
       auto_tag: true
       target: prod
       build_args:
+        # NOTE: Keep PYTHON_VERSION in sync with .python-version
+        - PYTHON_VERSION=3.13.16
         - VERSION=${DRONE_TAG}
 
   - name: Build dev
@@ -157,6 +159,8 @@ steps:
       auto_tag_suffix: dev
       target: dev
       build_args:
+        # NOTE: Keep PYTHON_VERSION in sync with .python-version
+        - PYTHON_VERSION=3.13.16
         - VERSION=${DRONE_TAG}
 
 trigger:
