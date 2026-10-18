@@ -1265,7 +1265,7 @@ export interface components {
             readonly last_imported_at: string | null;
             /**
              * Format: date
-             * @description Latest posted_date seen in the most recent import batch. The funding engine will not process events dated after this value.
+             * @description Latest posted_date seen by an import. Informational only; funding does not read it.
              */
             readonly last_posted_through: string | null;
             /** Format: date-time */
