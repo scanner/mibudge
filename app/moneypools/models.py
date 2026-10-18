@@ -261,8 +261,8 @@ class BankAccount(MoneyPoolBaseClass):
         blank=True,
         default=None,
         help_text=(
-            "Latest posted_date seen in the most recent import batch. "
-            "The funding engine will not process events dated after this value."
+            "Latest posted_date seen by an import. Informational only; "
+            "funding does not read it."
         ),
     )
 

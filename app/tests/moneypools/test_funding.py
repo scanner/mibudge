@@ -137,8 +137,7 @@ class TestFundingEngineSingleEvent:
         system_user: User,
     ) -> None:
         """
-        GIVEN: a GOAL budget with FIXED_AMOUNT $50/month, unallocated=$200,
-               last_posted_through covers today
+        GIVEN: a GOAL budget with FIXED_AMOUNT $50/month, unallocated=$200
         WHEN:  fund_account is called
         THEN:  $50 is transferred; last_funded_on advances; 1 transfer reported
         """
@@ -1767,8 +1766,7 @@ class TestNextFundingInfo:
         """
         GIVEN: RECURRING+fillup budget that has never been funded
                (last_funded_on=None, created May 1); funding schedule fires on
-               the 15th and last day of each month; last_posted_through=April 30;
-               today=May 9
+               the 15th and last day of each month; today=May 9
         WHEN:  next_funding_info called on the fillup goal
         THEN:  returns date=April 30 (catch-up), not May 15 (next future event)
 

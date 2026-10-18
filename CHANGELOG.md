@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The description of a bank account's `last_posted_through` no longer claims that funding stops at that date: funding does not read it. Migration `moneypools.0044` changes only the field's help text and makes no database changes
+
 ## [0.4.0] - 2026-10-16
 
 ### Added

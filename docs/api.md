@@ -747,8 +747,7 @@ Common responses: `400` · `401` · `404` · `429`
   "auto_funding_enabled": false,    // boolean · optional
   // Wall-clock time of the most recent completed import for this account.
   "last_imported_at": "2026-09-29T14:00:00Z",  // date-time | null · read-only
-  // Latest posted_date seen in the most recent import batch. The funding engine will
-  // not process events dated after this value.
+  // Latest posted_date seen by an import. Informational only; funding does not read it.
   "last_posted_through": "2026-09-29",  // date | null · read-only
   "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
   "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
