@@ -1,9 +1,28 @@
 # mibudge API
 
-Version 1.0.0.
+Version 0.4.0.
 
 REST API for the mibudge personal budgeting service.  Every versioned
-endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`.
+endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`
+and the version endpoint is `/api/version/`.
+
+## Versions
+
+`GET /api/version/` answers the release the server runs and the API
+versions it serves, and needs no credentials:
+
+```json
+{"version": "0.4.1", "api_versions": ["v1"]}
+```
+
+Every `/api/` response, errors included, carries the release in an
+`X-Mibudge-Version` header.
+
+Releases follow semantic versioning.  Before 1.0, a breaking change to
+the API is made in `/api/v1/` itself and bumps the minor version.  At
+1.0, `/api/v1/` is frozen: from then on a breaking change ships as a new
+`/api/vN/` alongside the existing ones, so a client moves to it when it
+is ready, and removing an `/api/vN/` is a major release.
 
 ## Authentication
 
@@ -23,7 +42,7 @@ Send one of:
 
 A few endpoints need no credentials (the public invitation and
 email-change link endpoints).  A bad credential is refused with 401 even
-there.
+there.  `GET /api/version/` ignores credentials altogether.
 
 ## Permissions
 
@@ -2121,3 +2140,39 @@ Common responses: `401` · `403` · `429`
   "has_usable_password": false      // boolean · read-only
 }
 ```
+
+### meta
+
+#### `GET /api/version/`
+
+**Get the server version.**
+
+Return the release the server runs and the API versions it serves.  Needs no credentials, and ignores any that are sent.
+
+Example: A server running release 0.4.1.
+
+**200**
+
+Returns:
+
+```jsonc
+{
+  // The release the server runs, e.g. '0.4.1'.
+  "version": "string",              // string
+  // The API versions served, each at '/api/<version>/'.
+  "api_versions": ["string"]        // array of string
+}
+```
+
+*Example response -- Example response:*
+
+```json
+{
+  "version": "0.4.1",
+  "api_versions": [
+    "v1"
+  ]
+}
+```
+
+Common responses: `429`

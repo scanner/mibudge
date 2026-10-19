@@ -1173,6 +1173,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/version/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the server version
+         * @description Return the release the server runs and the API versions it serves.  Needs no credentials, and ignores any that are sent.
+         */
+        get: operations["api_version_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1948,6 +1968,12 @@ export interface components {
             running_balance?: string | null;
             /** @description ISO 4217 currency of `amount`.  Optional: defaults to the bank account's currency, and any other currency is refused. */
             amount_currency?: string;
+        };
+        ServerVersion: {
+            /** @description The release the server runs, e.g. '0.4.1'. */
+            version: string;
+            /** @description The API versions served, each at '/api/<version>/'. */
+            api_versions: string[];
         };
         Transaction: {
             /** Format: uuid */
@@ -6463,6 +6489,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    api_version_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerVersion"];
                 };
             };
             /** @description Rate limit exceeded; wait `Retry-After` seconds (see Throttling). */

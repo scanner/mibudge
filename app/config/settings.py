@@ -71,6 +71,9 @@ CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 TIME_ZONE = env("TIME_ZONE", default="America/Los_Angeles")
 LANGUAGE_CODE = "en-us"
 SITE_ID = 1
+# The release this server runs.  The image build sets it from the release
+# version (`make build`, the Drone tag build), which `pyproject.toml` declares.
+MIBUDGE_VERSION = env("MIBUDGE_VERSION", default="unknown")
 REPOSITORY_URL = env(
     "REPOSITORY_URL", default="https://github.com/scanner/mibudge"
 )
@@ -91,6 +94,7 @@ SITE_DISPLAY_NAME = env("SITE_DISPLAY_NAME", default="MiBudge [dev]")
 #
 SETTINGS_EXPORT = [
     "ADMINISTRATIVE_EMAIL_ADDRESS",
+    "MIBUDGE_VERSION",
     "REPOSITORY_URL",
 ]
 USE_I18N = False
@@ -196,6 +200,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # ------------------------------------------------------------------------------
 MIDDLEWARE = [
     "common.middleware.ClientAddressMiddleware",
+    "common.middleware.ServerVersionMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -487,7 +492,26 @@ API_KEY_EXPIRY_NOTICE_DAYS = env.int("API_KEY_EXPIRY_NOTICE_DAYS", default=14)
 #
 API_DESCRIPTION = f"""\
 REST API for the mibudge personal budgeting service.  Every versioned
-endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`.
+endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`
+and the version endpoint is `/api/version/`.
+
+## Versions
+
+`GET /api/version/` answers the release the server runs and the API
+versions it serves, and needs no credentials:
+
+```json
+{{"version": "0.4.1", "api_versions": ["v1"]}}
+```
+
+Every `/api/` response, errors included, carries the release in an
+`X-Mibudge-Version` header.
+
+Releases follow semantic versioning.  Before 1.0, a breaking change to
+the API is made in `/api/v1/` itself and bumps the minor version.  At
+1.0, `/api/v1/` is frozen: from then on a breaking change ships as a new
+`/api/vN/` alongside the existing ones, so a client moves to it when it
+is ready, and removing an `/api/vN/` is a major release.
 
 ## Authentication
 
@@ -507,7 +531,7 @@ Send one of:
 
 A few endpoints need no credentials (the public invitation and
 email-change link endpoints).  A bad credential is refused with 401 even
-there.
+there.  `GET /api/version/` ignores credentials altogether.
 
 ## Permissions
 
@@ -601,7 +625,7 @@ errors in full.
 SPECTACULAR_SETTINGS = {
     "TITLE": "mibudge API",
     "DESCRIPTION": API_DESCRIPTION,
-    "VERSION": "1.0.0",
+    "VERSION": MIBUDGE_VERSION,
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1/",
@@ -644,6 +668,7 @@ SIMPLE_JWT = {
 # django-cors-headers
 # ------------------------------------------------------------------------------
 CORS_URLS_REGEX = r"^/api/.*$"
+CORS_EXPOSE_HEADERS = ["X-Mibudge-Version"]
 
 # CACHES
 # ------------------------------------------------------------------------------

@@ -19,9 +19,18 @@ const httpsConfig =
     ? { cert: readFileSync(sslCert), key: readFileSync(sslKey) }
     : undefined
 
+// The release this bundle belongs to, built in as __MIBUDGE_SPA_VERSION__.
+// `make up` and the image build set MIBUDGE_VERSION from the release version,
+// the same value the server reports in its X-Mibudge-Version header.
+const spaVersion = process.env.MIBUDGE_VERSION || 'unknown'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+
+  define: {
+    __MIBUDGE_SPA_VERSION__: JSON.stringify(spaVersion),
+  },
 
   resolve: {
     alias: {

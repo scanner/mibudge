@@ -1,10 +1,29 @@
 openapi: 3.0.3
 info:
   title: mibudge API
-  version: 1.0.0
+  version: 0.4.0
   description: |
     REST API for the mibudge personal budgeting service.  Every versioned
-    endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`.
+    endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`
+    and the version endpoint is `/api/version/`.
+
+    ## Versions
+
+    `GET /api/version/` answers the release the server runs and the API
+    versions it serves, and needs no credentials:
+
+    ```json
+    {"version": "0.4.1", "api_versions": ["v1"]}
+    ```
+
+    Every `/api/` response, errors included, carries the release in an
+    `X-Mibudge-Version` header.
+
+    Releases follow semantic versioning.  Before 1.0, a breaking change to
+    the API is made in `/api/v1/` itself and bumps the minor version.  At
+    1.0, `/api/v1/` is frozen: from then on a breaking change ships as a new
+    `/api/vN/` alongside the existing ones, so a client moves to it when it
+    is ready, and removing an `/api/vN/` is a major release.
 
     ## Authentication
 
@@ -24,7 +43,7 @@ info:
 
     A few endpoints need no credentials (the public invitation and
     email-change link endpoints).  A bad credential is refused with 401 even
-    there.
+    there.  `GET /api/version/` ignores credentials altogether.
 
     ## Permissions
 
@@ -4624,6 +4643,30 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
           x-common-response: true
+  /api/version/:
+    get:
+      operationId: api_version_retrieve
+      description: Return the release the server runs and the API versions it serves.  Needs
+        no credentials, and ignores any that are sent.
+      summary: Get the server version
+      tags:
+      - meta
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerVersion'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Rate limit exceeded; wait `Retry-After` seconds (see Throttling).
+          x-common-response: true
 components:
   schemas:
     APIKey:
@@ -6399,6 +6442,20 @@ components:
       - is_pending
       - posted_date
       - raw_description
+    ServerVersion:
+      type: object
+      properties:
+        version:
+          type: string
+          description: The release the server runs, e.g. '0.4.1'.
+        api_versions:
+          type: array
+          items:
+            type: string
+          description: The API versions served, each at '/api/<version>/'.
+      required:
+      - api_versions
+      - version
     Transaction:
       type: object
       properties:

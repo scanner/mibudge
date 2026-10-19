@@ -213,6 +213,15 @@ and the error shape.
   instead of reloading in a loop. Other lazy imports, such as the
   password strength meter's `zxcvbn`, are left to fail; a reload of the
   page fixes them.
+- **A new release is offered before anything fails.** The build defines
+  `__MIBUDGE_SPA_VERSION__` from `MIBUDGE_VERSION` (`vite.config.ts`;
+  `make up` and the image build set it), and every API response names
+  the server's release in `X-Mibudge-Version`. `http.ts` passes the
+  header to the release store (`stores/release.ts`), and when the two
+  releases differ (`domain/release.ts`; `"unknown"` on either side never
+  does) `AppShell` shows a banner whose Reload loads the page again. The
+  account settings page ends with both releases. The comparison holds
+  while the SPA and the server are released together.
 
 Every route's component is a lazy `import()`, so each view is its own
 chunk. [adding-a-page.md](adding-a-page.md) has the steps for adding a

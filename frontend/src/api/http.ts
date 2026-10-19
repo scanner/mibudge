@@ -17,7 +17,9 @@
 // - throws `ApiError` (DRF error body parsed) on any other non-2xx;
 // - throws `NetworkError` when `fetch` itself rejects, except for an
 //   abort, which is rethrown as is;
-// - resolves to `null` for an empty or non-JSON 2xx response.
+// - resolves to `null` for an empty or non-JSON 2xx response;
+// - passes each response's `X-Mibudge-Version` header, errors
+//   included, to `onServerVersion`.
 //
 // `main.ts` creates the client once and wires the callbacks to the
 // session store; `api/index.ts` hands it to the resource modules.
@@ -59,6 +61,8 @@ export interface HttpClientConfig {
   // `true` on success; `false` or a rejection means the session is over.
   refresh: () => Promise<boolean>;
   onAuthFailure?: (err: AuthError) => void;
+  // The release the server runs, from a response's `X-Mibudge-Version`.
+  onServerVersion?: (version: string) => void;
   fetchImpl?: typeof fetch;
 }
 
@@ -168,19 +172,26 @@ export function createHttpClient(config: HttpClientConfig): HttpClient {
     const token = options.auth === false ? null : config.getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
 
+    let response: Response;
     try {
-      return await doFetch(`${baseUrl}${path}${toQueryString(options.query)}`, {
-        method: options.method ?? "GET",
-        headers,
-        body,
-        signal: options.signal,
-        credentials: "same-origin",
-      });
+      response = await doFetch(
+        `${baseUrl}${path}${toQueryString(options.query)}`,
+        {
+          method: options.method ?? "GET",
+          headers,
+          body,
+          signal: options.signal,
+          credentials: "same-origin",
+        },
+      );
     } catch (err) {
       // An abort is the caller's own doing; rethrow it as is.
       if (err instanceof DOMException && err.name === "AbortError") throw err;
       throw new NetworkError(err);
     }
+    const version = response.headers.get("X-Mibudge-Version");
+    if (version) config.onServerVersion?.(version);
+    return response;
   }
 
   //////////////////////////////////////////////////////////////////////

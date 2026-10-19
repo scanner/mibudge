@@ -1,6 +1,7 @@
 //
 // AppShell tests: the account-context header (TopBar) and the account
-// switcher, wired to the stores by the shell.  One test spies on store
+// switcher, wired to the stores by the shell, and the banner offering a
+// reload when the server runs another release.  One test spies on store
 // actions with `createTestingPinia` to check what the shell asks the
 // budgets store for; the others run the real stores against the mock
 // REST API.
@@ -19,6 +20,7 @@ import AppShell from "@/features/shell/AppShell.vue";
 import { bankAccountFromDto } from "@/models/bankAccount";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
+import { useReleaseStore } from "@/stores/release";
 import { mountWithApp, withAccounts, withAuth } from "../../helpers";
 import { makeBankAccount, makeBudget, makePage } from "../../mocks/factories";
 import { requestsTo, server } from "../../mocks/server";
@@ -213,5 +215,46 @@ describe("account switcher", () => {
         "unallocated budget",
       )
       .toBe(before + 1);
+  });
+
+  // GIVEN: the shell built from release 1.0.0
+  // WHEN:  the server reports its release
+  // THEN:  a banner offers a reload only when the server's release is
+  //        another one
+  //
+  it.each([
+    ["1.0.0", false],
+    ["2.0.0", true],
+  ])("server on %s shows the reload banner: %s", async (version, shown) => {
+    withAuth();
+    withAccounts([makeBankAccount()]);
+    const { wrapper } = await mountWithApp(AppShell, { route: "/budgets/" });
+
+    useReleaseStore().noteServerVersion(version);
+    await flushPromises();
+
+    expect(wrapper.text().includes("A new version of mibudge")).toBe(shown);
+  });
+
+  // GIVEN: the reload banner on screen
+  // WHEN:  the user presses Reload
+  // THEN:  the page is loaded again
+  //
+  it("reloads the page from the banner", async () => {
+    withAuth();
+    withAccounts([makeBankAccount()]);
+    const reload = vi
+      .spyOn(window.location, "reload")
+      .mockImplementation(() => undefined);
+    const { wrapper } = await mountWithApp(AppShell, { route: "/budgets/" });
+    useReleaseStore().noteServerVersion("2.0.0");
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text().trim() === "Reload")!
+      .trigger("click");
+
+    expect(reload).toHaveBeenCalledOnce();
   });
 });

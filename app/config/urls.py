@@ -10,7 +10,7 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
-from config.views import home_view, spa_shell_view
+from config.views import home_view, server_version, spa_shell_view
 from users.views import (
     cookie_token_logout_view,
     cookie_token_obtain_pair_view,
@@ -96,6 +96,8 @@ urlpatterns = [
     path("api/token/", cookie_token_obtain_pair_view, name="token-obtain"),
     path("api/token/refresh/", cookie_token_refresh_view, name="token-refresh"),
     path("api/token/logout/", cookie_token_logout_view, name="token-logout"),
+    # Cross-version: the release and the API versions it serves.
+    path("api/version/", server_version, name="server-version"),
     # OpenAPI schema + interactive docs for v1. The schema necessarily
     # describes one API version, so it lives under that version's prefix.
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),

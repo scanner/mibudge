@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /api/version/` reports the release the server runs and the API versions it serves, without signing in, and every API response names the release in an `X-Mibudge-Version` header. The OpenAPI schema's version and the landing page's footer show the release too
+- The SPA offers a reload when the server runs a newer (or older) release than the open tab, and the settings page shows the releases of the SPA and the server
+
 ### Fixed
 
 - After a deploy, a tab opened before it no longer fails to open a page it had not visited yet: it loads that page fresh, running the new release. The SPA shell is sent with `Cache-Control: no-cache`, so every page load gets the current release

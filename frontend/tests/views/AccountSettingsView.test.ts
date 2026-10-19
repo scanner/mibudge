@@ -1,6 +1,7 @@
 //
 // AccountSettingsView tests: the password, API key, notification and
-// outgoing-invitation sections against the mock REST API.
+// outgoing-invitation sections against the mock REST API, and the
+// releases shown at the bottom.
 //
 
 // 3rd party imports
@@ -11,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // app imports
 //
+import { useReleaseStore } from "@/stores/release";
 import AccountSettingsView from "@/views/AccountSettingsView.vue";
 import { mountWithApp, withAccounts, withAuth } from "../helpers";
 import {
@@ -384,5 +386,24 @@ describe("AccountSettingsView", () => {
       ),
     ).toHaveLength(1);
     expect(wrapper.text()).not.toContain("friend@example.com");
+  });
+
+  // GIVEN: the SPA built from release 1.0.0
+  // WHEN:  the settings page shows, before and after the server has
+  //        reported its release
+  // THEN:  the bottom names both releases, the server's as a dash until
+  //        it is known
+  //
+  it.each([
+    [null, "Web app 1.0.0, server -"],
+    ["2.0.0", "Web app 1.0.0, server 2.0.0"],
+  ])("shows the releases with server %j", async (version, text) => {
+    const { wrapper } = await mountWithApp(AccountSettingsView, {
+      route: "/account/settings/",
+    });
+    if (version) useReleaseStore().noteServerVersion(version);
+    await flushPromises();
+
+    expect(wrapper.text().replace(/\s+/g, " ")).toContain(text);
   });
 });

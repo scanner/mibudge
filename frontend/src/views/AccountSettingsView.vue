@@ -8,6 +8,8 @@
 // page, so a user who invited people to several accounts can review
 // and cancel them in one place.  Each section loads once on mount.
 //
+// The page ends with the releases of the SPA and the server.
+//
 
 // app imports
 //
@@ -15,6 +17,7 @@ import ApiKeysSection from "@/features/settings/ApiKeysSection.vue";
 import NotificationsSection from "@/features/settings/NotificationsSection.vue";
 import OutgoingInvitationsSection from "@/features/settings/OutgoingInvitationsSection.vue";
 import PasswordSection from "@/features/settings/PasswordSection.vue";
+import VersionSection from "@/features/settings/VersionSection.vue";
 import AppShell from "@/features/shell/AppShell.vue";
 import BasePageHeader from "@/components/base/BasePageHeader.vue";
 </script>
@@ -32,6 +35,8 @@ import BasePageHeader from "@/components/base/BasePageHeader.vue";
       <NotificationsSection />
 
       <OutgoingInvitationsSection />
+
+      <VersionSection />
     </div>
   </AppShell>
 </template>

@@ -1,7 +1,8 @@
 //
 // Transport tests for `src/api/http.ts` and `src/api/errors.ts`: paths,
 // the auth header, body and query encoding, empty responses, DRF error
-// parsing, and the 401 → single-flight refresh → retry cycle.
+// parsing, the 401 → single-flight refresh → retry cycle, and the
+// server release reported in `X-Mibudge-Version`.
 //
 // Most tests build a client with `createHttpClient` and a token /
 // refresh they control.  The last group runs the session-wired client
@@ -25,6 +26,7 @@ import {
 } from "@/api/errors";
 import { createHttpClient, pathOf, toQueryString } from "@/api/http";
 import type { HttpClientConfig } from "@/api/http";
+import { useReleaseStore } from "@/stores/release";
 import { useSessionStore } from "@/stores/session";
 import { expire, respondOnce401, TEST_TOKEN, withAuth } from "../helpers";
 import { makePage, makeUser } from "../mocks/factories";
@@ -446,9 +448,68 @@ describe("401 handling", () => {
 
 ////////////////////////////////////////////////////////////////////////
 //
+describe("server release header", () => {
+  // GIVEN: a server that names its release in `X-Mibudge-Version`
+  // WHEN:  a request gets a success or an error response
+  // THEN:  the client passes the release to `onServerVersion` either way
+  //
+  it.each([200, 404])("is reported from a %s response", async (status) => {
+    server.use(
+      http.get("/api/v1/banks/", () =>
+        HttpResponse.json(makePage([]), {
+          status,
+          headers: { "X-Mibudge-Version": "2.0.0" },
+        }),
+      ),
+    );
+    const onServerVersion = vi.fn();
+
+    await client({ onServerVersion })
+      .get("/api/v1/banks/")
+      .catch(() => undefined);
+
+    expect(onServerVersion.mock.calls).toEqual([["2.0.0"]]);
+  });
+
+  // GIVEN: a response without `X-Mibudge-Version`
+  // WHEN:  it arrives
+  // THEN:  `onServerVersion` is not called
+  //
+  it("is not reported when absent", async () => {
+    const onServerVersion = vi.fn();
+
+    await client({ onServerVersion }).get("/api/v1/banks/");
+
+    expect(onServerVersion).not.toHaveBeenCalled();
+  });
+});
+
+////////////////////////////////////////////////////////////////////////
+//
 // The client from `tests/setup.ts`, wired to the session store.
 //
 describe("session-wired client", () => {
+  // GIVEN: a server running a release other than the SPA's
+  // WHEN:  a response names it in `X-Mibudge-Version`
+  // THEN:  the release store records it and offers the update
+  //
+  it("records the server release in the release store", async () => {
+    withAuth();
+    server.use(
+      http.get("/api/v1/banks/", () =>
+        HttpResponse.json(makePage([]), {
+          headers: { "X-Mibudge-Version": "2.0.0" },
+        }),
+      ),
+    );
+
+    await api.banks.list();
+
+    const release = useReleaseStore();
+    expect(release.serverVersion).toBe("2.0.0");
+    expect(release.updateAvailable).toBe(true);
+  });
+
   // GIVEN: an access token the server no longer accepts
   // WHEN:  an authenticated request gets 401
   // THEN:  the store refreshes once and retries the request with the
