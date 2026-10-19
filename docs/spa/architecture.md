@@ -198,6 +198,21 @@ and the error shape.
   revoke link, the backend redirects to
   `/app/email-change/{confirmed,revoked,error}/`, so those paths must
   match the backend's `SPA_EMAIL_CHANGE_*` constants.
+- **A new release reaches an open tab on its next failed view load.**
+  Chunk names carry a content hash, and the server has only the current
+  release's chunks. A tab opened before a deploy still runs the old
+  bundle, so navigating to a view it has not loaded yet fails.
+  `router/staleChunk.ts` (installed by `createAppRouter`) then does a
+  full page load of the route the user was going to. Django sends the
+  shell with `Cache-Control: no-cache, max-age=0`, so that load fetches
+  the current shell and bundle. It reloads only for a chunk that would
+  not load (Vite's `vite:preloadError`, or the browser's own "module
+  failed to load" message), at most once per target every 30 seconds
+  (kept in sessionStorage), and not at all when sessionStorage cannot
+  be used, so a chunk that is really missing fails the navigation
+  instead of reloading in a loop. Other lazy imports, such as the
+  password strength meter's `zxcvbn`, are left to fail; a reload of the
+  page fixes them.
 
 Every route's component is a lazy `import()`, so each view is its own
 chunk. [adding-a-page.md](adding-a-page.md) has the steps for adding a

@@ -4,6 +4,7 @@
 
 # 3rd party imports
 #
+from django.views.decorators.cache import cache_control
 from django.views.generic import TemplateView
 
 # app imports
@@ -26,12 +27,16 @@ class SpaShellView(TemplateView):
     The template loads the Vite-built bundle (or connects to the Vite dev
     server in development). All further routing is handled client-side by
     Vue Router -- the server never sees sub-routes.
+
+    The shell is sent with `Cache-Control: no-cache, max-age=0`, so every
+    page load asks the server for it and gets the current release's
+    asset names.  The hashed assets themselves are cached as immutable.
     """
 
     template_name = "spa/shell.html"
 
 
-spa_shell_view = SpaShellView.as_view()
+spa_shell_view = cache_control(no_cache=True, max_age=0)(SpaShellView.as_view())
 
 
 ########################################################################

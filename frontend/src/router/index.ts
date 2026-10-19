@@ -27,6 +27,7 @@ import type {
 
 // app imports
 //
+import { reloadOnStaleChunk } from "@/router/staleChunk";
 import type { AppRouteName, RouteAccess } from "@/router/types";
 import { useSessionStore } from "@/stores/session";
 
@@ -179,13 +180,17 @@ export function redirectToLogin(router: Router): Promise<unknown> {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// A router with the app's routes and auth guard.  The app uses browser
-// history under `/app/`; tests pass a memory history.
+// A router with the app's routes, auth guard and stale-chunk recovery
+// (`router/staleChunk.ts`).  The app uses browser history under
+// `/app/` and reloads with `window.location.assign`; tests pass a
+// memory history.
 //
 export function createAppRouter(
   history: RouterHistory = createWebHistory("/app/"),
+  reload: (href: string) => void = (href) => window.location.assign(href),
 ): Router {
   const router = createRouter({ history, routes });
   router.beforeEach(authGuard);
+  reloadOnStaleChunk(router, reload);
   return router;
 }
