@@ -8,9 +8,13 @@ import viteConfig from './vite.config'
 export default mergeConfig(
   viteConfig,
   defineConfig({
-    // The release the tests' bundle is built from, so a test can have the
-    // server report the same release or another one.
-    define: { __MIBUDGE_SPA_VERSION__: JSON.stringify('1.0.0') },
+    // The release the tests' bundle is built from and the server releases
+    // it supports, so a test can have the server report a supported release
+    // or another one.
+    define: {
+      __MIBUDGE_SPA_VERSION__: JSON.stringify('1.0.0'),
+      __MIBUDGE_SUPPORTED_SERVER__: JSON.stringify('>=1.0.0 <2.0.0'),
+    },
     test: {
       environment: 'happy-dom',
       // client.ts fetches relative URLs (`/api/v1/...`); a page URL gives

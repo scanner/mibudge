@@ -388,15 +388,16 @@ describe("AccountSettingsView", () => {
     expect(wrapper.text()).not.toContain("friend@example.com");
   });
 
-  // GIVEN: the SPA built from release 1.0.0
+  // GIVEN: the SPA built from release 1.0.0, supporting servers
+  //        >=1.0.0 <2.0.0
   // WHEN:  the settings page shows, before and after the server has
   //        reported its release
-  // THEN:  the bottom names both releases, the server's as a dash until
-  //        it is known
+  // THEN:  the bottom names the releases and the supported range, the
+  //        server's release as a dash until it is known
   //
   it.each([
-    [null, "Web app 1.0.0, server -"],
-    ["2.0.0", "Web app 1.0.0, server 2.0.0"],
+    [null, "Web app 1.0.0, supports server >=1.0.0 <2.0.0; server -"],
+    ["2.0.0", "Web app 1.0.0, supports server >=1.0.0 <2.0.0; server 2.0.0"],
   ])("shows the releases with server %j", async (version, text) => {
     const { wrapper } = await mountWithApp(AccountSettingsView, {
       route: "/account/settings/",

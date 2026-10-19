@@ -491,7 +491,7 @@ describe("server release header", () => {
 describe("session-wired client", () => {
   // GIVEN: a server running a release other than the SPA's
   // WHEN:  a response names it in `X-Mibudge-Version`
-  // THEN:  the release store records it and offers the update
+  // THEN:  the release store records it and finds it unsupported
   //
   it("records the server release in the release store", async () => {
     withAuth();
@@ -507,7 +507,7 @@ describe("session-wired client", () => {
 
     const release = useReleaseStore();
     expect(release.serverVersion).toBe("2.0.0");
-    expect(release.updateAvailable).toBe(true);
+    expect(release.unsupportedServer).toBe(true);
   });
 
   // GIVEN: an access token the server no longer accepts

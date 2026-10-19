@@ -16,9 +16,9 @@
 // account's budgets may have.  Pulling down from the top (touch) or
 // the SideNav's Refresh button signals everything now.
 //
-// When the server reports a release other than this bundle's
+// When the server reports a release this bundle does not support
 // (`stores/release.ts`), a banner offers a page load, which gets the
-// server's release.
+// bundle the server serves.
 //
 
 // 3rd party imports
@@ -164,7 +164,7 @@ function manageAccounts() {
       />
       <main class="flex-1 px-page-x pb-4">
         <BaseBanner
-          v-if="release.updateAvailable"
+          v-if="release.unsupportedServer"
           class="mt-3 flex items-center justify-between gap-3"
         >
           <span>A new version of mibudge is available.</span>

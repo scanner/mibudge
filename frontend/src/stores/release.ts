@@ -3,9 +3,9 @@
 // it.  Store layer.
 //
 // `createSessionHttpClient()` passes every response's
-// `X-Mibudge-Version` to `noteServerVersion()`.  `updateAvailable` is
-// true once the server reports a release other than the one this
-// bundle was built from (`domain/release.ts`); the shell then offers a
+// `X-Mibudge-Version` to `noteServerVersion()`.  `unsupportedServer`
+// is true once the server reports a release outside the range this
+// bundle supports (`domain/release.ts`); the shell then offers a
 // reload.
 //
 
@@ -16,7 +16,11 @@ import { computed, ref } from "vue";
 
 // app imports
 //
-import { SPA_VERSION, isOtherRelease } from "@/domain/release";
+import {
+  isUnsupportedServer,
+  SPA_VERSION,
+  SUPPORTED_SERVER,
+} from "@/domain/release";
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -24,9 +28,10 @@ import { SPA_VERSION, isOtherRelease } from "@/domain/release";
 export const useReleaseStore = defineStore("release", () => {
   const serverVersion = ref<string | null>(null);
   const spaVersion = SPA_VERSION;
+  const supportedServer = SUPPORTED_SERVER;
 
-  const updateAvailable = computed(() =>
-    isOtherRelease(serverVersion.value, spaVersion),
+  const unsupportedServer = computed(() =>
+    isUnsupportedServer(serverVersion.value, supportedServer),
   );
 
   function noteServerVersion(version: string): void {
@@ -40,7 +45,8 @@ export const useReleaseStore = defineStore("release", () => {
   return {
     serverVersion,
     spaVersion,
-    updateAvailable,
+    supportedServer,
+    unsupportedServer,
     noteServerVersion,
     reset,
   };

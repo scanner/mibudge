@@ -214,14 +214,19 @@ and the error shape.
   password strength meter's `zxcvbn`, are left to fail; a reload of the
   page fixes them.
 - **A new release is offered before anything fails.** The build defines
-  `__MIBUDGE_SPA_VERSION__` from `MIBUDGE_VERSION` (`vite.config.ts`;
-  `make up` and the image build set it), and every API response names
-  the server's release in `X-Mibudge-Version`. `http.ts` passes the
-  header to the release store (`stores/release.ts`), and when the two
-  releases differ (`domain/release.ts`; `"unknown"` on either side never
-  does) `AppShell` shows a banner whose Reload loads the page again. The
-  account settings page ends with both releases. The comparison holds
-  while the SPA and the server are released together.
+  the SPA's release, `__MIBUDGE_SPA_VERSION__`, from `MIBUDGE_VERSION`
+  (`vite.config.ts`; `make up` and the image build set it), and the
+  server releases it supports, `__MIBUDGE_SUPPORTED_SERVER__`, as a
+  semver range. Every API response names the server's release in
+  `X-Mibudge-Version`; `http.ts` passes it to the release store
+  (`stores/release.ts`), and when it is outside the range
+  (`domain/release.ts`; a release or range that is not semver, such as
+  `"unknown"`, never is) `AppShell` shows a banner whose Reload loads
+  the page again. The account settings page ends with the releases and
+  the range. The SPA is released with the server, so the range is
+  exactly the build's release (`=0.4.1`) and a reload gets the matching
+  bundle; an SPA released on its own would declare a wider range and
+  keep its own version.
 
 Every route's component is a lazy `import()`, so each view is its own
 chunk. [adding-a-page.md](adding-a-page.md) has the steps for adding a

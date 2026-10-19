@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `GET /api/version/` reports the release the server runs and the API versions it serves, without signing in, and every API response names the release in an `X-Mibudge-Version` header. The OpenAPI schema's version and the landing page's footer show the release too
-- The SPA offers a reload when the server runs a newer (or older) release than the open tab, and the settings page shows the releases of the SPA and the server
+- The SPA declares the server releases it supports and offers a reload when the server runs another one (as after a deploy), and the settings page shows the SPA's release, the server releases it supports and the server's release. The API reference recommends how other clients check the server's release
 
 ### Fixed
 

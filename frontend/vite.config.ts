@@ -24,12 +24,18 @@ const httpsConfig =
 // the same value the server reports in its X-Mibudge-Version header.
 const spaVersion = process.env.MIBUDGE_VERSION || 'unknown'
 
+// The server releases this bundle supports, a semver range built in as
+// __MIBUDGE_SUPPORTED_SERVER__.  The SPA is released with the server, so it
+// supports exactly the server release it is built with.
+const supportedServer = spaVersion === 'unknown' ? 'unknown' : `=${spaVersion}`
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
 
   define: {
     __MIBUDGE_SPA_VERSION__: JSON.stringify(spaVersion),
+    __MIBUDGE_SUPPORTED_SERVER__: JSON.stringify(supportedServer),
   },
 
   resolve: {

@@ -1,7 +1,7 @@
 //
 // AppShell tests: the account-context header (TopBar) and the account
 // switcher, wired to the stores by the shell, and the banner offering a
-// reload when the server runs another release.  One test spies on store
+// reload when the server runs a release the bundle does not support.  One test spies on store
 // actions with `createTestingPinia` to check what the shell asks the
 // budgets store for; the others run the real stores against the mock
 // REST API.
@@ -217,10 +217,10 @@ describe("account switcher", () => {
       .toBe(before + 1);
   });
 
-  // GIVEN: the shell built from release 1.0.0
+  // GIVEN: the shell built to support servers >=1.0.0 <2.0.0
   // WHEN:  the server reports its release
   // THEN:  a banner offers a reload only when the server's release is
-  //        another one
+  //        outside that range
   //
   it.each([
     ["1.0.0", false],

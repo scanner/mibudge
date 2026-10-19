@@ -29,6 +29,12 @@ change of one version string.
   a new `/api/vN/` alongside the existing ones, so clients move to it on
   their own schedule.
 - Removing an `/api/vN/` is a major release.
+- A client declares the server releases it supports as a semver range
+  and checks the server's release against it; the API reference's
+  "Checking the server's release" (`API_DESCRIPTION` in
+  `app/config/settings.py`, rendered in `docs/api.md`) is the
+  recommendation for client developers. The SPA ships with the server,
+  so its range is exactly the release it is built with.
 
 ## Images
 
