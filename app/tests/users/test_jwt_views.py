@@ -321,3 +321,28 @@ class TestSpaShellView:
             client.force_login(user)
 
         assert client.get(path).status_code == 200
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "path",
+        [
+            pytest.param("/app/", id="root"),
+            pytest.param("/app/some/deep/route", id="deep-subpath"),
+        ],
+    )
+    def test_shell_is_revalidated_on_every_load(
+        self, client: Client, vite_dev_mode: None, path: str
+    ) -> None:
+        """
+        GIVEN: the SPA shell at /app/ or a sub-path
+        WHEN:  it is fetched
+        THEN:  Cache-Control makes the browser revalidate it on every page
+               load, so a deploy's new asset names are picked up
+        """
+        response = client.get(path)
+
+        assert set(response["Cache-Control"].split(", ")) == {
+            "no-cache",
+            "max-age=0",
+        }

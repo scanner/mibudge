@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- After a deploy, a tab opened before it no longer fails to open a page it had not visited yet: it loads that page fresh, running the new release. The SPA shell is sent with `Cache-Control: no-cache`, so every page load gets the current release
 - The description of a bank account's `last_posted_through` no longer claims that funding stops at that date: funding does not read it. Migration `moneypools.0044` changes only the field's help text and makes no database changes
 
 ## [0.4.0] - 2026-10-16
