@@ -84,10 +84,10 @@ certs: | ssl	## Create or renew this host's TLS certificate in deployment/ssl/ w
 up-backend: check-env build dirs certs	## Build the backend stack and bring it up detached (everything except the foreground Vite dev server)
 	@docker compose up --remove-orphans --detach
 
-up: up-backend	## Bring up the backend stack, then run Vite in the foreground
+up: up-backend version	## Bring up the backend stack, then run Vite in the foreground
 	@echo "Backend stack running in the background. Starting Vite dev server..."
 	@echo "(Ctrl-C stops Vite; backend containers keep running -- use 'make down' to stop them.)"
-	@cd $(ROOT_DIR)/frontend && pnpm dev || (echo "\nVite failed to start -- is the dev server already running on port 5173?" && exit 1)
+	@cd $(ROOT_DIR)/frontend && MIBUDGE_VERSION="$(VERSION)" pnpm dev || (echo "\nVite failed to start -- is the dev server already running on port 5173?" && exit 1)
 
 down:	## docker compose down
 	@docker compose down --remove-orphans
@@ -146,8 +146,8 @@ uv-add-dev:	## Add a dev dependency (usage: make uv-add-dev PACKAGE=pytest-xdist
 uv-upgrade:	## Upgrade all dependencies to latest compatible versions
 	@uv sync --upgrade
 
-api-schema: .venv docs	## Generate OpenAPI schema YAML into docs/openapi.yaml
-	@PYTHONPATH=$(ROOT_DIR)/app $(UV_RUN) python app/manage.py spectacular --color --file docs/openapi.yaml
+api-schema: .venv docs version	## Generate OpenAPI schema YAML into docs/openapi.yaml
+	@MIBUDGE_VERSION="$(VERSION)" PYTHONPATH=$(ROOT_DIR)/app $(UV_RUN) python app/manage.py spectacular --color --file docs/openapi.yaml
 	@echo "OpenAPI schema written to docs/openapi.yaml"
 
 api-docs: api-schema	## Generate API markdown docs from OpenAPI schema

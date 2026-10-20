@@ -14,6 +14,27 @@ change of one version string.
   release's code was finished, and an `[Unreleased]` section collecting
   changes for the next one.
 - `make version` prints the version in `pyproject.toml`.
+- A running server reports its release at `GET /api/version/`, which
+  needs no credentials, in an `X-Mibudge-Version` header on every API
+  response, in the OpenAPI schema's `info.version`, and in the landing
+  page's footer. The SPA has the release built in and shows both on the
+  account settings page.
+
+## API versions
+
+- Before 1.0, a breaking change to the REST API is made in `/api/v1/`
+  itself and bumps the minor version. The SPA and the importers change
+  in the same release.
+- At 1.0, `/api/v1/` is frozen. From then on a breaking change ships as
+  a new `/api/vN/` alongside the existing ones, so clients move to it on
+  their own schedule.
+- Removing an `/api/vN/` is a major release.
+- A client declares the server releases it supports as a semver range
+  and checks the server's release against it; the API reference's
+  "Checking the server's release" (`API_DESCRIPTION` in
+  `app/config/settings.py`, rendered in `docs/api.md`) is the
+  recommendation for client developers. The SPA ships with the server,
+  so its range is exactly the release it is built with.
 
 ## Images
 
@@ -26,7 +47,10 @@ image build. The build publishes to `ghcr.io/scanner/mibudge`:
 | `X.Y.Z-dev`, `X.Y-dev` | development image (`dev` target)            |
 
 Every image carries its version in the `org.opencontainers.image.version`
-label (`docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}'`).
+label (`docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}'`)
+and in the `MIBUDGE_VERSION` environment variable, which the server
+reports; the SPA bundle in it is built with the same version. `make up`
+builds the development image the same way and starts Vite with it.
 There is no `latest` tag: a deployment always names a version, as the
 production template's `VERSION` does (`deployment/production/`).
 
@@ -42,6 +66,8 @@ production template's `VERSION` does (`deployment/production/`).
      from the previous release.
    - Set `version = "X.Y.Z"` in `pyproject.toml` and run `uv lock`, which
      updates the project's own entry in `uv.lock`.
+   - Run `make api-docs`, which writes the version into
+     `docs/openapi.yaml` and `docs/api.md`.
    - Set `VERSION=X.Y.Z` in `deployment/production/dot-env.example`, so the
      production template names the newest release.
    - Say in the CHANGELOG when a release has migrations, so a deployer knows

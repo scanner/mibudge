@@ -49,7 +49,10 @@ RUN npm install -g pnpm@9
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Build the production bundle
+# Build the production bundle.  The bundle has the release version built in
+# (`vite.config.ts` reads MIBUDGE_VERSION), the same one the server reports.
+ARG VERSION=unknown
+ENV MIBUDGE_VERSION=$VERSION
 COPY frontend/ ./
 RUN pnpm build
 
@@ -65,6 +68,7 @@ LABEL org.opencontainers.image.description="mibudge Personal Budgeting Service (
 # The release version, set by `make build` and the Drone tag build.
 ARG VERSION=unknown
 LABEL org.opencontainers.image.version=$VERSION
+ENV MIBUDGE_VERSION=$VERSION
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -137,6 +141,7 @@ LABEL org.opencontainers.image.description="mibudge Personal Budgeting Service"
 # The release version, set by `make build` and the Drone tag build.
 ARG VERSION=unknown
 LABEL org.opencontainers.image.version=$VERSION
+ENV MIBUDGE_VERSION=$VERSION
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1

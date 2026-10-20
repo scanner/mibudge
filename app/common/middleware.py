@@ -3,6 +3,7 @@ Request middleware shared across the project.
 
 `ClientAddressMiddleware` sets `REMOTE_ADDR` to the client's address as
 reported by the reverse proxies this deployment trusts.
+`ServerVersionMiddleware` adds the release version to every API response.
 """
 
 # system imports
@@ -74,3 +75,31 @@ class ClientAddressMiddleware:
         if addr:
             request.META["REMOTE_ADDR"] = addr
         return self.get_response(request)
+
+
+########################################################################
+########################################################################
+#
+class ServerVersionMiddleware:
+    """
+    Add `X-Mibudge-Version: <MIBUDGE_VERSION>` to every `/api/` response.
+
+    Errors are tagged too, so a client learns the server's release from
+    whatever response it gets.  The SPA compares it with the release it
+    was built from and offers a reload when they differ.
+    """
+
+    ####################################################################
+    #
+    def __init__(
+        self, get_response: Callable[[HttpRequest], HttpResponseBase]
+    ) -> None:
+        self.get_response = get_response
+
+    ####################################################################
+    #
+    def __call__(self, request: HttpRequest) -> HttpResponseBase:
+        response = self.get_response(request)
+        if request.path_info.startswith("/api/"):
+            response["X-Mibudge-Version"] = settings.MIBUDGE_VERSION
+        return response

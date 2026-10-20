@@ -1,0 +1,10 @@
+{
+  "summary": "A server running release 0.4.1",
+  "response": {
+    "status": "200",
+    "body": {
+      "version": "0.4.1",
+      "api_versions": ["v1"]
+    }
+  }
+}

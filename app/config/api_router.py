@@ -2,7 +2,8 @@
 URL router for version 1 of the mibudge REST API.
 
 Mounted at ``/api/v1/`` in the project URLconf. Cross-version endpoints
-(JWT auth) live outside this router and stay at ``/api/token/...``.
+(JWT auth, the server version) live outside this router, at
+``/api/token/...`` and ``/api/version/``.
 
 Versioning policy: even though there is only one version today, all
 resource endpoints live under ``/api/v1/`` so a future ``/api/v2/``

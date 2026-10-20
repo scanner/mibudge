@@ -16,6 +16,10 @@
 // account's budgets may have.  Pulling down from the top (touch) or
 // the SideNav's Refresh button signals everything now.
 //
+// When the server reports a release this bundle does not support
+// (`stores/release.ts`), a banner offers a page load, which gets the
+// bundle the server serves.
+//
 
 // 3rd party imports
 //
@@ -28,17 +32,21 @@ import BottomNav from "@/components/layout/BottomNav.vue";
 import PullIndicator from "@/components/layout/PullIndicator.vue";
 import SideNav from "@/components/layout/SideNav.vue";
 import TopBar from "@/components/layout/TopBar.vue";
+import BaseBanner from "@/components/base/BaseBanner.vue";
+import BaseButton from "@/components/base/BaseButton.vue";
 import AccountSwitcher from "@/components/shared/AccountSwitcher.vue";
 import { usePullToRefresh } from "@/composables/usePullToRefresh";
 import type { AppRouteName } from "@/router/types";
 import { useAccountContextStore } from "@/stores/accountContext";
 import { useBudgetsStore } from "@/stores/budgets";
 import { accountInterest, useInvalidationStore } from "@/stores/invalidation";
+import { useReleaseStore } from "@/stores/release";
 
 ////////////////////////////////////////////////////////////////////////
 //
 const ctx = useAccountContextStore();
 const budgets = useBudgetsStore();
+const release = useReleaseStore();
 const route = useRoute();
 const router = useRouter();
 
@@ -121,6 +129,10 @@ function selectAccount(id: string) {
   if (changed && list) void router.push({ name: list });
 }
 
+function reloadPage() {
+  window.location.reload();
+}
+
 function manageAccounts() {
   switcherOpen.value = false;
   router.push({ name: "account" });
@@ -151,6 +163,15 @@ function manageAccounts() {
         :refreshing="pull.refreshing.value"
       />
       <main class="flex-1 px-page-x pb-4">
+        <BaseBanner
+          v-if="release.unsupportedServer"
+          class="mt-3 flex items-center justify-between gap-3"
+        >
+          <span>A new version of mibudge is available.</span>
+          <BaseButton variant="secondary" size="sm" @click="reloadPage">
+            Reload
+          </BaseButton>
+        </BaseBanner>
         <slot />
       </main>
       <BottomNav />

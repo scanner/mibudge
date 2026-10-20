@@ -11,7 +11,8 @@
 // for all concurrent requests), and a failed refresh ends the session
 // (`endSession()`) before the caller's `onAuthFailure` runs --
 // `main.ts` uses that to send the user to the login page with a
-// return path.
+// return path.  Each response's server release goes to the release
+// store (`stores/release.ts`).
 //
 // `endSession()` resets every store (see `stores/reset.ts`).
 // `logout()` first asks the server to revoke the refresh cookie, then
@@ -29,6 +30,7 @@ import { api, getHttp } from "@/api";
 import type { AuthError } from "@/api/errors";
 import type { HttpClient } from "@/api/http";
 import { createHttpClient } from "@/api/http";
+import { useReleaseStore } from "@/stores/release";
 import { resetAllStores } from "@/stores/reset";
 import type { User, UserUpdate } from "@/models/user";
 import { DEFAULT_TIMEZONE, userFromDto, userToUpdateDto } from "@/models/user";
@@ -186,6 +188,7 @@ export function createSessionHttpClient(
   options: SessionHttpOptions = {},
 ): HttpClient {
   const session = useSessionStore();
+  const release = useReleaseStore();
   return createHttpClient({
     baseUrl: options.baseUrl,
     getToken: () => session.accessToken,
@@ -194,5 +197,6 @@ export function createSessionHttpClient(
       session.endSession();
       options.onAuthFailure?.(err);
     },
+    onServerVersion: (version) => release.noteServerVersion(version),
   });
 }
