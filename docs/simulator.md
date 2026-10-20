@@ -154,10 +154,10 @@ uv run python app/manage.py simulate_bank_activity init sim.yaml \
 uv run python app/manage.py simulate_bank_activity fill sim.yaml
 ```
 
-Create budgets with `define_budgets`, giving each funding schedule a `DTSTART`
-on the **first funding day after the clock**. Without a `DTSTART`, mibudge
-anchors a new budget's schedule on the real date, so it would not fund until
-the simulated clock caught up with today.
+Create budgets with `define_budgets --as-of` the scenario's clock. That
+anchors each budget's funding schedule on the simulated date and funds it from
+there. Without `--as-of`, mibudge anchors a new budget's schedule on the real
+date, so it would not fund until the simulated clock caught up with today.
 
 ```yaml
 # budgets.yaml
@@ -168,15 +168,11 @@ budgets:
     funding_type: fixed_amount
     target_balance: "1200.00"
     funding_amount: "100.00"
-    funding_schedule: |
-      DTSTART:20260815T000000Z
-      RRULE:FREQ=MONTHLY;BYMONTHDAY=15,-1
+    funding_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=15,-1"
 ```
 
-For a recurring budget, give the `recurrence_schedule` a `DTSTART` too.
-
 ```bash
-uv run python app/manage.py define_budgets budgets.yaml
+uv run python app/manage.py define_budgets budgets.yaml --as-of 2026-08-10
 ```
 
 Now step through time and watch the budget in the SPA after each step:
@@ -373,11 +369,12 @@ afterwards doesn't undo it: those events are already recorded as done, so the
 simulator skips them. To recover, `reset` and `fill`.
 
 **Unpausing a budget.** Its funding resumes from the real yesterday, so the
-simulated days in between are skipped.
+simulated days in between are skipped. Unpause it with `define_budgets
+--as-of` the clock instead (`paused: false`, with the budget's `id`).
 
 **Creating or editing a budget.** Its funding schedule is anchored on the real
 date, so it doesn't fund until the simulated clock catches up. Create and
-change budgets with `define_budgets` and a `DTSTART`, as in
+change budgets with `define_budgets --as-of` the clock, as in
 [walkthrough 2](#2-watching-budgets-fill-as-time-passes).
 
 ## Troubleshooting

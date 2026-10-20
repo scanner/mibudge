@@ -125,10 +125,9 @@ def goal_on_the_15th(
 ) -> Budget:
     """A $50-a-month goal on the filled checking account, funding the 15th.
 
-    Defined with `define_budgets`, the way docs/simulator.md shows.  Its
-    funding schedule's DTSTART (Sep 15) is inside the simulated window;
-    without one, the budget would be anchored on the real date and never
-    fund on a simulated day.
+    Defined with `define_budgets --as-of` the clock, the way
+    docs/simulator.md shows, so its bare funding schedule is anchored on
+    the simulated Sep 15 rather than on the real date.
     """
     checking = BankAccount.objects.get(
         owners=user, name=scenario.account("checking").name
@@ -142,11 +141,15 @@ def goal_on_the_15th(
         "    funding_type: fixed_amount\n"
         '    target_balance: "300.00"\n'
         '    funding_amount: "50.00"\n'
-        "    funding_schedule: |\n"
-        "      DTSTART:20260915T000000Z\n"
-        "      RRULE:FREQ=MONTHLY;BYMONTHDAY=15\n"
+        '    funding_schedule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=15"\n'
     )
-    call_command("define_budgets", str(path), stdout=StringIO())
+    call_command(
+        "define_budgets",
+        str(path),
+        "--as-of",
+        CLOCK.isoformat(),
+        stdout=StringIO(),
+    )
     return Budget.objects.get(bank_account=checking, name="Vacation")
 
 
