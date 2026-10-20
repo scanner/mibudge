@@ -116,6 +116,9 @@ COPY ./app ./
 # the image can also run with dev mode off (e.g. staging smoke-tests).
 COPY --from=frontend-builder /frontend/dist /frontend/dist
 
+# The API reference's introduction, read by settings from REPO_DIR / "docs".
+COPY docs/api-introduction.md /docs/api-introduction.md
+
 RUN addgroup --system --gid 900 app && \
     adduser --system --uid 900 --ingroup app app
 
@@ -174,6 +177,9 @@ COPY ./app ./
 # NOTE: REPO_DIR in settings.py resolves to the parent of /app (i.e. /),
 # so the frontend dist must land at /frontend/dist for collectstatic to find it.
 COPY --from=frontend-builder /frontend/dist /frontend/dist
+
+# The API reference's introduction, read by settings from REPO_DIR / "docs".
+COPY docs/api-introduction.md /docs/api-introduction.md
 
 # Collect static files (Django app + built frontend assets) and pre-compile
 # bytecode.  collectstatic encrypts nothing; the key and salt set on this RUN

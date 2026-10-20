@@ -37,7 +37,9 @@ make api-docs     # Generate docs/api.md from the OpenAPI schema and examples/
 ```
 
 The API reference's introduction (authentication, pagination, throttling,
-errors) is `API_DESCRIPTION` in `app/config/settings.py`. Worked examples are
+errors) is `docs/api-introduction.md`, a `string.Template` that
+`app/config/settings.py` fills with the page sizes and throttle rates (as
+`API_DESCRIPTION`). Worked examples are
 JSON files in `examples/`, one per endpoint named by its `operationId` (see
 `examples/README.md`); `app/tests/test_api_examples.py` validates them against
 the schema.
