@@ -9,6 +9,7 @@ Usage:
 
     uv run python app/manage.py define_budgets budgets.yaml
     uv run python app/manage.py define_budgets budgets.yaml --dry-run
+    uv run python app/manage.py define_budgets budgets.yaml --as-of 2026-08-10
 
 YAML format:
 
@@ -36,11 +37,16 @@ YAML format:
 
 See the RFC 5545 spec for RRULE syntax.  Dry-run mode prints the next
 scheduled dates for each rule so you can confirm the schedule is correct.
+
+`--as-of DATE` creates and updates the budgets as if DATE were today: a
+funding schedule without a DTSTART is anchored on its first occurrence
+on/after DATE, and new and unpaused budgets fund from DATE on.  It
+defines budgets on the simulator's clock (see docs/simulator.md).
 """
 
 # system imports
 #
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -57,6 +63,7 @@ from djmoney.money import Money
 #
 from moneypools.models import BankAccount, Budget
 from moneypools.service import budget as budget_svc
+from moneypools.service.schedules import enumerate_schedule
 
 from ._budget_admin import resolve_account
 
@@ -118,12 +125,25 @@ class Command(BaseCommand):
             default=False,
             help="Validate and preview actions without making DB changes.",
         )
+        parser.add_argument(
+            "--as-of",
+            metavar="DATE",
+            type=date.fromisoformat,
+            default=None,
+            help=(
+                "Create and update the budgets as if DATE (YYYY-MM-DD, not "
+                "later than today) were today (default: today)."
+            ),
+        )
 
     ####################################################################
     #
     def handle(self, *args: Any, **options: Any) -> None:
         path: str = options["input"]
         dry_run: bool = options["dry_run"]
+        as_of: date | None = options["as_of"]
+        if as_of is not None and as_of > date.today():
+            raise CommandError(f"--as-of {as_of} is later than today.")
 
         with open(path) as fh:
             raw = yaml.safe_load(fh)
@@ -155,12 +175,12 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING("Dry run -- no changes will be made.")
             )
-            self._print_plan(entries, account)
+            self._print_plan(entries, account, as_of)
             self.stdout.write(self.style.SUCCESS("Dry run complete."))
             return
 
         with db_transaction.atomic():
-            created, updated = self._apply(entries, account)
+            created, updated = self._apply(entries, account, as_of)
 
         self.stdout.write(
             self.style.SUCCESS(f"Done -- {created} created, {updated} updated.")
@@ -169,13 +189,17 @@ class Command(BaseCommand):
     ####################################################################
     #
     def _print_plan(
-        self, entries: list[dict[str, Any]], account: BankAccount
+        self,
+        entries: list[dict[str, Any]],
+        account: BankAccount,
+        as_of: date | None,
     ) -> None:
         """Print a human-readable preview of what would be created/updated.
 
         Args:
             entries: Normalized budget entry dicts from _parse_entry().
             account: The resolved BankAccount.
+            as_of: The date the budgets are defined on (None for today).
         """
         for entry in entries:
             uid = entry.get("id")
@@ -211,14 +235,14 @@ class Command(BaseCommand):
 
             sched = entry.get("_funding_schedule_obj")
             if sched:
-                occurrences = _next_occurrences(sched)
+                occurrences = _next_occurrences(sched, start=as_of)
                 if occurrences:
                     dates_str = ", ".join(str(d) for d in occurrences)
                     self.stdout.write(f"    funding_schedule next: {dates_str}")
 
             rsched = entry.get("_recurrence_schedule_obj")
             if rsched:
-                occurrences = _next_occurrences(rsched)
+                occurrences = _next_occurrences(rsched, start=as_of)
                 if occurrences:
                     dates_str = ", ".join(str(d) for d in occurrences)
                     self.stdout.write(
@@ -231,12 +255,14 @@ class Command(BaseCommand):
         self,
         entries: list[dict[str, Any]],
         account: BankAccount,
+        as_of: date | None,
     ) -> tuple[int, int]:
         """Create or update budgets from parsed entries.
 
         Args:
             entries: Normalized budget entry dicts from _parse_entry().
             account: The resolved BankAccount.
+            as_of: The date the budgets are defined on (None for today).
 
         Returns:
             Tuple of (created_count, updated_count).
@@ -276,6 +302,7 @@ class Command(BaseCommand):
                     budget_type=entry["budget_type"],
                     funding_type=entry["funding_type"],
                     target_balance=entry["target_balance"],
+                    today=as_of,
                     **kwargs,
                 )
                 self.stdout.write(
@@ -290,7 +317,7 @@ class Command(BaseCommand):
                     "target_balance": entry["target_balance"],
                     **kwargs,
                 }
-                budget_svc.update(existing, **changes)
+                budget_svc.update(existing, today=as_of, **changes)
                 self.stdout.write(
                     f"  Updated: {entry['name']}  ({existing.id})"
                 )
@@ -580,29 +607,19 @@ def _parse_recurrence(value: str, label: str, field: str) -> Any:
 ####################################################################
 #
 def _next_occurrences(
-    sched: Any, n: int = 3, after: date | None = None
+    sched: Any, n: int = 3, start: date | None = None
 ) -> list[date]:
-    """Return up to n next occurrences of a recurrence schedule.
+    """Return up to n occurrences of a recurrence schedule from a date.
 
     Args:
         sched: A recurrence.Recurrence object.
         n: Maximum number of occurrences to return.
-        after: Start date (defaults to today).
+        start: First date to include (defaults to today).
 
     Returns:
-        List of upcoming occurrence dates (up to n).
+        List of occurrence dates on/after *start* (up to n).
     """
-    from datetime import datetime
-
-    start = after or date.today()
-    start_dt = datetime(start.year, start.month, start.day)
-    try:
-        occurrences = list(recurrence.occurrences(sched, start_dt, inc=False))
-        result = []
-        for occ in occurrences:
-            result.append(occ.date() if hasattr(occ, "date") else occ)
-            if len(result) >= n:
-                break
-        return result
-    except Exception:
-        return []
+    start = start or date.today()
+    # Two years covers any schedule a budget funds or resets on.
+    until = date(start.year + 2, start.month, 1)
+    return enumerate_schedule(sched, start - timedelta(days=1), until)[:n]

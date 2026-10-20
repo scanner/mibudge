@@ -6,7 +6,7 @@ Operations:
         Saves the budget and auto-creates the fill-up goal child for
         RECURRING budgets (logic moved from budget_post_save signal).
 
-    update(budget, **changes)
+    update(budget, today=None, **changes)
         Saves mutable fields under a budget lock.  Creates the fill-up
         goal child if the budget is RECURRING and has none yet.
         On pause->unpause flip, resets both pointer fields to today-1
@@ -71,6 +71,7 @@ def create(
     budget_type: str,
     funding_type: str,
     target_balance: Money,
+    today: date | None = None,
     **kwargs: Any,
 ) -> Budget:
     """Create a budget and auto-create its fill-up goal child if RECURRING.
@@ -79,12 +80,19 @@ def create(
     and complete-flag management).  If the new budget is RECURRING an
     ASSOCIATED_FILLUP_GOAL child is created and linked back via fillup_goal.
 
+    The budget starts on *today*: a funding schedule without a DTSTART is
+    anchored on its first occurrence on/after it, and the funding and
+    recurrence pointers are set to the day before, so the first event
+    due on or after *today* fires.
+
     Args:
         bank_account: The bank account this budget belongs to.
         name: Human-readable budget name.
         budget_type: One of Budget.BudgetType values.
         funding_type: One of Budget.FundingType values.
         target_balance: Target funding amount.
+        today: The date the budget starts on.  Defaults to the real
+            today (the creation date, for the pointers).
         **kwargs: Any other Budget field values (paused, target_date,
             funding_amount, funding_schedule, recurrence_schedule, memo,
             etc.).
@@ -92,6 +100,10 @@ def create(
     Returns:
         The saved Budget instance (with fillup_goal set if applicable).
     """
+    sched = kwargs.get("funding_schedule")
+    if today is not None and sched and sched.dtstart is None:
+        kwargs["funding_schedule"] = normalize_dtstart(sched, today)
+
     budget = Budget(
         bank_account=bank_account,
         name=name,
@@ -102,9 +114,11 @@ def create(
     )
     budget.save()
 
-    # Set pointers to created_at.date() - 1 so the first scheduled event
-    # fires on its scheduled date rather than being treated as already-seen.
-    yesterday = budget.created_at.date() - timedelta(days=1)
+    # Set pointers to the day before the start so the first scheduled
+    # event fires on its scheduled date rather than being treated as
+    # already-seen.
+    start = today if today is not None else budget.created_at.date()
+    yesterday = start - timedelta(days=1)
     Budget.objects.filter(pk=budget.pk).update(
         last_funded_on=yesterday,
         last_recurrence_on=yesterday,
@@ -119,7 +133,9 @@ def create(
 ########################################################################
 ########################################################################
 #
-def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
+def update(
+    budget: Budget, today: date | None = None, **changes: Any
+) -> tuple[Budget, list[str]]:
     """Update mutable fields on an existing budget.
 
     Acquires the budget lock, applies *changes*, saves, then creates the
@@ -138,6 +154,9 @@ def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
 
     Args:
         budget: The Budget instance to update.
+        today: The date the update takes effect, for re-anchoring the
+            funding schedule and the unpause pointers.  Defaults to the
+            real today.
         **changes: Field-value pairs to apply.  Only supply the fields
             being changed.
 
@@ -146,15 +165,17 @@ def update(budget: Budget, **changes: Any) -> tuple[Budget, list[str]]:
         The warnings list is empty on normal (non-unpause) updates.
     """
     warnings: list[str] = []
+    if today is None:
+        today = date.today()
 
-    _reanchor_funding_schedule(budget, changes)
+    _reanchor_funding_schedule(budget, changes, today)
 
     # Detect pause->unpause before applying changes.
     was_paused = budget.paused
     unpausing = was_paused and changes.get("paused") is False
 
     if unpausing:
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = today - timedelta(days=1)
         changes["last_funded_on"] = yesterday
         changes["last_recurrence_on"] = yesterday
 
@@ -520,6 +541,7 @@ _FILLUP_SYNCED_FIELDS: frozenset[str] = frozenset(
 def _reanchor_funding_schedule(
     budget: Budget,
     changes: dict[str, Any],
+    today: date,
 ) -> None:
     """Re-anchor or preserve the funding schedule's DTSTART on update.
 
@@ -538,6 +560,7 @@ def _reanchor_funding_schedule(
         budget: The Budget being updated (holds the stored schedule).
         changes: The update's field-value pairs; 'funding_schedule' is
             added or replaced as needed.
+        today: The date the update takes effect.
     """
     if "funding_schedule" not in changes and "target_date" not in changes:
         return
@@ -560,7 +583,7 @@ def _reanchor_funding_schedule(
             # Same pattern, new goal date: keep the stored anchor as the
             # rule anchor; normalize_dtstart moves it forward from today.
             incoming.dtstart = stored.dtstart
-        changes["funding_schedule"] = normalize_dtstart(incoming, date.today())
+        changes["funding_schedule"] = normalize_dtstart(incoming, today)
     elif incoming.dtstart is None:
         # Pattern and date unchanged; the client just echoed the stored
         # schedule without its anchor.  Preserve it -- or backfill from

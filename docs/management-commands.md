@@ -204,9 +204,12 @@ Creates or updates budgets from a YAML definition file. Idempotent when budget e
 ```bash
 uv run python app/manage.py define_budgets budgets.yaml --dry-run
 uv run python app/manage.py define_budgets budgets.yaml
+uv run python app/manage.py define_budgets budgets.yaml --as-of 2026-08-10
 ```
 
 Dry-run shows each budget's action (CREATE or UPDATE) and the next 3 scheduled occurrences for each RRULE. All changes apply in a single atomic transaction.
+
+`--as-of DATE` defines the budgets as if DATE were today: a funding schedule without a `DTSTART` is anchored on its first occurrence on or after DATE, new and unpaused budgets fund from DATE on, and the dry-run lists occurrences from DATE. DATE cannot be later than today. Use it to define budgets on the [simulator's](simulator.md) clock.
 
 **YAML format:**
 
@@ -253,6 +256,7 @@ budgets:
 |--------|-------------|
 | `FILE` | Path to the YAML definition file (required) |
 | `--dry-run` | Preview without writing |
+| `--as-of DATE` | Define the budgets as if DATE (`YYYY-MM-DD`, not later than today) were today |
 
 ### extract_budgets
 

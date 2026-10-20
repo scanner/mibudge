@@ -158,7 +158,7 @@ class TestBudgetService:
     def test_update_syncs_fillup_goal(
         self,
         field: str,
-        new_value: object,
+        new_value: Any,
         expected: object,
         recurring_budget: Budget,
     ) -> None:
@@ -197,30 +197,42 @@ class TestBudgetService:
     ####################################################################
     #
     @pytest.mark.parametrize(
-        "dtstart,expected",
+        "dtstart,today,expected,expected_pointer",
         [
             # Bare schedule (the SPA shape): anchored at the first real
             # rule occurrence on/after today (frozen to 2026-06-01).
-            (None, datetime(2026, 6, 15)),
+            (None, None, datetime(2026, 6, 15), date(2026, 5, 31)),
             # Explicit DTSTART (e.g. an account import): trusted as-is.
             # Supplied UTC-aware, the storage convention; a naive value
             # would be reinterpreted as local time on serialization.
-            (datetime(2026, 1, 15, tzinfo=UTC), datetime(2026, 1, 15)),
+            (
+                datetime(2026, 1, 15, tzinfo=UTC),
+                None,
+                datetime(2026, 1, 15),
+                date(2026, 5, 31),
+            ),
+            # Created as of an earlier date (the simulator's clock):
+            # anchored and pointed from that date, not the real today.
+            (None, date(2026, 3, 1), datetime(2026, 3, 15), date(2026, 2, 28)),
         ],
     )
     @freeze_time("2026-06-01")
     def test_create_anchors_funding_schedule_dtstart(
         self,
         dtstart: datetime | None,
+        today: date | None,
         expected: datetime,
+        expected_pointer: date,
         account: BankAccount,
     ) -> None:
         """
         GIVEN: a new budget whose funding schedule arrives bare or with
-               an explicit DTSTART
+               an explicit DTSTART, created as of today or an earlier date
         WHEN:  the budget is created
         THEN:  a bare schedule is anchored on its first real occurrence
-               from today; an explicit DTSTART is preserved
+               from the creation date; an explicit DTSTART is preserved;
+               the funding and recurrence pointers are the day before
+               the creation date
         """
         budget = budget_svc.create(
             bank_account=account,
@@ -235,11 +247,18 @@ class TestBudgetService:
                     recurrence.Rule(recurrence.MONTHLY, bymonthday=[15, -1])
                 ],
             ),
+            today=today,
         )
 
         budget.refresh_from_db()
-        assert budget.funding_schedule.dtstart is not None
-        assert budget.funding_schedule.dtstart.replace(tzinfo=None) == expected
+        dtstart = budget.funding_schedule.dtstart
+        check.equal(
+            dtstart and dtstart.replace(tzinfo=None), expected, "DTSTART"
+        )
+        check.equal(budget.last_funded_on, expected_pointer, "fund pointer")
+        check.equal(
+            budget.last_recurrence_on, expected_pointer, "recurrence pointer"
+        )
 
     ####################################################################
     #
@@ -250,6 +269,9 @@ class TestBudgetService:
             # does): re-anchor on the new rule's first occurrence from
             # the edit date (frozen to 2026-07-20).
             ([1], {}, datetime(2026, 8, 1)),
+            # The same edit made as of an earlier date (the simulator's
+            # clock): re-anchor from that date instead.
+            ([1], {"today": date(2026, 6, 20)}, datetime(2026, 7, 1)),
             # Goal date changed, same pattern echoed bare: re-anchor
             # forward from the edit date, keeping the stored anchor as
             # the rule anchor.
@@ -273,9 +295,9 @@ class TestBudgetService:
         """
         GIVEN: a Goal budget created 2026-06-01 with a semi-monthly
                schedule anchored at Jun 15, target date Dec 1
-        WHEN:  budget_svc.update runs on 2026-07-20 with a changed
-               funding pattern, a changed goal date, or a mere bare echo
-               of the stored schedule
+        WHEN:  budget_svc.update runs on 2026-07-20 (or as of an earlier
+               date) with a changed funding pattern, a changed goal
+               date, or a mere bare echo of the stored schedule
         THEN:  pattern/date changes re-figure the schedule (DTSTART moves
                to the first real occurrence from the edit date) while a
                bare echo keeps the stored anchor
@@ -310,6 +332,47 @@ class TestBudgetService:
         dtstart = budget.funding_schedule.dtstart
         assert dtstart is not None
         assert dtstart.replace(tzinfo=None) == expected_dtstart
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "today,expected_pointer",
+        [
+            (None, date(2026, 7, 19)),
+            (date(2026, 6, 1), date(2026, 5, 31)),
+        ],
+    )
+    @freeze_time("2026-07-20")
+    def test_unpause_resets_pointers_to_day_before(
+        self,
+        today: date | None,
+        expected_pointer: date,
+        account: BankAccount,
+        make_budget: Callable[..., Budget],
+    ) -> None:
+        """
+        GIVEN: a paused budget
+        WHEN:  budget_svc.update unpauses it on 2026-07-20, or as of an
+               earlier date
+        THEN:  the funding and recurrence pointers move to the day
+               before that date
+        """
+        budget = make_budget(
+            account,
+            budget_type=Budget.BudgetType.GOAL,
+            funding_type=Budget.FundingType.FIXED_AMOUNT,
+            funding_amount=Money(10, "USD"),
+            target_balance=Money(100, "USD"),
+            paused=True,
+        )
+
+        budget_svc.update(budget, today=today, paused=False)
+
+        budget.refresh_from_db()
+        check.equal(budget.last_funded_on, expected_pointer, "fund pointer")
+        check.equal(
+            budget.last_recurrence_on, expected_pointer, "recurrence pointer"
+        )
 
 
 ########################################################################
