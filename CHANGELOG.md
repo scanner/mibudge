@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-19
+
+One migration, `moneypools.0044`, which changes only a help text: going back to 0.4.0 needs no database change.
+
 ### Added
 
 - `GET /api/version/` reports the release the server runs and the API versions it serves, without signing in, and every API response names the release in an `X-Mibudge-Version` header. The OpenAPI schema's version and the landing page's footer show the release too
@@ -16,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `define_budgets --dry-run` lists each schedule's next dates, as documented; it printed none
-
 - After a deploy, a tab opened before it no longer fails to open a page it had not visited yet: it loads that page fresh, running the new release. The SPA shell is sent with `Cache-Control: no-cache`, so every page load gets the current release
 - The description of a bank account's `last_posted_through` no longer claims that funding stops at that date: funding does not read it. Migration `moneypools.0044` changes only the field's help text and makes no database changes
 
@@ -176,7 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/scanner/mibudge/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/scanner/mibudge/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/scanner/mibudge/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/scanner/mibudge/compare/0.1.1...0.2.0
