@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-25
+
+No migrations: going back to 0.4.1 needs no database change.
+
 ### Added
 
 - Docker images for `linux/arm64` alongside `linux/amd64`, under the same tags
@@ -183,7 +187,8 @@ One migration, `moneypools.0044`, which changes only a help text: going back to 
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.1...HEAD
+[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.2...HEAD
+[0.4.2]: https://github.com/scanner/mibudge/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/scanner/mibudge/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/scanner/mibudge/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/scanner/mibudge/compare/0.2.0...0.3.0
