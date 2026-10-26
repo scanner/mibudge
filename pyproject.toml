@@ -1,6 +1,6 @@
 [project]
 name = "mibudge"
-version = "0.4.1"
+version = "0.4.2"
 description = "Personal budgeting service inspired by Simple Bank"
 requires-python = ">=3.13"
 dependencies = [
