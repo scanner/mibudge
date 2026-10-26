@@ -5,8 +5,8 @@ production, staging or integration hosts. Copy it to the host, fill in `.env`
 and `secrets/`, and start it. Nothing here is used by local development (see
 [`../README.md`](../README.md)).
 
-The stack pulls a pre-built image from GHCR (`ghcr.io/scanner/mibudge`) and
-expects PostgreSQL and Redis to be available, either as external services
+The stack pulls a pre-built image from GHCR (`ghcr.io/scanner/mibudge`),
+published for `linux/amd64` and `linux/arm64`, and expects PostgreSQL and Redis to be available, either as external services
 connected via Docker networks or bundled into this Compose file.
 
 ---

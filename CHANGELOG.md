@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Docker images for `linux/arm64` alongside `linux/amd64`, under the same tags
+
 ## [0.4.1] - 2026-10-19
 
 One migration, `moneypools.0044`, which changes only a help text: going back to 0.4.0 needs no database change.
