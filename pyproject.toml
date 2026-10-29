@@ -1,6 +1,6 @@
 [project]
 name = "mibudge"
-version = "0.4.2"
+version = "0.4.3"
 description = "Personal budgeting service inspired by Simple Bank"
 requires-python = ">=3.13"
 dependencies = [
@@ -110,7 +110,7 @@ importers-bofa = [
 ]
 
 [tool.uv.sources]
-bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v1.1.0" }
+bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v1.2.0" }
 
 ########################################################################
 # Tool configurations

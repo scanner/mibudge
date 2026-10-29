@@ -814,7 +814,7 @@ def _setup_logging(
     default=5,
     type=float,
     show_default=True,
-    help="Selenium page-load timeout in seconds.",
+    help="Seconds to pause after each transaction details dialog.",
 )
 @click.option(
     "--account",

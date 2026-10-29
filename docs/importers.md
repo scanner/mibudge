@@ -250,7 +250,7 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 | `--api-key-onepassword-url` | 1Password secret reference (full field path) to the API key used to authenticate to mibudge (env var: `MIBUDGE_API_KEY_ONEPASSWORD_URL`) |
 | `--account, -a` | Filter by BofA account name substring (repeatable; omit for all accounts) |
 | `--headless / --no-headless` | Run Firefox headlessly (default) or visibly for debugging/2FA |
-| `--timeout` | Selenium page-load timeout in seconds (default: 5) |
+| `--timeout` | Seconds to pause after each transaction details dialog, pacing requests to BofA (default: 5) |
 | `--save-dir` | Directory to write raw scrape JSON files |
 | `--save-only` | Scrape and save without importing; requires `--save-dir` |
 | `--details-limit` | Max detail-dialog opens per run across all accounts (default: 30; 0 disables detail fetching) |

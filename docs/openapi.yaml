@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: mibudge API
-  version: 0.4.2
+  version: 0.4.3
   description: |
     REST API for the mibudge personal budgeting service.  Every versioned
     endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`
