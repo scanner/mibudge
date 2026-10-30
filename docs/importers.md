@@ -2,7 +2,30 @@
 
 The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using an API key (preferred; create one under Settings -> API keys, fetched from 1Password or Vault, or passed with `--api-key`) or a normal email and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
 
-These tools will eventually live in their own repository. For now they share the project's `pyproject.toml` and are run from the repo root with `uv run`.
+These tools will eventually live in their own repository. For now they share the project's `pyproject.toml`, which declares each one as a console script.
+
+### Where they are and how to run them
+
+The importers install nothing outside the checkout. `uv sync` (or `make uv-sync`) installs the project into the checkout's `.venv`, and with it four commands in `.venv/bin/`:
+
+| Command | Tool |
+|---------|------|
+| `mibudge-import` | Statement importer |
+| `mibudge-bofa-live` | BofA live scraper (needs the `importers-bofa` dependency group) |
+| `mibudge-bofa-saved` | BofA saved-scrape replayer |
+| `mibudge-backfill-budget` | Budget backfill |
+
+Run them with `uv run` from anywhere in the checkout, with `uv run --project <checkout>` from elsewhere, or by their full path, `<checkout>/.venv/bin/mibudge-import`. `--help` on each lists every flag.
+
+Wherever they are run from, they read the `.env` at the root of the checkout (the same file `make env` creates for the dev stack), never one in the current directory. They also read and write these files:
+
+| File | Used by |
+|------|---------|
+| `<checkout>/.env` | every tool: `MIBUDGE_*`, `BOFA_*` and `VAULT_*` settings (never secrets) |
+| `$XDG_CONFIG_HOME/mibudge-bofa-importer/config.toml` (default `~/.config/...`) | both BofA tools: option values; see [Config file](#config-file) |
+| `$XDG_CONFIG_HOME/mibudge-bofa-importer/accounts.json` | BofA live scraper: writes its cache of account nickname to last 4 digits |
+| `--save-dir` / `MIBUDGE_SAVE_DIR` | BofA live scraper: writes raw scrape JSON when set |
+| `~/.mibudge/vendor_rules.json` | budget backfill: saved per-vendor yes/no rules |
 
 ---
 
@@ -10,10 +33,10 @@ These tools will eventually live in their own repository. For now they share the
 
 | Tool | Command | Purpose |
 |------|---------|---------|
-| Statement importer | `python -m importers import` | Parse bank statement files (OFX/QFX or BofA CSV) and POST new transactions to mibudge |
-| BofA live scraper | `python -m importers.import_bofa_live` | Log in to Bank of America, scrape each account a mibudge account tracks, and sync it into mibudge via the `sync-scrape` endpoint |
-| BofA saved-scrape replayer | `python -m importers.import_bofa_saved` | Replay saved BofA scrape JSON files through the same `sync-scrape` endpoint without re-logging in to BofA |
-| Budget backfill | `python -m importers backfill_budget` | Interactively allocate historical transactions to a budget, month by month |
+| Statement importer | `mibudge-import` | Parse bank statement files (OFX/QFX or BofA CSV) and POST new transactions to mibudge |
+| BofA live scraper | `mibudge-bofa-live` | Log in to Bank of America, scrape each account a mibudge account tracks, and sync it into mibudge via the `sync-scrape` endpoint |
+| BofA saved-scrape replayer | `mibudge-bofa-saved` | Replay saved BofA scrape JSON files through the same `sync-scrape` endpoint without re-logging in to BofA |
+| Budget backfill | `mibudge-backfill-budget` | Interactively allocate historical transactions to a budget, month by month |
 
 ---
 
@@ -52,7 +75,7 @@ Alternatively, pull credentials from HashiCorp Vault:
 ```bash
 export VAULT_ADDR=https://vault.example.com
 export VAULT_TOKEN=s.xxxx
-uv run python -m importers --vault-path mibudge/prod import stmt.ofx
+uv run mibudge-import --vault-path mibudge/prod stmt.ofx
 ```
 
 The Vault secret must have `url` plus either `api_key` (preferred) or `email` and `password`.
@@ -63,10 +86,10 @@ Or pull just the API key from 1Password (set `--api-key-onepassword-url` / `MIBU
 
 ```bash
 # Auto-detect mkcert root CA:
-uv run python -m importers --trust-local-certs import stmt.ofx
+uv run mibudge-import --trust-local-certs stmt.ofx
 
 # Or specify a CA bundle explicitly:
-uv run python -m importers --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" import stmt.ofx
+uv run mibudge-import --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" stmt.ofx
 ```
 
 ---
@@ -87,7 +110,7 @@ Parses one or more bank statement files and imports their transactions into mibu
 For an existing account, the OFX `ACCTID` is matched against the account's stored account number automatically. This is the common case for monthly imports:
 
 ```bash
-uv run python -m importers import ~/Downloads/*.ofx
+uv run mibudge-import ~/Downloads/*.ofx
 ```
 
 Multiple files for the same account can be passed in one run. They are sorted by date and a warning is emitted if consecutive statements have a gap.
@@ -97,21 +120,20 @@ Multiple files for the same account can be passed in one run. They are sorted by
 The account type and number come from the OFX file; only the display name and parent bank are needed:
 
 ```bash
-# List banks to find the UUID:
-uv run python -m importers banks
-
-uv run python -m importers import --create-account \
+uv run mibudge-import --create-account \
     --name "Personal Checking" \
-    --bank <bank-uuid-or-name> \
+    --bank "Bank of America" \
     ~/Downloads/2025-*.ofx
 ```
+
+`--bank` takes a bank's name, UUID or routing number. When it does not match exactly one bank, the importer lists the candidates.
 
 ### First import from BofA CSV (create the account)
 
 CSV files carry no account identity, so all account details must be supplied:
 
 ```bash
-uv run python -m importers import --create-account \
+uv run mibudge-import --create-account \
     --name "Joint Checking" \
     --bank <bank-uuid-or-name> \
     --account-type checking \
@@ -124,7 +146,7 @@ uv run python -m importers import --create-account \
 Since CSVs have no `ACCTID` to match on, the account must be identified explicitly:
 
 ```bash
-uv run python -m importers import --account <account-uuid-or-name> \
+uv run mibudge-import --account <account-uuid-or-name> \
     ~/Downloads/stmt.csv
 ```
 
@@ -133,7 +155,7 @@ uv run python -m importers import --account <account-uuid-or-name> \
 Parse, validate, and check for duplicates without posting anything:
 
 ```bash
-uv run python -m importers import --dry-run ~/Downloads/*.ofx
+uv run mibudge-import --dry-run ~/Downloads/*.ofx
 ```
 
 ### Flag reference
@@ -159,12 +181,12 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 The importer does **not** trigger funding automatically. If you want to fund budgets immediately after importing, pass `--run-funding`:
 
 ```bash
-uv run python -m importers import ~/Downloads/*.ofx --run-funding
+uv run mibudge-import ~/Downloads/*.ofx --run-funding
 ```
 
 This calls `POST /api/v1/bank-accounts/<id>/run-funding/` after the import completes and prints the result (number of transfers, any warnings, skipped budget names). The flag is silently ignored on `--dry-run` runs.
 
-Without `--run-funding`, the funding engine will still run automatically at 3:00 AM each night.
+Without `--run-funding`, funding still runs on each budget's schedule; see [`funding.md`](funding.md).
 
 ### Account resolution
 
@@ -194,16 +216,12 @@ The live scraper logs into Bank of America using a Selenium/Firefox driver and s
 
 ### Installation
 
-The scraper requires an optional dependency group:
-
-```bash
-uv sync --group importers-bofa
-```
+The scraper needs the optional `importers-bofa` dependency group (bofa-scraper and Selenium), and Firefox installed on the host. `uv run --group importers-bofa`, as in the commands below, installs it into `.venv` on demand. A plain `uv sync` or `make uv-sync` removes it again; `uv sync --group importers-bofa` keeps it.
 
 ### Usage
 
 ```bash
-uv run --group importers-bofa python -m importers.import_bofa_live
+uv run --group importers-bofa mibudge-bofa-live
 ```
 
 BofA credentials are read from a 1Password item via `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` (reads the item's `username`/`password` fields), or from `--bofa-id` (or `BOFA_ID`) and `--bofa-passcode`, prompting for whichever is missing. mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → the [config file](#config-file) → the mibudge 1Password secret reference via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` → Vault). The two 1Password URLs are separate env vars on purpose -- each name says which credential it fetches -- and they differ in shape: the BofA one is an *item* URL (its `username`/`password` fields are both read), while the mibudge one is a full secret reference naming the field that holds the API key.
@@ -263,11 +281,11 @@ Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file 
 
 ```bash
 # Capture on BofA-accessible machine:
-uv run --group importers-bofa python -m importers.import_bofa_live \
+uv run --group importers-bofa mibudge-bofa-live \
     --save-dir ./saved --save-only --details-all
 
 # Replay later (also replays any saved details):
-uv run python -m importers.import_bofa_saved saved/*.json
+uv run mibudge-bofa-saved saved/*.json
 ```
 
 ### Flag reference
@@ -372,7 +390,7 @@ The `resolve-pending` REST API (`POST /api/v1/transactions/<id>/resolve-pending/
 Interactively allocates historical transactions to a single budget, month by month. Use this when you've added a new budget and want to assign past transactions to it without doing it one-by-one in the UI.
 
 ```bash
-uv run python -m importers backfill_budget \
+uv run mibudge-backfill-budget \
     --account "Personal Checking" \
     --budget "Groceries"
 ```

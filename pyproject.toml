@@ -62,12 +62,18 @@ dependencies = [
     "django-ordered-model>=3.7.4",
 ]
 
+[project.scripts]
+mibudge-import = "importers.import_transactions:cli"
+mibudge-bofa-live = "importers.import_bofa_live:cli"
+mibudge-bofa-saved = "importers.import_bofa_saved:cli"
+mibudge-backfill-budget = "importers.backfill_budget:cli"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app/moneypools", "app/users"]
+packages = ["app/moneypools", "app/users", "importers"]
 
 [dependency-groups]
 dev = [

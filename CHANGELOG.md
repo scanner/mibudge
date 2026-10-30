@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--account` on the live BofA importer matches last-4 digits as well as nicknames
 - Saved BofA scrapes record the account's last 4 digits; older files still replay
 - The BofA importers read option values, such as the mibudge URL, from `~/.config/mibudge-bofa-importer/config.toml` or `--config`
+- Importer commands `mibudge-import`, `mibudge-bofa-live`, `mibudge-bofa-saved` and `mibudge-backfill-budget`, which run from any directory
 
 ### Changed
 
@@ -21,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The live BofA importer matches accounts again after Bank of America stopped showing account numbers on its overview (bofa_scraper 2.0.0): it reads each account's last 4 digits from the account page and keeps a nickname cache in `~/.config/mibudge-bofa-importer/` so untracked accounts are not opened
+- The importer docs gave commands that no longer worked (`python -m importers import ...`, `... banks`)
+- With no `DATABASE_URL` set, the SQLite database is `app/db.sqlite3` instead of a file in whatever directory the command ran from
 
 ## [0.4.3] - 2026-10-29
 

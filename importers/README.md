@@ -48,31 +48,33 @@ importers/
 | `.csv`         | `bofa_csv.py` | No -- user must specify the target account |
 | `.ofx`, `.qfx` | `ofx.py`      | Yes (OFX `ACCTID` + `ACCTTYPE`)            |
 
-The importer dispatches by file extension. A single `import` command
+The importer dispatches by file extension. A single `mibudge-import` run
 can mix formats in one run *for the same destination account*.
 
 ## CLI shape
 
-`python -m importers` is a click group with two subcommands:
+Each tool is a single click command, installed as a console script by
+`[project.scripts]` in `pyproject.toml`:
 
-* `import` -- parse one or more statement files and POST their
-  transactions. Files may be passed as positional args or via `-f`, and
-  both forms accept globs expanded by the shell:
+| Command                   | Module                |
+|---------------------------|-----------------------|
+| `mibudge-import`          | `import_transactions` |
+| `mibudge-bofa-live`       | `import_bofa_live`    |
+| `mibudge-bofa-saved`      | `import_bofa_saved`   |
+| `mibudge-backfill-budget` | `backfill_budget`     |
 
-      import statements/*.ofx
-      import -f stmt1.ofx -f stmt2.ofx
-      import statements/*.ofx -f extra.csv
+`mibudge-import` takes statement files as positional args or via
+`-f`, and both forms accept globs expanded by the shell:
 
-* `banks` -- list the banks visible to the authenticated user along
-  with their UUIDs (for use with `--bank`).
+    mibudge-import statements/*.ofx
+    mibudge-import -f stmt1.ofx -f stmt2.ofx
+    mibudge-import statements/*.ofx -f extra.csv
 
-Connection/credentials options live on the group itself and apply to
-both subcommands.
+`--bank` takes a bank's name, UUID or routing number; when it does not
+match exactly one bank, the importer lists the candidates.
 
-The BofA scrapers are separate entry points (not subcommands of the
-group): `python -m importers.import_bofa_live` and
-`python -m importers.import_bofa_saved`.  See their module docstrings
-and `docs/importers.md` for usage.
+`python -m importers` still runs `mibudge-import`. See
+`docs/importers.md` for usage of every tool.
 
 ### Environment variables for every flag
 
@@ -94,6 +96,32 @@ The BofA importers also read option values from
 `~/.config/mibudge-bofa-importer/config.toml`, below CLI flags and
 environment variables; see `importers/bofa_config.py`.
 
+## Running the commands
+
+`uv sync` (or `make uv-sync`) installs the four commands into the
+checkout's `.venv/bin/`. Run them in one of three ways (here the
+checkout is `~/src/mibudge`):
+
+```bash
+# From anywhere inside the checkout:
+uv run mibudge-import ~/Downloads/*.ofx
+
+# From any other directory, naming the checkout:
+uv run --project ~/src/mibudge mibudge-import ~/Downloads/*.ofx
+
+# Or by full path, with no uv involved:
+~/src/mibudge/.venv/bin/mibudge-import ~/Downloads/*.ofx
+```
+
+`mibudge-bofa-live` also needs the `importers-bofa` dependency group
+(bofa-scraper and Selenium) and Firefox. Put `--group importers-bofa`
+on every `uv run` of it, as the examples below do: a plain `uv sync`
+removes the group again. To run it by full path instead, install the
+group first with `uv sync --group importers-bofa`.
+
+All four read the `.env` at the root of the checkout, wherever they are
+run from.
+
 ## Usage examples
 
 Connection variables (`MIBUDGE_URL` and
@@ -112,7 +140,7 @@ resolved automatically. This is the common case for routine monthly
 imports -- just drop the files on the command line:
 
 ```bash
-uv run python -m importers import ~/Downloads/*.ofx
+uv run mibudge-import ~/Downloads/*.ofx
 ```
 
 Multiple statements for the same account are accepted in one run.
@@ -126,10 +154,9 @@ number are read from the OFX file itself, so only `--name` and
 `--bank` are needed:
 
 ```bash
-uv run python -m importers banks                      # find <bank-uuid>
-uv run python -m importers import --create-account \
+uv run mibudge-import --create-account \
     --name "Personal Checking" \
-    --bank <bank-uuid> \
+    --bank "Bank of America" \
     ~/Downloads/2025-*.ofx
 ```
 
@@ -147,9 +174,9 @@ BofA CSV exports do **not** carry an account identifier, so the
 create-account flags must be supplied explicitly:
 
 ```bash
-uv run python -m importers import --create-account \
+uv run mibudge-import --create-account \
     --name "Joint Checking" \
-    --bank <bank-uuid> \
+    --bank "Bank of America" \
     --account-type checking \
     --account-number 1234567890 \
     ~/Downloads/stmt.csv
@@ -161,17 +188,17 @@ Because CSVs have no `ACCTID` to match on, follow-up imports must
 name the target account by UUID:
 
 ```bash
-uv run python -m importers import --account <bank-account-uuid> \
+uv run mibudge-import --account <bank-account-uuid> \
     ~/Downloads/stmt.csv
 ```
 
 ### Mixed-format single-account import
 
-One `import` run can combine CSV and OFX for the same account --
+One `mibudge-import` run can combine CSV and OFX for the same account --
 handy when migrating historical CSVs alongside current OFX exports:
 
 ```bash
-uv run python -m importers import --account <uuid> \
+uv run mibudge-import --account <uuid> \
     archive/2023-*.csv recent/2025-*.ofx
 ```
 
@@ -179,11 +206,10 @@ uv run python -m importers import --account <uuid> \
 
 ```bash
 # Trust a locally-issued cert (mkcert):
-uv run python -m importers --trust-local-certs import stmt.ofx
+uv run mibudge-import --trust-local-certs stmt.ofx
 
 # Or point at an explicit CA bundle:
-uv run python -m importers --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" \
-    import stmt.ofx
+uv run mibudge-import --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" stmt.ofx
 ```
 
 ### Pulling credentials from Vault
@@ -191,8 +217,7 @@ uv run python -m importers --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" \
 ```bash
 export VAULT_ADDR=https://vault.example.com
 export VAULT_TOKEN=s.xxxx
-uv run python -m importers --vault-path mibudge/importer \
-    import stmt.ofx
+uv run mibudge-import --vault-path mibudge/importer stmt.ofx
 ```
 
 The Vault secret must contain `url` plus either `api_key` (preferred)
@@ -201,9 +226,9 @@ or `email` and `password`.
 ### Pulling the API key from 1Password
 
 ```bash
-uv run python -m importers \
+uv run mibudge-import \
     --api-key-onepassword-url "op://Personal/mibudge/API key" \
-    import stmt.ofx
+    stmt.ofx
 ```
 
 Requires the [1Password CLI](https://developer.1password.com/docs/cli/) (`op`)
@@ -223,6 +248,52 @@ mibudge) from the BofA live scraper's `--bofa-onepassword-url` /
 its `username`/`password` fields are both read from it -- and each
 secret's name says what it fetches, so a future bank (Chase, etc.) can
 add `CHASE_ONEPASSWORD_URL` without colliding.
+
+### BofA live scrape -- `mibudge-bofa-live`
+
+Logs in to Bank of America and syncs every BofA account that a mibudge
+bank account tracks. With `BOFA_ONEPASSWORD_URL` in `.env` the BofA
+login comes from 1Password; without it the command prompts for the
+online ID and passcode. A 2FA code is prompted for on the terminal.
+
+```bash
+# Sync every tracked account:
+uv run --group importers-bofa mibudge-bofa-live
+
+# Preview one account (nickname substring or last 4 digits), with the
+# browser visible:
+uv run --group importers-bofa mibudge-bofa-live \
+    --dry-run --account 1234 --no-headless
+
+# Sync, keep the raw scrape, and run funding afterwards:
+uv run --group importers-bofa mibudge-bofa-live \
+    --save-dir ~/bofa-scrapes --run-funding
+```
+
+Option values can also come from
+`~/.config/mibudge-bofa-importer/config.toml`; see
+[Configuration resolution](#configuration-resolution).
+
+### Replay saved BofA scrapes -- `mibudge-bofa-saved`
+
+Sends JSON files written by `mibudge-bofa-live --save-dir` through the
+same sync, without logging in to BofA. It does not need the
+`importers-bofa` group.
+
+```bash
+uv run mibudge-bofa-saved --dry-run ~/bofa-scrapes/2026-10-30-*.json
+uv run mibudge-bofa-saved ~/bofa-scrapes/2026-10-30-*.json
+```
+
+### Backfill a budget -- `mibudge-backfill-budget`
+
+Steps through a bank account's past transactions month by month and
+asks, for each unallocated one, whether it belongs to a recurring
+budget. Answers saved per vendor go in `~/.mibudge/vendor_rules.json`.
+
+```bash
+uv run mibudge-backfill-budget --account "Personal Checking" --budget "Groceries"
+```
 
 ## Account resolution rules
 
@@ -247,7 +318,7 @@ silently guessing:
   existing account -- refused (see the OFX safeguard above).
 * Multiple OFX files in one run whose `ACCTID`s disagree -- refused.
 
-## Flag reference (import subcommand)
+## Flag reference (`mibudge-import`)
 
 Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment
 variable (see [Environment variables for every flag](#environment-variables-for-every-flag)).
@@ -280,7 +351,7 @@ Internal inconsistency aborts the run without touching the server.
 
 ## Multi-file semantics
 
-When an `import` run combines several files, the importer flattens
+When a `mibudge-import` run combines several files, the importer flattens
 them into one synthetic statement covering the full date range and
 applies two further normalisations:
 

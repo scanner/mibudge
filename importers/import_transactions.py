@@ -17,20 +17,20 @@ Typical usage::
     # Import a pile of OFX files for an already-created account. The
     # OFX ACCTID is matched against BankAccount.account_number, so no
     # --account flag is needed:
-    uv run python -m importers import statements/*.ofx
+    uv run mibudge-import statements/*.ofx
 
     # First-time import from OFX -- the account type and account
     # number come from the OFX file itself, only --name and --bank
     # are still required.  --bank accepts a name, routing number, or
     # UUID; if the string matches exactly one bank it is used,
     # otherwise all matches (or all banks) are printed:
-    uv run python -m importers import --create-account \\
+    uv run mibudge-import --create-account \\
         --name "Personal Card" --bank Chase \\
         statements/*.ofx
 
     # BofA CSV (no ACCTID in the file) -- --account accepts a name,
     # account number, or UUID:
-    uv run python -m importers import -f stmt.csv --account "Personal Checking"
+    uv run mibudge-import -f stmt.csv --account "Personal Checking"
 
 Configuration is resolved in this order (first wins):
 

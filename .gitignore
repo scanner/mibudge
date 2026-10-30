@@ -268,7 +268,7 @@ tags
 
 ### Project template
 
-mibudge/media/
+app/media/
 
 deployment/production/secrets/*
 !deployment/production/secrets/.gitkeep

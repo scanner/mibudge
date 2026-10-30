@@ -19,7 +19,7 @@ Useful for:
 
 Usage::
 
-    uv run python -m importers.import_bofa_saved \\
+    uv run mibudge-bofa-saved \\
         saved/2026-05-15-103045-1234.json \\
         saved/2026-05-15-103045-5678.json \\
         [--dry-run] [--run-funding] [--verbose]

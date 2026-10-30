@@ -11,7 +11,7 @@ and balance validation atomically.
 Requires the importers-bofa optional dependency group::
 
     uv sync --group importers-bofa
-    uv run --group importers-bofa python -m importers.import_bofa_live
+    uv run --group importers-bofa mibudge-bofa-live
 
 Options can also be set in the BofA importers' config file,
 ~/.config/mibudge-bofa-importer/config.toml (see
