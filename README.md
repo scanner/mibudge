@@ -71,6 +71,53 @@ Both flows email the invitee a single-use tokenized link (valid 7 days). Brand-n
 
 Users can later change their login email through a verified two-step flow with a 7-day revocation window -- see [`docs/email-change.md`](docs/email-change.md) for the flow and its security policy.
 
+## Supported platforms
+
+- **Production:** the Docker image `ghcr.io/scanner/mibudge`, for
+  linux/amd64 and linux/arm64, run with Docker Compose behind a
+  TLS-terminating reverse proxy, with PostgreSQL and Redis. See
+  [`deployment/production/README.md`](deployment/production/README.md).
+- **Development:** macOS with Docker, uv, pnpm and mkcert. `make up`
+  runs the backend stack in Docker and the Vite dev server on the host.
+- **Tests and the importers** run on the host with uv, on macOS or
+  Linux, and need no Docker. The BofA live scraper also needs Firefox.
+
+The Django app itself is not tied to Docker: it runs from a checkout with
+uv, against SQLite or PostgreSQL. Running it that way (a process manager
+for the web server, Celery worker and Celery beat, plus Redis) is
+possible but not a documented or tested deployment.
+
+## Importing transactions
+
+Bank data gets into mibudge through the command-line importers in
+`importers/`. They talk to any mibudge server over its REST API, so they
+need an API key (Settings -> API keys in the SPA), not access to the
+server. They are a separate client that will move to its own project
+once the API is stable; the command names below will stay the same.
+Nothing is installed outside the checkout: `uv sync` puts four commands
+in the checkout's `.venv/bin/`:
+
+```bash
+uv run mibudge-import ~/Downloads/*.ofx       # OFX/QFX or BofA CSV statements
+uv run --group importers-bofa mibudge-bofa-live   # scrape Bank of America
+uv run mibudge-bofa-saved saved/*.json        # replay saved BofA scrapes
+uv run mibudge-backfill-budget --account "Personal Checking" --budget "Groceries"
+```
+
+From outside the checkout, use `uv run --project <checkout> ...` or the
+full path, `<checkout>/.venv/bin/mibudge-import`. Wherever they are run
+from, the importers read the `.env` at the root of the checkout; put the
+server there:
+
+```bash
+MIBUDGE_URL=https://your-mibudge-host
+MIBUDGE_API_KEY_ONEPASSWORD_URL="op://Personal/mibudge/API key"
+```
+
+The API key itself is never read from `.env`: pass `--api-key`, or fetch
+it from 1Password or Vault. [`docs/importers.md`](docs/importers.md)
+covers every tool, flag and file they use.
+
 ## Architecture
 
 ### Backend: Django + DRF
@@ -78,7 +125,7 @@ Users can later change their login email through a verified two-step flow with a
 - **Python 3.13+** / **Django 5.2 LTS** / **Django REST Framework**
 - **djangorestframework-simplejwt** for JWT authentication
 - **Celery** + **Redis** for async task scheduling (budget funding, etc.)
-- **PostgreSQL** with psycopg (async-capable)
+- **PostgreSQL** with psycopg in production; the test suite also runs on **SQLite**, and the service code stays database-neutral
 - **django-allauth** for authentication (closed registration by default), **django-guardian** for object permissions
 - **djmoney** MoneyField for all monetary values
 - **django-recurrence** for funding/refresh schedules
@@ -87,7 +134,7 @@ Users can later change their login email through a verified two-step flow with a
 
 - **Vue 3** + **Vite** with **TypeScript** throughout
 - **Pinia** for state management, **Vue Router** (history mode, base `/app/`)
-- Native `fetch` wrapper (`src/api/client.ts`) -- no third-party HTTP client
+- Native `fetch` wrapper (`src/api/http.ts`) -- no third-party HTTP client
 - **django-vite** for dev integration (HMR via Vite dev server)
 - Build output: `frontend/dist/` collected by Django staticfiles for production
 
@@ -95,7 +142,9 @@ Users can later change their login email through a verified two-step flow with a
 
 | Path                         | Handled by               | Purpose                                      |
 |------------------------------|--------------------------|----------------------------------------------|
-| `/`, `/accounts/`, `/admin/` | Django templates         | Login, auth, admin                           |
+| `/`                          | Django template          | Landing page                                 |
+| `/accounts/`                 | django-allauth           | Password reset (sign-in is the SPA's `/app/login/`) |
+| `/admin/`                    | Django admin             | Admin site (path set by `DJANGO_ADMIN_URL`)  |
 | `/api/v1/`                   | DRF                      | JWT-authenticated REST API (v1)              |
 | `/api/token/`                | `TokenObtainPairView`    | JWT access+refresh pair (cross-version)      |
 | `/api/token/refresh/`        | `CookieTokenRefreshView` | Silent token refresh via httpOnly cookie     |
@@ -169,6 +218,9 @@ mibudge/
   frontend/               # Vue 3 SPA
     src/                  # TypeScript source: components, Pinia stores, Vue Router, API client
     dist/                 # Production build output (collected by Django staticfiles)
+  importers/              # Command-line importers (REST API clients; see docs/importers.md)
+  docs/                   # Reference docs, OpenAPI schema, generated API reference
+  examples/               # Worked API examples, one JSON file per endpoint
   deployment/             # Dev and prod docker env files, SSL certs, DB backups
   Dockerfile              # Multi-stage build: builder → dev → prod
   docker-compose.yml      # Local dev stack (Django, Postgres, Redis, Celery)
@@ -189,7 +241,7 @@ Startup scripts in `app/scripts/` use [wait-for-it](https://pypi.org/project/wai
 
 ## Development
 
-Prerequisites: [Docker](https://docs.docker.com/get-docker/), [uv](https://docs.astral.sh/uv/), Python 3.13+, [pnpm](https://pnpm.io/)
+Prerequisites: [Docker](https://docs.docker.com/get-docker/), [uv](https://docs.astral.sh/uv/) (it installs the Python version in `.python-version`), [pnpm](https://pnpm.io/), and [mkcert](https://github.com/FiloSottile/mkcert) with `mkcert -install` run once.
 
 ```bash
 # Start all services (builds images, runs in background)
@@ -231,6 +283,38 @@ make lint
 # See all available commands
 make help
 ```
+
+### What gets built, and where it goes
+
+Inside the checkout and Docker's storage:
+
+| Made by | What | Where |
+|---------|------|-------|
+| `make env` (run by `make up`, `make test`, `make lint`) | this host's settings | `.env` (never overwritten once it exists) |
+| `make certs` (run by `make up`) | mkcert TLS certificate and key | `deployment/ssl/<host>-ssl_{crt,key}.pem` |
+| `make up` / `make build` | Docker images | `mibudge:dev`, `mibudge:<version>-dev`, `mibudge:latest`, `mibudge:<version>` |
+| `make up` | PostgreSQL and Redis data | Docker volumes `mibudge_local_postgres_data`, `mibudge_local_redis_data` (`make purge` deletes them) |
+| `make up` (creates and mounts it; nothing writes there automatically) | a place for dev PostgreSQL dumps, the postgres container's `/backups` | `deployment/db_backups/` |
+| `make test`, `make lint`, `uv sync` | Python virtualenv, including the importer commands | `.venv/` |
+| `pnpm install` | frontend dependencies | `frontend/node_modules/` |
+| `pnpm build` | production SPA bundle | `frontend/dist/` |
+| `manage.py collectstatic` | collected static files | `app/staticfiles/` |
+| uploaded images and documents | media | `app/media/` |
+| `manage.py` with no `DATABASE_URL` set | SQLite database | `app/db.sqlite3` |
+
+The dev `.env` sets `DATABASE_URL` to the compose PostgreSQL, so the
+SQLite default applies only when nothing sets it. The importers' own
+files are listed in [`docs/importers.md`](docs/importers.md).
+
+Outside the checkout, the tools keep their usual shared state, each in the
+place its own command prints:
+
+| What | Where |
+|------|-------|
+| the Python that uv installs for `.python-version` | `uv python dir` |
+| uv's package cache | `uv cache dir` |
+| pnpm's package store | `pnpm store path` |
+| the mkcert CA (`mkcert -install` also adds it to the system trust store) | `mkcert -CAROOT` |
 
 ### Simulated bank data
 

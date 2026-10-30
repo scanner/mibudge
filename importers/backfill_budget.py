@@ -7,7 +7,7 @@ budget.  It maintains the budget's funding schedule at period boundaries.
 
 Typical usage::
 
-    uv run python -m importers.backfill_budget \\
+    uv run mibudge-backfill-budget \\
         --account "Personal Checking" \\
         --budget "Groceries"
 

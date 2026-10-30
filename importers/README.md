@@ -48,31 +48,33 @@ importers/
 | `.csv`         | `bofa_csv.py` | No -- user must specify the target account |
 | `.ofx`, `.qfx` | `ofx.py`      | Yes (OFX `ACCTID` + `ACCTTYPE`)            |
 
-The importer dispatches by file extension. A single `import` command
+The importer dispatches by file extension. A single `mibudge-import` run
 can mix formats in one run *for the same destination account*.
 
 ## CLI shape
 
-`python -m importers` is a click group with two subcommands:
+Each tool is a single click command, installed as a console script by
+`[project.scripts]` in `pyproject.toml`:
 
-* `import` -- parse one or more statement files and POST their
-  transactions. Files may be passed as positional args or via `-f`, and
-  both forms accept globs expanded by the shell:
+| Command                   | Module                |
+|---------------------------|-----------------------|
+| `mibudge-import`          | `import_transactions` |
+| `mibudge-bofa-live`       | `import_bofa_live`    |
+| `mibudge-bofa-saved`      | `import_bofa_saved`   |
+| `mibudge-backfill-budget` | `backfill_budget`     |
 
-      import statements/*.ofx
-      import -f stmt1.ofx -f stmt2.ofx
-      import statements/*.ofx -f extra.csv
+`mibudge-import` takes statement files as positional args or via
+`-f`, and both forms accept globs expanded by the shell:
 
-* `banks` -- list the banks visible to the authenticated user along
-  with their UUIDs (for use with `--bank`).
+    mibudge-import statements/*.ofx
+    mibudge-import -f stmt1.ofx -f stmt2.ofx
+    mibudge-import statements/*.ofx -f extra.csv
 
-Connection/credentials options live on the group itself and apply to
-both subcommands.
+`--bank` takes a bank's name, UUID or routing number; when it does not
+match exactly one bank, the importer lists the candidates.
 
-The BofA scrapers are separate entry points (not subcommands of the
-group): `python -m importers.import_bofa_live` and
-`python -m importers.import_bofa_saved`.  See their module docstrings
-and `docs/importers.md` for usage.
+`python -m importers` still runs `mibudge-import`. See
+`docs/importers.md` for usage of every tool.
 
 ### Environment variables for every flag
 
@@ -112,7 +114,7 @@ resolved automatically. This is the common case for routine monthly
 imports -- just drop the files on the command line:
 
 ```bash
-uv run python -m importers import ~/Downloads/*.ofx
+uv run mibudge-import ~/Downloads/*.ofx
 ```
 
 Multiple statements for the same account are accepted in one run.
@@ -126,10 +128,9 @@ number are read from the OFX file itself, so only `--name` and
 `--bank` are needed:
 
 ```bash
-uv run python -m importers banks                      # find <bank-uuid>
-uv run python -m importers import --create-account \
+uv run mibudge-import --create-account \
     --name "Personal Checking" \
-    --bank <bank-uuid> \
+    --bank "Bank of America" \
     ~/Downloads/2025-*.ofx
 ```
 
@@ -147,9 +148,9 @@ BofA CSV exports do **not** carry an account identifier, so the
 create-account flags must be supplied explicitly:
 
 ```bash
-uv run python -m importers import --create-account \
+uv run mibudge-import --create-account \
     --name "Joint Checking" \
-    --bank <bank-uuid> \
+    --bank "Bank of America" \
     --account-type checking \
     --account-number 1234567890 \
     ~/Downloads/stmt.csv
@@ -161,17 +162,17 @@ Because CSVs have no `ACCTID` to match on, follow-up imports must
 name the target account by UUID:
 
 ```bash
-uv run python -m importers import --account <bank-account-uuid> \
+uv run mibudge-import --account <bank-account-uuid> \
     ~/Downloads/stmt.csv
 ```
 
 ### Mixed-format single-account import
 
-One `import` run can combine CSV and OFX for the same account --
+One `mibudge-import` run can combine CSV and OFX for the same account --
 handy when migrating historical CSVs alongside current OFX exports:
 
 ```bash
-uv run python -m importers import --account <uuid> \
+uv run mibudge-import --account <uuid> \
     archive/2023-*.csv recent/2025-*.ofx
 ```
 
@@ -179,11 +180,10 @@ uv run python -m importers import --account <uuid> \
 
 ```bash
 # Trust a locally-issued cert (mkcert):
-uv run python -m importers --trust-local-certs import stmt.ofx
+uv run mibudge-import --trust-local-certs stmt.ofx
 
 # Or point at an explicit CA bundle:
-uv run python -m importers --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" \
-    import stmt.ofx
+uv run mibudge-import --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" stmt.ofx
 ```
 
 ### Pulling credentials from Vault
@@ -191,8 +191,7 @@ uv run python -m importers --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" \
 ```bash
 export VAULT_ADDR=https://vault.example.com
 export VAULT_TOKEN=s.xxxx
-uv run python -m importers --vault-path mibudge/importer \
-    import stmt.ofx
+uv run mibudge-import --vault-path mibudge/importer stmt.ofx
 ```
 
 The Vault secret must contain `url` plus either `api_key` (preferred)
@@ -201,9 +200,9 @@ or `email` and `password`.
 ### Pulling the API key from 1Password
 
 ```bash
-uv run python -m importers \
+uv run mibudge-import \
     --api-key-onepassword-url "op://Personal/mibudge/API key" \
-    import stmt.ofx
+    stmt.ofx
 ```
 
 Requires the [1Password CLI](https://developer.1password.com/docs/cli/) (`op`)
@@ -247,7 +246,7 @@ silently guessing:
   existing account -- refused (see the OFX safeguard above).
 * Multiple OFX files in one run whose `ACCTID`s disagree -- refused.
 
-## Flag reference (import subcommand)
+## Flag reference (`mibudge-import`)
 
 Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment
 variable (see [Environment variables for every flag](#environment-variables-for-every-flag)).
@@ -280,7 +279,7 @@ Internal inconsistency aborts the run without touching the server.
 
 ## Multi-file semantics
 
-When an `import` run combines several files, the importer flattens
+When a `mibudge-import` run combines several files, the importer flattens
 them into one synthetic statement covering the full date range and
 applies two further normalisations:
 
