@@ -1,6 +1,6 @@
 # Importing Transactions and Backfilling Budgets
 
-The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using an API key (preferred; create one under Settings -> API keys, pass it via `--api-key` / `MIBUDGE_API_KEY`) or a normal email and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
+The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using an API key (preferred; create one under Settings -> API keys, fetched from 1Password or Vault, or passed with `--api-key`) or a normal email and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
 
 These tools will eventually live in their own repository. For now they share the project's `pyproject.toml` and are run from the repo root with `uv run`.
 
@@ -11,7 +11,7 @@ These tools will eventually live in their own repository. For now they share the
 | Tool | Command | Purpose |
 |------|---------|---------|
 | Statement importer | `python -m importers import` | Parse bank statement files (OFX/QFX or BofA CSV) and POST new transactions to mibudge |
-| BofA live scraper | `python -m importers.import_bofa_live` | Log in to Bank of America, scrape all accessible accounts, and sync each one into mibudge via the `sync-scrape` endpoint |
+| BofA live scraper | `python -m importers.import_bofa_live` | Log in to Bank of America, scrape each account a mibudge account tracks, and sync it into mibudge via the `sync-scrape` endpoint |
 | BofA saved-scrape replayer | `python -m importers.import_bofa_saved` | Replay saved BofA scrape JSON files through the same `sync-scrape` endpoint without re-logging in to BofA |
 | Budget backfill | `python -m importers backfill_budget` | Interactively allocate historical transactions to a budget, month by month |
 
@@ -21,13 +21,14 @@ These tools will eventually live in their own repository. For now they share the
 
 ### Credentials
 
-All tools accept connection and credential flags. In practice, set them once in a `.env` file at the repo root:
+All tools accept connection and credential flags. In practice, set the non-secret ones once in a `.env` file at the repo root and keep the API key in 1Password or Vault (see below):
 
 ```bash
 MIBUDGE_URL=https://your-mibudge-host
-MIBUDGE_USERNAME=you@example.com
-MIBUDGE_PASSWORD=yourpassword
+MIBUDGE_API_KEY_ONEPASSWORD_URL="op://Personal/mibudge/API key"
 ```
+
+Secrets -- the API key (`MIBUDGE_API_KEY`), the password (`MIBUDGE_PASSWORD`) and the BofA passcode (`BOFA_PASSCODE`) -- are never read from the environment or `.env`, and a warning names any that are set there. Pass them as flags, or keep them in 1Password or Vault. `VAULT_TOKEN` is honored from the real environment but not from `.env`.
 
 ### Environment variables for every flag
 
@@ -36,13 +37,13 @@ Every flag on every command has a corresponding environment variable. All import
 | Flag | Environment variable |
 |------|----------------------|
 | `--url` | `MIBUDGE_URL` |
-| `--username` | `MIBUDGE_USERNAME` |
+| `--email` | `MIBUDGE_EMAIL` |
 | `--dry-run` | `MIBUDGE_DRY_RUN` |
 | `--run-funding` | `MIBUDGE_RUN_FUNDING` |
 | `--save-dir` | `MIBUDGE_SAVE_DIR` |
 | `--verbose` | `MIBUDGE_VERBOSE` |
 
-Two flags on the BofA live scraper use explicit names that override the auto-prefix: `--bofa-id` reads `BOFA_ID` and `--bofa-passcode` reads `BOFA_PASSCODE` (not `MIBUDGE_BOFA_ID` / `MIBUDGE_BOFA_PASSCODE`).
+The secret flags (`--api-key`, `--password`, `--bofa-passcode`) have no environment variable. Two flags on the BofA live scraper use explicit names that override the auto-prefix: `--bofa-id` reads `BOFA_ID` and `--bofa-onepassword-url` reads `BOFA_ONEPASSWORD_URL` (not `MIBUDGE_BOFA_ID` / `MIBUDGE_BOFA_ONEPASSWORD_URL`).
 
 CLI flags always take precedence over environment variables.
 
@@ -189,7 +190,7 @@ A file that fails its own consistency check is rejected before touching the serv
 
 ## BofA Live Scraper
 
-The live scraper logs into Bank of America using a Selenium/Firefox driver and syncs all accessible accounts into mibudge.
+The live scraper logs into Bank of America using a Selenium/Firefox driver and syncs each BofA account that a mibudge account tracks.
 
 ### Installation
 
@@ -205,9 +206,40 @@ uv sync --group importers-bofa
 uv run --group importers-bofa python -m importers.import_bofa_live
 ```
 
-BofA credentials are read from `BOFA_ID` and `BOFA_PASSCODE` environment variables (or `--bofa-id` / `--bofa-passcode` flags), or from a 1Password item via `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` (reads the item's `username`/`password` fields). mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → the mibudge 1Password secret reference via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` → Vault). The two 1Password URLs are separate env vars on purpose -- each name says which credential it fetches -- and they differ in shape: the BofA one is an *item* URL (its `username`/`password` fields are both read), while the mibudge one is a full secret reference naming the field that holds the API key.
+BofA credentials are read from a 1Password item via `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` (reads the item's `username`/`password` fields), or from `--bofa-id` (or `BOFA_ID`) and `--bofa-passcode`, prompting for whichever is missing. mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → the [config file](#config-file) → the mibudge 1Password secret reference via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` → Vault). The two 1Password URLs are separate env vars on purpose -- each name says which credential it fetches -- and they differ in shape: the BofA one is an *item* URL (its `username`/`password` fields are both read), while the mibudge one is a full secret reference naming the field that holds the API key.
 
 If BofA requires 2FA, the scraper prompts for the code interactively via stdin. Run with `--no-headless` to watch the browser.
+
+### Config file
+
+Both BofA importers (`import_bofa_live` and `import_bofa_saved`) read option values from `config.toml` in their config directory, `$XDG_CONFIG_HOME/mibudge-bofa-importer/` (default `~/.config/mibudge-bofa-importer/config.toml`), when it exists. `--config` / `MIBUDGE_CONFIG` names a different file, which must exist. A value is resolved in this order, first wins: CLI flag, environment variable (or `.env`), config file, the option's built-in default.
+
+Keys are option names, spelled like the flag with or without its dashes (`save-dir` or `save_dir`). Top-level keys apply to both importers, so each must be an option of both. A `[import_bofa_live]` or `[import_bofa_saved]` table holds keys for one importer and wins over the top level:
+
+```toml
+url = "https://mibudge.example.com"
+api_key_onepassword_url = "op://Personal/mibudge/API key"
+category_map = "categories.yaml"
+
+[import_bofa_live]
+bofa_onepassword_url = "op://Personal/BofA"
+save_dir = "~/bofa-scrapes"
+```
+
+Relative paths resolve against the config file's directory, and `~` is expanded. An unknown key or table is an error. Secrets (`password`, `api_key`, `bofa_passcode`) are refused because the directory is meant to be synced between machines: name a 1Password reference or a Vault path instead.
+
+### Matching BofA accounts to mibudge accounts
+
+A BofA account is imported into the mibudge account whose account number ends in the same last 4 digits. Only mibudge accounts in a bank whose name contains `--bank-name` (default `Bank of America`, case-insensitive) are tracked.
+
+BofA's account overview shows only each account's nickname; the last 4 digits appear only once the account is opened. The importer keeps a nickname -> last-4 cache in its config directory, `$XDG_CONFIG_HOME/mibudge-bofa-importer/` (default `~/.config/mibudge-bofa-importer/accounts.json`, or `--account-cache`). The directory is shared by the BofA importers and is safe to sync between machines.
+
+- An account whose nickname the cache maps to digits no tracked mibudge account has is skipped without being opened.
+- An account with a new nickname, or one whose nickname another overview tile also uses, is opened and checked.
+- When an opened account shows different digits than the cache holds, the cache is corrected. Every change is printed at the end of the run.
+- An opened account that no mibudge account tracks is skipped. This is not an error.
+
+If a tracked mibudge account is not found during a run, the importer warns and suggests `--check-all-accounts`. That option opens every BofA account regardless of the cache, rebuilds the mapping (dropping nicknames no longer on the overview), and reports what was added, changed or removed. The warning is not given for runs filtered with `--account` or cut short by BofA ending the session.
 
 ### Transaction details enrichment
 
@@ -227,7 +259,7 @@ Two things keep this under BofA's rate limit (a burst of ~40-50 detail-dialog op
 
 ### Saving scrape output
 
-Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file (`YYYY-MM-DD-HHMMSS-<last4>.json`, format v3 -- fetched transaction details are included). This lets you re-import from the saved file later without re-logging in to BofA. Combine with `--save-only` to capture the data on a machine that can reach BofA but not mibudge; add `--details-all` to force-capture the real detail dialog for every posted transaction (paced, no merchant-copy shortcut) so the file carries the full data:
+Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file (`YYYY-MM-DD-HHMMSS-<last4>.json`, format v4 -- the account's last 4 digits and fetched transaction details are included; `--save-only` saves every account, tracked or not). This lets you re-import from the saved file later without re-logging in to BofA. Combine with `--save-only` to capture the data on a machine that can reach BofA but not mibudge; add `--details-all` to force-capture the real detail dialog for every posted transaction (paced, no merchant-copy shortcut) so the file carries the full data:
 
 ```bash
 # Capture on BofA-accessible machine:
@@ -245,10 +277,14 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 | Flag | Purpose |
 |------|---------|
 | `--bofa-id` | BofA Online ID (env var: `BOFA_ID`, not `MIBUDGE_BOFA_ID`) |
-| `--bofa-passcode` | BofA passcode (env var: `BOFA_PASSCODE`, not `MIBUDGE_BOFA_PASSCODE`) |
+| `--bofa-passcode` | BofA passcode (not read from the environment or the config file; prompted for when missing) |
 | `--bofa-onepassword-url` | 1Password item URL for BofA username/password (env var: `BOFA_ONEPASSWORD_URL`, not `MIBUDGE_BOFA_ONEPASSWORD_URL`) |
 | `--api-key-onepassword-url` | 1Password secret reference (full field path) to the API key used to authenticate to mibudge (env var: `MIBUDGE_API_KEY_ONEPASSWORD_URL`) |
-| `--account, -a` | Filter by BofA account name substring (repeatable; omit for all accounts) |
+| `--account, -a` | Filter by BofA account nickname substring or last-4 digits (repeatable; omit for all tracked accounts) |
+| `--check-all-accounts` | Open every BofA account, rebuild the account cache, and report the changes |
+| `--config` | TOML file of option values (default: `~/.config/mibudge-bofa-importer/config.toml`; see [Config file](#config-file)) |
+| `--account-cache` | Nickname -> last-4 cache file (default: `~/.config/mibudge-bofa-importer/accounts.json`) |
+| `--bank-name` | Substring of the mibudge Bank name whose accounts are tracked (default: `Bank of America`) |
 | `--headless / --no-headless` | Run Firefox headlessly (default) or visibly for debugging/2FA |
 | `--timeout` | Seconds to pause after each transaction details dialog, pacing requests to BofA (default: 5) |
 | `--save-dir` | Directory to write raw scrape JSON files |

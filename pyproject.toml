@@ -105,12 +105,12 @@ dev = [
 ]
 
 importers-bofa = [
-    "bofa-scraper",
+    "bofa-scraper>=2.0.0,<3",
     "selenium",
 ]
 
 [tool.uv.sources]
-bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v1.2.0" }
+bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v2.0.0" }
 
 ########################################################################
 # Tool configurations

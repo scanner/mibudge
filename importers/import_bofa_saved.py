@@ -23,6 +23,10 @@ Usage::
         saved/2026-05-15-103045-1234.json \\
         saved/2026-05-15-103045-5678.json \\
         [--dry-run] [--run-funding] [--verbose]
+
+Options can also be set in the BofA importers' config file,
+~/.config/mibudge-bofa-importer/config.toml (see
+importers/bofa_config.py), below CLI flags and env vars.
 """
 
 # system imports
@@ -41,6 +45,7 @@ from rich.logging import RichHandler
 # Project imports
 #
 from importers.bofa_categories import load_overlay_map
+from importers.bofa_config import config_option
 from importers.client import AuthenticationError
 from importers.import_bofa_live import (
     SavedScrape,
@@ -129,7 +134,8 @@ def _setup_logging(
         "`import_bofa_live --save-dir` and submits each through the "
         "same scrape-sync endpoint the live importer uses.  mibudge "
         "credentials follow the same resolution order as the other "
-        "importers.\n\n"
+        "importers.  Options can also be set in "
+        "~/.config/mibudge-bofa-importer/config.toml (see --config).\n\n"
         "Useful for re-importing after a fix, dry-running to preview "
         "what would be created, or verifying coverage against CSV "
         "exports."
@@ -151,14 +157,17 @@ def _setup_logging(
 @click.option(
     "--password",
     default=None,
-    help="mibudge API password (prefer env var or Vault over CLI flag).",
+    allow_from_autoenv=False,
+    help="mibudge API password (not read from the environment).",
 )
 @click.option(
     "--api-key",
     default=None,
+    allow_from_autoenv=False,
     help=(
-        "mibudge API key (preferred over email/password; prefer env var "
-        "MIBUDGE_API_KEY or Vault over CLI flag)."
+        "mibudge API key (preferred over email/password).  Not read "
+        "from the environment; prefer --api-key-onepassword-url or "
+        "Vault over this flag."
     ),
 )
 @click.option(
@@ -217,6 +226,7 @@ def _setup_logging(
         "the built-ins.  [env var: MIBUDGE_CATEGORY_MAP]"
     ),
 )
+@config_option("import_bofa_saved")
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -329,10 +339,10 @@ def cli_cmd(
 
                 account = _ReplayAccount(saved)
 
-                # The mibudge bank account is located by the last-4
-                # digits embedded in the BofA account name -- the only
-                # stable identifier a saved snapshot carries.
-                last_four = _extract_last_four(acct_name)
+                # The mibudge bank account is located by the account
+                # number's last-4: saved as its own field since
+                # format_version 4, embedded in the account name before.
+                last_four = saved.last_four or _extract_last_four(acct_name)
                 if last_four is None:
                     if interactive:
                         console.print(

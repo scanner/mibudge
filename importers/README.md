@@ -83,15 +83,23 @@ uppercase, hyphens replaced with underscores, `MIBUDGE_` prepended.
 Examples: `--dry-run` → `MIBUDGE_DRY_RUN`; `--vault-path` →
 `MIBUDGE_VAULT_PATH`.
 
-Two flags on `import_bofa_live` override this with explicit names:
-`--bofa-id` reads `BOFA_ID` and `--bofa-passcode` reads `BOFA_PASSCODE`.
+The secret flags (`--api-key`, `--password`, `--bofa-passcode`) have
+no environment variable and are never read from `.env`: pass them as
+flags, or keep them in 1Password or Vault.  Two flags on
+`import_bofa_live` override the prefix with explicit names: `--bofa-id`
+reads `BOFA_ID` and `--bofa-onepassword-url` reads
+`BOFA_ONEPASSWORD_URL`.
+
+The BofA importers also read option values from
+`~/.config/mibudge-bofa-importer/config.toml`, below CLI flags and
+environment variables; see `importers/bofa_config.py`.
 
 ## Usage examples
 
-Authentication variables (`MIBUDGE_URL` and `MIBUDGE_API_KEY`; or the
-legacy `MIBUDGE_EMAIL`/`MIBUDGE_PASSWORD` pair) are typically set in a
-`.env` file at the repo root and loaded automatically; the examples
-below omit them for brevity.  An API key takes precedence over
+Connection variables (`MIBUDGE_URL` and
+`MIBUDGE_API_KEY_ONEPASSWORD_URL`, or `MIBUDGE_VAULT_PATH`) are
+typically set in a `.env` file at the repo root and loaded
+automatically; the examples below omit them for brevity.  An API key takes precedence over
 email/password when both are present.  Note: API keys cannot call the
 user/security endpoints (password/email change, invitations, key
 management) -- those require an interactive login.

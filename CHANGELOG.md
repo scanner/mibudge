@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--check-all-accounts` on the live BofA importer opens every account and rebuilds its account cache; a run warns when a tracked mibudge account was not found
+- `--account` on the live BofA importer matches last-4 digits as well as nicknames
+- Saved BofA scrapes record the account's last 4 digits; older files still replay
+- The BofA importers read option values, such as the mibudge URL, from `~/.config/mibudge-bofa-importer/config.toml` or `--config`
+
+### Changed
+
+- The importers no longer read secrets (`MIBUDGE_API_KEY`, `MIBUDGE_PASSWORD`, `BOFA_PASSCODE`) from the environment or `.env`, and warn when one is set there; pass them as flags or keep them in 1Password or Vault
+
+### Fixed
+
+- The live BofA importer matches accounts again after Bank of America stopped showing account numbers on its overview (bofa_scraper 2.0.0): it reads each account's last 4 digits from the account page and keeps a nickname cache in `~/.config/mibudge-bofa-importer/` so untracked accounts are not opened
+
 ## [0.4.3] - 2026-10-29
 
 No migrations: going back to 0.4.2 needs no database change.
