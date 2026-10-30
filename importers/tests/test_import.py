@@ -205,11 +205,10 @@ def _invoke(*args: str) -> Any:
     env = {
         "MIBUDGE_URL": "http://testserver",
         "MIBUDGE_EMAIL": "u@example.com",
-        "MIBUDGE_PASSWORD": "p",
     }
     return runner.invoke(
         it.cli_cmd,
-        ["--plain", *args],
+        ["--plain", "--password", "p", *args],
         env=env,
         catch_exceptions=False,
     )
@@ -819,6 +818,8 @@ class TestLoadImporterEnv:
             ("BOFA_ID", True),
             ("BOFA_ONEPASSWORD_URL", True),
             ("VAULT_ADDR", True),
+            ("MIBUDGE_API_KEY", False),
+            ("VAULT_TOKEN", False),
             ("SSL_CERT_FILE", False),
             ("DJANGO_SECRET_KEY", False),
             ("DATABASE_URL", False),

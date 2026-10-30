@@ -176,8 +176,8 @@ Send the plaintext key on every request:
 Authorization: Api-Key mib_...
 ```
 
-The importer CLIs accept `--api-key`, the `MIBUDGE_API_KEY` environment
-variable, a 1Password secret reference to the field holding the key
+The importer CLIs accept `--api-key` (never read from the environment),
+a 1Password secret reference to the field holding the key
 (`--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`), or a
 Vault secret key `api_key` -- see
 [`docs/importers.md`](importers.md).

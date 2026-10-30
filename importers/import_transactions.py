@@ -37,7 +37,13 @@ Configuration is resolved in this order (first wins):
     1. CLI flags
     2. Environment variables (MIBUDGE_URL, MIBUDGE_EMAIL, etc.)
     3. .env file (importer-related variables only; see load_importer_env)
-    4. Vault KV2 secret (if --vault-path / MIBUDGE_VAULT_PATH is set)
+    4. 1Password secret reference (--api-key-onepassword-url) for the
+       API key
+    5. Vault KV2 secret (if --vault-path / MIBUDGE_VAULT_PATH is set)
+
+Secrets -- the API key and the password -- are never read from the
+environment or .env: pass them as flags, or keep them in 1Password or
+Vault.
 
 The Vault secret is expected to contain keys: ``url``, ``email``,
 ``password``.  Standard Vault env vars (VAULT_ADDR, VAULT_TOKEN) are
@@ -1688,14 +1694,15 @@ def _build_client(
     Resolve credentials + TLS settings and return an unauthenticated client.
 
     Credential resolution order: CLI/env > 1Password > Vault > error.
-    An API key (CLI/env `MIBUDGE_API_KEY`, a 1Password secret
-    reference, or Vault key `api_key`) takes precedence over
-    email/password.
+    An API key (`--api-key`, a 1Password secret reference, or Vault
+    key `api_key`) takes precedence over email/password.  The API key
+    and password are never read from the environment.
     The returned client must be entered as a context manager and have
     `authenticate()` called on it before use.
 
     Args:
-        url, email, password, api_key: From CLI/env.
+        url, email: From CLI/env.
+        password, api_key: From the CLI only.
         vault_path: Optional KV2 path; if present, fills in missing
             credentials.
         api_key_onepassword_url: Optional full 1Password secret
@@ -1736,14 +1743,14 @@ def _build_client(
     match (api_key, email, password):
         case (None, None, _):
             raise click.ClickException(
-                "Credentials are required. Set --api-key / MIBUDGE_API_KEY "
-                "(preferred), --email / MIBUDGE_EMAIL, or provide them "
-                "via Vault."
+                "Credentials are required. Set "
+                "--api-key-onepassword-url / "
+                "MIBUDGE_API_KEY_ONEPASSWORD_URL (preferred), --vault-path, "
+                "--api-key, or --email / MIBUDGE_EMAIL with --password."
             )
         case (None, _, None):
             raise click.ClickException(
-                "Password is required. Set --password, MIBUDGE_PASSWORD, "
-                "or provide it via Vault."
+                "Password is required. Set --password or provide it via Vault."
             )
 
     verify: bool | str | None = None
@@ -1883,14 +1890,17 @@ def _print_summary(
 @click.option(
     "--password",
     default=None,
-    help="API password (prefer env var or Vault over CLI flag).",
+    allow_from_autoenv=False,
+    help="mibudge API password (not read from the environment).",
 )
 @click.option(
     "--api-key",
     default=None,
+    allow_from_autoenv=False,
     help=(
-        "mibudge API key (preferred over email/password; prefer env var "
-        "MIBUDGE_API_KEY or Vault over CLI flag)."
+        "mibudge API key (preferred over email/password).  Not read "
+        "from the environment; prefer --api-key-onepassword-url or "
+        "Vault over this flag."
     ),
 )
 @click.option(
@@ -2292,6 +2302,12 @@ def cli_cmd(
 # SSL_CERT_FILE, which httpx would honor when building its SSL context).
 _DOTENV_ALLOWED_PREFIXES = ("MIBUDGE_", "BOFA_", "VAULT_")
 
+# Secrets the importers never take from the environment or .env.  A
+# Vault token is still honored from the real environment, where the
+# Vault client reads it, but not from .env.
+_SECRET_ENV_VARS = ("MIBUDGE_API_KEY", "MIBUDGE_PASSWORD", "BOFA_PASSCODE")
+_DOTENV_SECRET_VARS = (*_SECRET_ENV_VARS, "VAULT_TOKEN")
+
 
 ########################################################################
 ########################################################################
@@ -2308,9 +2324,24 @@ def load_importer_env() -> None:
     Variables already present in the real environment are never
     overridden, so a value exported in the shell always wins over the
     .env file.
+
+    Secrets are not applied, and a warning names each one found in
+    the environment or .env: pass them as flags, or keep them in
+    1Password or Vault.
     """
-    for key, value in dotenv_values().items():
-        if value is None or key in os.environ:
+    dotenv = dotenv_values()
+    for key in _DOTENV_SECRET_VARS:
+        in_env = key in _SECRET_ENV_VARS and key in os.environ
+        if in_env or dotenv.get(key) is not None:
+            click.echo(
+                f"Warning: ignoring {key} from the "
+                f"{'environment' if in_env else '.env file'}; secrets are "
+                "not read from there.  Pass it as a flag, or use 1Password "
+                "or Vault.",
+                err=True,
+            )
+    for key, value in dotenv.items():
+        if value is None or key in os.environ or key in _DOTENV_SECRET_VARS:
             continue
         if key.startswith(_DOTENV_ALLOWED_PREFIXES):
             os.environ[key] = value

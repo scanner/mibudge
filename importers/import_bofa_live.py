@@ -2,8 +2,8 @@
 Import live Bank of America transactions into mibudge via its REST API.
 
 Logs into Bank of America using the bofa_scraper Selenium/Firefox
-scraper, scrapes all accessible accounts, and POSTs each scrape to
-mibudge's scrape-sync endpoint
+scraper, scrapes each account a mibudge BankAccount tracks, and POSTs
+each scrape to mibudge's scrape-sync endpoint
 (`POST /api/v1/bank-accounts/{id}/sync-scrape/`).  The server handles
 pending wipe-and-reinsert, posted-row dedup, snapshot recomputation,
 and balance validation atomically.
@@ -13,15 +13,20 @@ Requires the importers-bofa optional dependency group::
     uv sync --group importers-bofa
     uv run --group importers-bofa python -m importers.import_bofa_live
 
-BofA credentials are read from BOFA_ID and BOFA_PASSCODE environment
-variables or the --bofa-id / --bofa-passcode flags.  Alternatively,
-set BOFA_ONEPASSWORD_URL (or --bofa-onepassword-url) to an `op://`
-item URL and credentials are fetched via `op read` -- useful in
-automated contexts where plaintext env vars are undesirable.  mibudge
+Options can also be set in the BofA importers' config file,
+~/.config/mibudge-bofa-importer/config.toml (see
+importers/bofa_config.py), below CLI flags and env vars.
+
+BofA credentials come from BOFA_ONEPASSWORD_URL (or
+--bofa-onepassword-url), an `op://` item URL fetched via `op read`,
+or from --bofa-id / --bofa-passcode, prompting for whichever is
+missing.  BOFA_ID may also be set in the environment; the passcode is
+never read from the environment or the config file.  mibudge
 credentials follow the same resolution order as the CSV importer (CLI
-flags > env vars > .env > the MIBUDGE_API_KEY_ONEPASSWORD_URL secret
-reference > Vault).  The two 1Password URLs are deliberately separate
-env vars -- BOFA_ONEPASSWORD_URL is an *item* URL for the bank login
+flags > env vars > .env > config file > the
+MIBUDGE_API_KEY_ONEPASSWORD_URL secret reference > Vault).  The two
+1Password URLs are deliberately separate env vars --
+BOFA_ONEPASSWORD_URL is an *item* URL for the bank login
 (username/password fields are read from it), while
 MIBUDGE_API_KEY_ONEPASSWORD_URL is a full secret reference (item plus
 field path) to the API key used to authenticate to mibudge -- so each
@@ -39,8 +44,11 @@ Scraper-output notes (verified against all four accounts via
   a parseable date.  `_parse_scraped_date` treats any unparseable
   date string as pending, which keeps the importer tolerant of other
   banks' markers if we ever wire one up here.
-* Account names follow the pattern `NAME - XXXX` where XXXX is the
-  last 4 digits used to match the mibudge BankAccount.
+* The overview shows only each account's nickname.  The last 4 digits
+  of the account number, which match the mibudge BankAccount, are read
+  from the account page after it is opened.  A nickname -> last-4
+  cache (importers/bofa_accounts.py) lets a run skip accounts no
+  mibudge account tracks without opening them.
 
 Details enrichment: after each account's sync-scrape POST, the server
 returns `details_needed` -- the posted rows (by submitted-array index
@@ -78,6 +86,16 @@ from rich.logging import RichHandler
 from rich.table import Table
 
 # Project imports
+from importers.bofa_accounts import (
+    DEFAULT_BANK_NAME,
+    AccountCache,
+    ambiguous_nicknames,
+    default_account_cache_path,
+    index_tracked_accounts,
+    matches_filters,
+    missing_tracked_accounts,
+    should_open,
+)
 from importers.bofa_categories import category_for, load_overlay_map
 from importers.bofa_common import (
     DEFAULT_DETAILS_LIMIT,
@@ -86,10 +104,10 @@ from importers.bofa_common import (
     fetch_details_for_account,
     normalize_description,
 )
+from importers.bofa_config import config_option
 from importers.client import AuthenticationError
 from importers.import_transactions import (
     _build_client,
-    _resolve_account_by_query,
     _run_funding,
     load_importer_env,
 )
@@ -98,7 +116,7 @@ from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
 
-SCRAPE_FORMAT_VERSION = 3
+SCRAPE_FORMAT_VERSION = 4
 
 
 ########################################################################
@@ -201,11 +219,16 @@ class SavedScrape:
     Stores the raw scraped fields verbatim so that `import_bofa_saved`
     can replay the file through the scrape-sync endpoint and produce
     identical server-side state to the original live run.
+
+    `last_four` is the account number's last 4 digits as the account
+    page showed them (format_version 4).  None for older files, whose
+    `account_name` carried the digits instead.
     """
 
     format_version: int
     scraped_at: str
     account_name: str
+    last_four: str | None
     ending_balance: str
     transactions: list[SavedTransaction]
 
@@ -233,9 +256,9 @@ def save_scraped_account(
     Returns:
         Path to the written file.
     """
-    last_four = _extract_last_four(account.get_name()) or "xxxx"
+    last_four = account.get_last_four()
     ts = scraped_at.strftime("%Y-%m-%d-%H%M%S")
-    filename = save_dir / f"{ts}-{last_four}.json"
+    filename = save_dir / f"{ts}-{last_four or 'xxxx'}.json"
 
     details_by_index = details_by_index or {}
     raw_txs = account.get_transactions()
@@ -243,6 +266,7 @@ def save_scraped_account(
         format_version=SCRAPE_FORMAT_VERSION,
         scraped_at=scraped_at.isoformat(),
         account_name=account.get_name(),
+        last_four=last_four,
         ending_balance=str(
             Decimal(str(account.get_balance())).quantize(Decimal("0.01"))
         ),
@@ -286,7 +310,7 @@ def load_saved_scrape(path: Path) -> SavedScrape:
     """
     data = json.loads(path.read_text(encoding="utf-8"))
     version = data.get("format_version", 0)
-    if version not in (1, 2, SCRAPE_FORMAT_VERSION):
+    if version not in (1, 2, 3, SCRAPE_FORMAT_VERSION):
         raise ValueError(
             f"{path}: unsupported format_version {version} "
             f"(expected {SCRAPE_FORMAT_VERSION})"
@@ -311,6 +335,7 @@ def load_saved_scrape(path: Path) -> SavedScrape:
         format_version=version,
         scraped_at=data["scraped_at"],
         account_name=data["account_name"],
+        last_four=data.get("last_four"),
         ending_balance=data["ending_balance"],
         transactions=txs,
     )
@@ -341,12 +366,14 @@ def _parse_scraped_date(date_str: str) -> tuple[date, bool]:
 #
 def _extract_last_four(account_name: str) -> str | None:
     """
-    Extract the last 4-digit sequence from a BofA account name.
+    Extract the last 4-digit sequence from a saved BofA account name.
 
-    Handles formats like "Checking ...1234", "Adv Plus - 1234.", "(1234)".
+    Saved scrapes before format_version 4 carry the digits only in the
+    account name, in formats like "Checking ...1234", "Adv Plus - 1234.",
+    "(1234)".
 
     Args:
-        account_name: BofA account name from ``account.get_name()``.
+        account_name: The saved scrape's `account_name`.
 
     Returns:
         The 4-digit string, or None if no 4-digit run is found.
@@ -679,6 +706,45 @@ def _post_transaction_details(
 ########################################################################
 ########################################################################
 #
+def _warn(console: Console, interactive: bool, msg: str) -> None:
+    """Print a warning on the console, or log it when not interactive."""
+    if interactive:
+        console.print(f"[warning]{msg}[/warning]")
+    else:
+        logger.warning("%s", msg)
+
+
+########################################################################
+########################################################################
+#
+def _save_account_cache(
+    cache: AccountCache, console: Console, interactive: bool
+) -> None:
+    """Report the account cache's changes and write it.
+
+    A failed write is reported, not raised: the cache is rebuildable
+    and must not mask the run's own outcome.
+    """
+    for change in cache.changes:
+        msg = f"Account cache: {change.describe()}"
+        if interactive:
+            console.print(f"[dim]{msg}[/dim]")
+        else:
+            logger.info("%s", msg)
+    try:
+        if cache.save():
+            logger.info("Account cache written to %s", cache.path)
+    except OSError as e:
+        _warn(
+            console,
+            interactive,
+            f"Could not write account cache {cache.path}: {e}",
+        )
+
+
+########################################################################
+########################################################################
+#
 def _setup_logging(
     verbose: bool, interactive: bool, console: Console | None = None
 ) -> None:
@@ -716,12 +782,15 @@ def _setup_logging(
     context_settings={"auto_envvar_prefix": "MIBUDGE"},
     help=(
         "Live-scrape Bank of America and import transactions into mibudge. "
-        "Logs in via the bofa_scraper Selenium/Firefox driver, fetches all "
-        "accessible accounts, and submits transactions through the same "
-        "dedup + POST pipeline as the CSV/OFX importers.\n\n"
-        "BofA credentials are read from BOFA_ID and BOFA_PASSCODE env vars "
-        "(or --bofa-id / --bofa-passcode).  mibudge credentials follow the "
-        "same order as the CSV importer.\n\n"
+        "Logs in via the bofa_scraper Selenium/Firefox driver, scrapes each "
+        "account a mibudge bank account tracks (matched on the account "
+        "number's last 4 digits), and syncs it through mibudge's "
+        "sync-scrape endpoint.\n\n"
+        "BofA credentials come from a 1Password item "
+        "(--bofa-onepassword-url) or --bofa-id / --bofa-passcode, prompting "
+        "for whichever is missing.  mibudge credentials follow the same "
+        "order as the CSV importer.  Options can also be set in "
+        "~/.config/mibudge-bofa-importer/config.toml (see --config).\n\n"
         "If BofA requires 2FA the scraper prompts for the code via stdin; "
         "run with --no-headless to watch the browser."
     ),
@@ -734,9 +803,12 @@ def _setup_logging(
 )
 @click.option(
     "--bofa-passcode",
-    envvar="BOFA_PASSCODE",
     default=None,
-    help="BofA passcode (env var: BOFA_PASSCODE; prefer env over CLI flag).",
+    allow_from_autoenv=False,
+    help=(
+        "BofA passcode.  Not read from the environment; prefer "
+        "--bofa-onepassword-url, or omit it to be prompted."
+    ),
 )
 @click.option(
     "--bofa-onepassword-url",
@@ -746,7 +818,7 @@ def _setup_logging(
         "1Password item URL to source BofA credentials from "
         "(e.g. 'op://Personal/BofA').  When set, the CLI calls "
         "`op read <url>/username` and `op read <url>/password` "
-        "instead of reading BOFA_ID / BOFA_PASSCODE.  "
+        "instead of using --bofa-id / --bofa-passcode.  "
         "Env var: BOFA_ONEPASSWORD_URL. Distinct from "
         "--api-key-onepassword-url, which sources the mibudge API key."
     ),
@@ -761,14 +833,17 @@ def _setup_logging(
 @click.option(
     "--password",
     default=None,
-    help="mibudge API password (prefer env var or Vault over CLI flag).",
+    allow_from_autoenv=False,
+    help="mibudge API password (not read from the environment).",
 )
 @click.option(
     "--api-key",
     default=None,
+    allow_from_autoenv=False,
     help=(
-        "mibudge API key (preferred over email/password; prefer env var "
-        "MIBUDGE_API_KEY or Vault over CLI flag)."
+        "mibudge API key (preferred over email/password).  Not read "
+        "from the environment; prefer --api-key-onepassword-url or "
+        "Vault over this flag."
     ),
 )
 @click.option(
@@ -822,9 +897,38 @@ def _setup_logging(
     "account_filters",
     multiple=True,
     help=(
-        "Filter by BofA account name substring (matches the BofA-side "
-        "account name, e.g. 'Checking' or '1234'). Repeatable; when "
-        "omitted all accessible accounts are imported."
+        "Filter by BofA account nickname substring or last-4 digits "
+        "(e.g. 'Checking' or '1234'). Repeatable; when omitted all "
+        "tracked accounts are imported."
+    ),
+)
+@click.option(
+    "--check-all-accounts",
+    is_flag=True,
+    help=(
+        "Open every BofA account regardless of the account cache, "
+        "rebuild the nickname -> last-4 mapping, and report what was "
+        "added, changed or removed."
+    ),
+)
+@click.option(
+    "--account-cache",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help=(
+        "Nickname -> last-4 cache file.  [default: "
+        "$XDG_CONFIG_HOME/mibudge-bofa-importer/accounts.json, i.e. "
+        "~/.config/...]  [env var: MIBUDGE_ACCOUNT_CACHE]"
+    ),
+)
+@click.option(
+    "--bank-name",
+    default=DEFAULT_BANK_NAME,
+    show_default=True,
+    help=(
+        "Substring of the mibudge Bank name whose accounts this "
+        "importer tracks; matched case-insensitively.  "
+        "[env var: MIBUDGE_BANK_NAME]"
     ),
 )
 @click.option(
@@ -834,7 +938,8 @@ def _setup_logging(
     help=(
         "Show what would be imported without making any changes. "
         "Scrapes, authenticates, and checks for duplicates, but does "
-        "not POST or PATCH any transactions."
+        "not POST or PATCH any transactions.  The account cache is "
+        "still updated with what BofA showed."
     ),
 )
 @click.option(
@@ -902,6 +1007,7 @@ def _setup_logging(
         "after this importer shipped.  [env var: MIBUDGE_CATEGORY_MAP]"
     ),
 )
+@config_option("import_bofa_live")
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -924,6 +1030,9 @@ def cli_cmd(
     headless: bool,
     timeout: float,
     account_filters: tuple[str, ...],
+    check_all_accounts: bool,
+    account_cache: Path | None,
+    bank_name: str,
     dry_run: bool,
     run_funding: bool,
     save_dir: Path | None,
@@ -995,6 +1104,16 @@ def cli_cmd(
     any_error = False
     session_lost = False
 
+    # --- Account identity ---
+    # tracked: last-4 -> the mibudge account it imports into.  None for
+    # tracked_last_fours means every account is wanted (--save-only).
+    cache = AccountCache.load(account_cache or default_account_cache_path())
+    tracked: dict[str, dict[str, Any]] = {}
+    ambiguous_tracked: dict[str, list[dict[str, Any]]] = {}
+    tracked_last_fours: set[str] | None = None
+    found_last_fours: set[str] = set()
+    matched_any = False
+
     # One pacer for the whole run -- the BofA burst limit belongs to
     # the login session, not to an individual account page.
     # --details-all offline captures are unlimited (limit -1).
@@ -1039,6 +1158,26 @@ def cli_cmd(
                 )
                 logger.info("User timezone: %s", user_timezone)
 
+                tracked, ambiguous_tracked = index_tracked_accounts(
+                    client.get_all("/api/v1/bank-accounts/"),
+                    client.get_all("/api/v1/banks/"),
+                    bank_name,
+                )
+                for l4, accts in sorted(ambiguous_tracked.items()):
+                    names = ", ".join(repr(a.get("name")) for a in accts)
+                    _warn(
+                        console,
+                        interactive,
+                        f"mibudge accounts {names} all end in {l4}; "
+                        "none of them can be matched.",
+                    )
+                if not tracked:
+                    raise click.ClickException(
+                        f"No mibudge bank accounts with an account number "
+                        f"in a bank matching {bank_name!r}; see --bank-name."
+                    )
+                tracked_last_fours = set(tracked)
+
             # --- Launch browser ---
             if interactive:
                 console.print("[bold]Initializing browser...[/bold]")
@@ -1077,102 +1216,57 @@ def cli_cmd(
             else:
                 logger.info("BofA login successful.")
 
-            # --- Collect and filter accounts ---
+            # --- Collect accounts ---
             accounts = scraper.get_accounts()
             if not accounts:
                 raise click.ClickException(
                     "No BofA accounts found after login. The page layout "
                     "may have changed; run with --no-headless to inspect."
                 )
-
-            if account_filters:
-                filters_lower = [f.lower() for f in account_filters]
-                selected = [
-                    a
-                    for a in accounts
-                    if any(f in a.get_name().lower() for f in filters_lower)
-                ]
-                if not selected:
-                    names = [a.get_name() for a in accounts]
-                    raise click.ClickException(
-                        f"No BofA accounts matched filter(s) "
-                        f"{list(account_filters)}. "
-                        f"Available: {names}."
-                    )
-            else:
-                selected = list(accounts)
+            nicknames = [a.get_name() for a in accounts]
+            ambiguous = ambiguous_nicknames(nicknames)
 
             if interactive:
                 console.print(
-                    f"[dim]Found {len(accounts)} BofA account(s); "
-                    f"{'saving' if save_only else 'importing'} "
-                    f"{len(selected)}.[/dim]"
+                    f"[dim]Found {len(accounts)} BofA account(s).[/dim]"
                 )
 
-            # --- Per account: scrape -> sync -> fetch details -> post ---
-            # The scrape session stays OPEN through the details fetch:
-            # bofa_scraper txn hashes are session-scoped, so details
-            # can only be fetched while the account page is still live.
+            # --- Per account: match -> scrape -> sync -> details -> post ---
+            # An account is opened only when the cache does not already
+            # say it is untracked; its last-4 is read from the opened
+            # page.  The scrape session stays OPEN through the details
+            # fetch: bofa_scraper txn hashes are session-scoped, so
+            # details can only be fetched while the account page is
+            # still live.
             scrape_time = datetime.now(UTC)
-            for account in selected:
-                acct_name = account.get_name()
+            for account in accounts:
+                nickname = account.get_name()
 
                 if session_lost:
                     logger.warning(
                         "BofA session lost; skipping remaining account(s) "
                         "starting with %r.",
-                        acct_name,
+                        nickname,
                     )
                     any_error = True
                     break
 
-                if interactive:
-                    console.rule(f"[bold]{acct_name}[/bold]")
-                else:
-                    logger.info("--- Processing account: %s ---", acct_name)
+                cached = None if nickname in ambiguous else cache.get(nickname)
+                if not should_open(
+                    nickname,
+                    cached,
+                    tracked_last_fours,
+                    account_filters,
+                    check_all_accounts,
+                ):
+                    logger.debug(
+                        "Skipping %r (cached last-4 %s) without opening it.",
+                        nickname,
+                        cached,
+                    )
+                    continue
 
-                # Resolve the mibudge account BEFORE scraping so an
-                # unmatched account is skipped without page work.
-                bank_account_id = ""
-                if not save_only:
-                    last_four = _extract_last_four(acct_name)
-                    if last_four is None:
-                        if interactive:
-                            console.print(
-                                f"[warning]Could not extract last-4 digits "
-                                f"from {acct_name!r}; skipping.[/warning]"
-                            )
-                        else:
-                            logger.warning(
-                                "Could not extract last-4 from %r; skipping.",
-                                acct_name,
-                            )
-                        any_error = True
-                        continue
-
-                    try:
-                        bank_account_id = _resolve_account_by_query(
-                            client,
-                            last_four,
-                            console=console,
-                            interactive=interactive,
-                        )
-                    except click.ClickException as e:
-                        if interactive:
-                            console.print(
-                                f"[warning]Skipping {acct_name!r}: "
-                                f"{e.format_message()}[/warning]"
-                            )
-                        else:
-                            logger.warning(
-                                "Skipping %r: %s",
-                                acct_name,
-                                e.format_message(),
-                            )
-                        any_error = True
-                        continue
-
-                # --- Scrape (session stays open for detail fetches) ---
+                # --- Open, match, scrape (session stays open) ---
                 details_items: list[dict[str, Any]] = []
                 details_by_index: dict[int, dict[str, Any]] = {}
                 posted_count = 0
@@ -1182,14 +1276,64 @@ def cli_cmd(
                 except (WebDriverException, Exception) as e:
                     if interactive:
                         console.print(
-                            f"[error]Failed to open {acct_name!r}: {e}[/error]"
+                            f"[error]Failed to open {nickname!r}: {e}[/error]"
                         )
                     else:
-                        logger.error("Failed to open %r: %s", acct_name, e)
+                        logger.error("Failed to open %r: %s", nickname, e)
                     any_error = True
                     continue
 
                 try:
+                    last_four = sess.get_last_four()
+                    if last_four is None:
+                        _warn(
+                            console,
+                            interactive,
+                            f"BofA showed no account number for "
+                            f"{nickname!r}; skipping.",
+                        )
+                        any_error = True
+                        continue
+                    if nickname not in ambiguous:
+                        cache.record(nickname, last_four)
+                    acct_name = f"{nickname} ...{last_four}"
+
+                    if not matches_filters(
+                        nickname, last_four, account_filters
+                    ):
+                        continue
+
+                    bank_account_id = ""
+                    matched_label = ""
+                    if not save_only:
+                        target = tracked.get(last_four)
+                        if target is None:
+                            if last_four in ambiguous_tracked:
+                                any_error = True
+                            logger.info(
+                                "%s: no single mibudge account ends in %s; "
+                                "skipping.",
+                                acct_name,
+                                last_four,
+                            )
+                            continue
+                        bank_account_id = target["id"]
+                        matched_label = (
+                            f"Matched mibudge account '{target.get('name')}' "
+                            f"({bank_account_id})."
+                        )
+                        found_last_fours.add(last_four)
+                    matched_any = True
+
+                    if interactive:
+                        console.rule(f"[bold]{acct_name}[/bold]")
+                        if matched_label:
+                            console.print(f"[dim]{matched_label}[/dim]")
+                    else:
+                        logger.info("--- Processing account: %s ---", acct_name)
+                        if matched_label:
+                            logger.info("%s", matched_label)
+
                     try:
                         sess.scrape_transactions()
                         try:
@@ -1375,12 +1519,44 @@ def cli_cmd(
                         interactive=interactive,
                     )
 
+            if check_all_accounts:
+                cache.prune(n for n in nicknames if n not in ambiguous)
+
+            if account_filters and not matched_any:
+                raise click.ClickException(
+                    f"No BofA accounts matched filter(s) "
+                    f"{list(account_filters)}. Available: {nicknames}."
+                )
+
     except AuthenticationError as e:
         raise click.ClickException(str(e)) from e
     except KeyboardInterrupt as e:
         raise click.Abort() from e
+    finally:
+        _save_account_cache(cache, console, interactive)
 
     # --- Run summary & exit status ---
+    # The missing-account check needs every account considered, so it
+    # is skipped for filtered runs and runs cut short by BofA.
+    if not save_only and not account_filters and not session_lost:
+        missing = missing_tracked_accounts(tracked, found_last_fours)
+        if missing:
+            names = ", ".join(
+                f"{a.get('name')!r} ({a['account_number'][-4:]})"
+                for a in missing
+            )
+            hint = (
+                "they are not on BofA's account overview."
+                if check_all_accounts
+                else "re-run with --check-all-accounts to open every "
+                "BofA account and refresh the account cache."
+            )
+            _warn(
+                console,
+                interactive,
+                f"Tracked mibudge account(s) not found on BofA: {names}; "
+                f"{hint}",
+            )
     if session_lost:
         logger.warning(
             "BofA terminated the login session mid-run; unfetched details "

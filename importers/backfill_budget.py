@@ -1360,14 +1360,17 @@ def _run_backfill(
 @click.option(
     "--password",
     default=None,
-    help="API password (prefer env var over CLI flag).",
+    allow_from_autoenv=False,
+    help="mibudge API password (not read from the environment).",
 )
 @click.option(
     "--api-key",
     default=None,
+    allow_from_autoenv=False,
     help=(
-        "mibudge API key (preferred over email/password; prefer env var "
-        "MIBUDGE_API_KEY or Vault over CLI flag)."
+        "mibudge API key (preferred over email/password).  Not read "
+        "from the environment; prefer --api-key-onepassword-url or "
+        "Vault over this flag."
     ),
 )
 @click.option(
