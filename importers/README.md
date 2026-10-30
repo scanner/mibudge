@@ -96,6 +96,32 @@ The BofA importers also read option values from
 `~/.config/mibudge-bofa-importer/config.toml`, below CLI flags and
 environment variables; see `importers/bofa_config.py`.
 
+## Running the commands
+
+`uv sync` (or `make uv-sync`) installs the four commands into the
+checkout's `.venv/bin/`. Run them in one of three ways (here the
+checkout is `~/src/mibudge`):
+
+```bash
+# From anywhere inside the checkout:
+uv run mibudge-import ~/Downloads/*.ofx
+
+# From any other directory, naming the checkout:
+uv run --project ~/src/mibudge mibudge-import ~/Downloads/*.ofx
+
+# Or by full path, with no uv involved:
+~/src/mibudge/.venv/bin/mibudge-import ~/Downloads/*.ofx
+```
+
+`mibudge-bofa-live` also needs the `importers-bofa` dependency group
+(bofa-scraper and Selenium) and Firefox. Put `--group importers-bofa`
+on every `uv run` of it, as the examples below do: a plain `uv sync`
+removes the group again. To run it by full path instead, install the
+group first with `uv sync --group importers-bofa`.
+
+All four read the `.env` at the root of the checkout, wherever they are
+run from.
+
 ## Usage examples
 
 Connection variables (`MIBUDGE_URL` and
@@ -222,6 +248,52 @@ mibudge) from the BofA live scraper's `--bofa-onepassword-url` /
 its `username`/`password` fields are both read from it -- and each
 secret's name says what it fetches, so a future bank (Chase, etc.) can
 add `CHASE_ONEPASSWORD_URL` without colliding.
+
+### BofA live scrape -- `mibudge-bofa-live`
+
+Logs in to Bank of America and syncs every BofA account that a mibudge
+bank account tracks. With `BOFA_ONEPASSWORD_URL` in `.env` the BofA
+login comes from 1Password; without it the command prompts for the
+online ID and passcode. A 2FA code is prompted for on the terminal.
+
+```bash
+# Sync every tracked account:
+uv run --group importers-bofa mibudge-bofa-live
+
+# Preview one account (nickname substring or last 4 digits), with the
+# browser visible:
+uv run --group importers-bofa mibudge-bofa-live \
+    --dry-run --account 1234 --no-headless
+
+# Sync, keep the raw scrape, and run funding afterwards:
+uv run --group importers-bofa mibudge-bofa-live \
+    --save-dir ~/bofa-scrapes --run-funding
+```
+
+Option values can also come from
+`~/.config/mibudge-bofa-importer/config.toml`; see
+[Configuration resolution](#configuration-resolution).
+
+### Replay saved BofA scrapes -- `mibudge-bofa-saved`
+
+Sends JSON files written by `mibudge-bofa-live --save-dir` through the
+same sync, without logging in to BofA. It does not need the
+`importers-bofa` group.
+
+```bash
+uv run mibudge-bofa-saved --dry-run ~/bofa-scrapes/2026-10-30-*.json
+uv run mibudge-bofa-saved ~/bofa-scrapes/2026-10-30-*.json
+```
+
+### Backfill a budget -- `mibudge-backfill-budget`
+
+Steps through a bank account's past transactions month by month and
+asks, for each unallocated one, whether it belongs to a recurring
+budget. Answers saved per vendor go in `~/.mibudge/vendor_rules.json`.
+
+```bash
+uv run mibudge-backfill-budget --account "Personal Checking" --budget "Groceries"
+```
 
 ## Account resolution rules
 
