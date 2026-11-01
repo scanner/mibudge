@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The importers no longer read secrets (`MIBUDGE_API_KEY`, `MIBUDGE_PASSWORD`, `BOFA_PASSCODE`) from the environment or `.env`, and warn when one is set there; pass them as flags or keep them in a secret store
+- `uv sync` installs the live BofA importer's dependencies; `mibudge-bofa-live` no longer needs `--group importers-bofa`
 - The budget backfill keeps its vendor rules in `~/.config/mibudge-importers/backfill-vendor-rules.json`; move an existing `~/.mibudge/vendor_rules.json` there to keep its rules
 
 ### Removed
