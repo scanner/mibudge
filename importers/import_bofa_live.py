@@ -8,10 +8,10 @@ each scrape to mibudge's scrape-sync endpoint
 pending wipe-and-reinsert, posted-row dedup, snapshot recomputation,
 and balance validation atomically.
 
-Requires the importers-bofa optional dependency group::
+Needs the importers-bofa dependency group (bofa-scraper, Selenium),
+which `uv sync` installs by default, and Firefox::
 
-    uv sync --group importers-bofa
-    uv run --group importers-bofa mibudge-bofa-live
+    uv run mibudge-bofa-live
 
 Options can also be set in the importers' config file,
 ~/.config/mibudge-importers/config.toml, at the top level or in its

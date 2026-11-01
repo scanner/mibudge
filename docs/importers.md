@@ -11,7 +11,7 @@ The importers install nothing outside the checkout. `uv sync` (or `make uv-sync`
 | Command | Tool |
 |---------|------|
 | `mibudge-import` | Statement importer |
-| `mibudge-bofa-live` | BofA live scraper (needs the `importers-bofa` dependency group) |
+| `mibudge-bofa-live` | BofA live scraper |
 | `mibudge-bofa-saved` | BofA saved-scrape replayer |
 | `mibudge-backfill-budget` | Budget backfill |
 
@@ -267,12 +267,12 @@ The live scraper logs into Bank of America using a Selenium/Firefox driver and s
 
 ### Installation
 
-The scraper needs the optional `importers-bofa` dependency group (bofa-scraper and Selenium), and Firefox installed on the host. `uv run --group importers-bofa`, as in the commands below, installs it into `.venv` on demand. A plain `uv sync` or `make uv-sync` removes it again; `uv sync --group importers-bofa` keeps it.
+The scraper uses bofa-scraper and Selenium, from the `importers-bofa` dependency group, which `uv sync` installs by default, and needs Firefox installed on the host.
 
 ### Usage
 
 ```bash
-uv run --group importers-bofa mibudge-bofa-live
+uv run mibudge-bofa-live
 ```
 
 The BofA login comes from `--bofa-id` (or `BOFA_ID`) and `--bofa-passcode`, then from the `username` and `password` fields of the [secret store](#secret-stores) `--bofa-creds-url` / `BOFA_CREDS_URL` names, and the scraper prompts for whichever is still missing. mibudge credentials come from the same [options](#credentials) as every tool.
@@ -314,7 +314,7 @@ Pass `--save-dir <dir>` to write each account's raw scraped data to a JSON file 
 
 ```bash
 # Capture on BofA-accessible machine:
-uv run --group importers-bofa mibudge-bofa-live \
+uv run mibudge-bofa-live \
     --save-dir ./saved --save-only --details-all
 
 # Replay later (also replays any saved details):

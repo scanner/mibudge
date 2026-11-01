@@ -122,11 +122,9 @@ uv run --project ~/src/mibudge mibudge-import ~/Downloads/*.ofx
 ~/src/mibudge/.venv/bin/mibudge-import ~/Downloads/*.ofx
 ```
 
-`mibudge-bofa-live` also needs the `importers-bofa` dependency group
-(bofa-scraper and Selenium) and Firefox. Put `--group importers-bofa`
-on every `uv run` of it, as the examples below do: a plain `uv sync`
-removes the group again. To run it by full path instead, install the
-group first with `uv sync --group importers-bofa`.
+`mibudge-bofa-live` also needs Firefox. Its Python dependencies
+(bofa-scraper and Selenium) are the `importers-bofa` dependency group,
+which `uv sync` installs by default.
 
 All four read the `.env` at the root of the checkout, wherever they are
 run from.
@@ -248,23 +246,22 @@ the terminal.
 
 ```bash
 # Sync every tracked account:
-uv run --group importers-bofa mibudge-bofa-live
+uv run mibudge-bofa-live
 
 # Preview one account (nickname substring or last 4 digits), with the
 # browser visible:
-uv run --group importers-bofa mibudge-bofa-live \
+uv run mibudge-bofa-live \
     --dry-run --account 1234 --no-headless
 
 # Sync, keep the raw scrape, and run funding afterwards:
-uv run --group importers-bofa mibudge-bofa-live \
+uv run mibudge-bofa-live \
     --save-dir ~/bofa-scrapes --run-funding
 ```
 
 ### Replay saved BofA scrapes -- `mibudge-bofa-saved`
 
 Sends JSON files written by `mibudge-bofa-live --save-dir` through the
-same sync, without logging in to BofA. It does not need the
-`importers-bofa` group.
+same sync, without logging in to BofA.
 
 ```bash
 uv run mibudge-bofa-saved --dry-run ~/bofa-scrapes/2026-10-30-*.json
