@@ -1,12 +1,12 @@
 """
-BofA account identity for the importers: config dir, last-4 cache, matching.
+BofA account identity for the importers: last-4 cache and matching.
 
 BofA's account overview shows only each account's nickname.  The last
 four digits of the account number -- what a mibudge BankAccount is
 matched on -- appear only after the account is opened
 (`ScrapeSession.get_last_four()`).  Opening every account on every run
 costs page loads against BofA, so the importer keeps a nickname ->
-last-4 cache in its config directory:
+last-4 cache in the importers' config directory:
 
 * An account whose nickname is cached with digits no tracked mibudge
   account has is skipped without opening it.
@@ -16,9 +16,9 @@ last-4 cache in its config directory:
   cache is corrected.
 * `--check-all-accounts` opens every account and rebuilds the cache.
 
-The config directory (`bofa_config_dir()`) is shared by the BofA
-importers and is meant to be synced across machines, so a run on one
-machine benefits from what another learned.
+The config directory (`importers.config.config_dir()`) is meant to be
+synced across machines, so a run on one machine benefits from what
+another learned.
 """
 
 # system imports
@@ -32,31 +32,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Project imports
+from importers.config import config_dir
+
 logger = logging.getLogger(__name__)
 
-CONFIG_DIR_NAME = "mibudge-bofa-importer"
-ACCOUNT_CACHE_NAME = "accounts.json"
+ACCOUNT_CACHE_NAME = "bofa-accounts.json"
 ACCOUNT_CACHE_FORMAT_VERSION = 1
 DEFAULT_BANK_NAME = "Bank of America"
 
 
 ####################################################################
 #
-def bofa_config_dir() -> Path:
-    """Return the BofA importers' config directory.
-
-    `$XDG_CONFIG_HOME/mibudge-bofa-importer`, falling back to
-    `~/.config/mibudge-bofa-importer`.  Not created here.
-    """
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / CONFIG_DIR_NAME
-
-
-####################################################################
-#
 def default_account_cache_path() -> Path:
     """Return the default path of the nickname -> last-4 cache file."""
-    return bofa_config_dir() / ACCOUNT_CACHE_NAME
+    return config_dir() / ACCOUNT_CACHE_NAME
 
 
 ########################################################################

@@ -32,22 +32,20 @@ Typical usage::
     # account number, or UUID:
     uv run mibudge-import -f stmt.csv --account "Personal Checking"
 
-Configuration is resolved in this order (first wins):
+Option values are resolved in this order (first wins):
 
     1. CLI flags
     2. Environment variables (MIBUDGE_URL, MIBUDGE_EMAIL, etc.)
     3. .env file (importer-related variables only; see load_importer_env)
-    4. 1Password secret reference (--api-key-onepassword-url) for the
-       API key
-    5. Vault KV2 secret (if --vault-path / MIBUDGE_VAULT_PATH is set)
+    4. The importers' config file, ~/.config/mibudge-importers/config.toml,
+       top level and its [statements] table (see importers/config.py)
+    5. The option's built-in default
 
 Secrets -- the API key and the password -- are never read from the
-environment or .env: pass them as flags, or keep them in 1Password or
-Vault.
-
-The Vault secret is expected to contain keys: ``url``, ``email``,
-``password``.  Standard Vault env vars (VAULT_ADDR, VAULT_TOKEN) are
-used to connect to Vault.
+environment, .env or the config file: pass them as flags, or keep them
+in the secret store --mibudge-creds-url names (an `op://` 1Password
+item or an `hcvault://` HashiCorp Vault secret; see
+importers/secrets.py).
 """
 
 # system imports
@@ -79,11 +77,21 @@ from rich.table import Table
 
 # Project imports
 from importers.client import APIError, AuthenticationError, MibudgeClient
+from importers.config import config_option
 from importers.parsers import bofa_csv, ofx
 from importers.parsers.common import ParsedStatement, ParsedTransaction
+from importers.secrets import (
+    API_KEY,
+    PASSWORD,
+    SecretError,
+    SecretStore,
+    store_for,
+)
 from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_URL = "https://localhost:8000"
 
 # The server caps at 500; request the maximum to minimize round-trips
 # during dedup.
@@ -1537,8 +1545,6 @@ def _resolve_local_ca_bundle() -> str:
         click.ClickException: If mkcert is not installed or its CA root
             cannot be found.
     """
-    import subprocess
-
     try:
         result = subprocess.run(
             ["mkcert", "-CAROOT"],
@@ -1565,113 +1571,39 @@ def _resolve_local_ca_bundle() -> str:
 ########################################################################
 ########################################################################
 #
-def _resolve_vault_secrets(vault_path: str) -> dict[str, str]:
+def read_secret(store: SecretStore, field: str) -> str | None:
     """
-    Fetch credentials from HashiCorp Vault KV2.
-
-    Uses standard Vault env vars (VAULT_ADDR, VAULT_TOKEN) for
-    connection.  The secret at *vault_path* is expected to contain
-    keys: ``url``, ``email``, ``password``.
+    Read one field of a secret store, as a click error on failure.
 
     Args:
-        vault_path: KV2 mount path, e.g. 'secret/data/mibudge/importer'
-            or just 'mibudge/importer' (mount auto-detected).
+        store: The store.
+        field: The field name.
 
     Returns:
-        Dict with the secret's key-value data.
+        The value, or None when the store has no such field.
 
     Raises:
-        click.ClickException: On connection or permission errors.
+        click.ClickException: The store could not be read.
     """
     try:
-        import hvac
-    except ImportError as e:
-        raise click.ClickException(
-            "hvac package is required for Vault support: pip install hvac"
-        ) from e
-
-    client = hvac.Client()
-    if not client.is_authenticated():
-        raise click.ClickException(
-            "Vault authentication failed. Check VAULT_ADDR and "
-            "VAULT_TOKEN environment variables."
-        )
-
-    try:
-        response = client.secrets.kv.v2.read_secret_version(
-            path=vault_path,
-            raise_on_deleted_version=True,
-        )
-    except hvac.exceptions.Forbidden as e:
-        raise click.ClickException(
-            f"Vault permission denied for path: {vault_path}"
-        ) from e
-    except hvac.exceptions.InvalidPath as e:
-        raise click.ClickException(
-            f"Vault secret not found at path: {vault_path}"
-        ) from e
-
-    return response["data"]["data"]
+        return store.get(field)
+    except SecretError as e:
+        raise click.ClickException(str(e)) from e
 
 
 ####################################################################
 #
-def _resolve_api_key_from_1password(secret_reference: str) -> str:
+def open_secret_store(url: str) -> SecretStore:
     """
-    Fetch the mibudge API key via a 1Password secret reference.
-
-    The reference is passed to `op read` verbatim and must therefore
-    be the full path to the field holding the key:
-    'op://<vault>/<item>[/<section>]/<field>', e.g.
-    'op://Personal/mibudge/API key'.  Naming the field in the
-    reference (rather than hardcoding a field label here) lets one
-    item hold several API keys under different section/field names.
-    This is a *mibudge* secret and is intentionally distinct from any
-    bank-specific 1Password option (e.g. the BofA live scraper's
-    `--bofa-onepassword-url`, an *item* URL whose username/password
-    fields are read) so each entity's secret lives at its own,
-    unambiguous env var.
-
-    Strips any trailing slash so 'op://vault/item/field/' also works.
-
-    Args:
-        secret_reference: Full 1Password secret reference to the
-            field holding the API key.
-
-    Returns:
-        The API key value.
+    Build the secret store a URL names, as a click error on failure.
 
     Raises:
-        click.ClickException: If the reference does not name a field,
-            the `op` CLI is not found, or `op read` returns a
-            non-zero exit code.
+        click.ClickException: The URL names no usable store.
     """
-    reference = secret_reference.rstrip("/")
-    if len(reference.removeprefix("op://").split("/")) < 3:
-        raise click.ClickException(
-            f"1Password reference {reference!r} must be the full path "
-            "to the field holding the API key: "
-            "'op://<vault>/<item>[/<section>]/<field>', e.g. "
-            "'op://Personal/mibudge/API key'."
-        )
     try:
-        api_key = subprocess.run(
-            ["op", "read", reference],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except FileNotFoundError as e:
-        raise click.ClickException(
-            "1Password CLI (op) not found in PATH. "
-            "Install it from https://1password.com/downloads/command-line/"
-        ) from e
-    except subprocess.CalledProcessError as e:
-        raise click.ClickException(
-            f"Failed to read API key from 1Password "
-            f"({reference!r}): {e.stderr.strip()}"
-        ) from e
-    return api_key
+        return store_for(url)
+    except SecretError as e:
+        raise click.ClickException(str(e)) from e
 
 
 ########################################################################
@@ -1683,8 +1615,7 @@ def _build_client(
     email: str | None,
     password: str | None,
     api_key: str | None,
-    vault_path: str | None,
-    api_key_onepassword_url: str | None,
+    mibudge_creds_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     console: Console,
@@ -1693,21 +1624,17 @@ def _build_client(
     """
     Resolve credentials + TLS settings and return an unauthenticated client.
 
-    Credential resolution order: CLI/env > 1Password > Vault > error.
-    An API key (`--api-key`, a 1Password secret reference, or Vault
-    key `api_key`) takes precedence over email/password.  The API key
-    and password are never read from the environment.
-    The returned client must be entered as a context manager and have
-    `authenticate()` called on it before use.
+    An API key wins over email/password.  The `--api-key` or
+    `--password` flag is used as given; with neither, the secret store
+    named by `mibudge_creds_url` is read for its `api_key` field, then
+    for `password`.  The returned client must be entered as a context
+    manager and have `authenticate()` called on it before use.
 
     Args:
-        url, email: From CLI/env.
+        url, email: From the CLI, env or config file.
         password, api_key: From the CLI only.
-        vault_path: Optional KV2 path; if present, fills in missing
-            credentials.
-        api_key_onepassword_url: Optional full 1Password secret
-            reference to the API key used to authenticate to mibudge
-            (env var: MIBUDGE_API_KEY_ONEPASSWORD_URL).
+        mibudge_creds_url: Optional secret store URL (`op://...` or
+            `hcvault://...`) holding the mibudge credentials.
         ca_bundle: Explicit CA bundle path (overrides system CAs).
         trust_local_certs: If True, use the project-local mkcert bundle.
         console: Rich console for user-visible messages.
@@ -1719,38 +1646,36 @@ def _build_client(
     Raises:
         click.ClickException: If required credentials cannot be resolved.
     """
-    vault_data: dict[str, str] = {}
-    if vault_path:
+    if mibudge_creds_url and api_key is None and password is None:
+        store = open_secret_store(mibudge_creds_url)
         if interactive:
             console.print(
-                f"[dim]Fetching credentials from Vault: {vault_path}[/dim]"
+                f"[dim]Reading mibudge credentials from {store.url}[/dim]"
             )
-        vault_data = _resolve_vault_secrets(vault_path)
-
-    if api_key_onepassword_url and not api_key:
-        if interactive:
-            console.print(
-                "[dim]Fetching API key from 1Password: "
-                f"{api_key_onepassword_url}[/dim]"
+        api_key = read_secret(store, API_KEY)
+        if api_key is None:
+            password = read_secret(store, PASSWORD)
+        if api_key is None and password is None:
+            raise click.ClickException(
+                f"{store.url} has neither an '{API_KEY}' nor a "
+                f"'{PASSWORD}' field."
             )
-        api_key = _resolve_api_key_from_1password(api_key_onepassword_url)
-
-    url = url or vault_data.get("url") or "https://localhost:8000"
-    api_key = api_key or vault_data.get("api_key")
-    email = email or vault_data.get("email")
-    password = password or vault_data.get("password")
 
     match (api_key, email, password):
+        case (None, None, None):
+            raise click.ClickException(
+                "Credentials are required.  Set --mibudge-creds-url / "
+                "MIBUDGE_CREDS_URL (preferred), --api-key, or --email "
+                "with --password."
+            )
         case (None, None, _):
             raise click.ClickException(
-                "Credentials are required. Set "
-                "--api-key-onepassword-url / "
-                "MIBUDGE_API_KEY_ONEPASSWORD_URL (preferred), --vault-path, "
-                "--api-key, or --email / MIBUDGE_EMAIL with --password."
+                "Password login needs --email / MIBUDGE_EMAIL."
             )
         case (None, _, None):
             raise click.ClickException(
-                "Password is required. Set --password or provide it via Vault."
+                "Password login needs --password, or a "
+                f"'{PASSWORD}' field in the --mibudge-creds-url store."
             )
 
     verify: bool | str | None = None
@@ -1761,7 +1686,84 @@ def _build_client(
         if interactive:
             console.print(f"[dim]Trusting local CA bundle: {verify}[/dim]")
 
-    return MibudgeClient(url, email, password, api_key=api_key, verify=verify)
+    return MibudgeClient(
+        url or DEFAULT_URL, email, password, api_key=api_key, verify=verify
+    )
+
+
+########################################################################
+########################################################################
+#
+def mibudge_options[F: Callable[..., Any]](f: F) -> F:
+    """
+    Click decorator adding the options every command uses to reach mibudge.
+
+    They are `--url`, `--email`, `--password`, `--api-key`,
+    `--mibudge-creds-url`, `--ca-bundle` and `--trust-local-certs`,
+    whose values go to `_build_client`.
+    """
+    options = [
+        click.option(
+            "--url",
+            "-u",
+            default=None,
+            help=f"Base URL of the mibudge API.  [default: {DEFAULT_URL}]",
+        ),
+        click.option(
+            "--email",
+            default=None,
+            help="mibudge login email, for password login.",
+        ),
+        click.option(
+            "--password",
+            default=None,
+            allow_from_autoenv=False,
+            help=(
+                "mibudge password.  Not read from the environment or the "
+                "config file; prefer --mibudge-creds-url."
+            ),
+        ),
+        click.option(
+            "--api-key",
+            default=None,
+            allow_from_autoenv=False,
+            help=(
+                "mibudge API key, preferred over email/password.  Not read "
+                "from the environment or the config file; prefer "
+                "--mibudge-creds-url."
+            ),
+        ),
+        click.option(
+            "--mibudge-creds-url",
+            envvar="MIBUDGE_CREDS_URL",
+            default=None,
+            help=(
+                "Secret store holding the mibudge credentials: "
+                "'op://<vault>/<item>' (1Password) or "
+                "'hcvault://<host>/<mount>/<path>' (HashiCorp Vault).  Its "
+                "'api_key' field is used, else its 'password' with --email.  "
+                "[env var: MIBUDGE_CREDS_URL]"
+            ),
+        ),
+        click.option(
+            "--ca-bundle",
+            default=None,
+            type=click.Path(exists=True, dir_okay=False, path_type=Path),
+            help="Path to a PEM CA bundle to trust (overrides system CAs).",
+        ),
+        click.option(
+            "--trust-local-certs",
+            is_flag=True,
+            help=(
+                "Trust the mkcert root CA (located via `mkcert -CAROOT`).  "
+                "Required when connecting to a local dev server using "
+                "mkcert TLS."
+            ),
+        ),
+    ]
+    for option in reversed(options):
+        f = option(f)
+    return f
 
 
 ########################################################################
@@ -1877,63 +1879,13 @@ def _print_summary(
         "Import one or more bank statement files (CSV or OFX/QFX) into "
         "mibudge via its REST API. Files can be passed via -f "
         "(repeatable) or as positional arguments, so shell globs like "
-        "*.ofx work."
+        "*.ofx work.\n\n"
+        "Options can also be set in "
+        "~/.config/mibudge-importers/config.toml, at the top level or "
+        "in its [statements] table (see --config)."
     ),
 )
-@click.option(
-    "--url",
-    "-u",
-    default=None,
-    help="Base URL of the mibudge API.  [default: https://localhost:8000]",
-)
-@click.option("--email", default=None, help="API login email.")
-@click.option(
-    "--password",
-    default=None,
-    allow_from_autoenv=False,
-    help="mibudge API password (not read from the environment).",
-)
-@click.option(
-    "--api-key",
-    default=None,
-    allow_from_autoenv=False,
-    help=(
-        "mibudge API key (preferred over email/password).  Not read "
-        "from the environment; prefer --api-key-onepassword-url or "
-        "Vault over this flag."
-    ),
-)
-@click.option(
-    "--vault-path",
-    default=None,
-    help="Vault KV2 path for credentials (e.g. 'mibudge/importer').",
-)
-@click.option(
-    "--api-key-onepassword-url",
-    default=None,
-    help=(
-        "1Password secret reference to the API key used to "
-        "authenticate to mibudge -- the full field path "
-        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
-        "'op://Personal/mibudge/API key'. Used when --api-key is not "
-        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
-        "from any bank-specific 1Password URL option."
-    ),
-)
-@click.option(
-    "--ca-bundle",
-    default=None,
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to a PEM CA bundle to trust (overrides system CAs).",
-)
-@click.option(
-    "--trust-local-certs",
-    is_flag=True,
-    help=(
-        "Trust the mkcert root CA (located via `mkcert -CAROOT`). "
-        "Required when connecting to a local dev server using mkcert TLS."
-    ),
-)
+@mibudge_options
 @click.option(
     "--dry-run",
     "-n",
@@ -1958,6 +1910,7 @@ def _print_summary(
     help="Disable rich output (auto-disabled when not a TTY).",
 )
 @theme_option
+@config_option("statements")
 @click.option(
     "--file",
     "-f",
@@ -2043,8 +1996,7 @@ def cli_cmd(
     email: str | None,
     password: str | None,
     api_key: str | None,
-    vault_path: str | None,
-    api_key_onepassword_url: str | None,
+    mibudge_creds_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     dry_run: bool,
@@ -2147,8 +2099,7 @@ def cli_cmd(
             email=email,
             password=password,
             api_key=api_key,
-            vault_path=vault_path,
-            api_key_onepassword_url=api_key_onepassword_url,
+            mibudge_creds_url=mibudge_creds_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,
@@ -2318,16 +2269,16 @@ def load_importer_env() -> None:
 
     Unlike a plain load_dotenv(), only variables the importer CLIs
     actually consume are applied: MIBUDGE_* (click auto-envvar options,
-    including MIBUDGE_API_KEY_ONEPASSWORD_URL), BOFA_* (scraper
-    credentials, including BOFA_ONEPASSWORD_URL), and VAULT_* (hvac
-    connection).
+    including MIBUDGE_CREDS_URL), BOFA_* (the live scraper's login,
+    including BOFA_CREDS_URL), and VAULT_* (the HashiCorp Vault server
+    an `hcvault://` URL reaches).
     Variables already present in the real environment are never
     overridden, so a value exported in the shell always wins over the
     .env file.
 
     Secrets are not applied, and a warning names each one found in
-    the environment or .env: pass them as flags, or keep them in
-    1Password or Vault.
+    the environment or .env: pass them as flags, or keep them in a
+    secret store (--mibudge-creds-url, --bofa-creds-url).
     """
     dotenv = dotenv_values()
     for key in _DOTENV_SECRET_VARS:
@@ -2336,8 +2287,8 @@ def load_importer_env() -> None:
             click.echo(
                 f"Warning: ignoring {key} from the "
                 f"{'environment' if in_env else '.env file'}; secrets are "
-                "not read from there.  Pass it as a flag, or use 1Password "
-                "or Vault.",
+                "not read from there.  Pass it as a flag, or keep it in a "
+                "secret store (--mibudge-creds-url, --bofa-creds-url).",
                 err=True,
             )
     for key, value in dotenv.items():

@@ -13,24 +13,19 @@ Requires the importers-bofa optional dependency group::
     uv sync --group importers-bofa
     uv run --group importers-bofa mibudge-bofa-live
 
-Options can also be set in the BofA importers' config file,
-~/.config/mibudge-bofa-importer/config.toml (see
-importers/bofa_config.py), below CLI flags and env vars.
+Options can also be set in the importers' config file,
+~/.config/mibudge-importers/config.toml, at the top level or in its
+[bofa_live] table (see importers/config.py), below CLI flags and env
+vars.
 
-BofA credentials come from BOFA_ONEPASSWORD_URL (or
---bofa-onepassword-url), an `op://` item URL fetched via `op read`,
-or from --bofa-id / --bofa-passcode, prompting for whichever is
-missing.  BOFA_ID may also be set in the environment; the passcode is
-never read from the environment or the config file.  mibudge
-credentials follow the same resolution order as the CSV importer (CLI
-flags > env vars > .env > config file > the
-MIBUDGE_API_KEY_ONEPASSWORD_URL secret reference > Vault).  The two
-1Password URLs are deliberately separate env vars --
-BOFA_ONEPASSWORD_URL is an *item* URL for the bank login
-(username/password fields are read from it), while
-MIBUDGE_API_KEY_ONEPASSWORD_URL is a full secret reference (item plus
-field path) to the API key used to authenticate to mibudge -- so each
-secret's name says what it unlocks.
+BofA credentials come from --bofa-id / --bofa-passcode, then from the
+`username` and `password` fields of the secret store --bofa-creds-url
+(BOFA_CREDS_URL) names, then from a prompt.  BOFA_ID may also be set in
+the environment; the passcode is never read from the environment or
+the config file.  mibudge credentials come from the same flags and
+--mibudge-creds-url store as every importer command (see
+import_transactions._build_client).  A store is an `op://` 1Password
+item or an `hcvault://` HashiCorp Vault secret (importers/secrets.py).
 
 2FA: if BofA requires it, the scraper prompts for the code
 interactively via stdin.  Run with --no-headless to watch the browser.
@@ -69,7 +64,6 @@ converges over successive runs.
 import json
 import logging
 import re
-import subprocess
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
@@ -104,72 +98,23 @@ from importers.bofa_common import (
     fetch_details_for_account,
     normalize_description,
 )
-from importers.bofa_config import config_option
 from importers.client import AuthenticationError
+from importers.config import config_option
 from importers.import_transactions import (
     _build_client,
     _run_funding,
     load_importer_env,
+    mibudge_options,
+    open_secret_store,
+    read_secret,
 )
 from importers.parsers.bofa_csv import _infer_transaction_type
+from importers.secrets import PASSWORD, USERNAME
 from importers.theme import get_theme, theme_option
 
 logger = logging.getLogger(__name__)
 
 SCRAPE_FORMAT_VERSION = 4
-
-
-########################################################################
-########################################################################
-#
-def _read_bofa_credentials_from_1password(base_url: str) -> tuple[str, str]:
-    """Fetch BofA credentials from the 1Password CLI.
-
-    This reads the BofA login item (BOFA_ONEPASSWORD_URL /
-    --bofa-onepassword-url) -- distinct from the mibudge API-key
-    secret reference read by `_resolve_api_key_from_1password` in
-    import_transactions.py (MIBUDGE_API_KEY_ONEPASSWORD_URL /
-    --api-key-onepassword-url).
-
-    Strips any trailing slash from `base_url` before appending the
-    field names, so both `op://vault/item` and `op://vault/item/`
-    work correctly.
-
-    Args:
-        base_url: 1Password item URL (e.g. `op://Personal/BofA`).
-
-    Returns:
-        A ``(username, password)`` tuple.
-
-    Raises:
-        click.ClickException: If the ``op`` CLI is not found or returns
-            a non-zero exit code.
-    """
-    url = base_url.rstrip("/")
-    try:
-        username = subprocess.run(
-            ["op", "read", f"{url}/username"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        password = subprocess.run(
-            ["op", "read", f"{url}/password"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except FileNotFoundError as e:
-        raise click.ClickException(
-            "1Password CLI (op) not found in PATH. "
-            "Install it from https://1password.com/downloads/command-line/"
-        ) from e
-    except subprocess.CalledProcessError as e:
-        raise click.ClickException(
-            f"Failed to read credentials from 1Password "
-            f"({url!r}): {e.stderr.strip()}"
-        ) from e
-    return username, password
 
 
 ########################################################################
@@ -786,11 +731,12 @@ def _setup_logging(
         "account a mibudge bank account tracks (matched on the account "
         "number's last 4 digits), and syncs it through mibudge's "
         "sync-scrape endpoint.\n\n"
-        "BofA credentials come from a 1Password item "
-        "(--bofa-onepassword-url) or --bofa-id / --bofa-passcode, prompting "
-        "for whichever is missing.  mibudge credentials follow the same "
-        "order as the CSV importer.  Options can also be set in "
-        "~/.config/mibudge-bofa-importer/config.toml (see --config).\n\n"
+        "BofA credentials come from --bofa-id / --bofa-passcode, then the "
+        "secret store --bofa-creds-url names, prompting for whichever is "
+        "still missing.  mibudge credentials come from the same options "
+        "as every importer command.  Options can also be set in "
+        "~/.config/mibudge-importers/config.toml, at the top level or in "
+        "its [bofa_live] table (see --config).\n\n"
         "If BofA requires 2FA the scraper prompts for the code via stdin; "
         "run with --no-headless to watch the browser."
     ),
@@ -806,78 +752,23 @@ def _setup_logging(
     default=None,
     allow_from_autoenv=False,
     help=(
-        "BofA passcode.  Not read from the environment; prefer "
-        "--bofa-onepassword-url, or omit it to be prompted."
+        "BofA passcode.  Not read from the environment or the config "
+        "file; prefer --bofa-creds-url, or omit it to be prompted."
     ),
 )
 @click.option(
-    "--bofa-onepassword-url",
-    envvar="BOFA_ONEPASSWORD_URL",
+    "--bofa-creds-url",
+    envvar="BOFA_CREDS_URL",
     default=None,
     help=(
-        "1Password item URL to source BofA credentials from "
-        "(e.g. 'op://Personal/BofA').  When set, the CLI calls "
-        "`op read <url>/username` and `op read <url>/password` "
-        "instead of using --bofa-id / --bofa-passcode.  "
-        "Env var: BOFA_ONEPASSWORD_URL. Distinct from "
-        "--api-key-onepassword-url, which sources the mibudge API key."
+        "Secret store holding the BofA login in its 'username' and "
+        "'password' fields: 'op://<vault>/<item>' (1Password) or "
+        "'hcvault://<host>/<mount>/<path>' (HashiCorp Vault).  "
+        "--bofa-id / --bofa-passcode win over it.  "
+        "[env var: BOFA_CREDS_URL]"
     ),
 )
-@click.option(
-    "--url",
-    "-u",
-    default=None,
-    help="Base URL of the mibudge API.  [default: https://localhost:8000]",
-)
-@click.option("--email", default=None, help="mibudge API login email.")
-@click.option(
-    "--password",
-    default=None,
-    allow_from_autoenv=False,
-    help="mibudge API password (not read from the environment).",
-)
-@click.option(
-    "--api-key",
-    default=None,
-    allow_from_autoenv=False,
-    help=(
-        "mibudge API key (preferred over email/password).  Not read "
-        "from the environment; prefer --api-key-onepassword-url or "
-        "Vault over this flag."
-    ),
-)
-@click.option(
-    "--vault-path",
-    default=None,
-    help="Vault KV2 path for mibudge credentials (e.g. 'mibudge/importer').",
-)
-@click.option(
-    "--api-key-onepassword-url",
-    default=None,
-    help=(
-        "1Password secret reference to the API key used to "
-        "authenticate to mibudge -- the full field path "
-        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
-        "'op://Personal/mibudge/API key'. Used when --api-key is not "
-        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
-        "from --bofa-onepassword-url, an item URL sourcing BofA "
-        "login credentials."
-    ),
-)
-@click.option(
-    "--ca-bundle",
-    default=None,
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to a PEM CA bundle to trust (overrides system CAs).",
-)
-@click.option(
-    "--trust-local-certs",
-    is_flag=True,
-    help=(
-        "Trust the mkcert root CA (located via `mkcert -CAROOT`). "
-        "Required when connecting to a local dev server using mkcert TLS."
-    ),
-)
+@mibudge_options
 @click.option(
     "--headless/--no-headless",
     default=True,
@@ -917,7 +808,7 @@ def _setup_logging(
     type=click.Path(dir_okay=False, path_type=Path),
     help=(
         "Nickname -> last-4 cache file.  [default: "
-        "$XDG_CONFIG_HOME/mibudge-bofa-importer/accounts.json, i.e. "
+        "$XDG_CONFIG_HOME/mibudge-importers/bofa-accounts.json, i.e. "
         "~/.config/...]  [env var: MIBUDGE_ACCOUNT_CACHE]"
     ),
 )
@@ -1007,7 +898,7 @@ def _setup_logging(
         "after this importer shipped.  [env var: MIBUDGE_CATEGORY_MAP]"
     ),
 )
-@config_option("import_bofa_live")
+@config_option("bofa_live")
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -1018,13 +909,12 @@ def _setup_logging(
 def cli_cmd(
     bofa_id: str | None,
     bofa_passcode: str | None,
-    bofa_onepassword_url: str | None,
+    bofa_creds_url: str | None,
     url: str | None,
     email: str | None,
     password: str | None,
     api_key: str | None,
-    vault_path: str | None,
-    api_key_onepassword_url: str | None,
+    mibudge_creds_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     headless: bool,
@@ -1067,15 +957,18 @@ def cli_cmd(
     unmapped_categories: set[str] = set()
 
     # --- BofA credentials ---
-    if bofa_onepassword_url is not None:
-        bofa_id, bofa_passcode = _read_bofa_credentials_from_1password(
-            bofa_onepassword_url
-        )
-    else:
+    if bofa_creds_url is not None and (
+        bofa_id is None or bofa_passcode is None
+    ):
+        store = open_secret_store(bofa_creds_url)
         if bofa_id is None:
-            bofa_id = click.prompt("BofA Online ID")
+            bofa_id = read_secret(store, USERNAME)
         if bofa_passcode is None:
-            bofa_passcode = click.prompt("BofA Passcode", hide_input=True)
+            bofa_passcode = read_secret(store, PASSWORD)
+    if bofa_id is None:
+        bofa_id = click.prompt("BofA Online ID")
+    if bofa_passcode is None:
+        bofa_passcode = click.prompt("BofA Passcode", hide_input=True)
 
     # --- Output & logging setup ---
     console = Console(theme=get_theme(theme_name).rich, stderr=True)
@@ -1135,8 +1028,7 @@ def cli_cmd(
                         email=email,
                         password=password,
                         api_key=api_key,
-                        vault_path=vault_path,
-                        api_key_onepassword_url=api_key_onepassword_url,
+                        mibudge_creds_url=mibudge_creds_url,
                         ca_bundle=ca_bundle,
                         trust_local_certs=trust_local_certs,
                         console=console,

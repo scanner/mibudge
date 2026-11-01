@@ -27,6 +27,7 @@ from pytest_mock import MockerFixture
 from importers import import_bofa_live as live
 from importers.bofa_accounts import AccountCache
 from importers.import_bofa_saved import _ReplayAccount
+from importers.tests.factories import FakeStore
 
 BANKS = [
     {"id": "b-bofa", "name": "Bank of America"},
@@ -126,6 +127,7 @@ class FakeBofA:
 
     tiles: list[tuple[str, str | None]] = field(default_factory=list)
     opened: list[str] = field(default_factory=list)
+    login: tuple[str, str] | None = None
 
     def scraper_class(self) -> type:
         bofa = self
@@ -133,8 +135,8 @@ class FakeBofA:
         class FakeScraper:
             logged_in = False
 
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
+            def __init__(self, bofa_id: str, passcode: str, **kwargs: Any):
+                bofa.login = (bofa_id, passcode)
 
             def login(self) -> None:
                 self.logged_in = True
@@ -262,6 +264,9 @@ def run_live(
 ) -> Callable[..., Result]:
     """Return a function that runs the live importer CLI in plain mode.
 
+    `login` replaces the default --bofa-id / --bofa-passcode flags and
+    `input` answers prompts.
+
     BOFA_* and MIBUDGE_* variables from the developer's environment are
     removed, and XDG_CONFIG_HOME points into tmp_path, so neither they
     nor the developer's config file can steer option resolution.
@@ -274,25 +279,89 @@ def run_live(
     env["XDG_CONFIG_HOME"] = str(tmp_path / "xdg")
     mocker.patch.dict(os.environ, env, clear=True)
 
-    def _run(*args: str) -> Result:
+    def _run(
+        *args: str,
+        login: tuple[str, ...] = ("--bofa-id", "id", "--bofa-passcode", "pw"),
+        input: str | None = None,
+    ) -> Result:
         return CliRunner().invoke(
             live.cli_cmd,
             [
                 "--plain",
-                "--bofa-id",
-                "id",
-                "--bofa-passcode",
-                "pw",
+                *login,
                 "--details-limit",
                 "0",
                 "--account-cache",
                 str(cache_path),
                 *args,
             ],
+            input=input,
             catch_exceptions=False,
         )
 
     return _run
+
+
+########################################################################
+########################################################################
+#
+class TestBofaLogin:
+    """Tests for where the BofA login comes from."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "login,fields,input,expected",
+        [
+            pytest.param(
+                (),
+                {"username": "store-id", "password": "store-pw"},
+                None,
+                ("store-id", "store-pw"),
+                id="store",
+            ),
+            pytest.param(
+                ("--bofa-id", "flag-id"),
+                {"username": "store-id", "password": "store-pw"},
+                None,
+                ("flag-id", "store-pw"),
+                id="flag-wins",
+            ),
+            pytest.param(
+                (),
+                {"username": "store-id"},
+                "typed-pw\n",
+                ("store-id", "typed-pw"),
+                id="prompt-for-missing",
+            ),
+        ],
+    )
+    def test_flags_then_store_then_prompt(
+        self,
+        fake_bofa: FakeBofA,
+        fake_client: FakeClient,
+        run_live: Callable[..., Result],
+        creds_store: Callable[..., FakeStore],
+        login: tuple[str, ...],
+        fields: dict[str, str],
+        input: str | None,
+        expected: tuple[str, str],
+    ) -> None:
+        """
+        GIVEN: a --bofa-creds-url store, with or without a flag, and
+               with or without a password field
+        WHEN:  the importer runs
+        THEN:  a flag wins, then the store's field, then a prompt
+        """
+        fake_bofa.tiles = [("Main", "1234")]
+        store = creds_store(**fields)
+
+        result = run_live(
+            "--bofa-creds-url", store.url, login=login, input=input
+        )
+
+        check.equal(result.exit_code, 0, result.output)
+        check.equal(fake_bofa.login, expected)
 
 
 ########################################################################

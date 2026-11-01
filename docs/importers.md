@@ -1,6 +1,6 @@
 # Importing Transactions and Backfilling Budgets
 
-The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using an API key (preferred; create one under Settings -> API keys, fetched from 1Password or Vault, or passed with `--api-key`) or a normal email and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
+The `importers/` directory contains standalone CLI tools for getting data into mibudge. They authenticate with the mibudge REST API using an API key (preferred; create one under Settings -> API keys, and keep it in 1Password or HashiCorp Vault) or a normal email and password -- they do not require direct access to the server, the database, or Django management commands. Anyone with a mibudge account can run them.
 
 These tools will eventually live in their own repository. For now they share the project's `pyproject.toml`, which declares each one as a console script.
 
@@ -22,10 +22,12 @@ Wherever they are run from, they read the `.env` at the root of the checkout (th
 | File | Used by |
 |------|---------|
 | `<checkout>/.env` | every tool: `MIBUDGE_*`, `BOFA_*` and `VAULT_*` settings (never secrets) |
-| `$XDG_CONFIG_HOME/mibudge-bofa-importer/config.toml` (default `~/.config/...`) | both BofA tools: option values; see [Config file](#config-file) |
-| `$XDG_CONFIG_HOME/mibudge-bofa-importer/accounts.json` | BofA live scraper: writes its cache of account nickname to last 4 digits |
+| `$XDG_CONFIG_HOME/mibudge-importers/config.toml` (default `~/.config/...`) | every tool: option values; see [Config file](#config-file) |
+| `$XDG_CONFIG_HOME/mibudge-importers/bofa-accounts.json` | BofA live scraper: writes its cache of account nickname to last 4 digits |
+| `$XDG_CONFIG_HOME/mibudge-importers/backfill-vendor-rules.json` | budget backfill: saved per-vendor yes/no rules |
 | `--save-dir` / `MIBUDGE_SAVE_DIR` | BofA live scraper: writes raw scrape JSON when set |
-| `~/.mibudge/vendor_rules.json` | budget backfill: saved per-vendor yes/no rules |
+
+The `mibudge-importers` directory holds no secrets and is meant to be synced between machines.
 
 ---
 
@@ -44,14 +46,74 @@ Wherever they are run from, they read the `.env` at the root of the checkout (th
 
 ### Credentials
 
-All tools accept connection and credential flags. In practice, set the non-secret ones once in a `.env` file at the repo root and keep the API key in 1Password or Vault (see below):
+Every tool reaches mibudge with the same options:
 
-```bash
-MIBUDGE_URL=https://your-mibudge-host
-MIBUDGE_API_KEY_ONEPASSWORD_URL="op://Personal/mibudge/API key"
+| Flag | Environment variable | Purpose |
+|------|----------------------|---------|
+| `--url, -u` | `MIBUDGE_URL` | Base URL of the mibudge API (default `https://localhost:8000`) |
+| `--mibudge-creds-url` | `MIBUDGE_CREDS_URL` | [Secret store](#secret-stores) holding the mibudge credentials |
+| `--api-key` | none | mibudge API key |
+| `--email` | `MIBUDGE_EMAIL` | Login email, for password login |
+| `--password` | none | Login password |
+| `--ca-bundle` | `MIBUDGE_CA_BUNDLE` | PEM CA bundle to trust instead of the system CAs |
+| `--trust-local-certs` | `MIBUDGE_TRUST_LOCAL_CERTS` | Trust the mkcert root CA |
+
+An API key wins over email and password. `--api-key` or `--password` is used as given; with neither, the store `--mibudge-creds-url` names is read for its `api_key` field, then for its `password` field (used with `--email`).
+
+In practice, set the non-secret options once in the [config file](#config-file) and keep the API key in a secret store:
+
+```toml
+url = "https://your-mibudge-host"
+mibudge_creds_url = "op://Personal/mibudge"
 ```
 
-Secrets -- the API key (`MIBUDGE_API_KEY`), the password (`MIBUDGE_PASSWORD`) and the BofA passcode (`BOFA_PASSCODE`) -- are never read from the environment or `.env`, and a warning names any that are set there. Pass them as flags, or keep them in 1Password or Vault. `VAULT_TOKEN` is honored from the real environment but not from `.env`.
+Secrets -- the API key (`MIBUDGE_API_KEY`), the password (`MIBUDGE_PASSWORD`) and the BofA passcode (`BOFA_PASSCODE`) -- are never read from the environment, `.env` or the config file, and a warning names any that are set in the environment or `.env`. Pass them as flags, or keep them in a secret store. `VAULT_TOKEN` is honored from the real environment but not from `.env`.
+
+### Secret stores
+
+A secret store is one record, named by a URL whose scheme picks the backend. The tools only read from it.
+
+| URL | Backend |
+|-----|---------|
+| `op://<vault>/<item>` | A 1Password item |
+| `hcvault://<host>/<mount>/<path>` | A secret in a HashiCorp Vault KV version 2 engine |
+
+The URL names the record, not a field; each tool reads the fields it needs by name:
+
+| Option | Fields read |
+|--------|-------------|
+| `--mibudge-creds-url` | `api_key`, else `password` |
+| `--bofa-creds-url` (BofA live scraper) | `username` and `password` |
+
+**1Password.** The tools run the `op` command line tool, which must be installed and signed in. A field is found by its label in any section of the item, so `op://Personal/mibudge` with a field labelled `api_key` is enough. Set `MIBUDGE_OP_BIN` when `op` is not on the `PATH`, or when more than one is and only a particular one can reach the account.
+
+**HashiCorp Vault.** The first path segment is the KV engine's mount point and the rest is the secret's path under it, so `hcvault://vault.example.com:8200/secret/mibudge` reads `secret/data/mibudge`. A host in the URL is reached over https; leave it out (`hcvault:///secret/mibudge`) to use `VAULT_ADDR`. The Vault token comes from `VAULT_TOKEN`, then the `~/.vault-token` file `vault login` writes, and `VAULT_CACERT` names a CA bundle for a server whose certificate is not publicly trusted.
+
+### Config file
+
+Every tool reads option values from `config.toml` in the importers' config directory, `$XDG_CONFIG_HOME/mibudge-importers/` (default `~/.config/mibudge-importers/config.toml`), when it exists. `--config` / `MIBUDGE_CONFIG` names a different file, which must exist. A value is resolved in this order, first wins: CLI flag, environment variable (or `.env`), config file, the option's built-in default.
+
+Keys are option names, spelled like the flag with or without its dashes (`save-dir` or `save_dir`). A top-level key applies to every tool that has that option and is ignored by the rest. A table named for a tool holds keys for that tool alone and wins over the top level:
+
+| Table | Tool |
+|-------|------|
+| `[statements]` | `mibudge-import` |
+| `[bofa_live]` | `mibudge-bofa-live` |
+| `[bofa_saved]` | `mibudge-bofa-saved` |
+| `[backfill_budget]` | `mibudge-backfill-budget` |
+
+```toml
+url = "https://mibudge.example.com"
+email = "me@example.com"
+mibudge_creds_url = "op://Personal/mibudge"
+category_map = "categories.yaml"
+
+[bofa_live]
+bofa_creds_url = "op://Personal/BofA"
+save_dir = "~/bofa-scrapes"
+```
+
+Relative paths resolve against the config file's directory, and `~` is expanded. A key that is no tool's option, a key in a table that is not that tool's option, and an unknown table are errors, whichever tool runs. Secrets (`password`, `api_key`, `bofa_passcode`) are refused because the directory is meant to be synced between machines: name a secret store instead.
 
 ### Environment variables for every flag
 
@@ -66,21 +128,9 @@ Every flag on every command has a corresponding environment variable. All import
 | `--save-dir` | `MIBUDGE_SAVE_DIR` |
 | `--verbose` | `MIBUDGE_VERBOSE` |
 
-The secret flags (`--api-key`, `--password`, `--bofa-passcode`) have no environment variable. Two flags on the BofA live scraper use explicit names that override the auto-prefix: `--bofa-id` reads `BOFA_ID` and `--bofa-onepassword-url` reads `BOFA_ONEPASSWORD_URL` (not `MIBUDGE_BOFA_ID` / `MIBUDGE_BOFA_ONEPASSWORD_URL`).
+The secret flags (`--api-key`, `--password`, `--bofa-passcode`) have no environment variable. Three flags use explicit names that override the auto-prefix: `--mibudge-creds-url` reads `MIBUDGE_CREDS_URL`, and the BofA live scraper's `--bofa-id` and `--bofa-creds-url` read `BOFA_ID` and `BOFA_CREDS_URL`.
 
 CLI flags always take precedence over environment variables.
-
-Alternatively, pull credentials from HashiCorp Vault:
-
-```bash
-export VAULT_ADDR=https://vault.example.com
-export VAULT_TOKEN=s.xxxx
-uv run mibudge-import --vault-path mibudge/prod stmt.ofx
-```
-
-The Vault secret must have `url` plus either `api_key` (preferred) or `email` and `password`.
-
-Or pull just the API key from 1Password (set `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` to a full secret reference -- `op://<vault>/<item>[/<section>]/<field>`, e.g. `op://Personal/mibudge/API key` -- naming the field that holds the key used to authenticate to mibudge; requires the `op` CLI signed in). Since the reference names the field, one item can hold several API keys under different section/field names. This is a distinct env var from the BofA scraper's own `BOFA_ONEPASSWORD_URL` -- see [BofA Live Scraper](#bofa-live-scraper) below.
 
 ### Local dev with a self-signed cert
 
@@ -173,6 +223,7 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 | `--account-number`                         | Account number (create mode, CSV only)                      |
 | `--dry-run, -n`                            | Validate and dedup-check without importing                  |
 | `--run-funding`                            | Run the funding engine after a successful import            |
+| `--config`                                 | TOML file of option values (see [Config file](#config-file)) |
 | `--verbose, -v`                            | Debug logging                                               |
 | `--plain`                                  | Disable rich terminal output (auto-detected when not a TTY) |
 
@@ -224,33 +275,15 @@ The scraper needs the optional `importers-bofa` dependency group (bofa-scraper a
 uv run --group importers-bofa mibudge-bofa-live
 ```
 
-BofA credentials are read from a 1Password item via `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` (reads the item's `username`/`password` fields), or from `--bofa-id` (or `BOFA_ID`) and `--bofa-passcode`, prompting for whichever is missing. mibudge credentials use the same resolution order as the statement importer (CLI flags → env vars → `.env` → the [config file](#config-file) → the mibudge 1Password secret reference via `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` → Vault). The two 1Password URLs are separate env vars on purpose -- each name says which credential it fetches -- and they differ in shape: the BofA one is an *item* URL (its `username`/`password` fields are both read), while the mibudge one is a full secret reference naming the field that holds the API key.
+The BofA login comes from `--bofa-id` (or `BOFA_ID`) and `--bofa-passcode`, then from the `username` and `password` fields of the [secret store](#secret-stores) `--bofa-creds-url` / `BOFA_CREDS_URL` names, and the scraper prompts for whichever is still missing. mibudge credentials come from the same [options](#credentials) as every tool.
 
 If BofA requires 2FA, the scraper prompts for the code interactively via stdin. Run with `--no-headless` to watch the browser.
-
-### Config file
-
-Both BofA importers (`import_bofa_live` and `import_bofa_saved`) read option values from `config.toml` in their config directory, `$XDG_CONFIG_HOME/mibudge-bofa-importer/` (default `~/.config/mibudge-bofa-importer/config.toml`), when it exists. `--config` / `MIBUDGE_CONFIG` names a different file, which must exist. A value is resolved in this order, first wins: CLI flag, environment variable (or `.env`), config file, the option's built-in default.
-
-Keys are option names, spelled like the flag with or without its dashes (`save-dir` or `save_dir`). Top-level keys apply to both importers, so each must be an option of both. A `[import_bofa_live]` or `[import_bofa_saved]` table holds keys for one importer and wins over the top level:
-
-```toml
-url = "https://mibudge.example.com"
-api_key_onepassword_url = "op://Personal/mibudge/API key"
-category_map = "categories.yaml"
-
-[import_bofa_live]
-bofa_onepassword_url = "op://Personal/BofA"
-save_dir = "~/bofa-scrapes"
-```
-
-Relative paths resolve against the config file's directory, and `~` is expanded. An unknown key or table is an error. Secrets (`password`, `api_key`, `bofa_passcode`) are refused because the directory is meant to be synced between machines: name a 1Password reference or a Vault path instead.
 
 ### Matching BofA accounts to mibudge accounts
 
 A BofA account is imported into the mibudge account whose account number ends in the same last 4 digits. Only mibudge accounts in a bank whose name contains `--bank-name` (default `Bank of America`, case-insensitive) are tracked.
 
-BofA's account overview shows only each account's nickname; the last 4 digits appear only once the account is opened. The importer keeps a nickname -> last-4 cache in its config directory, `$XDG_CONFIG_HOME/mibudge-bofa-importer/` (default `~/.config/mibudge-bofa-importer/accounts.json`, or `--account-cache`). The directory is shared by the BofA importers and is safe to sync between machines.
+BofA's account overview shows only each account's nickname; the last 4 digits appear only once the account is opened. The importer keeps a nickname -> last-4 cache in the importers' config directory (default `~/.config/mibudge-importers/bofa-accounts.json`, or `--account-cache`), which is safe to sync between machines.
 
 - An account whose nickname the cache maps to digits no tracked mibudge account has is skipped without being opened.
 - An account with a new nickname, or one whose nickname another overview tile also uses, is opened and checked.
@@ -290,18 +323,17 @@ uv run mibudge-bofa-saved saved/*.json
 
 ### Flag reference
 
-Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see [Environment variables for every flag](#environment-variables-for-every-flag)). The two exceptions are noted below.
+Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see [Environment variables for every flag](#environment-variables-for-every-flag)). The two exceptions are noted below. The connection flags every tool shares are under [Credentials](#credentials).
 
 | Flag | Purpose |
 |------|---------|
 | `--bofa-id` | BofA Online ID (env var: `BOFA_ID`, not `MIBUDGE_BOFA_ID`) |
 | `--bofa-passcode` | BofA passcode (not read from the environment or the config file; prompted for when missing) |
-| `--bofa-onepassword-url` | 1Password item URL for BofA username/password (env var: `BOFA_ONEPASSWORD_URL`, not `MIBUDGE_BOFA_ONEPASSWORD_URL`) |
-| `--api-key-onepassword-url` | 1Password secret reference (full field path) to the API key used to authenticate to mibudge (env var: `MIBUDGE_API_KEY_ONEPASSWORD_URL`) |
+| `--bofa-creds-url` | [Secret store](#secret-stores) holding the BofA `username` and `password` (env var: `BOFA_CREDS_URL`, not `MIBUDGE_BOFA_CREDS_URL`) |
 | `--account, -a` | Filter by BofA account nickname substring or last-4 digits (repeatable; omit for all tracked accounts) |
 | `--check-all-accounts` | Open every BofA account, rebuild the account cache, and report the changes |
-| `--config` | TOML file of option values (default: `~/.config/mibudge-bofa-importer/config.toml`; see [Config file](#config-file)) |
-| `--account-cache` | Nickname -> last-4 cache file (default: `~/.config/mibudge-bofa-importer/accounts.json`) |
+| `--config` | TOML file of option values (default: `~/.config/mibudge-importers/config.toml`; see [Config file](#config-file)) |
+| `--account-cache` | Nickname -> last-4 cache file (default: `~/.config/mibudge-importers/bofa-accounts.json`) |
 | `--bank-name` | Substring of the mibudge Bank name whose accounts are tracked (default: `Bank of America`) |
 | `--headless / --no-headless` | Run Firefox headlessly (default) or visibly for debugging/2FA |
 | `--timeout` | Seconds to pause after each transaction details dialog, pacing requests to BofA (default: 5) |
@@ -409,7 +441,7 @@ Transactions, allocations, and internal transactions are all fetched once at sta
 | `s` | Skip all remaining transactions from this vendor in this session |
 | `q` | Quit and save rules                                              |
 
-Saved rules are stored in `~/.mibudge/vendor_rules.json` keyed by budget UUID.
+Saved rules are stored in the importers' config directory, `~/.config/mibudge-importers/backfill-vendor-rules.json`, keyed by budget UUID.
 
 ### Funding between periods
 
@@ -432,6 +464,7 @@ Every flag can also be set via its `MIBUDGE_FLAG_NAME` environment variable (see
 |-----------------|------------------------------------------|
 | `--account, -a` | Bank account by UUID or name (required)  |
 | `--budget, -b`  | Target budget by UUID or name (required) |
+| `--config`      | TOML file of option values (see [Config file](#config-file)) |
 | `--verbose, -v` | Debug logging                            |
 | `--plain`       | Disable rich terminal output             |
 

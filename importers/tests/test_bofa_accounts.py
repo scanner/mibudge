@@ -1,4 +1,4 @@
-"""Tests for importers.bofa_accounts: config dir, last-4 cache, matching."""
+"""Tests for importers.bofa_accounts: last-4 cache and matching."""
 
 # system imports
 import json
@@ -9,14 +9,12 @@ from typing import Any
 # 3rd party imports
 import pytest
 import pytest_check as check
-from pytest_mock import MockerFixture
 
 # Project imports
 from importers.bofa_accounts import (
     AccountCache,
     CacheChange,
     ambiguous_nicknames,
-    bofa_config_dir,
     index_tracked_accounts,
     matches_filters,
     missing_tracked_accounts,
@@ -30,36 +28,7 @@ from importers.bofa_accounts import (
 @pytest.fixture
 def cache_path(tmp_path: Path) -> Path:
     """Path of an account cache file inside a not-yet-created dir."""
-    return tmp_path / "cfg" / "accounts.json"
-
-
-########################################################################
-########################################################################
-#
-class TestBofaConfigDir:
-    """Tests for bofa_config_dir."""
-
-    ####################################################################
-    #
-    @pytest.mark.parametrize(
-        "xdg,expected",
-        [
-            ("/x/conf", Path("/x/conf/mibudge-bofa-importer")),
-            (None, Path("/home/u/.config/mibudge-bofa-importer")),
-        ],
-    )
-    def test_location(
-        self, mocker: MockerFixture, xdg: str | None, expected: Path
-    ) -> None:
-        """
-        GIVEN: XDG_CONFIG_HOME set or unset
-        WHEN:  bofa_config_dir is called
-        THEN:  it is under XDG_CONFIG_HOME, else ~/.config
-        """
-        env = {"XDG_CONFIG_HOME": xdg} if xdg else {}
-        mocker.patch.dict("os.environ", env, clear=True)
-        mocker.patch.object(Path, "home", return_value=Path("/home/u"))
-        assert bofa_config_dir() == expected
+    return tmp_path / "cfg" / "bofa-accounts.json"
 
 
 ########################################################################

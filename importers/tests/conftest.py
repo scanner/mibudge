@@ -34,10 +34,12 @@ from pytest_factoryboy import register
 from pytest_mock import MockerFixture
 
 # Project imports
+from importers import import_transactions
 from importers.client import MibudgeClient
 from importers.tests.factories import (
     BofaCSVRow,
     BofaCSVRowFactory,
+    FakeStore,
     OFXTxnSpec,
     OFXTxnSpecFactory,
 )
@@ -433,3 +435,23 @@ def mock_auth(mocker: MockerFixture) -> Callable[..., MagicMock]:
         return mocker.patch.object(client._http, "post", return_value=response)
 
     return _patch
+
+
+########################################################################
+########################################################################
+#
+@pytest.fixture
+def creds_store(mocker: MockerFixture) -> Callable[..., FakeStore]:
+    """Return a function that makes the secret store `store_for` builds.
+
+    Called with the fields the store holds; returns the FakeStore.
+    """
+
+    def _make(**fields: str) -> FakeStore:
+        store = FakeStore(fields)
+        mocker.patch.object(
+            import_transactions, "store_for", return_value=store
+        )
+        return store
+
+    return _make

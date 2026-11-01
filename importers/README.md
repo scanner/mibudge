@@ -27,6 +27,9 @@ importers/
   import_transactions.py  # Statement importer (click CLI): OFX/QFX + BofA CSV
   import_bofa_live.py     # BofA live scraper: Selenium login -> sync-scrape endpoint
   import_bofa_saved.py    # BofA saved-scrape replayer: JSON file -> sync-scrape endpoint
+  backfill_budget.py      # Budget backfill: interactive month-by-month allocation
+  config.py               # Shared config directory and config.toml (--config)
+  secrets.py              # Secret stores: op:// (1Password), hcvault:// (Vault)
   parsers/
     __init__.py
     common.py             # Shared ParsedStatement / ParsedTransaction dataclasses
@@ -56,12 +59,17 @@ can mix formats in one run *for the same destination account*.
 Each tool is a single click command, installed as a console script by
 `[project.scripts]` in `pyproject.toml`:
 
-| Command                   | Module                |
-|---------------------------|-----------------------|
-| `mibudge-import`          | `import_transactions` |
-| `mibudge-bofa-live`       | `import_bofa_live`    |
-| `mibudge-bofa-saved`      | `import_bofa_saved`   |
-| `mibudge-backfill-budget` | `backfill_budget`     |
+| Command                   | Module                | Config table        |
+|---------------------------|-----------------------|---------------------|
+| `mibudge-import`          | `import_transactions` | `[statements]`      |
+| `mibudge-bofa-live`       | `import_bofa_live`    | `[bofa_live]`       |
+| `mibudge-bofa-saved`      | `import_bofa_saved`   | `[bofa_saved]`      |
+| `mibudge-backfill-budget` | `backfill_budget`     | `[backfill_budget]` |
+
+Every command takes the same connection options
+(`import_transactions.mibudge_options`) and `--config`
+(`config.config_option`); a new command adds both and an entry in
+`config.COMMANDS`.
 
 `mibudge-import` takes statement files as positional args or via
 `-f`, and both forms accept globs expanded by the shell:
@@ -82,19 +90,20 @@ Every command uses `auto_envvar_prefix="MIBUDGE"`, so every flag
 automatically reads from a `MIBUDGE_FLAG_NAME` environment variable
 when the flag is not set on the CLI.  Click derives the name as:
 uppercase, hyphens replaced with underscores, `MIBUDGE_` prepended.
-Examples: `--dry-run` → `MIBUDGE_DRY_RUN`; `--vault-path` →
-`MIBUDGE_VAULT_PATH`.
+Examples: `--dry-run` → `MIBUDGE_DRY_RUN`; `--save-dir` →
+`MIBUDGE_SAVE_DIR`.
 
 The secret flags (`--api-key`, `--password`, `--bofa-passcode`) have
-no environment variable and are never read from `.env`: pass them as
-flags, or keep them in 1Password or Vault.  Two flags on
-`import_bofa_live` override the prefix with explicit names: `--bofa-id`
-reads `BOFA_ID` and `--bofa-onepassword-url` reads
-`BOFA_ONEPASSWORD_URL`.
+no environment variable and are never read from `.env` or the config
+file: pass them as flags, or keep them in a secret store.  Three flags
+override the prefix with explicit names: `--mibudge-creds-url` reads
+`MIBUDGE_CREDS_URL`, and `import_bofa_live`'s `--bofa-id` and
+`--bofa-creds-url` read `BOFA_ID` and `BOFA_CREDS_URL`.
 
-The BofA importers also read option values from
-`~/.config/mibudge-bofa-importer/config.toml`, below CLI flags and
-environment variables; see `importers/bofa_config.py`.
+Every command also reads option values from
+`~/.config/mibudge-importers/config.toml`, below CLI flags and
+environment variables; see `importers/config.py` and
+[Configuration resolution](#configuration-resolution).
 
 ## Running the commands
 
@@ -212,49 +221,30 @@ uv run mibudge-import --trust-local-certs stmt.ofx
 uv run mibudge-import --ca-bundle "$(mkcert -CAROOT)/rootCA.pem" stmt.ofx
 ```
 
-### Pulling credentials from Vault
+### Credentials from a secret store
 
 ```bash
-export VAULT_ADDR=https://vault.example.com
-export VAULT_TOKEN=s.xxxx
-uv run mibudge-import --vault-path mibudge/importer stmt.ofx
+uv run mibudge-import --mibudge-creds-url op://Personal/mibudge stmt.ofx
+uv run mibudge-import --mibudge-creds-url hcvault:///secret/mibudge stmt.ofx
 ```
 
-The Vault secret must contain `url` plus either `api_key` (preferred)
-or `email` and `password`.
-
-### Pulling the API key from 1Password
-
-```bash
-uv run mibudge-import \
-    --api-key-onepassword-url "op://Personal/mibudge/API key" \
-    stmt.ofx
-```
-
-Requires the [1Password CLI](https://developer.1password.com/docs/cli/) (`op`)
-signed in. The value is a full 1Password *secret reference* -- the
-complete path to the field holding the key,
-`op://<vault>/<item>[/<section>]/<field>` -- passed to `op read`
-verbatim. Naming the field yourself means one item can hold several API
-keys under different section/field names (e.g.
-`op://Private/mibudge/add more/API key`), typically alongside that
-item's normal username/password fields so one item covers both an
-interactive login and the importer's machine credentials.
-
-This is deliberately a separate env var
-(`MIBUDGE_API_KEY_ONEPASSWORD_URL`, the API key used to authenticate to
-mibudge) from the BofA live scraper's `--bofa-onepassword-url` /
-`BOFA_ONEPASSWORD_URL` -- an *item* URL, not a field reference, since
-its `username`/`password` fields are both read from it -- and each
-secret's name says what it fetches, so a future bank (Chase, etc.) can
-add `CHASE_ONEPASSWORD_URL` without colliding.
+The URL names one record: a 1Password item (`op://<vault>/<item>`,
+read with the `op` CLI) or a HashiCorp Vault KV v2 secret
+(`hcvault://<host>/<mount>/<path>`; no host means `VAULT_ADDR`, and the
+token comes from `VAULT_TOKEN` or `~/.vault-token`).  The record's
+`api_key` field is used, else its `password` with `--email`.  The BofA
+live scraper's `--bofa-creds-url` names a second record, read for
+`username` and `password`.  See `importers/secrets.py` and the
+"Secret stores" section of `docs/importers.md`.
 
 ### BofA live scrape -- `mibudge-bofa-live`
 
 Logs in to Bank of America and syncs every BofA account that a mibudge
-bank account tracks. With `BOFA_ONEPASSWORD_URL` in `.env` the BofA
-login comes from 1Password; without it the command prompts for the
-online ID and passcode. A 2FA code is prompted for on the terminal.
+bank account tracks. The BofA login comes from `--bofa-id` /
+`--bofa-passcode`, then the secret store `--bofa-creds-url` names
+(usually set in the config file's `[bofa_live]` table), and the command
+prompts for whatever is still missing. A 2FA code is prompted for on
+the terminal.
 
 ```bash
 # Sync every tracked account:
@@ -269,10 +259,6 @@ uv run --group importers-bofa mibudge-bofa-live \
 uv run --group importers-bofa mibudge-bofa-live \
     --save-dir ~/bofa-scrapes --run-funding
 ```
-
-Option values can also come from
-`~/.config/mibudge-bofa-importer/config.toml`; see
-[Configuration resolution](#configuration-resolution).
 
 ### Replay saved BofA scrapes -- `mibudge-bofa-saved`
 
@@ -289,7 +275,8 @@ uv run mibudge-bofa-saved ~/bofa-scrapes/2026-10-30-*.json
 
 Steps through a bank account's past transactions month by month and
 asks, for each unallocated one, whether it belongs to a recurring
-budget. Answers saved per vendor go in `~/.mibudge/vendor_rules.json`.
+budget. Answers saved per vendor go in
+`~/.config/mibudge-importers/backfill-vendor-rules.json`.
 
 ```bash
 uv run mibudge-backfill-budget --account "Personal Checking" --budget "Groceries"
@@ -407,10 +394,12 @@ Resolved in this order (first win):
 2. Environment variables -- every flag has a `MIBUDGE_FLAG_NAME` equivalent
    (see [Environment variables for every flag](#environment-variables-for-every-flag))
 3. `.env` file (loaded via python-dotenv)
-4. API key only: a 1Password secret reference (if
-   `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL` is
-   set) -- the full field path, read via `op read`
-5. Vault KV2 secret (if `--vault-path` / `MIBUDGE_VAULT_PATH` is set)
+4. `~/.config/mibudge-importers/config.toml` (or `--config` /
+   `MIBUDGE_CONFIG`): the command's own table, then the top level
+5. The option's built-in default
+
+The API key and password are then taken from the flags, else from the
+secret store `--mibudge-creds-url` names.
 
 ## Adding a new bank parser
 
