@@ -2,6 +2,11 @@
 # Drone image build pass it explicitly.
 ARG PYTHON_VERSION=3.13.16
 
+# Registry that ghcr.io images are pulled from.  CI may set it to a
+# pull-through cache of ghcr.io; the default is ghcr.io itself.
+ARG GHCR_REGISTRY=ghcr.io
+FROM ${GHCR_REGISTRY}/astral-sh/uv:latest AS uv
+
 ########################################################################
 #
 # Builder stage -- compile dependencies into /venv
@@ -21,7 +26,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 
 # Copy dependency files and install deps only (not project) -- cached layer
 COPY pyproject.toml uv.lock ./
@@ -92,7 +97,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 
 # Copy the production venv from builder
 COPY --from=builder /venv /venv

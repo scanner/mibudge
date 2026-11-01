@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GHCR_REGISTRY` build argument: the registry the image build pulls its
+  ghcr.io images from (`uv`), for building through a mirror of ghcr.io;
+  defaults to `ghcr.io`
+
 ## [0.4.4] - 2026-11-01
 
 No migrations: going back to 0.4.3 needs no database change.
