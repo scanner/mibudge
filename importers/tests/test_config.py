@@ -1,4 +1,4 @@
-"""Tests for the BofA importers' config file."""
+"""Tests for the importers' config directory and config file."""
 
 # system imports
 import json
@@ -14,7 +14,8 @@ from click.testing import CliRunner, Result
 from pytest_mock import MockerFixture
 
 # Project imports
-from importers.bofa_config import config_option, default_config_path
+from importers import config
+from importers.config import config_dir, config_option, default_config_path
 
 
 ########################################################################
@@ -24,7 +25,7 @@ from importers.bofa_config import config_option, default_config_path
 def config_home(tmp_path: Path, mocker: MockerFixture) -> Path:
     """Point XDG_CONFIG_HOME at a temp dir with no BOFA_/MIBUDGE_ vars.
 
-    Returns the BofA importers' config directory under it, created.
+    Returns the importers' config directory under it, created.
     """
     env = {
         k: v
@@ -57,12 +58,15 @@ def write_config(config_home: Path) -> Callable[[str], Path]:
 ########################################################################
 #
 @pytest.fixture
-def run_cmd() -> Callable[..., Result]:
-    """Return a function that runs a stand-in BofA importer command.
+def run_cmd(mocker: MockerFixture) -> Callable[..., Result]:
+    """Return a function that runs a stand-in importer command.
 
-    The command has options shaped like the importers' (an auto env
-    var prefix, a path, a repeatable option with its own parameter
-    name, and a secret) and prints the values it received as JSON.
+    Two stand-in commands replace the real ones as the config file's
+    `[bofa_live]` and `[statements]` tables.  The `bofa_live` one is
+    run: its options are shaped like the importers' (an auto env var
+    prefix, a path, a repeatable option with its own parameter name,
+    and a secret) and it prints the values it received as JSON.  The
+    `statements` one has a `--budget` option the other lacks.
     """
 
     @click.command(context_settings={"auto_envvar_prefix": "MIBUDGE"})
@@ -75,14 +79,78 @@ def run_cmd() -> Callable[..., Result]:
     )
     @click.option("--account", "account_filters", multiple=True)
     @click.option("--api-key", default=None, allow_from_autoenv=False)
-    @config_option("import_bofa_live")
-    def cmd(**kwargs: object) -> None:
+    @config_option("bofa_live")
+    def live(**kwargs: object) -> None:
         click.echo(json.dumps(kwargs, default=str))
 
+    @click.command()
+    @click.option("--url", default=None)
+    @click.option("--budget", default=None)
+    def statements(**kwargs: object) -> None:
+        pass
+
+    mocker.patch.object(
+        config,
+        "_commands",
+        return_value={"bofa_live": live, "statements": statements},
+    )
+
     def _run(*args: str, env: dict[str, str] | None = None) -> Result:
-        return CliRunner().invoke(cmd, list(args), env=env)
+        return CliRunner().invoke(live, list(args), env=env)
 
     return _run
+
+
+########################################################################
+########################################################################
+#
+class TestConfigDir:
+    """Tests for config_dir."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "xdg,expected",
+        [
+            ("/x/conf", Path("/x/conf/mibudge-importers")),
+            (None, Path("/home/u/.config/mibudge-importers")),
+        ],
+    )
+    def test_location(
+        self, mocker: MockerFixture, xdg: str | None, expected: Path
+    ) -> None:
+        """
+        GIVEN: XDG_CONFIG_HOME set or unset
+        WHEN:  config_dir is called
+        THEN:  it is under XDG_CONFIG_HOME, else ~/.config
+        """
+        env = {"XDG_CONFIG_HOME": xdg} if xdg else {}
+        mocker.patch.dict("os.environ", env, clear=True)
+        mocker.patch.object(Path, "home", return_value=Path("/home/u"))
+        assert config_dir() == expected
+
+
+########################################################################
+########################################################################
+#
+class TestCommands:
+    """Tests for the table -> command registry."""
+
+    ####################################################################
+    #
+    def test_every_table_names_a_configurable_command(self) -> None:
+        """
+        GIVEN: the registry of config file tables
+        WHEN:  each table's command is loaded
+        THEN:  it takes --config and the options shared by every
+               command, so a top-level connection key reaches them all
+        """
+        for table, command in config._commands().items():
+            names = {p.name for p in command.params}
+            check.is_true(
+                {"config", "url", "email", "mibudge_creds_url"} <= names,
+                f"[{table}] command has the shared options",
+            )
 
 
 ########################################################################
@@ -133,27 +201,30 @@ class TestConfigFile:
         run_cmd: Callable[..., Result],
     ) -> None:
         """
-        GIVEN: top-level keys, an importer table overriding one, a
-               table for the other importer, flag-spelled keys, and a
-               relative path
+        GIVEN: top-level keys (one only another command has), the
+               command's table overriding one, another command's
+               table, flag-spelled keys, and a relative path
         WHEN:  the command runs
-        THEN:  its own table wins, the other table is ignored, flag
-               spellings map to their options, and the path resolves
-               against the config directory
+        THEN:  its own table wins, the other table and the other
+               command's top-level key are ignored, flag spellings map
+               to their options, and the path resolves against the
+               config directory
         """
         write_config(
             'url = "https://top"\n'
             'bank-name = "Top Bank"\n'
-            "[import_bofa_live]\n"
+            'budget = "Groceries"\n'
+            "[bofa_live]\n"
             'url = "https://live"\n'
             'account = ["Checking", "1234"]\n'
             'save_dir = "scrapes"\n'
-            "[import_bofa_saved]\n"
-            'url = "https://saved"\n'
+            "[statements]\n"
+            'url = "https://statements"\n'
         )
 
         result = run_cmd()
 
+        assert result.exit_code == 0, result.output
         values = json.loads(result.output)
         check.equal(values["url"], "https://live", "table wins")
         check.equal(values["bank_name"], "Top Bank", "dashed key")
@@ -163,6 +234,7 @@ class TestConfigFile:
         check.equal(
             values["save_dir"], str(config_home / "scrapes"), "relative path"
         )
+        check.is_not_in("budget", values, "other command's key ignored")
 
     ####################################################################
     #
@@ -184,7 +256,8 @@ class TestConfigFile:
         "text,message",
         [
             ('bank-nmae = "x"\n', "'bank-nmae' at the top level"),
-            ('[import_bofa_lve]\nurl = "x"\n', "unknown table"),
+            ('[bofa_lve]\nurl = "x"\n', "unknown table"),
+            ('[statements]\nbugdet = "x"\n', "'bugdet' in [statements]"),
             ('api_key = "x"\n', "'api_key' is a secret"),
             ("url = \n", "Config file"),
         ],
@@ -197,8 +270,9 @@ class TestConfigFile:
         message: str,
     ) -> None:
         """
-        GIVEN: a config file with a typo'd key, an unknown table, a
-               secret, or invalid TOML
+        GIVEN: a config file with a typo'd top-level key, an unknown
+               table, a typo in another command's table, a secret, or
+               invalid TOML
         WHEN:  the command runs
         THEN:  it fails and says what is wrong
         """

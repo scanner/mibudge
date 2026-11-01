@@ -99,7 +99,7 @@ in the checkout's `.venv/bin/`:
 
 ```bash
 uv run mibudge-import ~/Downloads/*.ofx       # OFX/QFX or BofA CSV statements
-uv run --group importers-bofa mibudge-bofa-live   # scrape Bank of America
+uv run mibudge-bofa-live                      # scrape Bank of America
 uv run mibudge-bofa-saved saved/*.json        # replay saved BofA scrapes
 uv run mibudge-backfill-budget --account "Personal Checking" --budget "Groceries"
 ```

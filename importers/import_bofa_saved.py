@@ -24,9 +24,10 @@ Usage::
         saved/2026-05-15-103045-5678.json \\
         [--dry-run] [--run-funding] [--verbose]
 
-Options can also be set in the BofA importers' config file,
-~/.config/mibudge-bofa-importer/config.toml (see
-importers/bofa_config.py), below CLI flags and env vars.
+Options can also be set in the importers' config file,
+~/.config/mibudge-importers/config.toml, at the top level or in its
+[bofa_saved] table (see importers/config.py), below CLI flags and env
+vars.
 """
 
 # system imports
@@ -45,8 +46,8 @@ from rich.logging import RichHandler
 # Project imports
 #
 from importers.bofa_categories import load_overlay_map
-from importers.bofa_config import config_option
 from importers.client import AuthenticationError
+from importers.config import config_option
 from importers.import_bofa_live import (
     SavedScrape,
     SavedTransaction,
@@ -61,6 +62,7 @@ from importers.import_transactions import (
     _resolve_account_by_query,
     _run_funding,
     load_importer_env,
+    mibudge_options,
 )
 from importers.theme import get_theme, theme_option
 
@@ -135,7 +137,8 @@ def _setup_logging(
         "same scrape-sync endpoint the live importer uses.  mibudge "
         "credentials follow the same resolution order as the other "
         "importers.  Options can also be set in "
-        "~/.config/mibudge-bofa-importer/config.toml (see --config).\n\n"
+        "~/.config/mibudge-importers/config.toml, at the top level or "
+        "in its [bofa_saved] table (see --config).\n\n"
         "Useful for re-importing after a fix, dry-running to preview "
         "what would be created, or verifying coverage against CSV "
         "exports."
@@ -147,57 +150,7 @@ def _setup_logging(
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-@click.option(
-    "--url",
-    "-u",
-    default=None,
-    help="Base URL of the mibudge API.  [default: https://localhost:8000]",
-)
-@click.option("--email", default=None, help="mibudge API login email.")
-@click.option(
-    "--password",
-    default=None,
-    allow_from_autoenv=False,
-    help="mibudge API password (not read from the environment).",
-)
-@click.option(
-    "--api-key",
-    default=None,
-    allow_from_autoenv=False,
-    help=(
-        "mibudge API key (preferred over email/password).  Not read "
-        "from the environment; prefer --api-key-onepassword-url or "
-        "Vault over this flag."
-    ),
-)
-@click.option(
-    "--vault-path",
-    default=None,
-    help="Vault KV2 path for mibudge credentials (e.g. 'mibudge/importer').",
-)
-@click.option(
-    "--api-key-onepassword-url",
-    default=None,
-    help=(
-        "1Password secret reference to the API key used to "
-        "authenticate to mibudge -- the full field path "
-        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
-        "'op://Personal/mibudge/API key'. Used when --api-key is not "
-        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
-        "from any bank-specific 1Password URL option."
-    ),
-)
-@click.option(
-    "--ca-bundle",
-    default=None,
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to a PEM CA bundle to trust (overrides system CAs).",
-)
-@click.option(
-    "--trust-local-certs",
-    is_flag=True,
-    help="Trust the mkcert root CA.  Required for local dev with mkcert TLS.",
-)
+@mibudge_options
 @click.option(
     "--dry-run",
     "-n",
@@ -226,7 +179,7 @@ def _setup_logging(
         "the built-ins.  [env var: MIBUDGE_CATEGORY_MAP]"
     ),
 )
-@config_option("import_bofa_saved")
+@config_option("bofa_saved")
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 @click.option(
     "--plain",
@@ -240,8 +193,7 @@ def cli_cmd(
     email: str | None,
     password: str | None,
     api_key: str | None,
-    vault_path: str | None,
-    api_key_onepassword_url: str | None,
+    mibudge_creds_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     dry_run: bool,
@@ -303,8 +255,7 @@ def cli_cmd(
             email=email,
             password=password,
             api_key=api_key,
-            vault_path=vault_path,
-            api_key_onepassword_url=api_key_onepassword_url,
+            mibudge_creds_url=mibudge_creds_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,

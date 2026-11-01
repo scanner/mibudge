@@ -53,7 +53,6 @@ dependencies = [
     "ofxparse>=0.21",
     "click>=8.3.1",
     "python-dotenv>=1.2.2",
-    "hvac>=2.4.0",
     "django-settings-export>=1.2.1",
     "zxcvbn>=4.5.0",
     "django-crispy-forms>=2.6",
@@ -114,6 +113,12 @@ importers-bofa = [
     "bofa-scraper>=2.0.0,<3",
     "selenium",
 ]
+
+[tool.uv]
+# Every sync installs the BofA scraper's group, so `mibudge-bofa-live`
+# runs from a plain `uv run`.  The production image installs no groups
+# (Dockerfile: `--no-default-groups`).
+default-groups = ["dev", "importers-bofa"]
 
 [tool.uv.sources]
 bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v2.0.0" }

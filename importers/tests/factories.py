@@ -180,3 +180,24 @@ class OFXTxnSpecFactory(factory.Factory):
     memo = ""
     checknum = ""
     fitid = factory.Sequence(lambda n: f"FIT{n:010d}")
+
+
+########################################################################
+########################################################################
+#
+class FakeStore:
+    """A secret store holding fixed fields, recording which were read."""
+
+    ####################################################################
+    #
+    def __init__(self, fields: dict[str, str]) -> None:
+        self.url = "op://Personal/mibudge"
+        self.fields = fields
+        self.reads: list[str] = []
+
+    ####################################################################
+    #
+    def get(self, field: str) -> str | None:
+        """Return the field's value, or None, recording the read."""
+        self.reads.append(field)
+        return self.fields.get(field)

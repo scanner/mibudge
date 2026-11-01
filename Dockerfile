@@ -26,7 +26,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Copy dependency files and install deps only (not project) -- cached layer
 COPY pyproject.toml uv.lock ./
 ENV UV_PROJECT_ENVIRONMENT=/venv
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-default-groups --no-install-project
 
 # Clean up unnecessary files from venv to reduce size.
 # NOTE: Only remove 'tests' (plural) -- third-party test suites live there.

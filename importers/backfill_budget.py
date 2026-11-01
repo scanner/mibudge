@@ -27,11 +27,13 @@ For each unallocated transaction the script:
      * Capped (C): fills to ``target_balance`` initially, then adds the
        fixed ``funding_amount`` per period (never exceeding ``target_balance``).
 
-Vendor auto-rules are stored in ``~/.mibudge/vendor_rules.json`` and
-persist across runs, keyed by budget UUID.
+Vendor auto-rules are stored in the importers' config directory,
+``~/.config/mibudge-importers/backfill-vendor-rules.json``, and persist
+across runs, keyed by budget UUID.
 
-Connection configuration follows the same precedence as the transaction
-importer (CLI flags → env vars → .env file → Vault).
+Options are resolved like every importer command's: CLI flags, env
+vars, .env, then ``~/.config/mibudge-importers/config.toml`` (top level
+and its ``[backfill_budget]`` table).
 
 NOTE: All transactions, allocations, and internal transactions are fetched
 once at startup.  Any transactions imported while the script is running will
@@ -74,11 +76,13 @@ from rich.table import Table
 
 # Project imports
 from importers.client import APIError, AuthenticationError, MibudgeClient
+from importers.config import config_dir, config_option
 from importers.import_transactions import (
     _build_client,
     _resolve_account_by_query,
     _setup_logging,
     load_importer_env,
+    mibudge_options,
 )
 from importers.theme import _Theme, get_theme, theme_option
 
@@ -96,7 +100,7 @@ logger = logging.getLogger(__name__)
 #     }
 #   }
 #
-_RULES_PATH = Path.home() / ".mibudge" / "vendor_rules.json"
+_RULES_PATH = config_dir() / "backfill-vendor-rules.json"
 
 # MM/DD purchase date embedded in many card descriptions
 _DESC_DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")
@@ -1350,60 +1354,7 @@ def _run_backfill(
         "automatically topped up to its configured funding amount from Unallocated."
     ),
 )
-@click.option(
-    "--url",
-    "-u",
-    default=None,
-    help="Base URL of the mibudge API.  [default: https://localhost:8000]",
-)
-@click.option("--email", default=None, help="API login email.")
-@click.option(
-    "--password",
-    default=None,
-    allow_from_autoenv=False,
-    help="mibudge API password (not read from the environment).",
-)
-@click.option(
-    "--api-key",
-    default=None,
-    allow_from_autoenv=False,
-    help=(
-        "mibudge API key (preferred over email/password).  Not read "
-        "from the environment; prefer --api-key-onepassword-url or "
-        "Vault over this flag."
-    ),
-)
-@click.option(
-    "--vault-path",
-    default=None,
-    help="Vault KV2 path for credentials (e.g. 'mibudge/importer').",
-)
-@click.option(
-    "--api-key-onepassword-url",
-    default=None,
-    help=(
-        "1Password secret reference to the API key used to "
-        "authenticate to mibudge -- the full field path "
-        "'op://<vault>/<item>[/<section>]/<field>', e.g. "
-        "'op://Personal/mibudge/API key'. Used when --api-key is not "
-        "given. Env var: MIBUDGE_API_KEY_ONEPASSWORD_URL. Distinct "
-        "from any bank-specific 1Password URL option."
-    ),
-)
-@click.option(
-    "--ca-bundle",
-    default=None,
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to a PEM CA bundle to trust (overrides system CAs).",
-)
-@click.option(
-    "--trust-local-certs",
-    is_flag=True,
-    help=(
-        "Trust the mkcert root CA (located via `mkcert -CAROOT`). "
-        "Required when connecting to a local dev server using mkcert TLS."
-    ),
-)
+@mibudge_options
 @click.option(
     "--account",
     "-a",
@@ -1434,13 +1385,13 @@ def _run_backfill(
     help="Disable rich output (auto-disabled when not a TTY).",
 )
 @theme_option
+@config_option("backfill_budget")
 def cli_cmd(
     url: str | None,
     email: str | None,
     password: str | None,
     api_key: str | None,
-    vault_path: str | None,
-    api_key_onepassword_url: str | None,
+    mibudge_creds_url: str | None,
     ca_bundle: Path | None,
     trust_local_certs: bool,
     account: str,
@@ -1461,8 +1412,7 @@ def cli_cmd(
             email=email,
             password=password,
             api_key=api_key,
-            vault_path=vault_path,
-            api_key_onepassword_url=api_key_onepassword_url,
+            mibudge_creds_url=mibudge_creds_url,
             ca_bundle=ca_bundle,
             trust_local_certs=trust_local_certs,
             console=console,

@@ -23,12 +23,13 @@ from typing import Any
 # 3rd party imports
 import click
 import pytest
+import pytest_check as check
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 
 # Project imports
 from importers import import_transactions as it
-from importers.tests.factories import OFXTxnSpec
+from importers.tests.factories import FakeStore, OFXTxnSpec
 
 
 ########################################################################
@@ -885,164 +886,138 @@ class TestLoadImporterEnv:
 ########################################################################
 ########################################################################
 #
-class TestResolveApiKeyFrom1Password:
-    """Tests for _resolve_api_key_from_1password (full secret reference)."""
+@pytest.fixture
+def build_client(mocker: MockerFixture) -> Callable[..., Any]:
+    """Return a function calling _build_client with defaults overridden.
 
-    ################################################################
-    #
-    @pytest.mark.parametrize(
-        "reference,expected_read",
-        [
-            # Plain field path, passed to `op read` verbatim.
-            (
-                "op://Personal/mibudge/API key",
-                "op://Personal/mibudge/API key",
-            ),
-            # Section-qualified field (several keys in one item).
-            (
-                "op://Private/nuknuax4gtw4qnfiodt55g2frm/add more/API key",
-                "op://Private/nuknuax4gtw4qnfiodt55g2frm/add more/API key",
-            ),
-            # Trailing slash is tolerated.
-            (
-                "op://Personal/mibudge/API key/",
-                "op://Personal/mibudge/API key",
-            ),
-        ],
-    )
-    def test_reads_the_secret_reference(
-        self, mocker: MockerFixture, reference: str, expected_read: str
-    ) -> None:
-        """
-        GIVEN: a full 1Password secret reference naming the field
-        WHEN:  _resolve_api_key_from_1password() is called
-        THEN:  the reference is passed to `op read` verbatim (modulo a
-               trailing slash) and the stripped value is returned
-        """
-        run = mocker.patch.object(
-            it.subprocess,
-            "run",
-            return_value=mocker.Mock(stdout="mib_secret\n"),
-        )
-
-        result = it._resolve_api_key_from_1password(reference)
-
-        assert result == "mib_secret"
-        run.assert_called_once_with(
-            ["op", "read", expected_read],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-    ################################################################
-    #
-    @pytest.mark.parametrize(
-        "scenario,reference,run_side_effect",
-        [
-            # Item-only URL (the pre-secret-reference semantics): the
-            # field path is missing, so we refuse before calling `op`.
-            ("missing field path", "op://Personal/mibudge", None),
-            ("op CLI not on PATH", "op://P/i/f", FileNotFoundError),
-        ],
-    )
-    def test_errors_raise_click_exception(
-        self,
-        mocker: MockerFixture,
-        scenario: str,
-        reference: str,
-        run_side_effect: type[Exception] | None,
-    ) -> None:
-        """
-        GIVEN: an item-only reference, or the `op` binary missing
-        WHEN:  _resolve_api_key_from_1password() is called
-        THEN:  a click.ClickException is raised (not a raw error)
-        """
-        run = mocker.patch.object(
-            it.subprocess, "run", side_effect=run_side_effect
-        )
-
-        with pytest.raises(click.ClickException):
-            it._resolve_api_key_from_1password(reference)
-
-        if run_side_effect is None:
-            run.assert_not_called()
-
-
-########################################################################
-########################################################################
-#
-class TestBuildClientCredentialPrecedence:
-    """Tests for _build_client's credential resolution order.
-
-    Full TLS/console plumbing is exercised elsewhere via the CLI tests
-    (which patch _build_client wholesale); these focus narrowly on
-    which credential source wins.
+    SSL_CERT_FILE from a developer's local .env would otherwise break
+    httpx's SSL context creation (see conftest.py's `client` fixture).
     """
+    env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
+    mocker.patch.dict(os.environ, env, clear=True)
 
-    ################################################################
-    #
-    def _call(self, mocker: MockerFixture, **overrides: Any) -> Any:
-        # SSL_CERT_FILE from a developer's local .env would otherwise
-        # break httpx's SSL context creation for this plain-HTTP
-        # default URL (see importers/tests/conftest.py's `client` fixture).
-        env = {k: v for k, v in os.environ.items() if k != "SSL_CERT_FILE"}
-        mocker.patch.dict(os.environ, env, clear=True)
-
-        defaults: dict[str, Any] = {
+    def _call(**overrides: Any) -> Any:
+        kwargs: dict[str, Any] = {
             "url": None,
             "email": None,
             "password": None,
             "api_key": None,
-            "vault_path": None,
-            "api_key_onepassword_url": None,
+            "mibudge_creds_url": None,
             "ca_bundle": None,
             "trust_local_certs": False,
             "console": mocker.Mock(),
             "interactive": False,
         }
-        defaults.update(overrides)
-        return it._build_client(**defaults)
+        kwargs.update(overrides)
+        return it._build_client(**kwargs)
 
-    ################################################################
+    return _call
+
+
+########################################################################
+########################################################################
+#
+class TestBuildClientCredentials:
+    """Tests for which credentials _build_client resolves."""
+
+    ####################################################################
     #
-    def test_explicit_api_key_skips_1password_lookup(
-        self, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        "flags,fields,api_key,password,reads",
+        [
+            pytest.param(
+                {"api_key": "mib_flag"},
+                {"api_key": "mib_store"},
+                "mib_flag",
+                None,
+                [],
+                id="api-key-flag-wins",
+            ),
+            pytest.param(
+                {"email": "me@example.com", "password": "pw_flag"},
+                {"api_key": "mib_store"},
+                None,
+                "pw_flag",
+                [],
+                id="password-flag-wins",
+            ),
+            pytest.param(
+                {},
+                {"api_key": "mib_store", "password": "pw_store"},
+                "mib_store",
+                None,
+                ["api_key"],
+                id="store-api-key",
+            ),
+            pytest.param(
+                {"email": "me@example.com"},
+                {"password": "pw_store"},
+                None,
+                "pw_store",
+                ["api_key", "password"],
+                id="store-password",
+            ),
+        ],
+    )
+    def test_resolution(
+        self,
+        build_client: Callable[..., Any],
+        creds_store: Callable[..., FakeStore],
+        flags: dict[str, str],
+        fields: dict[str, str],
+        api_key: str | None,
+        password: str | None,
+        reads: list[str],
     ) -> None:
         """
-        GIVEN: --api-key is given alongside --api-key-onepassword-url
+        GIVEN: a --mibudge-creds-url store, with or without a credential
+               flag
         WHEN:  _build_client() is called
-        THEN:  the explicit key is used and 1Password is never queried
+        THEN:  a flag is used as given and the store is not read;
+               otherwise the store's api_key, else its password
         """
-        resolve = mocker.patch.object(it, "_resolve_api_key_from_1password")
+        store = creds_store(**fields)
 
-        client = self._call(
-            mocker,
-            api_key="mib_explicit",
-            api_key_onepassword_url="op://Personal/mibudge/API key",
-        )
+        client = build_client(mibudge_creds_url=store.url, **flags)
 
-        assert client._api_key == "mib_explicit"
-        resolve.assert_not_called()
+        check.equal(client._api_key, api_key, "api key")
+        check.equal(client._password, password, "password")
+        check.equal(store.reads, reads, "store fields read")
 
-    ################################################################
+    ####################################################################
     #
-    def test_1password_used_when_no_explicit_api_key(
-        self, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        "flags,fields,message",
+        [
+            pytest.param({}, None, "Credentials are required", id="nothing"),
+            pytest.param({}, {}, "neither an 'api_key' nor", id="empty-store"),
+            pytest.param(
+                {}, {"password": "pw"}, "needs --email", id="no-email"
+            ),
+            pytest.param(
+                {"email": "me@example.com"},
+                None,
+                "needs --password",
+                id="no-password",
+            ),
+        ],
+    )
+    def test_missing_credentials_are_an_error(
+        self,
+        build_client: Callable[..., Any],
+        creds_store: Callable[..., FakeStore],
+        flags: dict[str, str],
+        fields: dict[str, str] | None,
+        message: str,
     ) -> None:
         """
-        GIVEN: --api-key-onepassword-url is given and no --api-key
+        GIVEN: no credentials, a store holding neither field, a store
+               password without --email, or --email without a password
         WHEN:  _build_client() is called
-        THEN:  the key is fetched from 1Password and used
+        THEN:  it fails saying what is missing
         """
-        mocker.patch.object(
-            it,
-            "_resolve_api_key_from_1password",
-            return_value="mib_from_1password",
-        )
+        if fields is not None:
+            flags = {**flags, "mibudge_creds_url": creds_store(**fields).url}
 
-        client = self._call(
-            mocker, api_key_onepassword_url="op://Personal/mibudge/API key"
-        )
-
-        assert client._api_key == "mib_from_1password"
+        with pytest.raises(click.ClickException, match=message):
+            build_client(**flags)

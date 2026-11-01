@@ -12,16 +12,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--check-all-accounts` on the live BofA importer opens every account and rebuilds its account cache; a run warns when a tracked mibudge account was not found
 - `--account` on the live BofA importer matches last-4 digits as well as nicknames
 - Saved BofA scrapes record the account's last 4 digits; older files still replay
-- The BofA importers read option values, such as the mibudge URL, from `~/.config/mibudge-bofa-importer/config.toml` or `--config`
+- Every importer command reads option values, such as the mibudge URL, from `~/.config/mibudge-importers/config.toml` or `--config`, at the top level or in the command's own table
+- Importer credentials come from a secret store, a 1Password item (`op://<vault>/<item>`) or a HashiCorp Vault secret (`hcvault://<host>/<mount>/<path>`): `--mibudge-creds-url` / `MIBUDGE_CREDS_URL` for the mibudge API key or password, `--bofa-creds-url` / `BOFA_CREDS_URL` for the BofA login
 - Importer commands `mibudge-import`, `mibudge-bofa-live`, `mibudge-bofa-saved` and `mibudge-backfill-budget`, which run from any directory
 
 ### Changed
 
-- The importers no longer read secrets (`MIBUDGE_API_KEY`, `MIBUDGE_PASSWORD`, `BOFA_PASSCODE`) from the environment or `.env`, and warn when one is set there; pass them as flags or keep them in 1Password or Vault
+- The importers no longer read secrets (`MIBUDGE_API_KEY`, `MIBUDGE_PASSWORD`, `BOFA_PASSCODE`) from the environment or `.env`, and warn when one is set there; pass them as flags or keep them in a secret store
+- `uv sync` installs the live BofA importer's dependencies; `mibudge-bofa-live` no longer needs `--group importers-bofa`
+- The budget backfill keeps its vendor rules in `~/.config/mibudge-importers/backfill-vendor-rules.json`; move an existing `~/.mibudge/vendor_rules.json` there to keep its rules
+
+### Removed
+
+- `--api-key-onepassword-url` / `MIBUDGE_API_KEY_ONEPASSWORD_URL`, `--bofa-onepassword-url` / `BOFA_ONEPASSWORD_URL` and `--vault-path` on the importers; use `--mibudge-creds-url` and `--bofa-creds-url`, whose 1Password item holds the API key in a field labelled `api_key`
 
 ### Fixed
 
-- The live BofA importer matches accounts again after Bank of America stopped showing account numbers on its overview (bofa_scraper 2.0.0): it reads each account's last 4 digits from the account page and keeps a nickname cache in `~/.config/mibudge-bofa-importer/` so untracked accounts are not opened
+- The live BofA importer matches accounts again after Bank of America stopped showing account numbers on its overview (bofa_scraper 2.0.0): it reads each account's last 4 digits from the account page and keeps a nickname cache in `~/.config/mibudge-importers/` so untracked accounts are not opened
 - The importer docs gave commands that no longer worked (`python -m importers import ...`, `... banks`)
 - With no `DATABASE_URL` set, the SQLite database is `app/db.sqlite3` instead of a file in whatever directory the command ran from
 
