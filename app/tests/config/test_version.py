@@ -8,7 +8,7 @@ import pytest
 import pytest_check as check
 from django.test import Client
 from django.urls import reverse
-from pytest_django.fixtures import SettingsWrapper
+from pytest_django import Settings
 from rest_framework.test import APIClient
 
 pytestmark = pytest.mark.django_db
@@ -19,7 +19,7 @@ VERSION = "9.8.7"
 ####################################################################
 #
 @pytest.fixture(autouse=True)
-def release(settings: SettingsWrapper) -> None:
+def release(settings: Settings) -> None:
     """Every test in this module runs on release `VERSION`."""
     settings.MIBUDGE_VERSION = VERSION
 

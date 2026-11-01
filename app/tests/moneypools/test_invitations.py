@@ -29,7 +29,7 @@ from django.urls import reverse
 from django.utils import timezone
 from faker import Faker
 from freezegun import freeze_time
-from pytest_django.fixtures import SettingsWrapper
+from pytest_django import Settings
 from pytest_mock import MockerFixture
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -507,7 +507,7 @@ class TestAcceptInvitation:
         make_invitation: Callable[..., BankAccountInvitation],
         mailoutbox: list[EmailMessage],
         rf: RequestFactory,
-        settings: SettingsWrapper,
+        settings: Settings,
     ) -> None:
         """
         GIVEN: a pending invitation for a brand-new user, accepted via a

@@ -13,7 +13,7 @@ import redis
 from django.conf import LazySettings
 from django.core.cache import cache
 from django.db import connections
-from fakeredis import FakeConnection, FakeServer
+from fakeredis import FakeRedisConnection, FakeServer
 from pytest_factoryboy import register
 from pytest_mock import MockerFixture
 from rest_framework.test import APIClient
@@ -178,7 +178,7 @@ def use_fakeredis(
     """
     server = FakeServer()
     fake_pool = redis.ConnectionPool(
-        server=server, connection_class=FakeConnection
+        server=server, connection_class=FakeRedisConnection
     )
     mocker.patch("common.redis.REDIS_CONNECTION_POOL", fake_pool)
 

@@ -185,7 +185,7 @@ class TestLockRenewal:
             #
             time.sleep(short_ttl * 3)
             assert r.exists(key) == 1
-            assert int(r.pttl(key)) > 0  # type: ignore[arg-type]
+            assert int(r.pttl(key)) > 0
         assert r.exists(key) == 0
 
     ####################################################################

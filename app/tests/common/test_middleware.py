@@ -11,7 +11,7 @@ from collections.abc import Iterator
 import pytest
 from django.core.cache import cache
 from django.urls import reverse
-from pytest_django.fixtures import SettingsWrapper
+from pytest_django import Settings
 from pytest_mock import MockerFixture
 from rest_framework.test import APIClient
 from rest_framework.throttling import AnonRateThrottle
@@ -63,7 +63,7 @@ class TestClientAddress:
 #
 @pytest.fixture
 def one_anon_request_per_hour(
-    settings: SettingsWrapper, mocker: MockerFixture
+    settings: Settings, mocker: MockerFixture
 ) -> Iterator[None]:
     """Three trusted proxies and an anonymous rate of one request.
 

@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ghcr.io images from (`uv`), for building through a mirror of ghcr.io;
   defaults to `ghcr.io`
 
+### Changed
+
+- Upgrade the Python dependencies to their latest releases, with test
+  updates to match; no functional changes
+
 ## [0.4.4] - 2026-11-01
 
 No migrations: going back to 0.4.3 needs no database change.
