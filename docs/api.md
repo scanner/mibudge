@@ -1,6 +1,6 @@
 # mibudge API
 
-Version 0.4.3.
+Version 0.4.4.
 
 REST API for the mibudge personal budgeting service.  Every versioned
 endpoint is under `/api/v1/`; the token endpoints are under `/api/token/`
