@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-01
+
+No migrations: going back to 0.4.4 needs no database change.
+
 ### Added
 
 - `GHCR_REGISTRY` build argument: the registry the image build pulls its
@@ -236,7 +240,8 @@ One migration, `moneypools.0044`, which changes only a help text: going back to 
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.4...HEAD
+[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.5...HEAD
+[0.4.5]: https://github.com/scanner/mibudge/compare/0.4.4...0.4.5
 [0.4.4]: https://github.com/scanner/mibudge/compare/0.4.3...0.4.4
 [0.4.3]: https://github.com/scanner/mibudge/compare/0.4.2...0.4.3
 [0.4.2]: https://github.com/scanner/mibudge/compare/0.4.1...0.4.2

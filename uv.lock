@@ -1847,7 +1847,7 @@ wheels = [
 
 [[package]]
 name = "mibudge"
-version = "0.4.4"
+version = "0.4.5"
 source = { editable = "." }
 default-groups = ["dev", "importers-bofa"]
 dependencies = [
