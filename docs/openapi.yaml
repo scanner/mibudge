@@ -4819,6 +4819,138 @@ components:
         * `C` - Checking
         * `S` - Savings
         * `X` - Credit Card
+    AmountCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
+    AvailableBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
+    BalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     Bank:
       type: object
       properties:
@@ -4887,14 +5019,16 @@ components:
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         posted_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/PostedBalanceCurrencyEnum'
           readOnly: true
         available_balance:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         available_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/AvailableBalanceCurrencyEnum'
           readOnly: true
         unallocated_budget:
           type: string
@@ -4940,6 +5074,50 @@ components:
       - owners
       - posted_balance_currency
       - unallocated_budget
+    BankAccountAvailableBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     BankAccountInvitation:
       type: object
       properties:
@@ -5025,6 +5203,50 @@ components:
         * `declined` - Declined
         * `cancelled` - Cancelled
         * `expired` - Expired
+    BankAccountPostedBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     BankAccountRequest:
       type: object
       properties:
@@ -5092,7 +5314,8 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           readOnly: true
         balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/BalanceCurrencyEnum'
           readOnly: true
         funded_amount:
           type: string
@@ -5102,14 +5325,16 @@ components:
           description: 'For Goal budgets: running net of all ITX credits minus debits.
             Unused for other types.'
         funded_amount_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/FundedAmountCurrencyEnum'
           readOnly: true
         target_balance:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         target_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/TargetBalanceCurrencyEnum'
           readOnly: true
         funding_amount:
           type: string
@@ -5117,9 +5342,11 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           nullable: true
         funding_amount_currency:
-          type: string
           readOnly: true
           nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/FundingAmountCurrencyEnum'
+          - $ref: '#/components/schemas/NullEnum'
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -5215,6 +5442,50 @@ components:
       - next_recurrence
       - target_balance
       - target_balance_currency
+    BudgetBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     BudgetRequest:
       type: object
       properties:
@@ -5311,7 +5582,8 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           readOnly: true
         balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/BalanceCurrencyEnum'
           readOnly: true
         funded_amount:
           type: string
@@ -5321,14 +5593,16 @@ components:
           description: 'For Goal budgets: running net of all ITX credits minus debits.
             Unused for other types.'
         funded_amount_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/FundedAmountCurrencyEnum'
           readOnly: true
         target_balance:
           type: string
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         target_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/TargetBalanceCurrencyEnum'
           readOnly: true
         funding_amount:
           type: string
@@ -5336,9 +5610,11 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           nullable: true
         funding_amount_currency:
-          type: string
           readOnly: true
           nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/FundingAmountCurrencyEnum'
+          - $ref: '#/components/schemas/NullEnum'
         budget_type:
           $ref: '#/components/schemas/BudgetTypeEnum'
         funding_type:
@@ -5515,6 +5791,50 @@ components:
         * `weekly_friday` - Weekly on Friday
         * `weekly_saturday` - Weekly on Saturday
         * `weekly_sunday` - Weekly on Sunday
+    DstBudgetBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     EmailChangeRequestRequest:
       type: object
       properties:
@@ -5549,6 +5869,94 @@ components:
           description: Machine-readable reason, when given.
       required:
       - detail
+    FundedAmountCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
+    FundingAmountCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     FundingEventDates:
       type: object
       properties:
@@ -5718,7 +6126,8 @@ components:
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         amount_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/AmountCurrencyEnum'
           readOnly: true
         src_budget:
           type: string
@@ -5738,7 +6147,8 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           readOnly: true
         src_budget_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/SrcBudgetBalanceCurrencyEnum'
           readOnly: true
         dst_budget_balance:
           type: string
@@ -5746,7 +6156,8 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           readOnly: true
         dst_budget_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/DstBudgetBalanceCurrencyEnum'
           readOnly: true
         created_at:
           type: string
@@ -6255,10 +6666,13 @@ components:
           nullable: true
           maxLength: 64
         merchant_country:
-          type: string
-          nullable: true
-          pattern: ^[A-Z]{2}$
-          maxLength: 2
+          oneOf:
+          - type: string
+            pattern: ^[A-Z]{2}$
+            maxLength: 2
+            nullable: true
+          - type: string
+            maxLength: 0
         merchant_latitude:
           type: string
           format: decimal
@@ -6296,6 +6710,50 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+    PostedBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     PublicInvitationDetail:
       type: object
       properties:
@@ -6480,6 +6938,94 @@ components:
       required:
       - api_versions
       - version
+    SrcBudgetBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
+    TargetBalanceCurrencyEnum:
+      enum:
+      - AUD
+      - BRL
+      - GBP
+      - CAD
+      - CNY
+      - DKK
+      - EUR
+      - HKD
+      - INR
+      - JPY
+      - MXN
+      - TWD
+      - NZD
+      - NOK
+      - SGD
+      - ZAR
+      - KRW
+      - SEK
+      - CHF
+      - USD
+      type: string
+      description: |-
+        * `AUD` - Australian Dollar
+        * `BRL` - Brazilian Real
+        * `GBP` - British Pound
+        * `CAD` - Canadian Dollar
+        * `CNY` - Chinese Yuan
+        * `DKK` - Danish Krone
+        * `EUR` - Euro
+        * `HKD` - Hong Kong Dollar
+        * `INR` - Indian Rupee
+        * `JPY` - Japanese Yen
+        * `MXN` - Mexican Peso
+        * `TWD` - New Taiwan Dollar
+        * `NZD` - New Zealand Dollar
+        * `NOK` - Norwegian Krone
+        * `SGD` - Singapore Dollar
+        * `ZAR` - South African Rand
+        * `KRW` - South Korean Won
+        * `SEK` - Swedish Krona
+        * `CHF` - Swiss Franc
+        * `USD` - US Dollar
     Transaction:
       type: object
       properties:
@@ -6495,7 +7041,8 @@ components:
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         amount_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/AmountCurrencyEnum'
           readOnly: true
         party:
           type: string
@@ -6557,10 +7104,13 @@ components:
           nullable: true
           maxLength: 64
         merchant_country:
-          type: string
-          nullable: true
-          pattern: ^[A-Z]{2}$
-          maxLength: 2
+          oneOf:
+          - type: string
+            pattern: ^[A-Z]{2}$
+            maxLength: 2
+            nullable: true
+          - type: string
+            maxLength: 0
         merchant_latitude:
           type: string
           format: decimal
@@ -6607,7 +7157,8 @@ components:
           readOnly: true
           description: Posted Balance does not include pending debits.
         bank_account_posted_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/BankAccountPostedBalanceCurrencyEnum'
           readOnly: true
         bank_account_available_balance:
           type: string
@@ -6616,7 +7167,8 @@ components:
           readOnly: true
           description: Available Balance has pending debits deducted.
         bank_account_available_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/BankAccountAvailableBalanceCurrencyEnum'
           readOnly: true
         image:
           type: string
@@ -6678,7 +7230,8 @@ components:
           format: decimal
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
         amount_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/AmountCurrencyEnum'
           readOnly: true
         budget_balance:
           type: string
@@ -6686,7 +7239,8 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
           readOnly: true
         budget_balance_currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/BudgetBalanceCurrencyEnum'
           readOnly: true
         category:
           type: string
@@ -6938,10 +7492,13 @@ components:
           nullable: true
           maxLength: 64
         merchant_country:
-          type: string
-          nullable: true
-          pattern: ^[A-Z]{2}$
-          maxLength: 2
+          oneOf:
+          - type: string
+            pattern: ^[A-Z]{2}$
+            maxLength: 2
+            nullable: true
+          - type: string
+            maxLength: 0
         merchant_latitude:
           type: string
           format: decimal

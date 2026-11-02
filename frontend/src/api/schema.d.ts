@@ -1245,6 +1245,78 @@ export interface components {
          * @enum {string}
          */
         AccountTypeEnum: "C" | "S" | "X";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        AmountCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        AvailableBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        BalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         Bank: {
             /** Format: uuid */
             readonly id: string;
@@ -1270,10 +1342,10 @@ export interface components {
             currency?: string;
             /** Format: decimal */
             posted_balance?: string;
-            readonly posted_balance_currency: string;
+            readonly posted_balance_currency: components["schemas"]["PostedBalanceCurrencyEnum"];
             /** Format: decimal */
             available_balance?: string;
-            readonly available_balance_currency: string;
+            readonly available_balance_currency: components["schemas"]["AvailableBalanceCurrencyEnum"];
             /** Format: uuid */
             readonly unallocated_budget: string | null;
             /** @description When enabled (the default), scheduled funding and recurrence events run automatically for this account.  Disable to opt out of automation and drive funding entirely from the 'Run funding now' button. */
@@ -1293,6 +1365,30 @@ export interface components {
             /** Format: date-time */
             readonly modified_at: string;
         };
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        BankAccountAvailableBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         BankAccountInvitation: {
             /** Format: uuid */
             readonly id: string;
@@ -1330,6 +1426,30 @@ export interface components {
          * @enum {string}
          */
         BankAccountInvitationStatusEnum: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        BankAccountPostedBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         BankAccountRequest: {
             name: string;
             /** Format: uuid */
@@ -1359,19 +1479,19 @@ export interface components {
             bank_account: string;
             /** Format: decimal */
             readonly balance: string;
-            readonly balance_currency: string;
+            readonly balance_currency: components["schemas"]["BalanceCurrencyEnum"];
             /**
              * Format: decimal
              * @description For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
              */
             readonly funded_amount: string;
-            readonly funded_amount_currency: string;
+            readonly funded_amount_currency: components["schemas"]["FundedAmountCurrencyEnum"];
             /** Format: decimal */
             target_balance: string;
-            readonly target_balance_currency: string;
+            readonly target_balance_currency: components["schemas"]["TargetBalanceCurrencyEnum"];
             /** Format: decimal */
             funding_amount?: string | null;
-            readonly funding_amount_currency: string | null;
+            readonly funding_amount_currency: (components["schemas"]["FundingAmountCurrencyEnum"] | components["schemas"]["NullEnum"]) | null;
             budget_type?: components["schemas"]["BudgetTypeEnum"];
             funding_type?: components["schemas"]["FundingTypeEnum"];
             /** Format: date */
@@ -1400,6 +1520,30 @@ export interface components {
             /** Format: date-time */
             readonly modified_at: string;
         };
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        BudgetBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         BudgetRequest: {
             name: string;
             /** Format: uuid */
@@ -1441,19 +1585,19 @@ export interface components {
             bank_account: string;
             /** Format: decimal */
             readonly balance: string;
-            readonly balance_currency: string;
+            readonly balance_currency: components["schemas"]["BalanceCurrencyEnum"];
             /**
              * Format: decimal
              * @description For Goal budgets: running net of all ITX credits minus debits. Unused for other types.
              */
             readonly funded_amount: string;
-            readonly funded_amount_currency: string;
+            readonly funded_amount_currency: components["schemas"]["FundedAmountCurrencyEnum"];
             /** Format: decimal */
             target_balance: string;
-            readonly target_balance_currency: string;
+            readonly target_balance_currency: components["schemas"]["TargetBalanceCurrencyEnum"];
             /** Format: decimal */
             funding_amount?: string | null;
-            readonly funding_amount_currency: string | null;
+            readonly funding_amount_currency: (components["schemas"]["FundingAmountCurrencyEnum"] | components["schemas"]["NullEnum"]) | null;
             budget_type?: components["schemas"]["BudgetTypeEnum"];
             funding_type?: components["schemas"]["FundingTypeEnum"];
             /** Format: date */
@@ -1516,6 +1660,30 @@ export interface components {
          * @enum {string}
          */
         DigestFrequencyEnum: "daily_morning" | "daily_evening" | "twice_daily" | "weekly_friday" | "weekly_saturday" | "weekly_sunday";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        DstBudgetBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         EmailChangeRequestRequest: {
             /** Format: email */
             new_email: string;
@@ -1530,6 +1698,54 @@ export interface components {
             /** @description Machine-readable reason, when given. */
             code?: string;
         };
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        FundedAmountCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        FundingAmountCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         FundingEventDates: {
             dates: string[];
         };
@@ -1608,7 +1824,7 @@ export interface components {
             bank_account: string;
             /** Format: decimal */
             amount: string;
-            readonly amount_currency: string;
+            readonly amount_currency: components["schemas"]["AmountCurrencyEnum"];
             /** Format: uuid */
             src_budget: string;
             /** Format: uuid */
@@ -1618,10 +1834,10 @@ export interface components {
             effective_date?: string;
             /** Format: decimal */
             readonly src_budget_balance: string;
-            readonly src_budget_balance_currency: string;
+            readonly src_budget_balance_currency: components["schemas"]["SrcBudgetBalanceCurrencyEnum"];
             /** Format: decimal */
             readonly dst_budget_balance: string;
-            readonly dst_budget_balance_currency: string;
+            readonly dst_budget_balance_currency: components["schemas"]["DstBudgetBalanceCurrencyEnum"];
             /** Format: date-time */
             readonly created_at: string;
             /** Format: date-time */
@@ -1886,7 +2102,7 @@ export interface components {
             merchant_address?: string | null;
             merchant_city?: string | null;
             merchant_region?: string | null;
-            merchant_country?: string | null;
+            merchant_country?: (string | null) | string;
             /** Format: decimal */
             merchant_latitude?: string | null;
             /** Format: decimal */
@@ -1904,6 +2120,30 @@ export interface components {
             default_bank_account?: string | null;
             timezone?: string;
         };
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        PostedBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         PublicInvitationDetail: {
             /** Format: uuid */
             readonly id: string;
@@ -1975,6 +2215,54 @@ export interface components {
             /** @description The API versions served, each at '/api/<version>/'. */
             api_versions: string[];
         };
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        SrcBudgetBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
+        /**
+         * @description * `AUD` - Australian Dollar
+         *     * `BRL` - Brazilian Real
+         *     * `GBP` - British Pound
+         *     * `CAD` - Canadian Dollar
+         *     * `CNY` - Chinese Yuan
+         *     * `DKK` - Danish Krone
+         *     * `EUR` - Euro
+         *     * `HKD` - Hong Kong Dollar
+         *     * `INR` - Indian Rupee
+         *     * `JPY` - Japanese Yen
+         *     * `MXN` - Mexican Peso
+         *     * `TWD` - New Taiwan Dollar
+         *     * `NZD` - New Zealand Dollar
+         *     * `NOK` - Norwegian Krone
+         *     * `SGD` - Singapore Dollar
+         *     * `ZAR` - South African Rand
+         *     * `KRW` - South Korean Won
+         *     * `SEK` - Swedish Krona
+         *     * `CHF` - Swiss Franc
+         *     * `USD` - US Dollar
+         * @enum {string}
+         */
+        TargetBalanceCurrencyEnum: "AUD" | "BRL" | "GBP" | "CAD" | "CNY" | "DKK" | "EUR" | "HKD" | "INR" | "JPY" | "MXN" | "TWD" | "NZD" | "NOK" | "SGD" | "ZAR" | "KRW" | "SEK" | "CHF" | "USD";
         Transaction: {
             /** Format: uuid */
             readonly id: string;
@@ -1982,7 +2270,7 @@ export interface components {
             bank_account: string;
             /** Format: decimal */
             amount: string;
-            readonly amount_currency: string;
+            readonly amount_currency: components["schemas"]["AmountCurrencyEnum"];
             readonly party: string | null;
             /** Format: date-time */
             posted_date: string;
@@ -2003,7 +2291,7 @@ export interface components {
             merchant_address?: string | null;
             merchant_city?: string | null;
             merchant_region?: string | null;
-            merchant_country?: string | null;
+            merchant_country?: (string | null) | string;
             /** Format: decimal */
             merchant_latitude?: string | null;
             /** Format: decimal */
@@ -2021,13 +2309,13 @@ export interface components {
              * @description Posted Balance does not include pending debits.
              */
             readonly bank_account_posted_balance: string;
-            readonly bank_account_posted_balance_currency: string;
+            readonly bank_account_posted_balance_currency: components["schemas"]["BankAccountPostedBalanceCurrencyEnum"];
             /**
              * Format: decimal
              * @description Available Balance has pending debits deducted.
              */
             readonly bank_account_available_balance: string;
-            readonly bank_account_available_balance_currency: string;
+            readonly bank_account_available_balance_currency: components["schemas"]["BankAccountAvailableBalanceCurrencyEnum"];
             /** Format: uri */
             image?: string | null;
             /** Format: uri */
@@ -2046,10 +2334,10 @@ export interface components {
             budget?: string | null;
             /** Format: decimal */
             amount: string;
-            readonly amount_currency: string;
+            readonly amount_currency: components["schemas"]["AmountCurrencyEnum"];
             /** Format: decimal */
             readonly budget_balance: string;
-            readonly budget_balance_currency: string;
+            readonly budget_balance_currency: components["schemas"]["BudgetBalanceCurrencyEnum"];
             /** Format: uuid */
             category?: string | null;
             readonly category_full_name: string | null;
@@ -2148,7 +2436,7 @@ export interface components {
             merchant_address?: string | null;
             merchant_city?: string | null;
             merchant_region?: string | null;
-            merchant_country?: string | null;
+            merchant_country?: (string | null) | string;
             /** Format: decimal */
             merchant_latitude?: string | null;
             /** Format: decimal */

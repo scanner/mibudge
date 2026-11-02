@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade the Python dependencies to their latest releases, with test
   updates to match; no functional changes
+- The API schema lists the currencies each `*_currency` field accepts
 
 ## [0.4.4] - 2026-11-01
 

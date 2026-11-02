@@ -284,10 +284,21 @@ Common responses: `401` · `404` · `429`
   "budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
   "amount": "125.00",               // decimal · required
   // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
-  // and any other currency is refused.
-  "amount_currency": "USD",         // string · optional
+  // and any other currency is refused. One of: "AUD" Australian Dollar, "BRL" Brazilian
+  // Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan, "DKK" Danish
+  // Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY" Japanese Yen,
+  // "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand Dollar, "NOK"
+  // Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand, "KRW" South
+  // Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "amount_currency": "AUD",         // enum · optional
   "budget_balance": "125.00",       // decimal · read-only
-  "budget_balance_currency": "USD",  // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "budget_balance_currency": "AUD",  // enum · read-only
   "category": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · optional
   "category_full_name": "string",   // string | null · read-only
   "memo": "string",                 // string | null · optional
@@ -777,12 +788,22 @@ Common responses: `400` · `401` · `404` · `429`
   "currency": "USD",                // string · optional
   "posted_balance": "125.00",       // decimal · optional
   // ISO 4217 currency of `posted_balance`. Optional: defaults to the bank account's
-  // currency, and any other currency is refused.
-  "posted_balance_currency": "USD",  // string · optional
+  // currency, and any other currency is refused. One of: "AUD" Australian Dollar, "BRL"
+  // Brazilian Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan,
+  // "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY"
+  // Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand
+  // Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand,
+  // "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "posted_balance_currency": "AUD",  // enum · optional
   "available_balance": "125.00",    // decimal · optional
   // ISO 4217 currency of `available_balance`. Optional: defaults to the bank account's
-  // currency, and any other currency is refused.
-  "available_balance_currency": "USD",  // string · optional
+  // currency, and any other currency is refused. One of: "AUD" Australian Dollar, "BRL"
+  // Brazilian Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan,
+  // "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY"
+  // Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand
+  // Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand,
+  // "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "available_balance_currency": "AUD",  // enum · optional
   "unallocated_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · read-only
   // When enabled (the default), scheduled funding and recurrence events run
   // automatically for this account. Disable to opt out of automation and drive funding
@@ -1057,19 +1078,41 @@ Common responses: `401` · `404` · `429`
   "name": "string",                 // string · required
   "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "balance": "125.00",              // decimal · read-only
-  "balance_currency": "USD",        // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "balance_currency": "AUD",        // enum · read-only
   // For Goal budgets: running net of all ITX credits minus debits. Unused for other
   // types.
   "funded_amount": "125.00",        // decimal · read-only
-  "funded_amount_currency": "USD",  // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "funded_amount_currency": "AUD",  // enum · read-only
   "target_balance": "125.00",       // decimal · required
   // ISO 4217 currency of `target_balance`. Optional: defaults to the bank account's
-  // currency, and any other currency is refused.
-  "target_balance_currency": "USD",  // string · optional
+  // currency, and any other currency is refused. One of: "AUD" Australian Dollar, "BRL"
+  // Brazilian Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan,
+  // "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY"
+  // Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand
+  // Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand,
+  // "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "target_balance_currency": "AUD",  // enum · optional
   "funding_amount": "125.00",       // decimal | null · optional
   // ISO 4217 currency of `funding_amount`. Optional: defaults to the bank account's
-  // currency, and any other currency is refused.
-  "funding_amount_currency": "USD",  // string | null · optional
+  // currency, and any other currency is refused. One of: "AUD" Australian Dollar, "BRL"
+  // Brazilian Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan,
+  // "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY"
+  // Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand
+  // Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand,
+  // "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "funding_amount_currency": "AUD",  // enum | null · optional
   // "G" Goal, "R" Recurring, "A" Associated Fill-up Goal, "C" Capped
   "budget_type": "G",               // enum · optional
   // "D" Target Date, "F" Fixed Amount
@@ -1343,16 +1386,33 @@ Common responses: `401` · `404` · `429`
   "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "amount": "125.00",               // decimal · required
   // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
-  // and any other currency is refused.
-  "amount_currency": "USD",         // string · optional
+  // and any other currency is refused. One of: "AUD" Australian Dollar, "BRL" Brazilian
+  // Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan, "DKK" Danish
+  // Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY" Japanese Yen,
+  // "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand Dollar, "NOK"
+  // Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand, "KRW" South
+  // Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "amount_currency": "AUD",         // enum · optional
   "src_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "dst_budget": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "actor": 0,                       // integer · read-only
   "effective_date": "2026-09-29T14:00:00Z",  // date-time · optional
   "src_budget_balance": "125.00",   // decimal · read-only
-  "src_budget_balance_currency": "USD",  // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "src_budget_balance_currency": "AUD",  // enum · read-only
   "dst_budget_balance": "125.00",   // decimal · read-only
-  "dst_budget_balance_currency": "USD",  // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "dst_budget_balance_currency": "AUD",  // enum · read-only
   "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
   "modified_at": "2026-09-29T14:00:00Z"  // date-time · read-only
 }
@@ -1801,8 +1861,13 @@ Common responses: `400` · `401` · `404` · `429`
   "bank_account": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid · required
   "amount": "125.00",               // decimal · required
   // ISO 4217 currency of `amount`. Optional: defaults to the bank account's currency,
-  // and any other currency is refused.
-  "amount_currency": "USD",         // string · optional
+  // and any other currency is refused. One of: "AUD" Australian Dollar, "BRL" Brazilian
+  // Real, "GBP" British Pound, "CAD" Canadian Dollar, "CNY" Chinese Yuan, "DKK" Danish
+  // Krone, "EUR" Euro, "HKD" Hong Kong Dollar, "INR" Indian Rupee, "JPY" Japanese Yen,
+  // "MXN" Mexican Peso, "TWD" New Taiwan Dollar, "NZD" New Zealand Dollar, "NOK"
+  // Norwegian Krone, "SGD" Singapore Dollar, "ZAR" South African Rand, "KRW" South
+  // Korean Won, "SEK" Swedish Krona, "CHF" Swiss Franc, "USD" US Dollar.
+  "amount_currency": "AUD",         // enum · optional
   "party": "string",                // string | null · read-only
   "posted_date": "2026-09-29T14:00:00Z",  // date-time · required
   "transaction_date": "2026-09-29T14:00:00Z",  // date-time | null · optional
@@ -1829,7 +1894,7 @@ Common responses: `400` · `401` · `404` · `429`
   "merchant_address": "string",     // string | null · optional
   "merchant_city": "string",        // string | null · optional
   "merchant_region": "string",      // string | null · optional
-  "merchant_country": "string",     // string | null · optional
+  "merchant_country": "string",     // string · optional
   "merchant_latitude": "125.00",    // decimal | null · optional
   "merchant_longitude": "125.00",   // decimal | null · optional
   "merchant_category": "string",    // string | null · read-only
@@ -1841,10 +1906,22 @@ Common responses: `400` · `401` · `404` · `429`
   "linked_transaction": "3fa85f64-5717-4562-b3fc-2c963f66afa6",  // uuid | null · read-only
   // Posted Balance does not include pending debits.
   "bank_account_posted_balance": "125.00",  // decimal · read-only
-  "bank_account_posted_balance_currency": "USD",  // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "bank_account_posted_balance_currency": "AUD",  // enum · read-only
   // Available Balance has pending debits deducted.
   "bank_account_available_balance": "125.00",  // decimal · read-only
-  "bank_account_available_balance_currency": "USD",  // string · read-only
+  // "AUD" Australian Dollar, "BRL" Brazilian Real, "GBP" British Pound, "CAD" Canadian
+  // Dollar, "CNY" Chinese Yuan, "DKK" Danish Krone, "EUR" Euro, "HKD" Hong Kong Dollar,
+  // "INR" Indian Rupee, "JPY" Japanese Yen, "MXN" Mexican Peso, "TWD" New Taiwan
+  // Dollar, "NZD" New Zealand Dollar, "NOK" Norwegian Krone, "SGD" Singapore Dollar,
+  // "ZAR" South African Rand, "KRW" South Korean Won, "SEK" Swedish Krona, "CHF" Swiss
+  // Franc, "USD" US Dollar
+  "bank_account_available_balance_currency": "AUD",  // enum · read-only
   "image": "https://mibudge.example.com/...",  // uri | null · optional
   "document": "https://mibudge.example.com/...",  // uri | null · optional
   "created_at": "2026-09-29T14:00:00Z",  // date-time · read-only
