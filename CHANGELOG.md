@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-01
+
+No migrations: going back to 0.4.5 needs no database change.
+
 ### Added
 
 - `NPM_CONFIG_REGISTRY` build argument: the registry the frontend build
@@ -246,7 +250,8 @@ One migration, `moneypools.0044`, which changes only a help text: going back to 
 - Production Docker image: nginx + gunicorn + supervisord, frontend SPA compiled and baked in
 - Drone CI pipeline: lint (ruff/mypy/vue-tsc), pytest, Docker image build and publish to GHCR and Docker Hub
 
-[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.5...HEAD
+[Unreleased]: https://github.com/scanner/mibudge/compare/0.4.6...HEAD
+[0.4.6]: https://github.com/scanner/mibudge/compare/0.4.5...0.4.6
 [0.4.5]: https://github.com/scanner/mibudge/compare/0.4.4...0.4.5
 [0.4.4]: https://github.com/scanner/mibudge/compare/0.4.3...0.4.4
 [0.4.3]: https://github.com/scanner/mibudge/compare/0.4.2...0.4.3
