@@ -151,6 +151,7 @@ steps:
       target: prod
       build_args_from_env:
         - GHCR_REGISTRY
+        - NPM_CONFIG_REGISTRY
       build_args:
         # NOTE: Keep PYTHON_VERSION in sync with .python-version
         - PYTHON_VERSION=3.13.16
@@ -170,6 +171,7 @@ steps:
       target: dev
       build_args_from_env:
         - GHCR_REGISTRY
+        - NPM_CONFIG_REGISTRY
       build_args:
         # NOTE: Keep PYTHON_VERSION in sync with .python-version
         - PYTHON_VERSION=3.13.16
@@ -208,6 +210,7 @@ steps:
       target: prod
       build_args_from_env:
         - GHCR_REGISTRY
+        - NPM_CONFIG_REGISTRY
       build_args:
         # NOTE: Keep PYTHON_VERSION in sync with .python-version
         - PYTHON_VERSION=3.13.16
@@ -227,6 +230,7 @@ steps:
       target: dev
       build_args_from_env:
         - GHCR_REGISTRY
+        - NPM_CONFIG_REGISTRY
       build_args:
         # NOTE: Keep PYTHON_VERSION in sync with .python-version
         - PYTHON_VERSION=3.13.16

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `NPM_CONFIG_REGISTRY` build argument: the registry the frontend build
+  installs pnpm and its packages from, for building through a mirror of
+  registry.npmjs.org; defaults to `https://registry.npmjs.org/`
+
 ## [0.4.5] - 2026-11-01
 
 No migrations: going back to 0.4.4 needs no database change.
