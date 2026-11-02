@@ -45,6 +45,10 @@ RUN find /venv -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null ||
 #
 FROM node:22-slim AS frontend-builder
 
+# Registry that npm and pnpm fetch packages from.  CI may set it to a
+# mirror of registry.npmjs.org.
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+
 WORKDIR /frontend
 
 # pnpm 9.x matches the lockfile format (lockfileVersion: '9.0')
