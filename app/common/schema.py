@@ -170,6 +170,23 @@ class AutoSchema(SpectacularAutoSchema):
 
     ####################################################################
     #
+    def _insert_field_validators(self, field: Any, schema: dict) -> None:
+        """
+        Keep a nullable, blank-allowed constrained string nullable.
+
+        For a string field that allows blank and has a pattern, format or
+        `minLength`, drf-spectacular writes `oneOf: [<constrained>,
+        <empty string>]` and leaves `nullable` beside it.  OpenAPI 3.0
+        honours `nullable` only next to a `type`, so this moves it into
+        the constrained branch, where `null` matches exactly one branch.
+        """
+        super()._insert_field_validators(field, schema)
+        if "oneOf" in schema and "type" not in schema:
+            if schema.pop("nullable", False):
+                schema["oneOf"][0]["nullable"] = True
+
+    ####################################################################
+    #
     def _get_response_bodies(self, direction: Any = "response") -> dict:
         responses = super()._get_response_bodies(direction)
         if direction != "response":
