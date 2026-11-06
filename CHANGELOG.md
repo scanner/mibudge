@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `mibudge-bofa-live` names the row and cell when a transaction row cannot be read, and says whether the cell was empty or not displayed (bofa-scraper 2.0.1)
+
 ## [0.4.6] - 2026-11-01
 
 No migrations: going back to 0.4.5 needs no database change.
