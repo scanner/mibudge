@@ -100,19 +100,25 @@ class FakeAccount:
 class FakeSession:
     """A bofa_scraper ScrapeSession over a FakeAccount."""
 
-    def __init__(self, account: FakeAccount):
+    def __init__(self, account: FakeAccount, bofa: "FakeBofA"):
         self.account = account
+        self.bofa = bofa
         account.last_four = account.page_last_four
 
     def get_last_four(self) -> str | None:
         return self.account.last_four
 
     def scrape_transactions(self) -> "FakeSession":
+        self.bofa.scrapes += 1
+        if self.bofa.scrapes == 2 and self.bofa.second_scrape_error:
+            raise self.bofa.second_scrape_error
         self.account.transactions = [FakeTxn()]
         return self
 
     def load_more_transactions(self) -> "FakeSession":
-        raise NoSuchElementException()
+        if not self.bofa.view_more:
+            raise NoSuchElementException()
+        return self
 
     def close(self) -> None:
         pass
@@ -128,6 +134,9 @@ class FakeBofA:
     tiles: list[tuple[str, str | None]] = field(default_factory=list)
     opened: list[str] = field(default_factory=list)
     login: tuple[str, str] | None = None
+    view_more: bool = False
+    second_scrape_error: Exception | None = None
+    scrapes: int = 0
 
     def scraper_class(self) -> type:
         bofa = self
@@ -146,7 +155,7 @@ class FakeBofA:
 
             def open_account(self, account: FakeAccount) -> FakeSession:
                 bofa.opened.append(account.get_name())
-                return FakeSession(account)
+                return FakeSession(account, bofa)
 
             def quit(self) -> None:
                 pass
@@ -369,6 +378,49 @@ class TestBofaLogin:
 #
 class TestAccountLoop:
     """Tests for matching BofA accounts to mibudge accounts."""
+
+    ####################################################################
+    #
+    @pytest.mark.parametrize(
+        "view_more,second_scrape_error,exit_code,synced,scrapes",
+        [
+            pytest.param(False, None, 0, ["a-chk"], 1, id="no-view-more"),
+            pytest.param(True, None, 0, ["a-chk"], 2, id="view-more"),
+            pytest.param(
+                True,
+                NoSuchElementException("no amount-cell"),
+                1,
+                [],
+                2,
+                id="second-scrape-missing-cell",
+            ),
+        ],
+    )
+    def test_view_more_and_second_scrape(
+        self,
+        fake_bofa: FakeBofA,
+        fake_client: FakeClient,
+        run_live: Callable[..., Result],
+        view_more: bool,
+        second_scrape_error: Exception | None,
+        exit_code: int,
+        synced: list[str],
+        scrapes: int,
+    ) -> None:
+        """
+        GIVEN: a tracked tile with or without a "View more" button, and
+               a second scrape that succeeds or hits a missing cell
+        WHEN:  the importer runs
+        THEN:  only a missing button falls back to the first scrape's
+               rows; a missing cell fails the bank account unsynced
+        """
+        fake_bofa.tiles = [("Main", "1234")]
+        fake_bofa.view_more = view_more
+        fake_bofa.second_scrape_error = second_scrape_error
+        result = run_live()
+        check.equal(result.exit_code, exit_code, result.output)
+        check.equal(fake_client.synced, synced, "bank accounts synced")
+        check.equal(fake_bofa.scrapes, scrapes, "scrapes run")
 
     ####################################################################
     #
