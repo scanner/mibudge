@@ -121,7 +121,7 @@ importers-bofa = [
 default-groups = ["dev", "importers-bofa"]
 
 [tool.uv.sources]
-bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v2.0.0" }
+bofa-scraper = { git = "https://github.com/scanner/bofa_scraper", tag = "v2.0.1" }
 
 ########################################################################
 # Tool configurations
