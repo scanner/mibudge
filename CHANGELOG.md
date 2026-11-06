@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- BofA's `Shopping & Entertainment : Clothing/Shoes` category maps to `Personal : Clothing` in the BofA importers
+
 ### Changed
 
 - `mibudge-bofa-live` names the row and cell when a transaction row cannot be read, and says whether the cell was empty or not displayed (bofa-scraper 2.0.1)
+
+### Fixed
+
+- `mibudge-bofa-live` reports a bank account as failed when a transaction row cannot be read after "View more", rather than syncing only the rows from before it
 
 ## [0.4.6] - 2026-11-01
 

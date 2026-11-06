@@ -1230,12 +1230,13 @@ def cli_cmd(
                         sess.scrape_transactions()
                         try:
                             sess.load_more_transactions()
-                            load_more_clicks = 1
-                            sess.scrape_transactions()
                         except NoSuchElementException:
                             # no "load more" button; first scrape got
                             # everything
                             pass
+                        else:
+                            load_more_clicks = 1
+                            sess.scrape_transactions()
                     except (WebDriverException, Exception) as e:
                         if interactive:
                             console.print(
