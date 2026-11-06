@@ -163,8 +163,10 @@ On the importer side (`importers/bofa_categories.py`):
   map target names a seeded canonical row.
 
 Because the mapping lives client-side, mibudge cannot re-derive
-categories from the stored `details` JSON on its own; category re-map
-passes run through the importer (saved-scrape replay).
+categories from the stored `details` JSON on its own. The importers
+submit details only for rows that have none, so a new mapping applies
+to transactions enriched after it is added; see
+[When a run reports unmapped categories](importers.md#when-a-run-reports-unmapped-categories).
 
 ---
 

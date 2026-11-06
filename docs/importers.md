@@ -380,10 +380,93 @@ Three layers, all in `importers/bofa_categories.py`:
   whitespace collapsed, casefolded); values are mibudge category full
   names or `null`.
 - **End-of-run report** -- any BofA category found in neither map is
-  listed at the end of the run (its transactions land unassigned).
-  Add those keys to the overlay, or extend `BOFA_CATEGORY_MAP` and
-  open a PR -- a unit test verifies every built-in target names a
-  seeded canonical category.
+  listed at the end of the run (its transactions land unassigned). See
+  [When a run reports unmapped categories](#when-a-run-reports-unmapped-categories).
+
+### When a run reports unmapped categories
+
+A run ends with this notice when BofA used a category neither map knows:
+
+```text
+BofA categories with no mapping (their transactions were left unassigned):
+'Shopping & Entertainment : Sporting Goods'.  Add them to a --category-map
+overlay file or extend BOFA_CATEGORY_MAP in importers/bofa_categories.py.
+```
+
+Each quoted string is one BofA category. To map it:
+
+1. **Choose the mibudge category.** The target is a category full name
+   (`"{group} : {name}"`) visible to the user the importer signs in as.
+   Search for one through the API:
+
+   ```bash
+   curl -s -H "Authorization: Api-Key $API_KEY" \
+       "https://mibudge.example.com/api/v1/transaction-categories/?search=sporting" \
+       | jq -r '.results[].full_name'
+   ```
+
+   The seeded base set is also listed in
+   `app/moneypools/migrations/0038_seed_global_categories.py`. Use `null`
+   as the target to leave the category unassigned on purpose, which also
+   removes it from the notice.
+
+2. **Add it to the overlay file.** Create
+   `~/.config/mibudge-importers/categories.yaml`, or add a line to it:
+
+   ```yaml
+   'Shopping & Entertainment : Sporting Goods': 'Sports & Fitness : Sporting Goods'
+   ```
+
+   Paste the key exactly as the notice prints it; the loader normalizes
+   its spacing and case. Quote both sides, because an unquoted colon is
+   a YAML syntax error.
+
+3. **Point the importers at the file**, once, with a top-level key in
+   `~/.config/mibudge-importers/config.toml`:
+
+   ```toml
+   category_map = "categories.yaml"
+   ```
+
+   A relative path resolves against the config file's directory, and a
+   top-level key applies to both `mibudge-bofa-live` and
+   `mibudge-bofa-saved`. For a single run, pass `--category-map FILE` or
+   set `MIBUDGE_CATEGORY_MAP`.
+
+4. **Watch the next enrichment of that category.** The notice no longer
+   lists a mapped category, whether or not the target is valid. A target
+   that matches no visible category logs a warning for each transaction,
+   and the transaction stays unassigned:
+
+   ```text
+   <bank account>: details <transaction uuid>: unknown category 'Sports & Fitness : Sport Goods'; transaction left unassigned
+   ```
+
+   Correct the target in the overlay file. The transactions that logged
+   the warning are now in the position described next.
+
+**A mapping applies only to transactions enriched after it is added.**
+The importers submit details only for rows that have none, so the
+transactions in the notice keep no category, and neither a later live
+run nor a `mibudge-bofa-saved` replay revisits them.
+`GET /api/v1/transactions/?bank_account=<id>&uncategorized=true` lists
+the candidates, which include any other unassigned transactions in that
+bank account.
+
+Assigning them takes a staff login to the Django admin: a transaction's
+change page edits its `category` and each of its allocations' categories.
+Set both, because a transaction's category does not propagate to
+allocations that already exist, and change nothing else on the form,
+because a save there skips the budget balance accounting. Without staff
+access, `PATCH /api/v1/transactions/<id>/` sets the transaction's
+category only: allocations are read-only in the REST API, and the SPA has
+no category editor.
+
+To share a mapping with every deployment, add it to `BOFA_CATEGORY_MAP`
+instead, keyed in normalized form
+(`'shopping & entertainment:sporting goods'`). A unit test verifies every
+built-in target names a seeded global category; the overlay can also name
+your own categories, and it wins when both maps hold the same key.
 
 ## Pending Transactions
 
