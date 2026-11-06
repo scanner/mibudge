@@ -85,7 +85,8 @@ def category_key(raw: str) -> str:
 
 
 # The reviewed BofA vocabulary (25 categories seen across 4 accounts
-# as of the 2026-07 harvest).  Not guaranteed complete: BofA can post
+# as of the 2026-07 harvest, plus 'Clothing/Shoes' first seen
+# 2026-11).  Not guaranteed complete: BofA can post
 # a category we have not seen yet, which the importer flags at end of
 # run.  None = deliberately unassigned.
 #
@@ -111,6 +112,7 @@ BOFA_CATEGORY_MAP: dict[str, str | None] = {
     "restaurants & dining:restaurants/dining": "Food & Drink : Restaurants",
     "savings & transfers:savings": "Financial : Money Transfers",
     "savings & transfers:transfers": "Financial : Money Transfers",
+    "shopping & entertainment:clothing/shoes": "Personal : Clothing",
     # Mostly computer/network gear; appliance purchases are
     # hand-recategorized to 'Home : Appliances' (a category map
     # cannot tell a switch from a fridge -- the MCC could, via
